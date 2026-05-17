@@ -5,7 +5,7 @@ spring:
     name: vibecraft
 
   datasource:
-    url: jdbc:postgresql://localhost:8000/vibecraftDB
+    url: jdbc:postgresql://localhost:9010/vibecraft-db
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -26,8 +26,9 @@ spring:
       base-url: https://openrouter.ai/api
       chat:
         options:
-          model: nvidia/nemotron-3-ultra-550b-a55b:free
+          model: x-ai/grok-4.5
           temperature: 0.0
+          stream-usage: true
 
 jwt:
   secret-key: ${JWT_SECRET}
@@ -39,10 +40,10 @@ stripe:
     secret: ${STRIPE_WEBHOOK_SECRET}
 
 minio:
-  url: ${MINIO_URL:http://localhost:9000}
-  access-key: ${MINIO_ACCESS_KEY:minioadmin}
-  secret-key: ${MINIO_SECRET_KEY:minioadmin}
-  project-bucket: ${MINIO_PROJECT_BUCKET:projects}
+  url: http://localhost:9000
+  access-key: ${MINIO_ACCESS_KEY}
+  secret-key: ${MINIO_SECRET_KEY}
+  project-bucket: projects
 
 client.url: http://localhost:8080
 
