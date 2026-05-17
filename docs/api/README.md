@@ -34,12 +34,10 @@
 
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
-| GET | `/api/projects/{projectId}/files` | — | `FileNode` (`path`, `modifiedAt`, `size`, `type`) | Stub. Returns a single `FileNode`, not a tree/list — despite the "get file tree" method name, `FileService.getFileTree` returns just one `FileNode`. |
-| GET | `/api/projects/{projectId}/files/content?path=` | — | `FileContentResponse` (`path`, `content`) | Stub |
+| GET | `/api/projects/{projectId}/files` | — | `FileTreeResponse` (`files: List<FileNode>`) | **Real**, repointed 2026-05-16 (later pass) — delegates to `ProjectFileService.getFileTree`, all `ProjectFile` rows for the project as a real list, not the single-`FileNode` stub this used to return |
+| GET | `/api/projects/{projectId}/files/content?path=` | — | `FileContentResponse` (`path`, `content`) | **Real** — was already delegating to `ProjectFileService.getFileContent` (MinIO-backed) before this pass |
 
-`FileService` also declares `saveFile(projectId, filePath, fileContent)`, but there's no controller endpoint for it yet. DTOs live under `dto.project` (`FileNode`, `FileContentResponse`), not a separate `dto.file` package.
-
-As of 2026-05-16, a **separate**, fully-real `ProjectFileService`/`ProjectFileServiceImpl` exists (MinIO-backed `getFileTree`/`getFileContent`/`saveFile`) — but nothing above has been repointed at it; it's only used internally by `ChatController`'s AI chat flow (see below). See [Project Status](../project-status.md#project-status) "Known gaps".
+`ProjectFileService`/`ProjectFileServiceImpl` (MinIO-backed `getFileTree`/`getFileContent`/`saveFile`) is now the **only** file-storage abstraction in the codebase — the pre-existing `FileService`/`FileServiceImpl` stub was deleted 2026-05-16 once `FileController` was repointed at it, closing the duplication flagged since MinIO storage first landed. It's used both by this controller's public endpoints and internally by `ChatController`'s AI chat flow (see below). `saveFile(projectId, filePath, fileContent)` still has no dedicated controller endpoint — it's currently only ever called from `AiGenerationServiceImpl`'s generation pipeline, not exposed for a client to write a file directly.
 
 ## BillingController (no `@RequestMapping` prefix — full paths on each method)
 
