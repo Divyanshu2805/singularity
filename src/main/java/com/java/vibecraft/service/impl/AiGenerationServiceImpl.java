@@ -20,13 +20,15 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.retry.Retry;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -44,8 +46,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatEventRepository chatEventRepository;
     private final UsageService usageService;
-
-    private static final Pattern FILE_TAG_PATTERN = Pattern.compile("<file path=\"([^\"]+)\">(.*?)</file>", Pattern.DOTALL);
 
     @Override
     @PreAuthorize("@security.canEditProject(#projectId)")
@@ -68,40 +68,54 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         AtomicReference<Long> endTime = new AtomicReference<>(0L);
         AtomicReference<Usage> usageRef = new AtomicReference<>();
 
-        return chatClient.prompt()
-                .system(PromptUtils.getSystemPrompt())
-                .user(userMessage)
-                .tools(codeGenerationTools)
-                .advisors(advisorSpec -> {
-                            advisorSpec.params(advisorParams);
-                            advisorSpec.advisors(fileTreeContextAdvisor);
-                        }
-                )
-                .stream()
-                .chatResponse()
+        return Flux.defer(() -> chatClient.prompt()
+                        .system(PromptUtils.getSystemPrompt())
+                        .user(userMessage)
+                        .tools(codeGenerationTools)
+                        .advisors(advisorSpec -> {
+                                    advisorSpec.params(advisorParams);
+                                    advisorSpec.advisors(fileTreeContextAdvisor);
+                                }
+                        )
+                        .stream()
+                        .chatResponse())
+                .retryWhen(Retry.backoff(3, Duration.ofSeconds(3))
+                        .filter(throwable -> throwable instanceof WebClientResponseException.TooManyRequests)
+                        .doBeforeRetry(signal -> log.warn("Rate limited by OpenRouter, retrying (attempt {})", signal.totalRetries() + 1)))
                 .doOnNext(response -> {
+                    if(response.getMetadata().getUsage() != null) {
+                        usageRef.set(response.getMetadata().getUsage());
+                    }
+
+                    // The trailing chunk that carries usage stats (stream-usage: true) has no
+                    // choices at all, so getResult() is null here - nothing else to do with it.
+                    if(response.getResult() == null) {
+                        return;
+                    }
+
                     String content = response.getResult().getOutput().getText();
 
                     if(content != null && !content.isEmpty() && endTime.get() == 0) { // first non-empty chunk received
                         endTime.set(System.currentTimeMillis());
                     }
 
-                    if(response.getMetadata().getUsage() != null) {
-                        usageRef.set(response.getMetadata().getUsage());
-                    }
-
                     fullResponseBuffer.append(content);
                 })
                 .doOnComplete(() -> {
                     Schedulers.boundedElastic().schedule(() -> {
-//                        parseAndSaveFiles(fullResponseBuffer.toString(), projectId);
-
                         long duration = (endTime.get() - startTime.get()) /  1000;
-                        finalizeChats(userMessage, chatSession, fullResponseBuffer.toString(), duration, usageRef.get());
+                        try {
+                            finalizeChats(userMessage, chatSession, fullResponseBuffer.toString(), duration, usageRef.get());
+                        } catch (Exception e) {
+                            log.error("Failed to finalize chat for projectId: {}. Raw response was: {}", projectId, fullResponseBuffer, e);
+                        }
                     });
                 })
                 .doOnError(error -> log.error("Error during streaming for projectId: {}", projectId))
                 .map(response -> {
+                    if(response.getResult() == null) {
+                        return new StreamResponse("");
+                    }
                     String text = response.getResult().getOutput().getText();
                     return new StreamResponse(text != null ? text : "");
                 });
@@ -138,6 +152,9 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         assistantChatMessage = chatMessageRepository.save(assistantChatMessage);
 
         List<ChatEvent> chatEventList = llmResponseParser.parseChatEvents(fullText, assistantChatMessage);
+        long fileEditCount = chatEventList.stream().filter(e -> e.getType() == ChatEventType.FILE_EDIT).count();
+        log.info("Parsed {} chat event(s) ({} file edit(s)) for projectId: {}", chatEventList.size(), fileEditCount, projectId);
+
         chatEventList.addFirst(ChatEvent.builder()
                         .type(ChatEventType.THOUGHT)
                         .chatMessage(assistantChatMessage)
@@ -145,9 +162,23 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                         .sequenceOrder(0)
                 .build());
 
-        chatEventList.stream()
+        List<ChatEvent> fileEditEvents = chatEventList.stream()
                 .filter(e -> e.getType() == ChatEventType.FILE_EDIT)
-                .forEach(e -> projectFileService.saveFile(projectId, e.getFilePath(), e.getContent()));
+                .toList();
+
+        int savedCount = 0;
+        for (ChatEvent event : fileEditEvents) {
+            try {
+                projectFileService.saveFile(projectId, event.getFilePath(), event.getContent());
+                savedCount++;
+            } catch (Exception e) {
+                log.error("Failed to save file '{}' for projectId: {}. Skipping this file; other files and " +
+                        "chat history are unaffected.", event.getFilePath(), projectId, e);
+            }
+        }
+        if (savedCount < fileEditEvents.size()) {
+            log.warn("Saved {}/{} generated file(s) for projectId: {}", savedCount, fileEditEvents.size(), projectId);
+        }
 
         chatEventRepository.saveAll(chatEventList);
     }
