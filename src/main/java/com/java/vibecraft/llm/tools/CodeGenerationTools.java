@@ -22,6 +22,10 @@ public class CodeGenerationTools {
             @ToolParam(description = "List of relative paths (e.g., ['src/App.tsx'])")
             List<String> paths
     ) {
+        if (paths == null || paths.isEmpty()) {
+            log.warn("read_files called with no paths");
+            return List.of();
+        }
 
         List<String> result = new ArrayList<>();
 
@@ -30,13 +34,20 @@ public class CodeGenerationTools {
 
             log.info("Requested file: {}", cleanPath);
 
-            String content = projectFileService.getFileContent(projectId, cleanPath).content();
+            try {
+                String content = projectFileService.getFileContent(projectId, cleanPath).content();
 
-            result.add(String.format(
-                    "--- START OF FILE: %s ---\n%s\n--- END OF FILE ---",
-                    cleanPath, content
-            ));
-
+                result.add(String.format(
+                        "--- START OF FILE: %s ---\n%s\n--- END OF FILE ---",
+                        cleanPath, content
+                ));
+            } catch (Exception e) {
+                log.warn("Could not read requested file {}: {}", cleanPath, e.getMessage());
+                result.add(String.format(
+                        "--- FILE NOT FOUND: %s --- (this file does not exist yet in this project)",
+                        cleanPath
+                ));
+            }
         }
 
         return result;

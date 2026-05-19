@@ -39,10 +39,14 @@ public class LlmResponseParser {
     public List<ChatEvent> parseChatEvents(String fullResponse, ChatMessage parentMessage) {
         List<ChatEvent> events = new ArrayList<>();
         int orderCounter = 1;
+        int lastMatchEnd = 0;
 
         Matcher matcher = GENERIC_TAG_PATTERN.matcher(fullResponse);
 
         while (matcher.find()) {
+            logUnparsedGap(fullResponse, lastMatchEnd, matcher.start());
+            lastMatchEnd = matcher.end();
+
             String tagName = matcher.group(2).toLowerCase();
             String attributes = matcher.group(3);
             String content = matcher.group(4).trim();
@@ -58,9 +62,13 @@ public class LlmResponseParser {
             switch (tagName) {
                 case "message" -> builder.type(ChatEventType.MESSAGE);
                 case "file" -> {
+                    String filePath = attrMap.get("path");
+                    if (filePath == null || filePath.isBlank()) {
+                        log.warn("Skipping <file> tag with no 'path' attribute in AI response: {}", preview(content));
+                        continue;
+                    }
                     builder.type(ChatEventType.FILE_EDIT);
-                    builder.filePath(attrMap.get("path")); // Required for files
-//                    builder.content(null);
+                    builder.filePath(filePath); // Required for files
                 }
                 case "tool" -> {
                     builder.type(ChatEventType.TOOL_LOG);
@@ -72,7 +80,21 @@ public class LlmResponseParser {
             events.add(builder.build());
         }
 
+        logUnparsedGap(fullResponse, lastMatchEnd, fullResponse.length());
+
         return events;
+    }
+
+    private void logUnparsedGap(String fullResponse, int from, int to) {
+        String gap = fullResponse.substring(from, to).trim();
+        if (!gap.isEmpty()) {
+            log.warn("Ignoring {} character(s) of unrecognized content in AI response (model may not be " +
+                    "following the expected <message>/<file>/<tool> protocol): {}", gap.length(), preview(gap));
+        }
+    }
+
+    private String preview(String text) {
+        return text.length() > 100 ? text.substring(0, 100) + "..." : text;
     }
 
     private Map<String, String> extractAttributes(String attributeString) {
