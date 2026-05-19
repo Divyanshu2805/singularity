@@ -62,12 +62,12 @@ An earlier version of this controller had a `/webhooks/payment` handler and a `P
 
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
-| POST | `/api/chat/stream` | `ChatRequest` (`message`, `projectId`) | SSE stream of `StreamResponse` (`text`) | **Real**, 2026-05-16 — delegates to `AiGenerationService.streamResponse`, gated by `@PreAuthorize("@security.canEditProject(#projectId)")` on the service method (not the controller). `ChatRequest` has **no** `@Valid`/Bean Validation constraints at all, breaking the "every request DTO has explicit constraints" convention every other request DTO follows — see [Request Validation](#request-validation) |
-| GET | `/api/chat/projects/{projectId}` | — | `List<ChatResponse>` | **Real**, 2026-05-16 — `ChatService.getProjectChatHistory`. Not `@PreAuthorize`-gated at all (unlike the stream endpoint) — only implicitly scoped by looking up `(projectId, callerId)`'s `ChatSession` via `getReferenceById`, which doesn't verify the caller is still a project member the way `@security.canViewProject` would |
+| POST | `/api/chat/stream` | `ChatRequest` (`message`, `projectId`, `@Valid`) | SSE stream of `StreamResponse` (`text`) | **Real**, 2026-05-16 — delegates to `AiGenerationService.streamResponse`, gated by `@PreAuthorize("@security.canEditProject(#projectId)")` on the service method (not the controller). `ChatRequest` gained Bean Validation (`@NotBlank`/`@NotNull`) in a later 2026-05-16 pass, closing the gap noted below — validation runs before the SSE stream starts, so a rejected request still gets a clean JSON 400 rather than a content-type mismatch on an already-committed stream. A mid-stream 429 from the AI provider (after retries are exhausted) now surfaces to the client as a specific "the AI provider is currently rate-limited" message instead of a generic one |
+| GET | `/api/chat/projects/{projectId}` | — | `List<ChatResponse>` | **Real**, 2026-05-16 — `ChatService.getProjectChatHistory`, now `@PreAuthorize("@security.canViewProject(#projectId)")`-gated (later 2026-05-16 pass, closing the gap noted below) instead of relying only on the self-scoped `(projectId, callerId)` lookup. A project with no chat session yet returns an empty list (uses `findById` now, not `getReferenceById`, which used to throw lazily on first access to the unresolved proxy) |
 
 ## Request Validation
 
-6 of the 7 request DTOs (every DTO actually used as a `@RequestBody`) carry Bean Validation constraints; response DTOs never do. Every constraint has an explicit `message`, matching the convention used in the payflux repo. The exception is `ChatRequest` (2026-05-16, see [ChatController](#chatcontroller-apichat)) — no `@Valid` on the controller parameter, no constraints on the record itself, so a blank `message` or missing `projectId` reaches the service layer unchecked.
+All 7 request DTOs (every DTO actually used as a `@RequestBody`) now carry Bean Validation constraints; response DTOs never do. `ChatRequest` (2026-05-16, see [ChatController](#chatcontroller-apichat)) was the last holdout — gained `@NotBlank`/`@NotNull` and `@Valid` on the controller parameter in a later 2026-05-16 pass, closing the gap this section used to flag.
 
 | DTO | Field | Constraints |
 |---|---|---|
@@ -81,6 +81,8 @@ An earlier version of this controller had a `/webhooks/payment` handler and a `P
 | | `role` | `@NotNull` |
 | `UpdateMemberRoleRequest` | `role` | `@NotNull` |
 | `CheckoutRequest` | `planId` | `@NotNull` |
+| `ChatRequest` | `message` | `@NotBlank` |
+| | `projectId` | `@NotNull` |
 
 All 6 DTOs were renamed from `email` to `username` on 2026-04-26, matching the `User` entity's field rename (`email`/`passwordHash` → `username`/`password`, see [Differences from v3](../schema/README.md#differences-from-v3)). The `@Email` constraint on `username`/`SignupRequest.username`/`InviteMemberRequest.username` was kept as-is through the rename, so these fields are still validated as email-shaped despite the field name — the `@Email` messages were updated to say "must be a valid username address" (grammatically odd, kept verbatim since it's what's actually in the code) rather than being dropped.
 
