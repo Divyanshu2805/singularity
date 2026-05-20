@@ -45,6 +45,11 @@ public class ProjectController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/{id}/retry-template-init")
+    public ResponseEntity<ProjectResponse> retryTemplateInit(@PathVariable Long id) {
+        return ResponseEntity.ok(projectService.retryTemplateInitialization(id));
+    }
+
 }
 
 

@@ -6,6 +6,7 @@ public record ProjectResponse(
         Long id,
         String name,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String templateInitIssue
 ) {
 }

@@ -39,4 +39,9 @@ public class Project {
     Instant updatedAt;
 
     Instant deletedAt; //soft delete
+
+    // Null when the starter template initialized fully (or wasn't applicable). Set when
+    // some template files couldn't be created even after retries, describing what's missing
+    // so both API clients and the AI generation context can react to it.
+    String templateInitIssue;
 }

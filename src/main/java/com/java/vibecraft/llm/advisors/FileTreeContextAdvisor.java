@@ -1,6 +1,8 @@
 package com.java.vibecraft.llm.advisors;
 
 import com.java.vibecraft.dto.project.FileNode;
+import com.java.vibecraft.entity.Project;
+import com.java.vibecraft.repository.ProjectRepository;
 import com.java.vibecraft.service.ProjectFileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +27,7 @@ import java.util.Map;
 public class FileTreeContextAdvisor implements StreamAdvisor {
 
     private final ProjectFileService projectFileService;
+    private final ProjectRepository projectRepository;
 
     @Override
     public Flux<ChatClientResponse> adviseStream(ChatClientRequest request, StreamAdvisorChain streamAdvisorChain) {
@@ -57,8 +60,18 @@ public class FileTreeContextAdvisor implements StreamAdvisor {
         }
 
         List<FileNode> fileTree = projectFileService.getFileTree(projectId).files();
-        String fileTreeContext = "\n\n ---- FILE_TREE ----\n"+fileTree.toString();
-        allMessages.add(new SystemMessage(fileTreeContext));
+        StringBuilder fileTreeContext = new StringBuilder("\n\n ---- FILE_TREE ----\n").append(fileTree);
+
+        projectRepository.findById(projectId)
+                .map(Project::getTemplateInitIssue)
+                .filter(issue -> issue != null && !issue.isBlank())
+                .ifPresent(issue -> fileTreeContext.append("\n\n ---- NOTICE ----\n")
+                        .append("This project's starter template did not finish setting up correctly: ")
+                        .append(issue)
+                        .append(" If the project seems to be missing expected configuration or scaffold files, ")
+                        .append("create them yourself as needed."));
+
+        allMessages.add(new SystemMessage(fileTreeContext.toString()));
 
         allMessages.addAll(userMessages);
 

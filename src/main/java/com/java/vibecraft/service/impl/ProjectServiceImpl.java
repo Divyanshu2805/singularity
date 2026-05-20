@@ -16,11 +16,14 @@ import com.java.vibecraft.repository.ProjectRepository;
 import com.java.vibecraft.repository.UserRepository;
 import com.java.vibecraft.security.AuthUtil;
 import com.java.vibecraft.service.ProjectService;
+import com.java.vibecraft.service.ProjectTemplateService;
 import com.java.vibecraft.service.SubscriptionService;
+import com.java.vibecraft.service.TemplateInitResult;
 import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +34,7 @@ import java.util.List;
 @RequiredArgsConstructor
 @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
 @Transactional
+@Slf4j
 public class ProjectServiceImpl implements ProjectService {
 
     ProjectRepository projectRepository;
@@ -39,6 +43,7 @@ public class ProjectServiceImpl implements ProjectService {
     ProjectMemberRepository projectMemberRepository;
     AuthUtil authUtil;
     SubscriptionService subscriptionService;
+    ProjectTemplateService projectTemplateService;
 
     @Override
     @PreAuthorize("@security.canViewProject(#id)")
@@ -79,6 +84,19 @@ public class ProjectServiceImpl implements ProjectService {
                 .build();
 
         projectMemberRepository.save(projectMember);
+
+        TemplateInitResult templateResult;
+        try {
+            templateResult = projectTemplateService.initializeProjectFromTemplate(project.getId());
+        } catch (Exception e) {
+            log.error("Unexpected error during template initialization for project {}", project.getId(), e);
+            templateResult = new TemplateInitResult(0, 0, List.of("(template initialization failed unexpectedly)"));
+        }
+
+        if (!templateResult.isComplete()) {
+            project.setTemplateInitIssue(describeIncompleteTemplate(templateResult));
+            project = projectRepository.save(project);
+        }
 
         return projectMapper.toProjectResponse(project);
     }
@@ -122,5 +140,27 @@ public class ProjectServiceImpl implements ProjectService {
 
         return projectRepository.findAccessibleProjectById(projectId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", projectId.toString()));
+    }
+
+    @Override
+    @PreAuthorize("@security.canEditProject(#id)")
+    public ProjectResponse retryTemplateInitialization(Long id) {
+        Project project = getAccessibleProjectById(id, authUtil.getCurrentUserId());
+
+        TemplateInitResult result = projectTemplateService.initializeProjectFromTemplate(id);
+
+        project.setTemplateInitIssue(result.isComplete() ? null : describeIncompleteTemplate(result));
+        project = projectRepository.save(project);
+
+        return projectMapper.toProjectResponse(project);
+    }
+
+    private String describeIncompleteTemplate(TemplateInitResult result) {
+        if (result.copiedCount() == 0 && result.skippedCount() == 0) {
+            return "Template initialization failed: the starter template storage was unreachable, " +
+                    "so no files could be created.";
+        }
+        return "Template initialization incomplete: " + result.failedPaths().size()
+                + " file(s) could not be created (" + String.join(", ", result.failedPaths()) + ").";
     }
 }

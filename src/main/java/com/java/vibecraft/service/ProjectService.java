@@ -16,4 +16,6 @@ public interface ProjectService {
     ProjectResponse updateProject(Long id, ProjectRequest request);
 
     void softDelete(Long id);
+
+    ProjectResponse retryTemplateInitialization(Long id);
 }
