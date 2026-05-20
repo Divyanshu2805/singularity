@@ -5,6 +5,8 @@ import com.java.vibecraft.dto.project.FileNode;
 import com.java.vibecraft.dto.project.FileTreeResponse;
 import com.java.vibecraft.entity.Project;
 import com.java.vibecraft.entity.ProjectFile;
+import com.java.vibecraft.error.BadRequestException;
+import com.java.vibecraft.error.FileStorageException;
 import com.java.vibecraft.error.ResourceNotFoundException;
 import com.java.vibecraft.mapper.ProjectFileMapper;
 import com.java.vibecraft.repository.ProjectFileRepository;
@@ -13,6 +15,7 @@ import com.java.vibecraft.service.ProjectFileService;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.errors.ErrorResponseException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -57,14 +60,25 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
             String content = new String(is.readAllBytes(), StandardCharsets.UTF_8);
             return new FileContentResponse(path, content);
+        } catch (ErrorResponseException e) {
+            if ("NoSuchKey".equals(e.errorResponse().code())) {
+                log.debug("File not found in storage: {}", objectName);
+                throw new ResourceNotFoundException("File", objectName);
+            }
+            log.error("MinIO error while reading file: {}", objectName, e);
+            throw new FileStorageException("Failed to read file content for " + path, e);
         } catch (Exception e) {
-            log.error("Failed to read file: {}/{}", projectId, path, e);
-            throw new RuntimeException("Failed to read file content", e);
+            log.error("Unexpected error while reading file: {}", objectName, e);
+            throw new FileStorageException("Failed to read file content for " + path, e);
         }
     }
 
     @Override
     public void saveFile(Long projectId, String path, String content) {
+        if (path == null || path.isBlank()) {
+            throw new BadRequestException("File path must not be blank");
+        }
+
         Project project = projectRepository.findById(projectId).orElseThrow(
                 () -> new ResourceNotFoundException("Project", projectId.toString())
         );
@@ -98,7 +112,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             log.info("Saved file: {}", objectKey);
         } catch (Exception e) {
             log.error("Failed to save file {}/{}", projectId, cleanPath, e);
-            throw new RuntimeException("File save failed", e);
+            throw new FileStorageException("Failed to save file " + cleanPath, e);
         }
 
     }
