@@ -38,6 +38,7 @@ erDiagram
         timestamp createdAt
         timestamp updatedAt
         timestamp deletedAt
+        string templateInitIssue
     }
 
     PROJECT_MEMBER {
@@ -164,6 +165,7 @@ A workspace/app being built; can be collaborated on and optionally made public.
 | `isPublic` | Whether the project (and its preview) is visible to anyone, not just members. Defaults to `false`. |
 | `createdAt` / `updatedAt` | Record lifecycle timestamps. |
 | `deletedAt` | Soft-delete timestamp. |
+| `templateInitIssue` | Nullable — `null` when the starter template copied into this project fully succeeded (or wasn't attempted), otherwise a short description of what's still missing (e.g. `"Template initialization incomplete: 2 file(s) could not be created (...)."`). Added 2026-05-16 (later pass) alongside `ProjectTemplateService`'s idempotent-retry rework; not treated as a v6 schema change (unlike v1–v5, a single additive nullable column isn't a redesign of relationships or vocabulary), just an incremental addition to v5. See [Project Status](../project-status.md#project-status) and `POST /api/projects/{id}/retry-template-init` below. |
 
 No `owner` field — as of 2026-04-26 (v4), ownership is expressed entirely through a `PROJECT_MEMBER` row with `projectRole = OWNER`; see [Differences from v3](#differences-from-v3). `ProjectServiceImpl.createProject` creates that owner `ProjectMember` row in the same request that creates the `Project`.
 
