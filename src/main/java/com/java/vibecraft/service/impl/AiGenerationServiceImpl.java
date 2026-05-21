@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -68,20 +69,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         AtomicReference<Long> endTime = new AtomicReference<>(0L);
         AtomicReference<Usage> usageRef = new AtomicReference<>();
 
-        return Flux.defer(() -> chatClient.prompt()
-                        .system(PromptUtils.getSystemPrompt())
-                        .user(userMessage)
-                        .tools(codeGenerationTools)
-                        .advisors(advisorSpec -> {
-                                    advisorSpec.params(advisorParams);
-                                    advisorSpec.advisors(fileTreeContextAdvisor);
-                                }
-                        )
-                        .stream()
-                        .chatResponse())
-                .retryWhen(Retry.backoff(3, Duration.ofSeconds(3))
-                        .filter(throwable -> throwable instanceof WebClientResponseException.TooManyRequests)
-                        .doBeforeRetry(signal -> log.warn("Rate limited by OpenRouter, retrying (attempt {})", signal.totalRetries() + 1)))
+        return buildGenerationFlux(userMessage, advisorParams, codeGenerationTools)
                 .doOnNext(response -> {
                     if(response.getMetadata().getUsage() != null) {
                         usageRef.set(response.getMetadata().getUsage());
@@ -121,6 +109,52 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 });
     }
 
+    private Flux<ChatResponse> buildGenerationFlux(String userMessage, Map<String, Object> advisorParams, CodeGenerationTools tools) {
+        return Flux.defer(() -> chatClient.prompt()
+                        .system(PromptUtils.getSystemPrompt())
+                        .user(userMessage)
+                        .tools(tools)
+                        .advisors(advisorSpec -> {
+                                    advisorSpec.params(advisorParams);
+                                    advisorSpec.advisors(fileTreeContextAdvisor);
+                                }
+                        )
+                        .stream()
+                        .chatResponse())
+                .retryWhen(Retry.backoff(3, Duration.ofSeconds(3))
+                        .filter(throwable -> throwable instanceof WebClientResponseException.TooManyRequests)
+                        .doBeforeRetry(signal -> log.warn("Rate limited by OpenRouter, retrying (attempt {})", signal.totalRetries() + 1)));
+    }
+
+    /**
+     * Runs a full (non-streamed) generation and blocks until it completes. Only ever called from
+     * {@code finalizeChats}, which itself runs on a boundedElastic thread - never call this from a
+     * request thread.
+     */
+    private String collectFullResponse(String userMessage, Map<String, Object> advisorParams, CodeGenerationTools tools) {
+        StringBuilder buffer = new StringBuilder();
+        buildGenerationFlux(userMessage, advisorParams, tools)
+                .doOnNext(response -> {
+                    if (response.getResult() == null) return;
+                    String content = response.getResult().getOutput().getText();
+                    if (content != null) buffer.append(content);
+                })
+                .blockLast();
+        return buffer.toString();
+    }
+
+    /**
+     * Catches the exact failure mode found in production: the model announces (via a {@code <tool>}
+     * tag) that it's reading files to make a change, but the turn ends without ever emitting the
+     * {@code <file>} edit - so nothing gets saved and the chat looks like it succeeded. A turn that
+     * never announced an edit at all (a plain question, for example) is left alone.
+     */
+    private boolean looksLikeAbandonedEdit(List<ChatEvent> events) {
+        boolean announcedToolUse = events.stream().anyMatch(e -> e.getType() == ChatEventType.TOOL_LOG);
+        boolean producedFileEdit = events.stream().anyMatch(e -> e.getType() == ChatEventType.FILE_EDIT);
+        return announcedToolUse && !producedFileEdit;
+    }
+
     private void finalizeChats(String userMessage, ChatSession chatSession, String fullText, Long duration, Usage usage) {
         Long projectId = chatSession.getProject().getId();
 
@@ -155,10 +189,43 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         long fileEditCount = chatEventList.stream().filter(e -> e.getType() == ChatEventType.FILE_EDIT).count();
         log.info("Parsed {} chat event(s) ({} file edit(s)) for projectId: {}", chatEventList.size(), fileEditCount, projectId);
 
+        boolean retried = false;
+        if (looksLikeAbandonedEdit(chatEventList)) {
+            log.warn("Turn for projectId: {} announced a file read/edit but produced no FILE_EDIT — retrying once.", projectId);
+            retried = true;
+
+            Map<String, Object> advisorParams = Map.of(
+                    "userId", chatSession.getUser().getId(),
+                    "projectId", projectId
+            );
+            CodeGenerationTools tools = new CodeGenerationTools(projectFileService, projectId);
+
+            long retryStart = System.currentTimeMillis();
+            String retryText = collectFullResponse(userMessage, advisorParams, tools);
+            duration = (System.currentTimeMillis() - retryStart) / 1000;
+
+            List<ChatEvent> retryEvents = llmResponseParser.parseChatEvents(retryText, assistantChatMessage);
+            long retryFileEditCount = retryEvents.stream().filter(e -> e.getType() == ChatEventType.FILE_EDIT).count();
+            log.info("Retry parsed {} chat event(s) ({} file edit(s)) for projectId: {}", retryEvents.size(), retryFileEditCount, projectId);
+
+            chatEventList = retryEvents;
+
+            if (looksLikeAbandonedEdit(chatEventList) || chatEventList.isEmpty()) {
+                log.error("Retry for projectId: {} still produced no FILE_EDIT — flagging as incomplete instead of a silent no-op.", projectId);
+                chatEventList.add(ChatEvent.builder()
+                        .type(ChatEventType.MESSAGE)
+                        .chatMessage(assistantChatMessage)
+                        .content("I started making this change but wasn't able to finish it. Please try sending your request again.")
+                        .sequenceOrder(chatEventList.size() + 1)
+                        .build());
+            }
+        }
+
         chatEventList.addFirst(ChatEvent.builder()
                         .type(ChatEventType.THOUGHT)
                         .chatMessage(assistantChatMessage)
-                        .content("Thought for "+duration+"s")
+                        .content(retried ? "Thought for " + duration + "s (retried once after an incomplete first attempt)"
+                                : "Thought for " + duration + "s")
                         .sequenceOrder(0)
                 .build());
 
