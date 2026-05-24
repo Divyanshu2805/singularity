@@ -54,6 +54,8 @@ erDiagram
         bigint projectId FK
         string path
         string minioObjectKey
+        bigint size
+        string type
         timestamp createdAt
         timestamp updatedAt
         bigint createdBy FK
@@ -193,6 +195,7 @@ A single file belonging to a project; its content lives in object storage, not t
 | `project` | The project this file belongs to — `@ManyToOne`, not null. |
 | `path` | The file's path within the project (e.g. `src/App.tsx`) — not null. |
 | `minioObjectKey` | Key locating the actual file content in MinIO object storage — this row is metadata, not the content. |
+| `size` / `type` | Byte size and MIME content type, set from the actual uploaded content at save time (`ProjectFileServiceImpl.saveFile`) or copied from the template source's real size at template-init time (`ProjectTemplateServiceImpl`) — added 2026-05-24, see [Practices](../practices/conventions.md#practices--conventions). |
 | `createdAt` / `updatedAt` | Record lifecycle timestamps. |
 | `createdBy` / `updatedBy` | The `User` who created/last modified this file — `@ManyToOne`, nullable. |
 

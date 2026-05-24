@@ -42,6 +42,8 @@
 
 `ProjectFileService`/`ProjectFileServiceImpl` (MinIO-backed `getFileTree`/`getFileContent`/`saveFile`) is now the **only** file-storage abstraction in the codebase — the pre-existing `FileService`/`FileServiceImpl` stub was deleted 2026-05-16 once `FileController` was repointed at it, closing the duplication flagged since MinIO storage first landed. It's used both by this controller's public endpoints and internally by `ChatController`'s AI chat flow (see below). `saveFile(projectId, filePath, fileContent)` still has no dedicated controller endpoint — it's currently only ever called from `AiGenerationServiceImpl`'s generation pipeline, not exposed for a client to write a file directly.
 
+`FileNode`'s `modifiedAt`/`size`/`type` fields were always present on the DTO but always returned `null` until 2026-05-24 — `ProjectFile` had no `size`/`type` columns to source them from, and the DTO's `modifiedAt` didn't name-match the entity's `updatedAt`, so MapStruct's auto-mapping silently left all three unmapped. Fixed by adding real `size`/`type` columns (populated at save/template-init time) and an explicit `@Mapping(target = "modifiedAt", source = "updatedAt")`; existing rows were backfilled from MinIO's actual stored object metadata rather than left null until their next edit.
+
 ## BillingController (no `@RequestMapping` prefix — full paths on each method)
 
 | Method | Path | Request | Response | Notes |
