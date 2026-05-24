@@ -31,6 +31,10 @@ public class ProjectFile {
 
     String minioObjectKey;
 
+    Long size;
+
+    String type;
+
     @CreationTimestamp
     Instant createdAt;
 

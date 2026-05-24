@@ -7,6 +7,7 @@ import com.java.vibecraft.repository.ProjectFileRepository;
 import com.java.vibecraft.repository.ProjectRepository;
 import com.java.vibecraft.service.ProjectTemplateService;
 import com.java.vibecraft.service.TemplateInitResult;
+import com.java.vibecraft.util.ContentTypeUtils;
 import io.minio.*;
 import io.minio.messages.Item;
 import lombok.RequiredArgsConstructor;
@@ -112,6 +113,8 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
                         .project(project)
                         .path(cleanPath)
                         .minioObjectKey(destKey)
+                        .size(item.size())
+                        .type(ContentTypeUtils.determineContentType(cleanPath))
                         .build());
 
                 copied++;

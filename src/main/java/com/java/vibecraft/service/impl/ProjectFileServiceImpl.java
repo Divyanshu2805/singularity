@@ -12,6 +12,7 @@ import com.java.vibecraft.mapper.ProjectFileMapper;
 import com.java.vibecraft.repository.ProjectFileRepository;
 import com.java.vibecraft.repository.ProjectRepository;
 import com.java.vibecraft.service.ProjectFileService;
+import com.java.vibecraft.util.ContentTypeUtils;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -23,7 +24,6 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
@@ -89,13 +89,14 @@ public class ProjectFileServiceImpl implements ProjectFileService {
         try {
             byte[] contentBytes = content.getBytes(StandardCharsets.UTF_8);
             InputStream inputStream = new ByteArrayInputStream(contentBytes);
+            String contentType = ContentTypeUtils.determineContentType(path);
             // saving the file content
             minioClient.putObject(
                     PutObjectArgs.builder()
                             .bucket(projectBucket)
                             .object(objectKey)
                             .stream(inputStream, contentBytes.length, -1)
-                            .contentType(determineContentType(path))
+                            .contentType(contentType)
                             .build());
 
             // Saving the metaData
@@ -107,6 +108,8 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                             .createdAt(Instant.now())
                             .build());
 
+            file.setSize((long) contentBytes.length);
+            file.setType(contentType);
             file.setUpdatedAt(Instant.now());
             projectFileRepository.save(file);
             log.info("Saved file: {}", objectKey);
@@ -117,13 +120,4 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     }
 
-    private String determineContentType(String path) {
-        String type = URLConnection.guessContentTypeFromName(path);
-        if (type != null) return type;
-        if (path.endsWith(".jsx") || path.endsWith(".ts") || path.endsWith(".tsx")) return "text/javascript";
-        if (path.endsWith(".json")) return "application/json";
-        if (path.endsWith(".css")) return "text/css";
-
-        return "text/plain";
-    }
 }
