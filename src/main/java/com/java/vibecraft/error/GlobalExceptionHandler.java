@@ -9,6 +9,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -77,6 +78,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST,
                 "Invalid value for parameter '" + ex.getName() + "': " + ex.getValue());
+        log.error(apiError.toString(), ex);
+        return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiError> handleMissingParameter(MissingServletRequestParameterException ex) {
+        ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST,
+                "Missing required parameter '" + ex.getParameterName() + "'");
         log.error(apiError.toString(), ex);
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
