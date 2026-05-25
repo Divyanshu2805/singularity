@@ -23,14 +23,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleResourceNotFound(ResourceNotFoundException ex) {
         ApiError apiError = new ApiError(HttpStatus.NOT_FOUND, ex.getResourceName() + " with id " + ex.getResourceId() + " not found");
-        log.error(apiError.toString(), ex);
+        log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ApiError> handleForbidden(ForbiddenException ex) {
         ApiError apiError = new ApiError(HttpStatus.FORBIDDEN, ex.getMessage());
-        log.error(apiError.toString(), ex);
+        log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
@@ -42,35 +42,36 @@ public class GlobalExceptionHandler {
                 .toList();
 
         ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST, "Input Validation Failed", errors);
-        log.error(apiError.toString(), ex);
+        log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ApiError> handleBadRequest(BadRequestException ex) {
         ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST, ex.getMessage());
-        log.error(apiError.toString(), ex);
+        log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
     @ExceptionHandler(AuthorizationDeniedException.class)
     public ResponseEntity<ApiError> handleAuthorizationDenied(AuthorizationDeniedException ex) {
         ApiError apiError = new ApiError(HttpStatus.FORBIDDEN, ex.getMessage());
-        log.error(apiError.toString(), ex);
+        log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiError> handleAuthenticationFailure(AuthenticationException ex) {
         ApiError apiError = new ApiError(HttpStatus.UNAUTHORIZED, ex.getMessage());
-        log.error(apiError.toString(), ex);
+        log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
     @ExceptionHandler(JwtException.class)
     public ResponseEntity<ApiError> handleJwtError(JwtException ex) {
         ApiError apiError = new ApiError(HttpStatus.UNAUTHORIZED, "Invalid or expired token");
-        log.error(apiError.toString(), ex);
+        // The response message is deliberately vague; the log still needs to say expired vs. malformed vs. bad signature.
+        log.warn("{} (cause: {})", apiError, ex.getMessage());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
@@ -78,7 +79,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST,
                 "Invalid value for parameter '" + ex.getName() + "': " + ex.getValue());
-        log.error(apiError.toString(), ex);
+        log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
@@ -86,14 +87,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleMissingParameter(MissingServletRequestParameterException ex) {
         ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST,
                 "Missing required parameter '" + ex.getParameterName() + "'");
-        log.error(apiError.toString(), ex);
+        log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiError> handleMalformedRequest(HttpMessageNotReadableException ex) {
         ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST, "Malformed request body");
-        log.error(apiError.toString(), ex);
+        log.warn("{} (cause: {})", apiError, ex.getMessage());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
@@ -101,7 +102,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         ApiError apiError = new ApiError(HttpStatus.CONFLICT,
                 "The request conflicts with existing data (e.g. a duplicate or a reference to something that doesn't exist)");
-        log.error(apiError.toString(), ex);
+        log.warn(apiError.toString(), ex);
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
