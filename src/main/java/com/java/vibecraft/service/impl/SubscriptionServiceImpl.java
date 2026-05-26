@@ -36,8 +36,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     SubscriptionMapper subscriptionMapper;
     ProjectMemberRepository projectMemberRepository;
 
-    Integer FREE_TIER_PROJECTS_ALLOWED = 100;
-
     @Override
     public SubscriptionResponse getCurrentSubscription() {
         Long userId = authUtil.getCurrentUserId();

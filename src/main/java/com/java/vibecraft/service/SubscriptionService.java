@@ -9,6 +9,10 @@ import com.java.vibecraft.enums.SubscriptionStatus;
 import java.time.Instant;
 
 public interface SubscriptionService {
+
+    int FREE_TIER_PROJECTS_ALLOWED = 100;
+    int FREE_TIER_DAILY_TOKENS = 50_000;
+
     SubscriptionResponse getCurrentSubscription();
 
     void activateSubscription(Long userId, Long planId, String subscriptionId, String customerId);
