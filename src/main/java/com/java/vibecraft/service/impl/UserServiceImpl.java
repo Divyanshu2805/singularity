@@ -1,7 +1,11 @@
 package com.java.vibecraft.service.impl;
 
 import com.java.vibecraft.dto.auth.UserProfileResponse;
+import com.java.vibecraft.entity.User;
+import com.java.vibecraft.error.ResourceNotFoundException;
+import com.java.vibecraft.mapper.UserMapper;
 import com.java.vibecraft.repository.UserRepository;
+import com.java.vibecraft.security.AuthUtil;
 import com.java.vibecraft.service.UserService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -17,10 +21,15 @@ import org.springframework.stereotype.Service;
 public class UserServiceImpl implements UserService, UserDetailsService {
 
     UserRepository userRepository;
+    AuthUtil authUtil;
+    UserMapper userMapper;
 
     @Override
     public UserProfileResponse getProfile() {
-        return null;
+        Long userId = authUtil.getCurrentUserId();
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
+        return userMapper.toUserProfileResponse(user);
     }
 
     @Override
