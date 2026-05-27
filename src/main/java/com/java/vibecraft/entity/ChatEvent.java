@@ -23,8 +23,16 @@ public class ChatEvent {
     @JoinColumn(nullable = false)
     ChatMessage chatMessage;
 
+    /**
+     * An explicit {@code columnDefinition} stops Hibernate generating a {@code CHECK type IN (...)} constraint
+     * listing today's enum values. Under {@code ddl-auto: update} Hibernate creates such a constraint once and
+     * then never alters it, so adding a value to {@link ChatEventType} left every insert of the new value
+     * failing against the old constraint - and because events are saved as one batch, a single new-value row
+     * rejected the whole conversation, losing the entire chat history for that turn while the generated files
+     * had already been written. Found 2026-09-15 when {@code TODO} was added for the build checklist.
+     */
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "varchar(255)")
     ChatEventType type;
 
     @Column(nullable = false)
