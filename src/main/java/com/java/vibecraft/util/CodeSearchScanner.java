@@ -1,0 +1,81 @@
+package com.java.vibecraft.util;
+
+import com.java.vibecraft.dto.code.CodeSearchFileResult;
+import com.java.vibecraft.dto.code.CodeSearchMatch;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * Finds a plain-text query inside one file's content. Pure and storage-free on purpose: the service around it
+ * deals with MinIO and skipping binaries, while the line-by-line matching - the part with all the off-by-one
+ * risk - stays directly testable.
+ *
+ * <p>The query is matched literally, not as a regex: people searching code type things like {@code useState(}
+ * and {@code [0]}, and having those silently mean something else is worse than not supporting patterns at all.
+ */
+public final class CodeSearchScanner {
+
+    /** Long enough to show the match in context, short enough that a minified line can't flood the results. */
+    public static final int MAX_LINE_CHARS = 240;
+
+    private CodeSearchScanner() {
+    }
+
+    /**
+     * @param maxMatches most matches to collect from this file; the result is flagged truncated if there were more
+     * @return null when nothing matched, so callers can skip the file entirely rather than filter empties later
+     */
+    public static CodeSearchFileResult scan(String path, String content, String query, int maxMatches) {
+        if (content == null || content.isEmpty() || query == null || query.isEmpty()) {
+            return null;
+        }
+
+        String needle = query.toLowerCase(Locale.ROOT);
+        List<CodeSearchMatch> matches = new ArrayList<>();
+        boolean truncated = false;
+
+        String[] lines = content.split("\n", -1);
+        for (int index = 0; index < lines.length; index++) {
+            String raw = stripCarriageReturn(lines[index]);
+            int hit = raw.toLowerCase(Locale.ROOT).indexOf(needle);
+            if (hit < 0) {
+                continue;
+            }
+            if (matches.size() == maxMatches) {
+                truncated = true;
+                break;
+            }
+
+            // Leading indentation is dropped for display, so the match column has to shift with it.
+            int indent = indentWidth(raw);
+            String text = raw.substring(indent);
+            int column = hit - indent;
+
+            // A very long line is windowed around the match so the hit stays visible.
+            if (text.length() > MAX_LINE_CHARS) {
+                int from = Math.max(0, Math.min(column - MAX_LINE_CHARS / 3, text.length() - MAX_LINE_CHARS));
+                text = text.substring(from, Math.min(text.length(), from + MAX_LINE_CHARS));
+                column -= from;
+            }
+
+            matches.add(new CodeSearchMatch(index + 1, text, Math.max(column, 0), query.length()));
+        }
+
+        return matches.isEmpty() ? null : new CodeSearchFileResult(path, List.copyOf(matches), truncated);
+    }
+
+    private static String stripCarriageReturn(String line) {
+        return line.endsWith("\r") ? line.substring(0, line.length() - 1) : line;
+    }
+
+    private static int indentWidth(String line) {
+        int index = 0;
+        while (index < line.length() && Character.isWhitespace(line.charAt(index))) {
+            index++;
+        }
+        // An all-whitespace line has nothing to trim to - keep it as-is so the column stays meaningful.
+        return index == line.length() ? 0 : index;
+    }
+}
