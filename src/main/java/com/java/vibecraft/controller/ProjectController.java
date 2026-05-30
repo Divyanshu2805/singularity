@@ -1,5 +1,6 @@
 package com.java.vibecraft.controller;
 
+import com.java.vibecraft.dto.project.CreateProjectFromPromptRequest;
 import com.java.vibecraft.dto.project.ProjectRequest;
 import com.java.vibecraft.dto.project.ProjectResponse;
 import com.java.vibecraft.dto.project.ProjectSummaryResponse;
@@ -34,6 +35,11 @@ public class ProjectController {
         return ResponseEntity.status(HttpStatus.CREATED).body(projectService.createProject(request));
     }
 
+    @PostMapping("/from-prompt")
+    public ResponseEntity<ProjectResponse> createProjectFromPrompt(@RequestBody @Valid CreateProjectFromPromptRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(projectService.createProjectFromPrompt(request));
+    }
+
     @PatchMapping("/{id}")
     public ResponseEntity<ProjectResponse> updateProject(@PathVariable Long id, @RequestBody @Valid ProjectRequest request) {
         return ResponseEntity.ok(projectService.updateProject(id, request));
@@ -48,6 +54,30 @@ public class ProjectController {
     @PostMapping("/{id}/retry-template-init")
     public ResponseEntity<ProjectResponse> retryTemplateInit(@PathVariable Long id) {
         return ResponseEntity.ok(projectService.retryTemplateInitialization(id));
+    }
+
+    @PutMapping("/{id}/pin")
+    public ResponseEntity<Void> pinProject(@PathVariable Long id) {
+        projectService.setPinned(id, true);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{id}/pin")
+    public ResponseEntity<Void> unpinProject(@PathVariable Long id) {
+        projectService.setPinned(id, false);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}/star")
+    public ResponseEntity<Void> starProject(@PathVariable Long id) {
+        projectService.setStarred(id, true);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{id}/star")
+    public ResponseEntity<Void> unstarProject(@PathVariable Long id) {
+        projectService.setStarred(id, false);
+        return ResponseEntity.noContent().build();
     }
 
 }

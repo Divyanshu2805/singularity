@@ -37,4 +37,8 @@ public class ProjectMember {
     Instant invitedAt;
     Instant acceptedAt;
 
+    // Per-member preferences: null when not pinned/starred, otherwise when it was.
+    Instant pinnedAt;
+    Instant starredAt;
+
 }

@@ -1,6 +1,8 @@
 package com.java.vibecraft.service.impl;
 
+import com.java.vibecraft.dto.project.CreateProjectFromPromptRequest;
 import com.java.vibecraft.dto.project.ProjectRequest;
+import com.java.vibecraft.llm.ProjectNameGenerator;
 import com.java.vibecraft.dto.project.ProjectResponse;
 import com.java.vibecraft.dto.project.ProjectSummaryResponse;
 import com.java.vibecraft.entity.Project;
@@ -29,6 +31,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -44,6 +49,7 @@ public class ProjectServiceImpl implements ProjectService {
     AuthUtil authUtil;
     SubscriptionService subscriptionService;
     ProjectTemplateService projectTemplateService;
+    ProjectNameGenerator projectNameGenerator;
 
     @Override
     @PreAuthorize("@security.canViewProject(#id)")
@@ -52,21 +58,34 @@ public class ProjectServiceImpl implements ProjectService {
         Long userId = authUtil.getCurrentUserId();
         Project project = getAccessibleProjectById(id, userId);
 
-        return projectMapper.toProjectResponse(project);
+        return projectMapper.toProjectResponse(project, getRole(id, userId));
     }
 
     @Override
     public ProjectResponse createProject(ProjectRequest request) {
+        assertCanCreateProject();
+        return createOwnedProject(request.name());
+    }
 
+    @Override
+    public ProjectResponse createProjectFromPrompt(CreateProjectFromPromptRequest request) {
+        // Checked before naming, so a user at their plan limit doesn't spend an AI call first.
+        assertCanCreateProject();
+        return createOwnedProject(projectNameGenerator.generateName(request.prompt()));
+    }
+
+    private void assertCanCreateProject() {
         if(!subscriptionService.canCreateNewProject()) {
             throw new BadRequestException("User cannot create a New project with current Plan, Upgrade plan now.");
         }
+    }
 
+    private ProjectResponse createOwnedProject(String name) {
         Long userId = authUtil.getCurrentUserId();
         User owner = userRepository.getReferenceById(userId);
 
         Project project = Project.builder()
-                .name(request.name())
+                .name(name)
                 .isPublic(false)
                 .build();
 
@@ -98,7 +117,7 @@ public class ProjectServiceImpl implements ProjectService {
             project = projectRepository.save(project);
         }
 
-        return projectMapper.toProjectResponse(project);
+        return projectMapper.toProjectResponse(project, ProjectRole.OWNER);
     }
 
     @Override
@@ -107,7 +126,46 @@ public class ProjectServiceImpl implements ProjectService {
         Long userId = authUtil.getCurrentUserId();
         var projects = projectRepository.findAllAccessibleByUser(userId);
 
-        return projectMapper.toListOfProjectSummaryResponse(projects);
+        Map<Long, ProjectMember> membershipsByProjectId = projectMemberRepository.findByIdUserId(userId).stream()
+                .collect(Collectors.toMap(pm -> pm.getId().getProjectId(), Function.identity()));
+
+        return projects.stream()
+                .map(project -> {
+                    ProjectMember membership = membershipsByProjectId.get(project.getId());
+                    return projectMapper.toProjectSummaryResponse(project, membership.getProjectRole(),
+                            membership.getPinnedAt(), membership.getStarredAt());
+                })
+                .toList();
+    }
+
+    @Override
+    @PreAuthorize("@security.canViewProject(#id)")
+    public void setPinned(Long id, boolean pinned) {
+        ProjectMember membership = getCurrentUserMembership(id);
+        // Re-pinning keeps the original time, so the sidebar's order doesn't shuffle.
+        if (pinned == (membership.getPinnedAt() != null)) {
+            return;
+        }
+        membership.setPinnedAt(pinned ? Instant.now() : null);
+        projectMemberRepository.save(membership);
+    }
+
+    @Override
+    @PreAuthorize("@security.canViewProject(#id)")
+    public void setStarred(Long id, boolean starred) {
+        ProjectMember membership = getCurrentUserMembership(id);
+        if (starred == (membership.getStarredAt() != null)) {
+            return;
+        }
+        membership.setStarredAt(starred ? Instant.now() : null);
+        projectMemberRepository.save(membership);
+    }
+
+    private ProjectMember getCurrentUserMembership(Long projectId) {
+        Long userId = authUtil.getCurrentUserId();
+        getAccessibleProjectById(projectId, userId); // excludes soft-deleted projects
+        return projectMemberRepository.findById(new ProjectMemberId(projectId, userId))
+                .orElseThrow(() -> new ResourceNotFoundException("ProjectMember", projectId + "/" + userId));
     }
 
     @Override
@@ -121,7 +179,7 @@ public class ProjectServiceImpl implements ProjectService {
 
         project = projectRepository.save(project);
 
-        return projectMapper.toProjectResponse(project);
+        return projectMapper.toProjectResponse(project, getRole(id, userId));
     }
 
     @Override
@@ -145,14 +203,20 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     @PreAuthorize("@security.canEditProject(#id)")
     public ProjectResponse retryTemplateInitialization(Long id) {
-        Project project = getAccessibleProjectById(id, authUtil.getCurrentUserId());
+        Long userId = authUtil.getCurrentUserId();
+        Project project = getAccessibleProjectById(id, userId);
 
         TemplateInitResult result = projectTemplateService.initializeProjectFromTemplate(id);
 
         project.setTemplateInitIssue(result.isComplete() ? null : describeIncompleteTemplate(result));
         project = projectRepository.save(project);
 
-        return projectMapper.toProjectResponse(project);
+        return projectMapper.toProjectResponse(project, getRole(id, userId));
+    }
+
+    private ProjectRole getRole(Long projectId, Long userId) {
+        return projectMemberRepository.findRoleByProjectIdAndUserId(projectId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("ProjectMember", projectId + "/" + userId));
     }
 
     private String describeIncompleteTemplate(TemplateInitResult result) {
