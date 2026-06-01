@@ -47,6 +47,8 @@ erDiagram
         string projectRole "EDITOR, VIEWER, OWNER"
         timestamp invitedAt
         timestamp acceptedAt
+        timestamp pinnedAt
+        timestamp starredAt
     }
 
     PROJECT_FILE {
@@ -95,7 +97,7 @@ erDiagram
     CHAT_EVENT {
         bigint id PK
         bigint chatMessageId FK
-        string type "THOUGHT, MESSAGE, FILE_EDIT, TOOL_LOG"
+        string type "THOUGHT, MESSAGE, TODO, FILE_EDIT, LEARN, TOOL_LOG"
         int sequenceOrder
         text content
         string filePath
@@ -182,6 +184,8 @@ The sole record of who can access a project and in what capacity — both owners
 | `projectRole` | `OWNER` (the project creator — exactly one per project, by convention, not enforced), `EDITOR` (can modify the project), or `VIEWER` (read-only) — a plain `ProjectRole` enum. ⚠ Nothing currently enforces the "exactly one `OWNER`" convention or restricts who can be assigned `OWNER`: `InviteMemberRequest.role`/`UpdateMemberRoleRequest.role` accept any `ProjectRole` value including `OWNER`, and none of `ProjectMemberServiceImpl`'s methods check the caller's own role before inviting/promoting/removing a member — see the "Known gaps" note in [Project Status](../project-status.md#project-status). |
 | `invitedAt` | When the invite was sent (also set for the owner's own row, to "now", at project-creation time). |
 | `acceptedAt` | When the invite was accepted — set for the owner's own row at project-creation time, and for anyone else via `POST /api/projects/{projectId}/members/accept` (added 2026-04-26, see [APIs](../api/README.md#apis)). `null` means still pending. Nothing currently reads this field to restrict access, though — an invited member has full access per their `projectRole` immediately, whether or not they've accepted; see Project Status "Known gaps". |
+| `pinnedAt` | Added 2026-05-30. When this member pinned the project, or `null` if they haven't — a per-member preference, so each collaborator pins independently. Set/cleared via `PUT`/`DELETE /api/projects/{id}/pin`. Nullable, so `ddl-auto: update` added it to existing rows without a migration. |
+| `starredAt` | Added 2026-05-30. Same as `pinnedAt`, for starring (`PUT`/`DELETE /api/projects/{id}/star`). Independent of `pinnedAt` at the database level. |
 
 `ProjectMemberId` (the `@EmbeddedId`) implements `Serializable` and `equals()`/`hashCode()` over both fields, as required for a JPA composite key to behave correctly in the persistence context.
 
@@ -249,13 +253,13 @@ One step of an assistant's response — a thought, a plain message, a file edit,
 |---|---|
 | `id` | Primary key. |
 | `chatMessage` | The assistant `ChatMessage` this event belongs to — `@ManyToOne`, not null. |
-| `type` | `ChatEventType` enum: `THOUGHT` ("Thought for Ns"), `MESSAGE` (conversational text), `FILE_EDIT` (a generated/modified file), `TOOL_LOG` (a tool call, e.g. reading files). |
+| `type` | `ChatEventType` enum: `THOUGHT` ("Thought for Ns"), `MESSAGE` (conversational text), `TODO` (one step of the build checklist, added 2026-05-30 — `filePath` holds the file that step writes, when it has one), `FILE_EDIT` (a generated/modified file), `LEARN` (teaching mode only, added 2026-05-30 — a walkthrough of a just-written file: a summary, one explained part per important line of code, and related files), `TOOL_LOG` (a tool call, e.g. reading files). |
 | `sequenceOrder` | Position of this event within the response — not null; events are fetched/rendered in this order. |
-| `content` | The event's text content (Markdown for `MESSAGE`, file content for `FILE_EDIT`) — `text` column. |
-| `filePath` | The file path, for `FILE_EDIT` events only. |
-| `metadata` | Extra context (currently the raw tool-args string for `TOOL_LOG` events) — `text` column. |
+| `content` | The event's text content (Markdown for `MESSAGE`, file content for `FILE_EDIT`, the raw walkthrough body — `<summary>`, `<part>`s and `<related>` files — for `LEARN`) — `text` column. |
+| `filePath` | The file path: always for `FILE_EDIT`; when given, the file a `TODO` step writes or a `LEARN` walkthrough explains. |
+| `metadata` | Extra context — the raw tool-args string for `TOOL_LOG` events; for `LEARN` events, the concepts the walkthrough's parts introduce, comma-separated (e.g. `State, Effects`) — `text` column. |
 
-`LlmResponseParser` builds these by regex-matching `<message>`/`<file path="...">`/`<tool args="...">` tags out of the LLM's raw streamed text (see [Practices / Conventions](../practices/conventions.md#practices--conventions)); a synthetic `THOUGHT` event (elapsed thinking time) is prepended before the parsed events are saved.
+`LlmResponseParser` builds these by regex-matching `<message>`/`<todo path="...">`/`<file path="...">`/`<learn path="...">`/`<tool args="...">` tags out of the LLM's raw streamed text (see [Practices / Conventions](../practices/conventions.md#practices--conventions)); a synthetic `THOUGHT` event (elapsed thinking time) is prepended before the parsed events are saved.
 
 ### SUBSCRIPTION
 
@@ -307,7 +311,7 @@ A per-user, per-day AI token counter (`usage_logs` table) — reverted 2026-05-1
 | `ProjectRole` | `EDITOR`, `VIEWER`, `OWNER` — since 2026-04-26, each maps to a `Set<ProjectPermission>` (`EDITOR`: `VIEW`/`EDIT`/`DELETE`/`VIEW_MEMBERS`; `VIEWER`: `VIEW`/`VIEW_MEMBERS`; `OWNER`: all five) | `ProjectMember.projectRole`, `InviteMemberRequest.role`, `UpdateMemberRoleRequest.role` |
 | `ProjectPermission` | `VIEW`, `EDIT`, `DELETE`, `MANAGE_MEMBERS`, `VIEW_MEMBERS` (each also carries a string `value`, e.g. `"project:view"`, currently unused outside the enum itself) | `ProjectRole.permissions`, checked by `SecurityExpressions` for every `@PreAuthorize` decision |
 | `MessageRole` | `USER`, `ASSISTANT`, `SYSTEM`, `TOOL` | `ChatMessage.role` |
-| `ChatEventType` | `THOUGHT`, `MESSAGE`, `FILE_EDIT`, `TOOL_LOG` — restored 2026-05-16 (existed in v2, deleted in v3 along with `ChatEvent`) | `ChatEvent.type` |
+| `ChatEventType` | `THOUGHT`, `MESSAGE`, `TODO`, `FILE_EDIT`, `LEARN`, `TOOL_LOG` — restored 2026-05-16 (existed in v2, deleted in v3 along with `ChatEvent`); `TODO` added 2026-05-30 for the live build checklist, `LEARN` the same day for teaching mode | `ChatEvent.type` |
 | `PreviewStatus` | `CREATING`, `RUNNING`, `FAILED`, `TERMINATED` | `Preview.status` |
 | `SubscriptionStatus` | `ACTIVE`, `TRIALING`, `CANCELED`, `PAST_DUE`, `INCOMPLETE` | `Subscription.status` |
 
