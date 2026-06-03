@@ -3,6 +3,7 @@ package com.java.vibecraft.error;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -58,6 +59,15 @@ public class GlobalExceptionHandler {
         ApiError apiError = new ApiError(HttpStatus.FORBIDDEN, ex.getMessage());
         log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiError> handleRateLimit(RateLimitExceededException ex) {
+        ApiError apiError = new ApiError(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+        log.warn(apiError.toString());
+        return ResponseEntity.status(apiError.status())
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(apiError);
     }
 
     @ExceptionHandler(AuthenticationException.class)
