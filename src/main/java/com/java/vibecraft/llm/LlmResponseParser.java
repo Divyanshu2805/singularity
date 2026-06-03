@@ -20,14 +20,14 @@ public class LlmResponseParser {
     /**
      * Regex Breakdown:
      * Group 1: Opening Tag (<tag ...>)
-     * Group 2: Tag Name (message|file|tool)
+     * Group 2: Tag Name (message|file|tool|todo)
      * Group 3: Attributes part (e.g., ' path="foo"' or ' args="a,b"')
      * Group 4: Content (The stuff inside)
      * Group 5: Closing Tag (</tag>)
      */
 
     private static final Pattern GENERIC_TAG_PATTERN = Pattern.compile(
-            "(<(message|file|tool)([^>]*)>)([\\s\\S]*?)(</\\2>)",
+            "(<(message|file|tool|todo)([^>]*)>)([\\s\\S]*?)(</\\2>)",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL
     );
 
@@ -36,10 +36,22 @@ public class LlmResponseParser {
             "(path|args)=\"([^\"]+)\""
     );
 
+    /**
+     * A backstop on runaway checklists, not a target. The prompt ties the step count to the files actually
+     * being written, so the real length is set by the work; this only exists so a model that ignores that
+     * can't persist dozens of rows or turn the progress card back into the wall of text it replaced.
+     *
+     * <p>Deliberately NOT capped at the number of {@code <file>} tags in the response: a checklist longer
+     * than the files delivered means the model announced steps it never did, and leaving those visible
+     * (unticked) is the point - truncating them would hide an unfinished plan.
+     */
+    private static final int MAX_CHECKLIST_STEPS = 12;
+
     public List<ChatEvent> parseChatEvents(String fullResponse, ChatMessage parentMessage) {
         List<ChatEvent> events = new ArrayList<>();
         int orderCounter = 1;
         int lastMatchEnd = 0;
+        int checklistSteps = 0;
 
         Matcher matcher = GENERIC_TAG_PATTERN.matcher(fullResponse);
 
@@ -74,6 +86,22 @@ public class LlmResponseParser {
                     builder.type(ChatEventType.TOOL_LOG);
                     builder.metadata(attrMap.get("args")); // Store raw file list in metadata
                 }
+                case "todo" -> {
+                    if (content.isBlank()) {
+                        log.warn("Skipping <todo> tag with no text in AI response");
+                        continue;
+                    }
+                    if (++checklistSteps > MAX_CHECKLIST_STEPS) {
+                        log.warn("Dropping checklist step {} - the model emitted more than the {} step cap: {}",
+                                checklistSteps, MAX_CHECKLIST_STEPS, preview(content));
+                        continue;
+                    }
+                    builder.type(ChatEventType.TODO);
+                    // Optional: a step that names the file it will write gets ticked off when that
+                    // file's FILE_EDIT lands. A step without one (e.g. "Wire up the routes") is
+                    // tracked by position instead - see the client's checklist rendering.
+                    builder.filePath(attrMap.get("path"));
+                }
                 default -> { continue; }
             }
 
@@ -89,7 +117,7 @@ public class LlmResponseParser {
         String gap = fullResponse.substring(from, to).trim();
         if (!gap.isEmpty()) {
             log.warn("Ignoring {} character(s) of unrecognized content in AI response (model may not be " +
-                    "following the expected <message>/<file>/<tool> protocol): {}", gap.length(), preview(gap));
+                    "following the expected <message>/<todo>/<file>/<tool> protocol): {}", gap.length(), preview(gap));
         }
     }
 

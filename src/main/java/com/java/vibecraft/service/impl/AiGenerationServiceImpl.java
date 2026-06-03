@@ -144,15 +144,20 @@ public class AiGenerationServiceImpl implements AiGenerationService {
     }
 
     /**
-     * Catches the exact failure mode found in production: the model announces (via a {@code <tool>}
-     * tag) that it's reading files to make a change, but the turn ends without ever emitting the
-     * {@code <file>} edit - so nothing gets saved and the chat looks like it succeeded. A turn that
-     * never announced an edit at all (a plain question, for example) is left alone.
+     * Catches the exact failure mode found in production: the model announces a change - via a {@code <tool>}
+     * tag saying it's reading files, or a {@code <todo>} checklist naming the files it will write - but the
+     * turn ends without ever emitting the {@code <file>} edit, so nothing gets saved and the chat looks like
+     * it succeeded. A turn that never announced an edit at all (a plain question, for example) is left alone.
+     *
+     * <p>The checklist is the stronger signal of the two: a turn that listed the files it would write and
+     * wrote none is unambiguously unfinished, and it catches the case where the model planned without
+     * reading anything first, which the tool-tag check alone misses.
      */
     private boolean looksLikeAbandonedEdit(List<ChatEvent> events) {
-        boolean announcedToolUse = events.stream().anyMatch(e -> e.getType() == ChatEventType.TOOL_LOG);
+        boolean announcedEdit = events.stream()
+                .anyMatch(e -> e.getType() == ChatEventType.TOOL_LOG || e.getType() == ChatEventType.TODO);
         boolean producedFileEdit = events.stream().anyMatch(e -> e.getType() == ChatEventType.FILE_EDIT);
-        return announcedToolUse && !producedFileEdit;
+        return announcedEdit && !producedFileEdit;
     }
 
     private void finalizeChats(String userMessage, ChatSession chatSession, String fullText, Long duration, Usage usage) {
