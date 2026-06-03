@@ -26,6 +26,7 @@ public class AuthUtil {
         return Keys.hmacShaKeyFor(jwtSecretKey.getBytes(StandardCharsets.UTF_8));
     }
 
+    /** Legacy (app.auth.legacy.enabled) Bearer tokens only - Firebase sign-ins use session cookies. */
     public String generateAccessToken(User user) {
         return Jwts.builder()
                 .subject(user.getUsername())
@@ -36,7 +37,7 @@ public class AuthUtil {
                 .compact();
     }
 
-    public JwtUserPrincipal verifyAccessToken(String token) {
+    public UserPrincipal verifyAccessToken(String token) {
         Claims claims = Jwts.parser()
                 .verifyWith(getSecretKey())
                 .build()
@@ -45,12 +46,21 @@ public class AuthUtil {
 
         Long userId = Long.parseLong(claims.get("userId", String.class));
         String username = claims.getSubject();
-        return new JwtUserPrincipal(userId, username, new ArrayList<>());
+        return new UserPrincipal(userId, username, null, new ArrayList<>());
+    }
+
+    /** The current caller, or an AuthenticationException (401) if the request isn't signed in. */
+    public UserPrincipal getCurrentPrincipal() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if(authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal userPrincipal)) {
+            throw new AuthenticationCredentialsNotFoundException("You need to sign in to do that.");
+        }
+        return userPrincipal;
     }
 
     public Long getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if(authentication == null || !(authentication.getPrincipal() instanceof JwtUserPrincipal userPrincipal)) {
+        if(authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal userPrincipal)) {
             throw new AuthenticationCredentialsNotFoundException("No JWT Found");
         }
         return userPrincipal.userId();

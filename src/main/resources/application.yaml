@@ -33,6 +33,39 @@ spring:
 jwt:
   secret-key: ${JWT_SECRET}
 
+# Firebase Authentication (Identity Platform). Every sign-in method - email/password, Google, two-step codes -
+# happens against Firebase from the browser; this server only verifies what Firebase issued and turns it into its
+# own httpOnly session cookie. Both values have no fallback, like every other secret:
+#   FIREBASE_PROJECT_ID        - the Firebase project id (Project settings -> General)
+#   FIREBASE_CREDENTIALS_PATH  - path to a service-account JSON key (Project settings -> Service accounts). A file
+#                                OUTSIDE this repo: it can mint tokens for any user, so it must never be committed.
+firebase:
+  project-id: ${FIREBASE_PROJECT_ID}
+  credentials-path: ${FIREBASE_CREDENTIALS_PATH}
+
+app:
+  auth:
+    session-cookie:
+      name: vc_session
+      # Firebase caps session cookies at 14 days. Five keeps a stolen cookie's useful life short without making
+      # people sign in every day.
+      max-age: 5d
+      # Browsers accept Secure cookies on http://localhost, so this stays true in dev too. Only turn it off to
+      # test from a non-localhost http origin.
+      secure: true
+    # How long a verified session is trusted before checking Firebase again for revocation (sign out everywhere,
+    # password change, disabled account). The upper bound on how long a revoked session keeps working here.
+    revocation-check-interval: 60s
+    # The pre-Firebase username/password endpoints (/api/auth/signup, /login, /forgot-password, /reset-password)
+    # and Bearer-token requests. Kept only as a rollback path during the migration: they bypass two-step
+    # verification, so switch this to false as soon as Firebase sign-in is confirmed working.
+    legacy:
+      enabled: true
+  firebase:
+    # One-off: on startup, copy every local user without a Firebase account into Firebase, keeping their BCrypt
+    # password hashes so they sign in with the same password. Safe to re-run; leave false otherwise.
+    import-users: false
+
 stripe:
   api:
     secret: ${STRIPE_SECRET}

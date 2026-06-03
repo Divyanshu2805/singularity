@@ -1,35 +1,63 @@
 package com.java.vibecraft.controller;
 
-import com.java.vibecraft.dto.auth.AuthResponse;
-import com.java.vibecraft.dto.auth.LoginRequest;
-import com.java.vibecraft.dto.auth.SignupRequest;
+import com.java.vibecraft.dto.auth.AuthAuditEventResponse;
+import com.java.vibecraft.dto.auth.CreateSessionRequest;
+import com.java.vibecraft.dto.auth.ReportSecurityEventRequest;
+import com.java.vibecraft.dto.auth.SessionResponse;
 import com.java.vibecraft.dto.auth.UserProfileResponse;
-import com.java.vibecraft.service.AuthService;
+import com.java.vibecraft.service.SessionService;
 import com.java.vibecraft.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
+/**
+ * Sessions for Firebase sign-ins. Signing in, signing up, Google, second factors and password resets all happen
+ * between the browser and Firebase; this controller only turns the result into a session and ends it again.
+ */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/auth")
 @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
 public class AuthController {
 
-    AuthService authService;
+    SessionService sessionService;
     UserService userService;
 
-    @PostMapping("/signup")
-    public ResponseEntity<AuthResponse> signup(@RequestBody @Valid SignupRequest request) {
-        return ResponseEntity.ok(authService.signup(request));
+    /**
+     * Makes sure the browser holds a CSRF token (the readable {@code XSRF-TOKEN} cookie) before its first write.
+     * Resolving the token is what makes Spring write the cookie.
+     */
+    @GetMapping("/csrf")
+    public ResponseEntity<Void> csrf(CsrfToken csrfToken) {
+        csrfToken.getToken();
+        return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@RequestBody @Valid LoginRequest request) {
-        return ResponseEntity.ok(authService.login(request));
+    @PostMapping("/session")
+    public ResponseEntity<SessionResponse> createSession(@RequestBody @Valid CreateSessionRequest request,
+                                                         HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        return ResponseEntity.ok(sessionService.createSession(request, httpRequest, httpResponse));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        sessionService.signOut(httpRequest, httpResponse);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/logout-all")
+    public ResponseEntity<Void> logoutEverywhere(HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        sessionService.signOutEverywhere(httpRequest, httpResponse);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/me")
@@ -37,4 +65,15 @@ public class AuthController {
         return ResponseEntity.ok(userService.getProfile());
     }
 
+    @GetMapping("/security-events")
+    public ResponseEntity<List<AuthAuditEventResponse>> getSecurityEvents() {
+        return ResponseEntity.ok(sessionService.recentSecurityEvents());
+    }
+
+    @PostMapping("/security-events")
+    public ResponseEntity<Void> reportSecurityEvent(@RequestBody @Valid ReportSecurityEventRequest request,
+                                                    HttpServletRequest httpRequest) {
+        sessionService.reportSecurityEvent(request, httpRequest);
+        return ResponseEntity.noContent().build();
+    }
 }

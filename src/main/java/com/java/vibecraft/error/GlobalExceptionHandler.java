@@ -7,8 +7,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -56,6 +58,22 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthorizationDeniedException.class)
     public ResponseEntity<ApiError> handleAuthorizationDenied(AuthorizationDeniedException ex) {
+        ApiError apiError = new ApiError(HttpStatus.FORBIDDEN, ex.getMessage());
+        log.warn(apiError.toString());
+        return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
+    /** Missing or mismatched X-XSRF-TOKEN on a write - see WebSecurityConfig's csrf().spa(). */
+    @ExceptionHandler(CsrfException.class)
+    public ResponseEntity<ApiError> handleCsrf(CsrfException ex) {
+        ApiError apiError = new ApiError(HttpStatus.FORBIDDEN, "Your request couldn't be verified. Refresh the page and try again.");
+        log.warn("{} (cause: {})", apiError, ex.getMessage());
+        return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
+    /** Any other access-denied from the security chain. Without this it fell through to the catch-all 500. */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException ex) {
         ApiError apiError = new ApiError(HttpStatus.FORBIDDEN, ex.getMessage());
         log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);

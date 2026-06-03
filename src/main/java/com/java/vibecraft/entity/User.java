@@ -34,6 +34,14 @@ public class User implements UserDetails {
 
     String name;
 
+    /**
+     * The Firebase Authentication uid - the identity every sign-in method (password, Google, two-step) resolves
+     * to. Matched on this, never on email: an address can change hands, the uid can't. Null only for a legacy
+     * account that hasn't signed in through Firebase or been imported yet.
+     */
+    @Column(unique = true)
+    String firebaseUid;
+
     @Column(unique = true)
     String stripeCustomerId;
 
