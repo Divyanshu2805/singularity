@@ -252,7 +252,39 @@ public class AiGenerationServiceImpl implements AiGenerationService {
             log.warn("Saved {}/{} generated file(s) for projectId: {}", savedCount, fileEditEvents.size(), projectId);
         }
 
-        chatEventRepository.saveAll(chatEventList);
+        saveChatEvents(chatEventList, projectId);
+    }
+
+    /**
+     * Saves the turn's events, falling back to one at a time if the batch is rejected. {@code saveAll} is
+     * all-or-nothing, so a single unsaveable event used to take the whole conversation record with it - the
+     * same failure the per-file loop above already guards against, and one that bites hardest here because
+     * the generated files have already been written by this point: the project gains files while its chat
+     * looks like nothing ever happened. Losing one event is a gap in the transcript; losing all of them
+     * looks like a broken product.
+     *
+     * <p>Safe to retry individually because this class is deliberately not {@code @Transactional}: the failed
+     * batch rolls back its own transaction and each retry gets a fresh one.
+     */
+    private void saveChatEvents(List<ChatEvent> events, Long projectId) {
+        try {
+            chatEventRepository.saveAll(events);
+        } catch (Exception batchFailure) {
+            log.error("Batch-saving {} chat event(s) failed for projectId: {} - retrying individually so the " +
+                    "rest of the conversation survives.", events.size(), projectId, batchFailure);
+
+            int saved = 0;
+            for (ChatEvent event : events) {
+                try {
+                    chatEventRepository.save(event);
+                    saved++;
+                } catch (Exception e) {
+                    log.error("Dropping unsaveable {} event (sequence {}) for projectId: {}",
+                            event.getType(), event.getSequenceOrder(), projectId, e);
+                }
+            }
+            log.warn("Saved {}/{} chat event(s) individually for projectId: {}", saved, events.size(), projectId);
+        }
     }
 
     private ChatSession createChatSessionIfNotExists(Long projectId, Long userId) {
