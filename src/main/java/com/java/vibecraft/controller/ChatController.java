@@ -30,7 +30,7 @@ public class ChatController {
     public Flux<ServerSentEvent<StreamResponse>> streamChat(
             @RequestBody @Valid ChatRequest request) {
 
-        return aiGenerationService.streamResponse(request.message(), request.projectId())
+        return aiGenerationService.streamResponse(request.message(), request.projectId(), Boolean.TRUE.equals(request.teachingMode()))
                 .map(data -> ServerSentEvent.<StreamResponse>builder()
                         .data(data)
                         .build())

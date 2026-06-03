@@ -7,6 +7,7 @@ import com.java.vibecraft.enums.MessageRole;
 import com.java.vibecraft.error.ResourceNotFoundException;
 import com.java.vibecraft.llm.LlmResponseParser;
 import com.java.vibecraft.llm.PromptUtils;
+import com.java.vibecraft.llm.TeachingMode;
 import com.java.vibecraft.llm.advisors.FileTreeContextAdvisor;
 import com.java.vibecraft.llm.tools.CodeGenerationTools;
 import com.java.vibecraft.repository.*;
@@ -19,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -50,12 +52,13 @@ public class AiGenerationServiceImpl implements AiGenerationService {
 
     @Override
     @PreAuthorize("@security.canEditProject(#projectId)")
-    public Flux<StreamResponse> streamResponse(String userMessage, Long projectId) {
+    public Flux<StreamResponse> streamResponse(String userMessage, Long projectId, boolean teachingMode) {
 
 //        usageService.checkDailyTokensUsage();
 
         Long userId = authUtil.getCurrentUserId();
         ChatSession chatSession = createChatSessionIfNotExists(projectId, userId);
+        TeachingMode teaching = resolveTeachingMode(teachingMode, userId, projectId);
 
         Map<String, Object> advisorParams = Map.of(
                 "userId", userId,
@@ -69,7 +72,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         AtomicReference<Long> endTime = new AtomicReference<>(0L);
         AtomicReference<Usage> usageRef = new AtomicReference<>();
 
-        return buildGenerationFlux(userMessage, advisorParams, codeGenerationTools)
+        return buildGenerationFlux(userMessage, advisorParams, codeGenerationTools, teaching)
                 .doOnNext(response -> {
                     if(response.getMetadata().getUsage() != null) {
                         usageRef.set(response.getMetadata().getUsage());
@@ -93,7 +96,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                     Schedulers.boundedElastic().schedule(() -> {
                         long duration = (endTime.get() - startTime.get()) /  1000;
                         try {
-                            finalizeChats(userMessage, chatSession, fullResponseBuffer.toString(), duration, usageRef.get());
+                            finalizeChats(userMessage, chatSession, fullResponseBuffer.toString(), duration, usageRef.get(), teaching);
                         } catch (Exception e) {
                             log.error("Failed to finalize chat for projectId: {}. Raw response was: {}", projectId, fullResponseBuffer, e);
                         }
@@ -109,9 +112,32 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 });
     }
 
-    private Flux<ChatResponse> buildGenerationFlux(String userMessage, Map<String, Object> advisorParams, CodeGenerationTools tools) {
+    /**
+     * Teaching mode is resolved once, on the request thread, and then reused by the abandoned-edit retry - nothing
+     * is saved between the two attempts, so the already-taught list can't go stale, and {@code finalizeChats} runs
+     * with no security context to look the user up again anyway. A failed lookup still honours the toggle, just
+     * without the history: a learner who asked for explanations shouldn't lose them over a read that only exists to
+     * avoid repeats.
+     */
+    private TeachingMode resolveTeachingMode(boolean enabled, Long userId, Long projectId) {
+        if (!enabled) {
+            return TeachingMode.off();
+        }
+        List<String> alreadyTaught = List.of();
+        try {
+            alreadyTaught = chatEventRepository.findRecentLessonConcepts(userId, PageRequest.of(0, TeachingMode.RECENT_LESSONS_TO_READ));
+        } catch (Exception e) {
+            log.warn("Couldn't load already-taught concepts for userId: {} - teaching without them", userId, e);
+        }
+        TeachingMode teaching = TeachingMode.on(alreadyTaught);
+        log.info("Teaching mode on for projectId: {} ({} concept(s) already taught)", projectId, teaching.conceptsAlreadyTaught().size());
+        return teaching;
+    }
+
+    private Flux<ChatResponse> buildGenerationFlux(String userMessage, Map<String, Object> advisorParams, CodeGenerationTools tools,
+                                                   TeachingMode teaching) {
         return Flux.defer(() -> chatClient.prompt()
-                        .system(PromptUtils.getSystemPrompt())
+                        .system(PromptUtils.getSystemPrompt(teaching))
                         .user(userMessage)
                         .tools(tools)
                         .advisors(advisorSpec -> {
@@ -131,9 +157,10 @@ public class AiGenerationServiceImpl implements AiGenerationService {
      * {@code finalizeChats}, which itself runs on a boundedElastic thread - never call this from a
      * request thread.
      */
-    private String collectFullResponse(String userMessage, Map<String, Object> advisorParams, CodeGenerationTools tools) {
+    private String collectFullResponse(String userMessage, Map<String, Object> advisorParams, CodeGenerationTools tools,
+                                       TeachingMode teaching) {
         StringBuilder buffer = new StringBuilder();
-        buildGenerationFlux(userMessage, advisorParams, tools)
+        buildGenerationFlux(userMessage, advisorParams, tools, teaching)
                 .doOnNext(response -> {
                     if (response.getResult() == null) return;
                     String content = response.getResult().getOutput().getText();
@@ -160,7 +187,8 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         return announcedEdit && !producedFileEdit;
     }
 
-    private void finalizeChats(String userMessage, ChatSession chatSession, String fullText, Long duration, Usage usage) {
+    private void finalizeChats(String userMessage, ChatSession chatSession, String fullText, Long duration, Usage usage,
+                               TeachingMode teaching) {
         Long projectId = chatSession.getProject().getId();
 
         Integer promptTokens = null;
@@ -191,8 +219,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         assistantChatMessage = chatMessageRepository.save(assistantChatMessage);
 
         List<ChatEvent> chatEventList = llmResponseParser.parseChatEvents(fullText, assistantChatMessage);
-        long fileEditCount = chatEventList.stream().filter(e -> e.getType() == ChatEventType.FILE_EDIT).count();
-        log.info("Parsed {} chat event(s) ({} file edit(s)) for projectId: {}", chatEventList.size(), fileEditCount, projectId);
+        logParsedEvents("Parsed", chatEventList, projectId, teaching);
 
         boolean retried = false;
         if (looksLikeAbandonedEdit(chatEventList)) {
@@ -206,12 +233,12 @@ public class AiGenerationServiceImpl implements AiGenerationService {
             CodeGenerationTools tools = new CodeGenerationTools(projectFileService, projectId);
 
             long retryStart = System.currentTimeMillis();
-            String retryText = collectFullResponse(userMessage, advisorParams, tools);
+            // Same teaching mode as the first attempt: the learner asked for lessons on this turn, retried or not.
+            String retryText = collectFullResponse(userMessage, advisorParams, tools, teaching);
             duration = (System.currentTimeMillis() - retryStart) / 1000;
 
             List<ChatEvent> retryEvents = llmResponseParser.parseChatEvents(retryText, assistantChatMessage);
-            long retryFileEditCount = retryEvents.stream().filter(e -> e.getType() == ChatEventType.FILE_EDIT).count();
-            log.info("Retry parsed {} chat event(s) ({} file edit(s)) for projectId: {}", retryEvents.size(), retryFileEditCount, projectId);
+            logParsedEvents("Retry parsed", retryEvents, projectId, teaching);
 
             chatEventList = retryEvents;
 
@@ -253,6 +280,22 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         }
 
         saveChatEvents(chatEventList, projectId);
+    }
+
+    /**
+     * Walkthroughs are counted only for a teaching-mode turn, where they show whether the model is following the
+     * {@code <learn>} rules: every file should get one, and the part count says how thoroughly they cover their files.
+     */
+    private void logParsedEvents(String label, List<ChatEvent> events, Long projectId, TeachingMode teaching) {
+        long fileEditCount = events.stream().filter(e -> e.getType() == ChatEventType.FILE_EDIT).count();
+        if (!teaching.enabled()) {
+            log.info("{} {} chat event(s) ({} file edit(s)) for projectId: {}", label, events.size(), fileEditCount, projectId);
+            return;
+        }
+        List<ChatEvent> lessons = events.stream().filter(e -> e.getType() == ChatEventType.LEARN).toList();
+        int partCount = lessons.stream().mapToInt(e -> LlmResponseParser.lessonPartCount(e.getContent())).sum();
+        log.info("{} {} chat event(s) ({} file edit(s), {} walkthrough(s) with {} part(s)) for projectId: {}",
+                label, events.size(), fileEditCount, lessons.size(), partCount, projectId);
     }
 
     /**

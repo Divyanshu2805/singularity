@@ -9,7 +9,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Covers the build-checklist part of the XML protocol - see PromptUtils for the tags themselves. */
+/** Covers the build-checklist and teaching-mode lessons of the XML protocol - see PromptUtils for the tags themselves. */
 class LlmResponseParserTest {
 
     private final LlmResponseParser parser = new LlmResponseParser();
@@ -115,5 +115,112 @@ class LlmResponseParserTest {
         List<ChatEvent> events = parse("<message>Just answering a question.</message>");
 
         assertThat(events).extracting(ChatEvent::getType).containsExactly(ChatEventType.MESSAGE);
+    }
+
+    private static final String TIMER_WALKTHROUGH = """
+            <summary>Keeps the countdown's numbers and the buttons that control it in one place.</summary>
+            <part concept="Custom hooks"><code>export function useTimer(start: number) {</code>Your own reusable function starting with `use`.</part>
+            <part concept="State"><code>const [left, setLeft] = useState(start);</code>Remembers how many seconds are left.</part>
+            <part><code><button className="btn" onClick={() => setLeft(start)}></code>Puts the time back to the start.</part>
+            <related path="src/App.tsx">shows the timer</related>""";
+
+    @Test
+    void parsesAWalkthroughAfterEachFileWithItsPathAndConcepts() {
+        List<ChatEvent> events = parse("""
+                <todo path="src/hooks/useTimer.ts">Building the timer logic</todo>
+                <file path="src/hooks/useTimer.ts">export function useTimer(start: number) {}</file>
+                <learn path="src/hooks/useTimer.ts">%s</learn>
+                <file path="src/App.tsx">export default App;</file>
+                <learn path="src/App.tsx"><summary>The app's top-level screen.</summary></learn>
+                <message phase="completed">Done.</message>""".formatted(TIMER_WALKTHROUGH));
+
+        assertThat(events).extracting(ChatEvent::getType).containsExactly(
+                ChatEventType.TODO, ChatEventType.FILE_EDIT, ChatEventType.LEARN,
+                ChatEventType.FILE_EDIT, ChatEventType.LEARN, ChatEventType.MESSAGE);
+
+        ChatEvent lesson = events.get(2);
+        // Saved as written: the client lays out the summary, parts and related files from the raw body.
+        assertThat(lesson.getContent()).isEqualTo(TIMER_WALKTHROUGH);
+        // The path is what puts the walkthrough under its file in the UI, so it has to survive verbatim.
+        assertThat(lesson.getFilePath()).isEqualTo(events.get(1).getFilePath());
+        // metadata holds the concepts it introduced - what later requests read back so they aren't re-explained.
+        assertThat(lesson.getMetadata()).isEqualTo("Custom hooks, State");
+        assertThat(events.get(4).getMetadata()).isNull();
+        assertThat(events).extracting(ChatEvent::getSequenceOrder).containsExactly(1, 2, 3, 4, 5, 6);
+    }
+
+    @Test
+    void codeFullOfTagsAndQuotesInsideAWalkthroughDoesNotCutItShort() {
+        // JSX in a <code> anchor is full of angle brackets and quotes - none of it may end the <learn> early.
+        List<ChatEvent> events = parse("""
+                <file path="src/Timer.tsx">x</file><learn path="src/Timer.tsx">%s</learn><file path="src/App.tsx">y</file>"""
+                .formatted(TIMER_WALKTHROUGH));
+
+        assertThat(events).extracting(ChatEvent::getType)
+                .containsExactly(ChatEventType.FILE_EDIT, ChatEventType.LEARN, ChatEventType.FILE_EDIT);
+        assertThat(events.get(1).getContent()).endsWith("<related path=\"src/App.tsx\">shows the timer</related>");
+    }
+
+    @Test
+    void collectsEachConceptOnceWithoutCommasThatWouldBreakTheList() {
+        String concepts = LlmResponseParser.lessonConcepts(null, """
+                <part concept="State"><code>a</code>x</part>
+                <part><code>b</code>y</part>
+                <part concept="state"><code>c</code>z</part>
+                <part concept="Props, children"><code>d</code>w</part>""");
+
+        assertThat(concepts).isEqualTo("State, Props children");
+    }
+
+    @Test
+    void stillReadsTheConceptOfAOneSentenceLesson() {
+        // Lessons saved before walkthroughs existed carried a single concept on the <learn> tag itself.
+        assertThat(parse("<file path=\"a.tsx\">x</file><learn path=\"a.tsx\" concept=\"Props\">Props are inputs.</learn>"))
+                .filteredOn(event -> event.getType() == ChatEventType.LEARN)
+                .singleElement().satisfies(lesson -> assertThat(lesson.getMetadata()).isEqualTo("Props"));
+    }
+
+    @Test
+    void countsAWalkthroughsParts() {
+        assertThat(LlmResponseParser.lessonPartCount(TIMER_WALKTHROUGH)).isEqualTo(3);
+        assertThat(LlmResponseParser.lessonPartCount("A plain sentence.")).isZero();
+    }
+
+    @Test
+    void keepsOnlyTheFirstLessonForAFile() {
+        List<ChatEvent> lessons = parse("""
+                <file path="src/App.tsx">x</file>
+                <learn path="src/App.tsx" concept="Props">First.</learn>
+                <learn path="src/App.tsx" concept="JSX">Second.</learn>""").stream()
+                .filter(event -> event.getType() == ChatEventType.LEARN).toList();
+
+        assertThat(lessons).singleElement().satisfies(lesson -> assertThat(lesson.getContent()).isEqualTo("First."));
+    }
+
+    @Test
+    void keepsALessonWithoutAConceptOrPath() {
+        // Neither attribute is load-bearing for the text itself: the UI falls back to the file it follows.
+        assertThat(parse("<file path=\"a.tsx\">x</file><learn>Components are reusable pieces of UI.</learn>"))
+                .filteredOn(event -> event.getType() == ChatEventType.LEARN)
+                .singleElement().satisfies(lesson -> {
+                    assertThat(lesson.getContent()).isEqualTo("Components are reusable pieces of UI.");
+                    assertThat(lesson.getFilePath()).isNull();
+                    assertThat(lesson.getMetadata()).isNull();
+                });
+    }
+
+    @Test
+    void skipsAnEmptyLesson() {
+        assertThat(parse("<file path=\"a.tsx\">x</file><learn path=\"a.tsx\" concept=\"Props\">  </learn>"))
+                .extracting(ChatEvent::getType).containsExactly(ChatEventType.FILE_EDIT);
+    }
+
+    @Test
+    void aLessonIsNeverMistakenForPartOfTheFileBeforeIt() {
+        List<ChatEvent> events = parse("""
+                <file path="src/App.tsx">const a = 1;</file><learn path="src/App.tsx" concept="Variables">A variable names a value.</learn>""");
+
+        assertThat(events.getFirst().getContent()).isEqualTo("const a = 1;");
+        assertThat(events).extracting(ChatEvent::getType).containsExactly(ChatEventType.FILE_EDIT, ChatEventType.LEARN);
     }
 }
