@@ -1,6 +1,6 @@
 # Entities / Models
 
-11 entity types are implemented as JPA entities. This section documents the schema **as implemented in code**, which is the source of truth. The design was simplified on 2026-04-26 (v3) from the previous implementation (v2): project ownership moved from a `ProjectMember`-role model back onto a direct `Project.owner` FK, `ProjectRole` dropped its permission-set design back to a plain `EDITOR`/`VIEWER` enum, `ChatMessage` dropped the `ChatEvent` child-entity design back to a `toolCalls` JSON string column, and `UsageLog` dropped the daily-counter design back to a per-action audit row. See [Differences from v2](#differences-from-v2) below. Later the same day (v4), two of those v3 decisions were reversed: project ownership moved back onto `ProjectMember.projectRole == OWNER` (no `Project.owner` FK), and `User.email`/`passwordHash` were renamed back to `username`/`password` with `avatarUrl` dropped. See [Differences from v3](#differences-from-v3) below. On 2026-05-16 (v5), as real AI chat generation landed, two more v3 decisions were reversed back toward v2: `ChatEvent`/`ChatEventType` were restored (`ChatMessage.toolCalls` removed in favor of structured child rows) and `UsageLog` reverted to a per-user daily counter (from a per-action audit row) — see [Differences from v4](#differences-from-v4) below.
+14 entity types are implemented as JPA entities. `CodeNote` was added 2026-06-03 to keep each person's code-notes thread, and `AuthAuditEvent`/`RevokedSession` on 2026-07-15 for the Firebase session migration - additive tables only, so none of this makes it a v6 schema. This section documents the schema **as implemented in code**, which is the source of truth. The design was simplified on 2026-04-26 (v3) from the previous implementation (v2): project ownership moved from a `ProjectMember`-role model back onto a direct `Project.owner` FK, `ProjectRole` dropped its permission-set design back to a plain `EDITOR`/`VIEWER` enum, `ChatMessage` dropped the `ChatEvent` child-entity design back to a `toolCalls` JSON string column, and `UsageLog` dropped the daily-counter design back to a per-action audit row. See [Differences from v2](#differences-from-v2) below. Later the same day (v4), two of those v3 decisions were reversed: project ownership moved back onto `ProjectMember.projectRole == OWNER` (no `Project.owner` FK), and `User.email`/`passwordHash` were renamed back to `username`/`password` with `avatarUrl` dropped. See [Differences from v3](#differences-from-v3) below. On 2026-05-16 (v5), as real AI chat generation landed, two more v3 decisions were reversed back toward v2: `ChatEvent`/`ChatEventType` were restored (`ChatMessage.toolCalls` removed in favor of structured child rows) and `UsageLog` reverted to a per-user daily counter (from a per-action audit row) — see [Differences from v4](#differences-from-v4) below.
 
 ## Entity Relationship Diagram (v5)
 
@@ -19,6 +19,8 @@ erDiagram
     PLAN ||--o{ SUBSCRIPTION : follows
     CHAT_SESSION ||--o{ CHAT_MESSAGE : contains
     CHAT_MESSAGE ||--o{ CHAT_EVENT : "made up of"
+    PROJECT ||--o{ CODE_NOTE : "has code notes"
+    USER ||--o{ CODE_NOTE : "asked"
 
     USER {
         bigint id PK
@@ -290,8 +292,29 @@ A billing tier defining what a subscriber gets — quotas and limits (`plans` ta
 | `maxProjects` | How many projects a user on this plan may have. |
 | `maxTokensPerDay` | Daily AI token budget for this plan. |
 | `maxPreviews` | How many concurrent live previews this plan allows. |
-| `unlimitedAi` | Whether this plan bypasses the daily token budget entirely (ignore `maxTokensPerDay` if true). |
+| `unlimitedAi` | Kept for compatibility but **enforced nowhere** and not shown in the UI (2026-06-03 product decision): `maxTokensPerDay` is the real limit on every plan. |
 | `active` | Whether this plan is currently offered/selectable. |
+| `priceAmountMinor` | Price in the currency's smallest unit, as Stripe quotes it (49900 = ₹499). Added 2026-06-03. |
+| `currency` / `billingInterval` | Lowercase ISO currency (`inr`) and Stripe interval (`month`). Added 2026-06-03. |
+| `tagline` | One line under the name on the pricing card. Added 2026-06-03. |
+| `sortOrder` | Cheapest first; ids are insertion order and say nothing about price. Added 2026-06-03. |
+
+Seeded every boot by `config.PlanSeeder`, upserting on `stripePriceId` (the free plan, which has none, on name). The free row's limits are taken from `SubscriptionService.FREE_TIER_*` - the same constants that gate a user with no subscription - so the pricing page can't promise something enforcement doesn't do. Catalogue as of 2026-06-03: Free ₹0 (1 project, 5,000 tokens/day), Pro ₹499/mo (3, 100,000), Business ₹1,499/mo (10, 500,000); Stripe prices are test-mode INR.
+
+### USAGE_EVENT
+
+One AI call's token usage (`usage_events`, added 2026-06-03) — the ledger behind usage insights, written in the same transaction as the `USAGE_LOG` counter by `UsageServiceImpl.recordTokenUsage`. The counter stays the source of truth for quotas; this is the source of truth for breakdowns.
+
+| Field | Meaning |
+|---|---|
+| `id` | Primary key. |
+| `userId` | Who spent the tokens — plain `Long`, like `USAGE_LOG`. Indexed with `createdAt`. |
+| `projectId` | The project, or null for calls made before one exists (idea interview, naming). A deleted project's usage is kept. |
+| `feature` | `BUILD`, `BUILD_RETRY`, `EXPLAIN`, `IDEA_INTERVIEW` or `PROJECT_NAMING`. A **plain String column**, deliberately: an `@Enumerated` mapping (with or without `columnDefinition`, or via a converter) generated a check constraint pinning today's values, which would make adding a feature break inserts. |
+| `inputTokens` / `outputTokens` / `totalTokens` | As reported on the call's usage metadata. |
+| `createdAt` | When the call happened. Set explicitly (not `@CreationTimestamp`) so the one-time backfill can keep each historical chat message's real time. |
+
+Backfilled once, only while empty, by `config.UsageLedgerBackfill` from `chat_messages` (each user turn's prompt tokens plus the next assistant reply's completion tokens → one `BUILD` event).
 
 ### USAGE_LOG
 
@@ -303,6 +326,45 @@ A per-user, per-day AI token counter (`usage_logs` table) — reverted 2026-05-1
 | `userId` | The user this counter belongs to — a plain `Long` column, not a `@ManyToOne User` object reference (unlike most other FK-shaped fields in this codebase). Not null. |
 | `date` | The calendar day this row counts — not null; unique together with `userId` (`@UniqueConstraint(columnNames = {"user_id", "date"})`), so there's exactly one row per user per day. |
 | `tokensUsed` | Running total of AI tokens consumed by this user on this day — incremented (not replaced) on each recorded usage. |
+
+### AUTH_AUDIT_EVENT
+
+Added 2026-07-15. One security-relevant thing that happened to an account — append-only, nothing updates or deletes these rows (`GET`/`POST /api/auth/security-events`). `userId` is a plain column rather than a `@ManyToOne`, deliberately: a rejected sign-in often has no matched user yet, and the trail has to outlive whatever later happens to the account it describes.
+
+| Field | Meaning |
+|---|---|
+| `id` | Primary key. |
+| `userId` | Plain FK column (not a relation) — nullable, since a rejected sign-in may have no user to attach to. |
+| `firebaseUid` | The Firebase identity involved, when known. |
+| `type` | `AuthAuditEventType` — `ACCOUNT_CREATED`/`ACCOUNT_LINKED`/`SIGN_IN`/`SIGN_IN_REJECTED`/`SIGN_OUT`/`SIGN_OUT_EVERYWHERE`/`MFA_ENROLLED`/`MFA_REMOVED`/`PASSWORD_CHANGED`/`LEGACY_SIGN_UP`/`LEGACY_SIGN_IN`/`LEGACY_PASSWORD_RESET_REQUESTED`/`LEGACY_PASSWORD_RESET_COMPLETED`. Stored `varchar(64)` with no `@Enumerated` `CHECK` constraint on purpose — see [Practices](../practices/conventions.md#practices--conventions) on `ddl-auto: update` and enum columns. `isClientReportable()` says which of these a signed-in client may report itself (MFA/password changes it made directly with Firebase, via `POST /api/auth/report-security-event`). |
+| `ipAddress` / `userAgent` | Best-effort request context, capped short. |
+| `detail` | Free-text extra context. |
+| `createdAt` | When it happened — `@CreationTimestamp`. |
+
+### REVOKED_SESSION
+
+Added 2026-07-15. A session cookie that's been signed out of but hasn't expired yet — Firebase can only revoke *every* session for a user at once, so signing out of a single device is enforced here instead. Checked by `SessionAuthenticator` at most once every `app.auth.revocation-check-interval` (default 60s), so a single-device sign-out takes effect quickly without hitting the table on every request. Only the SHA-256 of the cookie is stored (`util.Hashing`), never the raw value.
+
+| Field | Meaning |
+|---|---|
+| `cookieHash` | Primary key — SHA-256 of the revoked session cookie. |
+| `expiresAt` | When the cookie would have expired anyway; past this the row is dead weight and gets pruned. |
+
+### CODE_NOTE
+
+One exchange of a project's code notes (`code_notes` table, added 2026-06-03) — a question and the answer it got, belonging to the person who asked it. Before this the thread lived only in the browser's `sessionStorage`, keyed by project alone, so two accounts used in the same browser saw each other's notes.
+
+| Field | Meaning |
+|---|---|
+| `id` | Primary key — and what `DELETE .../code/notes/{noteId}` deletes. |
+| `project` | The project asked about — `@ManyToOne`, not null. |
+| `user` | Who asked — `@ManyToOne`, not null. Every query filters on **both** this and `project`; there is deliberately no find-by-project-alone method on the repository, since that query would hand one member another's notes. |
+| `question` | What was asked (`"Explain this"` for the one-shot explanation) — `text`, not null. |
+| `answer` | The model's reply, as markdown — `text`, not null. Written once the answer has finished streaming; a reply that failed or was cut off is never saved. |
+| `selectionPath` / `selectionCode` / `selectionStartLine` / `selectionEndLine` | The block the question quoted, or all null for a question about the project as a whole. Flat columns here, one nested `selection` object in the DTO — `CodeNoteMapper` turns "all null" into an absent selection rather than an object full of nulls. |
+| `createdAt` | When the exchange happened — also the transcript's order (rows are read `OrderByIdAsc`). |
+
+A row per *exchange* rather than per message: the transcript is always a question followed by its answer, and deleting one note is meant to take the pair away together rather than leave an answer with nothing above it. There is no `deletedAt` — these are personal notes, so a delete is a delete.
 
 ## Domain Vocabulary (Enums)
 
