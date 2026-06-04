@@ -28,6 +28,15 @@ services:
       - minio-data:/data
     restart: unless-stopped
 
+  # Catches every email the app sends in local dev (password resets) - SMTP on 1025, inbox UI on 8025.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit-vibecraft
+    ports:
+      - "1025:1025"    # SMTP
+      - "8025:8025"    # Web inbox
+    restart: unless-stopped
+
 volumes:
   minio-data:
   pgvector-data:

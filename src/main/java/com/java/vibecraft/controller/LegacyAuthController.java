@@ -1,10 +1,13 @@
 package com.java.vibecraft.controller;
 
 import com.java.vibecraft.dto.auth.AuthResponse;
+import com.java.vibecraft.dto.auth.ForgotPasswordRequest;
 import com.java.vibecraft.dto.auth.LoginRequest;
+import com.java.vibecraft.dto.auth.ResetPasswordRequest;
 import com.java.vibecraft.dto.auth.SignupRequest;
 import com.java.vibecraft.security.ClientInfo;
 import com.java.vibecraft.service.AuthService;
+import com.java.vibecraft.service.PasswordResetService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
@@ -30,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class LegacyAuthController {
 
     AuthService authService;
+    PasswordResetService passwordResetService;
 
     @PostMapping("/signup")
     public ResponseEntity<AuthResponse> signup(@RequestBody @Valid SignupRequest request, HttpServletRequest httpRequest) {
@@ -39,5 +43,18 @@ public class LegacyAuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody @Valid LoginRequest request, HttpServletRequest httpRequest) {
         return ResponseEntity.ok(authService.login(request, ClientInfo.from(httpRequest)));
+    }
+
+    /** Always 202, whether or not the email has an account. */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Void> forgotPassword(@RequestBody @Valid ForgotPasswordRequest request, HttpServletRequest httpRequest) {
+        passwordResetService.requestReset(request, ClientInfo.from(httpRequest));
+        return ResponseEntity.accepted().build();
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@RequestBody @Valid ResetPasswordRequest request, HttpServletRequest httpRequest) {
+        passwordResetService.resetPassword(request, ClientInfo.from(httpRequest));
+        return ResponseEntity.noContent().build();
     }
 }

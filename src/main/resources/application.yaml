@@ -20,6 +20,13 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false
 
+  # Password-reset emails. Locally this is Mailpit from services.docker-compose.yml (no auth, inbox at
+  # http://localhost:8025). A real relay's credentials come from SPRING_MAIL_USERNAME / SPRING_MAIL_PASSWORD in
+  # the environment - deliberately not written here, so no placeholder credential ever looks like a working one.
+  mail:
+    host: localhost
+    port: 1025
+
   ai:
     openai:
       api-key: ${OPENROUTER_API_KEY}
@@ -65,6 +72,12 @@ app:
     # One-off: on startup, copy every local user without a Firebase account into Firebase, keeping their BCrypt
     # password hashes so they sign in with the same password. Safe to re-run; leave false otherwise.
     import-users: false
+
+# Legacy (app.auth.legacy.enabled) reset links only - Firebase sends its own reset emails.
+password-reset:
+  # How long an emailed reset link works. Short on purpose: the link is a password-equivalent sitting in an inbox.
+  token-validity: 30m
+  mail-from: "VibeCraft <no-reply@vibecraft.dev>"
 
 stripe:
   api:
