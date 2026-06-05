@@ -49,6 +49,26 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
+    /**
+     * 402 Payment Required - the one status that means "this would work if you paid". Not a 400: the request
+     * was perfectly well formed, and not a 403: it isn't a permission problem. WARN with no stack trace, like
+     * every other client-fault status here.
+     */
+    @ExceptionHandler(QuotaExceededException.class)
+    public ResponseEntity<ApiError> handleQuotaExceeded(QuotaExceededException ex) {
+        ApiError apiError = new ApiError(HttpStatus.PAYMENT_REQUIRED, ex.getMessage(), ex.toDetails());
+        log.warn("Quota exceeded ({}): {} of {} used on plan {}",
+                ex.getReason(), ex.getUsed(), ex.getLimit(), ex.getPlanName());
+        return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiError> handleConflict(ConflictException ex) {
+        ApiError apiError = new ApiError(HttpStatus.CONFLICT, ex.getMessage());
+        log.warn(apiError.toString());
+        return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ApiError> handleBadRequest(BadRequestException ex) {
         ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST, ex.getMessage());
