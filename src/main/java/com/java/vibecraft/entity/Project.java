@@ -44,4 +44,10 @@ public class Project {
     // some template files couldn't be created even after retries, describing what's missing
     // so both API clients and the AI generation context can react to it.
     String templateInitIssue;
+
+    /**
+     * The project this one was forked from, or null for an original. A plain id rather than a relation: the fork is
+     * its own project from the moment it's made, and must keep working if the original is later deleted.
+     */
+    Long forkedFromProjectId;
 }

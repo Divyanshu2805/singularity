@@ -1,5 +1,6 @@
 package com.java.vibecraft.controller;
 
+import com.java.vibecraft.dto.project.ForkProjectRequest;
 import com.java.vibecraft.dto.project.CreateProjectFromPromptRequest;
 import com.java.vibecraft.dto.project.ProjectRequest;
 import com.java.vibecraft.dto.project.ProjectResponse;
@@ -45,10 +46,18 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.updateProject(id, request));
     }
 
+    /** For the owner, deletes the project for everyone; for an editor, removes it from their own projects only. */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteProject(@PathVariable Long id) {
         projectService.softDelete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Copies a project the caller can edit into a new one they own. The body (a name) is optional. */
+    @PostMapping("/{id}/fork")
+    public ResponseEntity<ProjectResponse> forkProject(@PathVariable Long id,
+                                                       @RequestBody(required = false) @Valid ForkProjectRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(projectService.forkProject(id, request));
     }
 
     @PostMapping("/{id}/retry-template-init")

@@ -16,6 +16,8 @@ import com.java.vibecraft.repository.ProjectRepository;
 import com.java.vibecraft.service.ProjectFileService;
 import com.java.vibecraft.util.CodeSearchScanner;
 import com.java.vibecraft.util.ContentTypeUtils;
+import io.minio.CopyObjectArgs;
+import io.minio.CopySource;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -250,6 +252,47 @@ public class ProjectFileServiceImpl implements ProjectFileService {
      */
     private static String normalizePath(String path) {
         return path.startsWith("/") ? path.substring(1) : path;
+    }
+
+    @Override
+    @PreAuthorize("@security.canViewProject(#sourceProjectId)")
+    public int copyAllFiles(Long sourceProjectId, Long targetProjectId) {
+        Project target = projectRepository.findById(targetProjectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project", targetProjectId.toString()));
+        int failed = 0;
+
+        for (ProjectFile file : projectFileRepository.findByProjectId(sourceProjectId)) {
+            String sourceKey = file.getMinioObjectKey() != null ? file.getMinioObjectKey() : objectKey(sourceProjectId, file.getPath());
+            String targetKey = objectKey(targetProjectId, file.getPath());
+            try {
+                minioClient.copyObject(CopyObjectArgs.builder()
+                        .bucket(projectBucket)
+                        .object(targetKey)
+                        .source(CopySource.builder().bucket(projectBucket).object(sourceKey).build())
+                        .build());
+            } catch (ErrorResponseException e) {
+                if ("NoSuchKey".equals(e.errorResponse().code())) {
+                    log.warn("Skipping file missing from storage while forking project {}: {}", sourceProjectId, sourceKey);
+                    continue;
+                }
+                log.error("Failed to copy {} while forking project {}", sourceKey, sourceProjectId, e);
+                failed++;
+                continue;
+            } catch (Exception e) {
+                log.error("Failed to copy {} while forking project {}", sourceKey, sourceProjectId, e);
+                failed++;
+                continue;
+            }
+
+            projectFileRepository.save(ProjectFile.builder()
+                    .project(target)
+                    .path(normalizePath(file.getPath()))
+                    .minioObjectKey(targetKey)
+                    .size(file.getSize())
+                    .type(file.getType())
+                    .build());
+        }
+        return failed;
     }
 
     /**

@@ -10,6 +10,8 @@ public record ProjectResponse(
         ProjectRole role,
         Instant createdAt,
         Instant updatedAt,
-        String templateInitIssue
+        String templateInitIssue,
+        /** Set when this project is a fork - the id of the project it was copied from. */
+        Long forkedFromProjectId
 ) {
 }

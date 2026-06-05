@@ -12,6 +12,14 @@ public interface ProjectFileService {
 
     void saveFile(Long projectId, String filePath, String fileContent);
 
+    /**
+     * Copies every file of one project into another, inside storage (bytes are never downloaded, so images and other
+     * binaries come through intact). A file listed but missing from storage is skipped, as the ZIP download does.
+     *
+     * @return how many files couldn't be copied for any other reason
+     */
+    int copyAllFiles(Long sourceProjectId, Long targetProjectId);
+
     byte[] buildProjectZip(Long projectId);
 
     /** Plain-text (not regex) search across every text file in the project, case-insensitive. */

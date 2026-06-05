@@ -1,6 +1,10 @@
 package com.java.vibecraft.service.impl;
 
 import com.java.vibecraft.dto.project.CreateProjectFromPromptRequest;
+import com.java.vibecraft.dto.project.ForkProjectRequest;
+import com.java.vibecraft.error.FileStorageException;
+import com.java.vibecraft.error.ForbiddenException;
+import com.java.vibecraft.service.ProjectFileService;
 import com.java.vibecraft.dto.project.ProjectRequest;
 import com.java.vibecraft.llm.ProjectNameGenerator;
 import com.java.vibecraft.dto.project.ProjectResponse;
@@ -11,6 +15,7 @@ import com.java.vibecraft.entity.ProjectMemberId;
 import com.java.vibecraft.entity.User;
 import com.java.vibecraft.enums.ProjectRole;
 import com.java.vibecraft.error.BadRequestException;
+import com.java.vibecraft.error.QuotaExceededException;
 import com.java.vibecraft.error.ResourceNotFoundException;
 import com.java.vibecraft.mapper.ProjectMapper;
 import com.java.vibecraft.repository.ProjectMemberRepository;
@@ -50,6 +55,10 @@ public class ProjectServiceImpl implements ProjectService {
     SubscriptionService subscriptionService;
     ProjectTemplateService projectTemplateService;
     ProjectNameGenerator projectNameGenerator;
+    ProjectFileService projectFileService;
+
+    /** Matches the project name column and ProjectRequest's limit. */
+    static final int MAX_NAME_LENGTH = 255;
 
     @Override
     @PreAuthorize("@security.canViewProject(#id)")
@@ -74,35 +83,83 @@ public class ProjectServiceImpl implements ProjectService {
         return createOwnedProject(projectNameGenerator.generateName(request.prompt()));
     }
 
+    /**
+     * Refuses a create that would take the caller past their plan's project count. A 402 rather than the 400
+     * this used to throw: nothing is wrong with the request, they simply need a bigger plan, and the client
+     * shows an upgrade prompt rather than an error toast.
+     */
     private void assertCanCreateProject() {
-        if(!subscriptionService.canCreateNewProject()) {
-            throw new BadRequestException("User cannot create a New project with current Plan, Upgrade plan now.");
+        Long userId = authUtil.getCurrentUserId();
+        int allowance = subscriptionService.projectAllowance(userId);
+        int owned = subscriptionService.projectsOwned(userId);
+
+        if (owned < allowance) {
+            return;
         }
+
+        String planName = subscriptionService.getCurrentSubscription().plan().name();
+        throw new QuotaExceededException(
+                "The " + planName + " plan includes " + allowance + (allowance == 1 ? " project" : " projects")
+                        + ". Upgrade, or delete one to make room.",
+                QuotaExceededException.Reason.PROJECT_LIMIT,
+                allowance, owned, null, planName);
     }
 
-    private ProjectResponse createOwnedProject(String name) {
+    @Override
+    @PreAuthorize("@security.canEditProject(#id)")
+    public ProjectResponse forkProject(Long id, ForkProjectRequest request) {
         Long userId = authUtil.getCurrentUserId();
+        Project source = getAccessibleProjectById(id, userId);
+        // Forking is for people working on someone else's project. The owner already has it to change as they like,
+        // and letting them fork would just be an unlabelled way to duplicate projects past the point of meaning.
+        if (getRole(id, userId) == ProjectRole.OWNER) {
+            throw new ForbiddenException("You own this project, so there's nothing to fork - you can already change it however you like.");
+        }
+        // A fork is a project the caller owns, so it counts against their plan like any other.
+        assertCanCreateProject();
+
+        String requested = request == null || request.name() == null ? "" : request.name().strip();
+        String name = requested.isEmpty() ? source.getName() + " (fork)" : requested;
+        if (name.length() > MAX_NAME_LENGTH) name = name.substring(0, MAX_NAME_LENGTH).strip();
+
+        Project fork = saveProjectWithOwner(name, userId, source.getId());
+        int failed = projectFileService.copyAllFiles(source.getId(), fork.getId());
+        if (failed > 0) {
+            // A fork quietly missing files would look like the original, then break in ways nobody could explain.
+            fork.setDeletedAt(Instant.now());
+            projectRepository.save(fork);
+            throw new FileStorageException("Couldn't copy " + failed + " file(s) while forking project " + id, null);
+        }
+
+        log.info("User {} forked project {} into project {}", userId, id, fork.getId());
+        return projectMapper.toProjectResponse(fork, ProjectRole.OWNER);
+    }
+
+    /** The project row plus its OWNER membership - shared by a fresh project and a fork. */
+    private Project saveProjectWithOwner(String name, Long userId, Long forkedFromProjectId) {
         User owner = userRepository.getReferenceById(userId);
 
-        Project project = Project.builder()
+        Project project = projectRepository.save(Project.builder()
                 .name(name)
                 .isPublic(false)
-                .build();
+                .forkedFromProjectId(forkedFromProjectId)
+                .build());
 
-        project = projectRepository.save(project);
-
-        ProjectMemberId projectMemberId = new ProjectMemberId(project.getId(), owner.getId());
-
-        ProjectMember projectMember = ProjectMember.builder()
-                .id(projectMemberId)
+        projectMemberRepository.save(ProjectMember.builder()
+                .id(new ProjectMemberId(project.getId(), owner.getId()))
                 .projectRole(ProjectRole.OWNER)
                 .user(owner)
                 .acceptedAt(Instant.now())
                 .invitedAt(Instant.now())
                 .project(project)
-                .build();
+                .build());
 
-        projectMemberRepository.save(projectMember);
+        return project;
+    }
+
+    private ProjectResponse createOwnedProject(String name) {
+        Long userId = authUtil.getCurrentUserId();
+        Project project = saveProjectWithOwner(name, userId, null);
 
         TemplateInitResult templateResult;
         try {
@@ -189,9 +246,17 @@ public class ProjectServiceImpl implements ProjectService {
         Long userId = authUtil.getCurrentUserId();
         Project project = getAccessibleProjectById(id, userId);
 
-        project.setDeletedAt(Instant.now());
+        if (getRole(id, userId) != ProjectRole.OWNER) {
+            // An editor leaving: only their own access goes. Their pin/star go with the membership row; the project,
+            // its files and everyone else's access are untouched. The owner can invite them back.
+            projectMemberRepository.deleteById(new ProjectMemberId(id, userId));
+            log.info("User {} removed project {} from their projects (left as a non-owner)", userId, id);
+            return;
+        }
 
+        project.setDeletedAt(Instant.now());
         projectRepository.save(project);
+        log.info("Owner {} deleted project {} for all its members", userId, id);
     }
 
     public Project getAccessibleProjectById(Long projectId, Long userId) {
