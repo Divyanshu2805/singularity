@@ -1,11 +1,14 @@
 package com.java.vibecraft.service.impl;
 
+import com.java.vibecraft.config.PlanSeeder;
+import com.java.vibecraft.dto.subscription.PlanResponse;
 import com.java.vibecraft.dto.subscription.SubscriptionResponse;
 import com.java.vibecraft.entity.Plan;
 import com.java.vibecraft.entity.Subscription;
 import com.java.vibecraft.entity.User;
 import com.java.vibecraft.enums.SubscriptionStatus;
 import com.java.vibecraft.error.ResourceNotFoundException;
+import com.java.vibecraft.mapper.PlanMapper;
 import com.java.vibecraft.mapper.SubscriptionMapper;
 import com.java.vibecraft.repository.PlanRepository;
 import com.java.vibecraft.repository.ProjectMemberRepository;
@@ -34,20 +37,50 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     PlanRepository planRepository;
     AuthUtil authUtil;
     SubscriptionMapper subscriptionMapper;
+    PlanMapper planMapper;
     ProjectMemberRepository projectMemberRepository;
 
+    /** The statuses that still entitle someone to their plan. Cancelled and incomplete do not. */
+    private static final Set<SubscriptionStatus> ENTITLING = Set.of(
+            SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE, SubscriptionStatus.TRIALING);
+
+    /**
+     * Always answers with a plan. Someone who has never paid gets the free plan rather than an empty shell -
+     * this used to map {@code new Subscription()}, so the response came back with a null plan, null status and
+     * null everything, leaving every caller to infer "free" from an absence.
+     */
     @Override
     public SubscriptionResponse getCurrentSubscription() {
-        Long userId = authUtil.getCurrentUserId();
+        return subscriptionRepository.findByUserIdAndStatusIn(authUtil.getCurrentUserId(), ENTITLING)
+                .map(subscriptionMapper::toSubscriptionResponse)
+                .orElseGet(this::freeSubscription);
+    }
 
-        var currentSubscription = subscriptionRepository.findByUserIdAndStatusIn(userId, Set.of(
-                SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE,
-                SubscriptionStatus.TRIALING
-        )).orElse(
-                new Subscription()
-        );
+    private SubscriptionResponse freeSubscription() {
+        return new SubscriptionResponse(freePlanResponse(), null, null, null, false, true);
+    }
 
-        return subscriptionMapper.toSubscriptionResponse(currentSubscription);
+    /**
+     * The seeded free plan. Synthesised from the constants if the row is somehow missing, so a failed seed
+     * degrades to the right limits rather than a null plan the UI can't render.
+     */
+    private PlanResponse freePlanResponse() {
+        return planRepository.findByNameIgnoreCase(PlanSeeder.FREE_PLAN_NAME)
+                .map(planMapper::toPlanResponse)
+                .orElseGet(() -> new PlanResponse(null, PlanSeeder.FREE_PLAN_NAME, null,
+                        FREE_TIER_PROJECTS_ALLOWED, FREE_TIER_DAILY_TOKENS, 0, false,
+                        "Free", 0, "inr", "month", true));
+    }
+
+    /** The plan a user is entitled to right now, or null when they're on the free tier. */
+    @Override
+    public Plan getActivePlan(Long userId) {
+        return getActiveSubscription(userId).map(Subscription::getPlan).orElse(null);
+    }
+
+    @Override
+    public java.util.Optional<Subscription> getActiveSubscription(Long userId) {
+        return subscriptionRepository.findByUserIdAndStatusIn(userId, ENTITLING);
     }
 
     @Override
@@ -92,7 +125,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             hasSubscriptionUpdated = true;
         }
 
-        if(cancelAtPeriodEnd != null && cancelAtPeriodEnd != subscription.getCancelAtPeriodEnd()) {
+        // Objects.equals, not !=: both sides are boxed Booleans, and != compares references - correct only while
+        // every Boolean happens to come from the valueOf cache. Cancel and resume both depend on this flag.
+        if(cancelAtPeriodEnd != null && !java.util.Objects.equals(cancelAtPeriodEnd, subscription.getCancelAtPeriodEnd())) {
             subscription.setCancelAtPeriodEnd(cancelAtPeriodEnd);
             hasSubscriptionUpdated = true;
         }
@@ -147,17 +182,20 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     @Override
+    public int projectAllowance(Long userId) {
+        Plan plan = getActivePlan(userId);
+        return plan != null && plan.getMaxProjects() != null ? plan.getMaxProjects() : FREE_TIER_PROJECTS_ALLOWED;
+    }
+
+    @Override
+    public int projectsOwned(Long userId) {
+        return projectMemberRepository.countProjectOwnedByUser(userId);
+    }
+
+    @Override
     public boolean canCreateNewProject() {
         Long userId = authUtil.getCurrentUserId();
-        SubscriptionResponse currentSubscription = getCurrentSubscription();
-
-        int countOfOwnedProjects = projectMemberRepository.countProjectOwnedByUser(userId);
-
-        if(currentSubscription.plan() == null) {
-            return countOfOwnedProjects < FREE_TIER_PROJECTS_ALLOWED;
-        }
-
-        return countOfOwnedProjects < currentSubscription.plan().maxProjects();
+        return projectsOwned(userId) < projectAllowance(userId);
     }
 
     private User getUser(Long userId) {

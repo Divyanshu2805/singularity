@@ -84,6 +84,12 @@ stripe:
     secret: ${STRIPE_SECRET}
   webhook:
     secret: ${STRIPE_WEBHOOK_SECRET}
+  # The recurring prices the paid plans check out against. Not secret, but env-sourced with no fallback like
+  # everything else Stripe-related - a wrong price id here bills the wrong amount, so failing startup beats
+  # silently seeding a plan that points nowhere. PlanSeeder upserts the catalogue against these.
+  price:
+    pro: ${STRIPE_PRICE_PRO}
+    business: ${STRIPE_PRICE_BUSINESS}
 
 minio:
   url: http://localhost:9000
@@ -91,7 +97,9 @@ minio:
   secret-key: ${MINIO_SECRET_KEY}
   project-bucket: projects
 
-client.url: http://localhost:8080
+# Where Stripe sends people back to: the FRONTEND, not this server. It pointed at 8080 - this backend's own
+# port - so every successful checkout redirected to a path the API has no route for.
+client.url: http://localhost:5173
 
 logging:
   level:

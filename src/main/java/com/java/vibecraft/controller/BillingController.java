@@ -56,6 +56,27 @@ public class BillingController {
         return ResponseEntity.ok(paymentProcessor.openCustomerPortal());
     }
 
+    /**
+     * Upgrade, downgrade, cancel (move to the free plan) or resume - on the subscription the caller already has.
+     * Only someone with no subscription goes through checkout.
+     */
+    @PostMapping("/api/payments/change-plan")
+    public ResponseEntity<SubscriptionResponse> changePlan(@RequestBody @Valid ChangePlanRequest request) {
+        return ResponseEntity.ok(paymentProcessor.changePlan(request));
+    }
+
+    /**
+     * Called by the app when the browser returns from Stripe, so a subscription is live the moment the user
+     * is looking at it rather than whenever the webhook happens to arrive - and at all in local development,
+     * where Stripe cannot reach localhost. Idempotent, and safe to race with the webhook.
+     */
+    @PostMapping("/api/payments/confirm")
+    public ResponseEntity<SubscriptionResponse> confirmCheckout(
+            @RequestBody @Valid ConfirmCheckoutRequest request
+    ) {
+        return ResponseEntity.ok(paymentProcessor.confirmCheckoutSession(request));
+    }
+
     @PostMapping("/webhooks/payment")
     public ResponseEntity<String> handlePaymentWebhooks(
             @RequestBody String payload,
@@ -92,7 +113,11 @@ public class BillingController {
             return ResponseEntity.ok().build();
 
         } catch (SignatureVerificationException e) {
-            throw new RuntimeException(e);
+            // 400, not a 500: the signature will never verify on a retry, and a 5xx tells Stripe to keep
+            // redelivering a request that can only fail. It also means a forged payload can't be made to look
+            // like a server fault in the logs.
+            log.warn("Rejected a webhook with an invalid Stripe signature: {}", e.getMessage());
+            return ResponseEntity.badRequest().body("Invalid signature");
         }
 
     }
