@@ -1,6 +1,6 @@
 # Entities / Models
 
-14 entity types are implemented as JPA entities. `CodeNote` was added 2026-06-03 to keep each person's code-notes thread, and `AuthAuditEvent`/`RevokedSession` on 2026-07-15 for the Firebase session migration - additive tables only, so none of this makes it a v6 schema. This section documents the schema **as implemented in code**, which is the source of truth. The design was simplified on 2026-04-26 (v3) from the previous implementation (v2): project ownership moved from a `ProjectMember`-role model back onto a direct `Project.owner` FK, `ProjectRole` dropped its permission-set design back to a plain `EDITOR`/`VIEWER` enum, `ChatMessage` dropped the `ChatEvent` child-entity design back to a `toolCalls` JSON string column, and `UsageLog` dropped the daily-counter design back to a per-action audit row. See [Differences from v2](#differences-from-v2) below. Later the same day (v4), two of those v3 decisions were reversed: project ownership moved back onto `ProjectMember.projectRole == OWNER` (no `Project.owner` FK), and `User.email`/`passwordHash` were renamed back to `username`/`password` with `avatarUrl` dropped. See [Differences from v3](#differences-from-v3) below. On 2026-05-16 (v5), as real AI chat generation landed, two more v3 decisions were reversed back toward v2: `ChatEvent`/`ChatEventType` were restored (`ChatMessage.toolCalls` removed in favor of structured child rows) and `UsageLog` reverted to a per-user daily counter (from a per-action audit row) — see [Differences from v4](#differences-from-v4) below.
+15 entity types are implemented as JPA entities. `CodeNote` was added 2026-06-03 to keep each person's code-notes thread, and `AuthAuditEvent`/`RevokedSession`/`PasswordResetToken` on 2026-07-15 for the Firebase session migration and its legacy password-reset path - additive tables only, so none of this makes it a v6 schema. This section documents the schema **as implemented in code**, which is the source of truth. The design was simplified on 2026-04-26 (v3) from the previous implementation (v2): project ownership moved from a `ProjectMember`-role model back onto a direct `Project.owner` FK, `ProjectRole` dropped its permission-set design back to a plain `EDITOR`/`VIEWER` enum, `ChatMessage` dropped the `ChatEvent` child-entity design back to a `toolCalls` JSON string column, and `UsageLog` dropped the daily-counter design back to a per-action audit row. See [Differences from v2](#differences-from-v2) below. Later the same day (v4), two of those v3 decisions were reversed: project ownership moved back onto `ProjectMember.projectRole == OWNER` (no `Project.owner` FK), and `User.email`/`passwordHash` were renamed back to `username`/`password` with `avatarUrl` dropped. See [Differences from v3](#differences-from-v3) below. On 2026-05-16 (v5), as real AI chat generation landed, two more v3 decisions were reversed back toward v2: `ChatEvent`/`ChatEventType` were restored (`ChatMessage.toolCalls` removed in favor of structured child rows) and `UsageLog` reverted to a per-user daily counter (from a per-action audit row) — see [Differences from v4](#differences-from-v4) below.
 
 ## Entity Relationship Diagram (v5)
 
@@ -349,6 +349,18 @@ Added 2026-07-15. A session cookie that's been signed out of but hasn't expired 
 |---|---|
 | `cookieHash` | Primary key — SHA-256 of the revoked session cookie. |
 | `expiresAt` | When the cookie would have expired anyway; past this the row is dead weight and gets pruned. |
+
+### PASSWORD_RESET_TOKEN
+
+Added 2026-07-15. One emailed "reset your password" link, for the legacy flow only (Firebase sends its own reset emails). Only the SHA-256 of the token is stored — a row alone can't take over an account, since the real token exists only in the sent email. Single-use: a successful reset deletes every token the user has, and requesting a new one does too.
+
+| Field | Meaning |
+|---|---|
+| `id` | Primary key. |
+| `user` | The account this link resets — `@ManyToOne`, not null. |
+| `tokenHash` | SHA-256 of the token, unique. |
+| `expiresAt` | 30 minutes after creation (`password-reset.token-validity`) — the link is a password-equivalent sitting in an inbox, so short-lived on purpose. |
+| `createdAt` | When it was requested. |
 
 ### CODE_NOTE
 

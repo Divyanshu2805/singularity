@@ -18,7 +18,9 @@ Added 2026-07-15: sign-in itself happens against Firebase Authentication (email/
 
 ### LegacyAuthController (`/api/auth`) — rollback path
 
-The pre-Firebase username/password flow, kept only behind `app.auth.legacy.enabled` (default `true` during the migration) so it can be turned off once Firebase sign-in is confirmed working. Unchanged from before: `POST /api/auth/signup`, `POST /api/auth/login` (both return a legacy `AuthResponse` with a Bearer JWT, `AuthUtil.generateAccessToken` — still verified by `SessionAuthFilter` for a request carrying `Authorization: Bearer ...` and no session cookie), plus new `POST /api/auth/forgot-password` and `POST /api/auth/reset-password` (see [Project Status](../project-status.md#project-status)).
+The pre-Firebase username/password flow, kept only behind `app.auth.legacy.enabled` (default `true` during the migration) so it can be turned off once Firebase sign-in is confirmed working. Unchanged from before: `POST /api/auth/signup`, `POST /api/auth/login` (both return a legacy `AuthResponse` with a Bearer JWT, `AuthUtil.generateAccessToken` — still verified by `SessionAuthFilter` for a request carrying `Authorization: Bearer ...` and no session cookie).
+
+Added 2026-07-15: `POST /api/auth/forgot-password` (`ForgotPasswordRequest{email}`) always returns 202, whether or not the address has an account — `PasswordResetServiceImpl.requestReset` looks the user up, and if one exists, saves a `PasswordResetToken` and emails a reset link (`PasswordResetMailer`, `@Async`) through Mailpit in dev; either way the caller can't tell an account exists from the response alone. `POST /api/auth/reset-password` (`ResetPasswordRequest{token, newPassword}`) verifies the token (unexpired, hash matches — `util.Hashing`), updates the password, deletes every reset token the user has (so a used or superseded link can't work twice), and 204s; an invalid/expired token is 400.
 
 ## ProjectController (`/api/projects`)
 
