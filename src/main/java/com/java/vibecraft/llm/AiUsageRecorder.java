@@ -1,5 +1,7 @@
 package com.java.vibecraft.llm;
 
+import com.java.vibecraft.dto.usage.UsageRecord;
+import com.java.vibecraft.enums.UsageFeature;
 import com.java.vibecraft.security.AuthUtil;
 import com.java.vibecraft.service.UsageService;
 import lombok.RequiredArgsConstructor;
@@ -9,14 +11,16 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.stereotype.Component;
 
 /**
- * Bills a one-shot AI call to the caller's daily token usage. The chat pipeline records its own usage off the
- * stream's trailing chunk ({@code AiGenerationServiceImpl.finalizeChats}); the calls made before a project
- * even exists - naming it, and the idea interview - go through here, so they count the same way instead of
- * being invisible in {@code GET /api/usage/today}.
+ * Bills an AI call to a user's usage - the daily counter quotas read, and the ledger insights read.
  *
- * <p>Reads the caller from the security context, so it only works on a request thread (not from a
- * {@code Schedulers.boundedElastic()} continuation, which is why the chat path passes its user id explicitly).
- * Never throws: failing to write a usage row must not fail the user's request.
+ * <p><b>Two forms, and which one to use matters.</b> {@link #record(ChatResponse, UsageFeature, Long)} reads the
+ * caller from the security context, so it is only correct on a request thread. Anything that records from a
+ * stream's completion - a Reactor continuation with no signed-in user - must capture the user id on the request
+ * thread first and call {@link #record(ChatResponse, UsageFeature, Long, Long)}. ExplainLLM streaming used the
+ * context-reading form from {@code doOnComplete}; the lookup threw, this class swallowed it, and those tokens
+ * were never billed.
+ *
+ * <p>Never throws: failing to write a usage row must not fail the user's request.
  */
 @Component
 @RequiredArgsConstructor
@@ -26,18 +30,43 @@ public class AiUsageRecorder {
     private final UsageService usageService;
     private final AuthUtil authUtil;
 
-    /** {@code label} only names the call in logs, e.g. "idea clarification". */
-    public void record(ChatResponse response, String label) {
+    /** For request-thread callers. {@code projectId} is null for calls made before a project exists. */
+    public void record(ChatResponse response, UsageFeature feature, Long projectId) {
+        Long userId;
+        try {
+            userId = authUtil.getCurrentUserId();
+        } catch (Exception e) {
+            log.warn("Couldn't identify the caller to record {} usage - called off the request thread?", feature, e);
+            return;
+        }
+        record(response, feature, userId, projectId);
+    }
+
+    /** For anything recording after the request thread has gone - a stream's completion, a background retry. */
+    public void record(ChatResponse response, UsageFeature feature, Long userId, Long projectId) {
         try {
             Usage usage = response == null || response.getMetadata() == null ? null : response.getMetadata().getUsage();
-            Integer totalTokens = usage == null ? null : usage.getTotalTokens();
-            if (totalTokens == null || totalTokens <= 0) {
-                log.debug("The {} call reported no token usage, nothing to record", label);
+            record(usage, feature, userId, projectId);
+        } catch (Exception e) {
+            log.warn("Couldn't record token usage for {}", feature, e);
+        }
+    }
+
+    public void record(Usage usage, UsageFeature feature, Long userId, Long projectId) {
+        try {
+            Integer total = usage == null ? null : usage.getTotalTokens();
+            if (total == null || total <= 0) {
+                log.debug("The {} call reported no token usage, nothing to record", feature);
                 return;
             }
-            usageService.recordTokenUsage(authUtil.getCurrentUserId(), totalTokens);
+            usageService.recordTokenUsage(new UsageRecord(
+                    userId, projectId, feature, orZero(usage.getPromptTokens()), orZero(usage.getCompletionTokens()), total));
         } catch (Exception e) {
-            log.warn("Couldn't record token usage for the {} call", label, e);
+            log.warn("Couldn't record token usage for {}", feature, e);
         }
+    }
+
+    private static int orZero(Integer value) {
+        return value == null ? 0 : value;
     }
 }

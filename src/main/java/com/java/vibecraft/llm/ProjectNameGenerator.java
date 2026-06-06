@@ -57,7 +57,7 @@ public class ProjectNameGenerator {
                     .user(trimmedPrompt.substring(0, Math.min(trimmedPrompt.length(), MAX_PROMPT_CHARS)))
                     .call()
                     .chatResponse();
-            aiUsageRecorder.record(response, "project naming");
+            aiUsageRecorder.record(response, com.java.vibecraft.enums.UsageFeature.PROJECT_NAMING, null);
             String raw = response == null || response.getResult() == null ? null : response.getResult().getOutput().getText();
             String name = sanitize(raw);
             if (!name.isEmpty()) {
