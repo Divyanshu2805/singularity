@@ -223,4 +223,23 @@ class LlmResponseParserTest {
         assertThat(events.getFirst().getContent()).isEqualTo("const a = 1;");
         assertThat(events).extracting(ChatEvent::getType).containsExactly(ChatEventType.FILE_EDIT, ChatEventType.LEARN);
     }
+
+    @Test
+    void parsesARenameAsANewFileAndADeleteOfTheOldOne() {
+        List<ChatEvent> events = parse("""
+                <message phase="planning">Renaming the editor page.</message>
+                <todo path="src/pages/NoteEditorUpdatedPage.tsx">Creating the renamed page</todo>
+                <todo path="src/pages/NoteEditorPage.tsx">Removing the old page</todo>
+                <file path="src/pages/NoteEditorUpdatedPage.tsx">export default function Page() { return null; }</file>
+                <delete path="src/pages/NoteEditorPage.tsx">Replaced by NoteEditorUpdatedPage.tsx</delete>
+                <delete>no path, so ignored</delete>
+                <message phase="completed">Renamed.</message>""");
+
+        assertThat(events).extracting(ChatEvent::getType).containsExactly(
+                ChatEventType.MESSAGE, ChatEventType.TODO, ChatEventType.TODO,
+                ChatEventType.FILE_EDIT, ChatEventType.FILE_DELETE, ChatEventType.MESSAGE);
+        ChatEvent delete = events.get(4);
+        // Must match the step's path byte for byte, the same rule that ticks off a file edit.
+        assertThat(delete.getFilePath()).isEqualTo(events.get(2).getFilePath());
+    }
 }

@@ -36,6 +36,10 @@ spring:
           model: x-ai/grok-4.5
           temperature: 0.0
           stream-usage: true
+          # A teaching-mode build of a dozen files runs to tens of thousands of characters, and walkthroughs
+          # are about half of that. Without an explicit ceiling the provider's default applied, and a long
+          # build simply stopped mid-plan with no error - four files written, eight steps never started.
+          max-tokens: 32000
 
 jwt:
   secret-key: ${JWT_SECRET}

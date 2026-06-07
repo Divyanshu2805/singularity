@@ -5,16 +5,23 @@ import com.java.vibecraft.dto.idea.ClarifyIdeaResponse;
 import com.java.vibecraft.dto.idea.ClarifyingQuestion;
 import com.java.vibecraft.dto.idea.CompileIdeaRequest;
 import com.java.vibecraft.dto.idea.IdeaAnswer;
+import com.java.vibecraft.error.QuotaExceededException;
 import com.java.vibecraft.llm.AiUsageRecorder;
+import com.java.vibecraft.service.UsageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -39,12 +46,32 @@ class IdeaServiceImplTest {
             see who is booked, and cancel a session if nobody signs up.""";
 
     private IdeaServiceImpl ideaService;
+    private ChatClient chatClient;
+    private UsageService usageService;
 
     @BeforeEach
     void setUp() {
-        ChatClient chatClient = mock(ChatClient.class);
+        chatClient = mock(ChatClient.class);
         when(chatClient.prompt()).thenThrow(new IllegalStateException("model unavailable"));
-        ideaService = new IdeaServiceImpl(chatClient, mock(AiUsageRecorder.class));
+        // A plain mock allows everything: the budget check is void and does nothing unless a test says so.
+        usageService = mock(UsageService.class);
+        ideaService = new IdeaServiceImpl(chatClient, mock(AiUsageRecorder.class), usageService);
+    }
+
+    @Test
+    void refusesTheInterviewOnceTheDailyAllowanceIsSpent() {
+        doThrow(new QuotaExceededException("spent", QuotaExceededException.Reason.DAILY_TOKENS,
+                5_000, 5_000, Instant.now(), "Free"))
+                .when(usageService).assertWithinDailyTokenBudget();
+
+        // Refused outright - not quietly served the no-AI fallback questions, which would let someone with no
+        // allowance left answer a whole interview and only be stopped once the project tried to build.
+        assertThatThrownBy(() -> ideaService.clarify(new ClarifyIdeaRequest(BARE_IDEA)))
+                .isInstanceOf(QuotaExceededException.class);
+        assertThatThrownBy(() -> ideaService.compile(new CompileIdeaRequest(BARE_IDEA, List.of())))
+                .isInstanceOf(QuotaExceededException.class);
+        // And checked before the model is ever asked, so a refused call spends nothing.
+        verify(chatClient, never()).prompt();
     }
 
     private int questionsAskedFor(String idea) {

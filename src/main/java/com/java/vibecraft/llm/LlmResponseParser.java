@@ -24,14 +24,14 @@ public class LlmResponseParser {
     /**
      * Regex Breakdown:
      * Group 1: Opening Tag (<tag ...>)
-     * Group 2: Tag Name (message|file|tool|todo|learn)
+     * Group 2: Tag Name (message|file|delete|tool|todo|learn)
      * Group 3: Attributes part (e.g., ' path="foo"', ' args="a,b"' or ' concept="Props"')
      * Group 4: Content (The stuff inside)
      * Group 5: Closing Tag (</tag>)
      */
 
     private static final Pattern GENERIC_TAG_PATTERN = Pattern.compile(
-            "(<(message|file|tool|todo|learn)([^>]*)>)([\\s\\S]*?)(</\\2>)",
+            "(<(message|file|delete|tool|todo|learn)([^>]*)>)([\\s\\S]*?)(</\\2>)",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL
     );
 
@@ -92,6 +92,15 @@ public class LlmResponseParser {
                     builder.type(ChatEventType.FILE_EDIT);
                     builder.filePath(filePath); // Required for files
                 }
+                case "delete" -> {
+                    String filePath = attrMap.get("path");
+                    if (filePath == null || filePath.isBlank()) {
+                        log.warn("Skipping <delete> tag with no 'path' attribute in AI response: {}", preview(content));
+                        continue;
+                    }
+                    builder.type(ChatEventType.FILE_DELETE);
+                    builder.filePath(filePath);
+                }
                 case "tool" -> {
                     builder.type(ChatEventType.TOOL_LOG);
                     builder.metadata(attrMap.get("args")); // Store raw file list in metadata
@@ -126,7 +135,7 @@ public class LlmResponseParser {
                         continue;
                     }
                     builder.type(ChatEventType.LEARN);
-                    // The body is saved as written - its summary, parts and related files are laid out by the
+                    // The body is saved as written - its summary and parts are laid out by the
                     // client - and the path is how the client puts the walkthrough under its file's row.
                     builder.filePath(filePath);
                     // The concepts it introduces are what later requests read back, so the model can use those
@@ -172,7 +181,7 @@ public class LlmResponseParser {
         String gap = fullResponse.substring(from, to).trim();
         if (!gap.isEmpty()) {
             log.warn("Ignoring {} character(s) of unrecognized content in AI response (model may not be " +
-                    "following the expected <message>/<todo>/<file>/<learn>/<tool> protocol): {}", gap.length(), preview(gap));
+                    "following the expected <message>/<todo>/<file>/<delete>/<learn>/<tool> protocol): {}", gap.length(), preview(gap));
         }
     }
 

@@ -156,9 +156,12 @@ public class IdeaServiceImpl implements IdeaService {
 
     private final ChatClient chatClient;
     private final AiUsageRecorder aiUsageRecorder;
+    private final com.java.vibecraft.service.UsageService usageService;
 
     @Override
     public ClarifyIdeaResponse clarify(ClarifyIdeaRequest request) {
+        // The interview is three AI calls before a project even exists; they come out of the same allowance.
+        usageService.assertWithinDailyTokenBudget();
         String idea = truncate(request.idea().strip(), MAX_IDEA_CHARS);
         int budget = questionBudget(idea);
         log.debug("Asking {} clarifying question(s) for an idea of {} words", budget, wordCount(idea));
@@ -168,7 +171,7 @@ public class IdeaServiceImpl implements IdeaService {
                     .user(idea)
                     .call()
                     .chatResponse();
-            aiUsageRecorder.record(response, "idea clarification");
+            aiUsageRecorder.record(response, com.java.vibecraft.enums.UsageFeature.IDEA_INTERVIEW, null);
             return new ClarifyIdeaResponse(sanitizeQuestions(QUESTIONS_CONVERTER.convert(responseText(response)), budget));
         } catch (Exception e) {
             log.warn("AI idea clarification failed, falling back to untailored questions", e);
@@ -198,6 +201,7 @@ public class IdeaServiceImpl implements IdeaService {
 
     @Override
     public CompileIdeaResponse compile(CompileIdeaRequest request) {
+        usageService.assertWithinDailyTokenBudget();
         String idea = truncate(request.idea().strip(), MAX_IDEA_CHARS);
         List<IdeaAnswer> answered = request.answers().stream()
                 .filter(answer -> !cleanAnswers(answer.answers()).isEmpty())
@@ -215,7 +219,7 @@ public class IdeaServiceImpl implements IdeaService {
                     .user("Idea: " + idea + "\n\nInterview answers:\n" + interview)
                     .call()
                     .chatResponse();
-            aiUsageRecorder.record(response, "project brief");
+            aiUsageRecorder.record(response, com.java.vibecraft.enums.UsageFeature.IDEA_INTERVIEW, null);
             String spec = responseText(response);
             if (spec != null && !spec.isBlank()) {
                 return new CompileIdeaResponse(truncate(spec.strip(), MAX_SPEC_CHARS));

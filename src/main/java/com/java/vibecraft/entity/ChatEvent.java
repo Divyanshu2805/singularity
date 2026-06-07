@@ -46,4 +46,13 @@ public class ChatEvent {
     @Column(columnDefinition = "text")
     String metadata;
 
+    /**
+     * {@code FILE_EDIT} only: the file as it was just before this turn saved over it - empty for a file the turn
+     * created. It's what the editor's diff toggle compares against, and storage keeps only a file's current version,
+     * so without this the last turn's diff lived only in the browser and was gone after signing out. Null for events
+     * saved before this existed, or when the old version couldn't be read.
+     */
+    @Column(columnDefinition = "text")
+    String previousContent;
+
 }

@@ -21,6 +21,7 @@ import io.minio.CopySource;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 import io.minio.errors.ErrorResponseException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -293,6 +294,24 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                     .build());
         }
         return failed;
+    }
+
+    @Override
+    public void deleteFile(Long projectId, String path) {
+        if (path == null || path.isBlank()) {
+            throw new BadRequestException("File path must not be blank");
+        }
+        String cleanPath = normalizePath(path);
+        String objectName = objectKey(projectId, path);
+        try {
+            // MinIO treats removing a missing object as success, so this is idempotent without a lookup first.
+            minioClient.removeObject(RemoveObjectArgs.builder().bucket(projectBucket).object(objectName).build());
+            projectFileRepository.findByProjectIdAndPath(projectId, cleanPath).ifPresent(projectFileRepository::delete);
+            log.info("Deleted file: {}", objectName);
+        } catch (Exception e) {
+            log.error("Failed to delete file {}/{}", projectId, cleanPath, e);
+            throw new FileStorageException("Failed to delete file " + path, e);
+        }
     }
 
     /**

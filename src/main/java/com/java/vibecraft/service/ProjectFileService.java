@@ -13,6 +13,12 @@ public interface ProjectFileService {
     void saveFile(Long projectId, String filePath, String fileContent);
 
     /**
+     * Removes a file from storage and from the project's file list. Deleting a file that doesn't exist is a no-op,
+     * so a model repeating a delete (or a retried turn) is harmless.
+     */
+    void deleteFile(Long projectId, String filePath);
+
+    /**
      * Copies every file of one project into another, inside storage (bytes are never downloaded, so images and other
      * binaries come through intact). A file listed but missing from storage is skipped, as the ZIP download does.
      *
