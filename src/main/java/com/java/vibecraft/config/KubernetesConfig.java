@@ -1,4 +1,4 @@
-package com.codingshuttle.projects.lovable_clone.config;
+package com.java.vibecraft.config;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;

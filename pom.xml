@@ -132,6 +132,18 @@
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 			<version>3.0.1</version>
 		</dependency>
+		<!-- Talks to the runner-pod cluster live previews run in (see k8s/runner-pods.yml): creating/watching
+		     pods and port-forwarding into them from local dev. -->
+		<dependency>
+			<groupId>io.fabric8</groupId>
+			<artifactId>kubernetes-client</artifactId>
+			<version>6.13.4</version>
+		</dependency>
+		<!-- Routes hostname -> runner-pod for the preview proxy (proxy/index.js) and tracks preview idle time. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
 	</dependencies>
 
 	<dependencyManagement>

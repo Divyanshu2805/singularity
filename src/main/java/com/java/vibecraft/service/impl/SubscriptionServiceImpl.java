@@ -188,6 +188,12 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     @Override
+    public int previewAllowance(Long userId) {
+        Plan plan = getActivePlan(userId);
+        return plan != null && plan.getMaxPreviews() != null ? plan.getMaxPreviews() : FREE_TIER_PREVIEWS;
+    }
+
+    @Override
     public int projectsOwned(Long userId) {
         return projectMemberRepository.countProjectOwnedByUser(userId);
     }

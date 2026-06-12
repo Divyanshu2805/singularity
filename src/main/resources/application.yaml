@@ -105,6 +105,38 @@ minio:
 # port - so every successful checkout redirected to a path the API has no route for.
 client.url: http://localhost:5173
 
+# kind (local dev) has no load balancer or host ports, so Redis and the preview proxy aren't reachable from the
+# backend process unless something forwards them - see PreviewPortForwarder and k8s/dev-port-forward.sh. On a
+# real cluster the backend runs alongside them and this whole block stays disabled.
+spring.data.redis:
+  host: localhost
+  port: 6379
+
+preview:
+  namespace: vibecraft-ai
+  public-scheme: http
+  public-domain: localhost
+  public-port: 8090
+  runner-port: 5173
+  storage-alias: myminio
+  bucket: ${minio.project-bucket}
+  idle-timeout: 10m
+  boot-timeout: 2m
+  route-ttl: 90s
+  port-forward:
+    enabled: false
+    forwards:
+      - name: redis
+        pod-labels:
+          app: redis
+        pod-port: 6379
+        local-port: 6379
+      - name: proxy
+        pod-labels:
+          app: vibecraft-proxy
+        pod-port: 80
+        local-port: 8090
+
 logging:
   level:
     org.springframework.ai:

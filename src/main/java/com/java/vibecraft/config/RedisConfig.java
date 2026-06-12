@@ -1,4 +1,4 @@
-package com.codingshuttle.projects.lovable_clone.config;
+package com.java.vibecraft.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

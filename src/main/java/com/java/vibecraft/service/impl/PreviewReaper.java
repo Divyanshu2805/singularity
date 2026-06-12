@@ -1,0 +1,137 @@
+package com.java.vibecraft.service.impl;
+
+import com.java.vibecraft.config.PreviewProperties;
+import com.java.vibecraft.entity.Preview;
+import com.java.vibecraft.entity.PreviewSession;
+import com.java.vibecraft.enums.PreviewStatus;
+import com.java.vibecraft.error.ExternalServiceException;
+import com.java.vibecraft.repository.PreviewRepository;
+import com.java.vibecraft.repository.PreviewSessionRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import static com.java.vibecraft.service.impl.KubernetesDeploymentServiceImpl.ACTIVE;
+
+/**
+ * Keeps the runner pool from filling up with previews nobody is using - a claimed pod is never returned on its own.
+ * Every minute it:
+ * <ul>
+ *   <li>ends a person's session when their app hasn't asked about it for {@code preview.idle-timeout};</li>
+ *   <li>stops a RUNNING runner nobody has a session on - unless the proxy served it recently, so one open in its own
+ *       tab stays up;</li>
+ *   <li>ends a RUNNING runner whose pod is gone;</li>
+ *   <li>fails a CREATING runner stuck well past the boot timeout (its bootstrap thread died);</li>
+ *   <li>deletes claimed pods no active runner owns - left behind when cleanup couldn't reach the cluster.</li>
+ * </ul>
+ */
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class PreviewReaper {
+
+    /** A pod claimed this recently may simply not have its Preview row saved yet. */
+    private static final Duration ORPHAN_GRACE = Duration.ofMinutes(2);
+    private static final Duration STUCK_GRACE = Duration.ofMinutes(2);
+
+    private final PreviewRepository previewRepository;
+    private final PreviewSessionRepository sessionRepository;
+    private final PreviewRunnerPool runnerPool;
+    private final PreviewRouter router;
+    private final PreviewLifecycle lifecycle;
+    private final PreviewProperties properties;
+    private final KubernetesDeploymentServiceImpl deploymentService;
+
+    private volatile boolean lastRunFailed;
+
+    /**
+     * A restart kills any bootstrap that was in flight, so a CREATING row left from before can never finish. Fail
+     * them straight away rather than leaving the tab spinning until the reaper's timeout.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void failInterruptedStarts() {
+        try {
+            previewRepository.findByStatusIn(List.of(PreviewStatus.CREATING)).forEach(preview ->
+                    lifecycle.fail(preview, "The server restarted while this preview was starting. Start it again.", null));
+        } catch (RuntimeException e) {
+            log.warn("Couldn't clean up previews interrupted by a restart: {}", e.getMessage());
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${preview.reap-interval:60s}", initialDelayString = "${preview.reap-initial-delay:30s}")
+    public void reap() {
+        try {
+            Instant now = Instant.now();
+            endIdleSessions(now);
+
+            List<Preview> active = previewRepository.findByStatusIn(ACTIVE);
+            for (Preview preview : active) {
+                if (preview.getStatus() == PreviewStatus.CREATING) {
+                    reapIfStuck(preview, now);
+                } else {
+                    reapIfUnusedOrGone(preview, now);
+                }
+            }
+            sweepOrphanPods(active, now);
+
+            if (lastRunFailed) log.info("Preview reaper reconnected");
+            lastRunFailed = false;
+        } catch (ExternalServiceException e) {
+            // The cluster or Redis being down (laptop asleep, cluster stopped) shouldn't bury the log every minute.
+            if (!lastRunFailed) log.warn("Preview reaper skipped a run: {}", e.getMessage());
+            lastRunFailed = true;
+        }
+    }
+
+    private void endIdleSessions(Instant now) {
+        Instant cutoff = now.minus(properties.idleTimeout());
+        for (PreviewSession session : sessionRepository.findByEndedAtIsNullAndLastSeenAtBefore(cutoff)) {
+            sessionRepository.end(session.getId(), "Stopped after " + properties.idleTimeout().toMinutes()
+                    + " minutes without a visit", now);
+        }
+    }
+
+    private void reapIfStuck(Preview preview, Instant now) {
+        Instant startedAt = preview.getLastAccessedAt() != null ? preview.getLastAccessedAt() : preview.getStartedAt();
+        if (startedAt != null && startedAt.plus(properties.bootTimeout()).plus(STUCK_GRACE).isBefore(now)) {
+            lifecycle.fail(preview, "The preview didn't finish starting", null);
+        }
+    }
+
+    private void reapIfUnusedOrGone(Preview preview, Instant now) {
+        if (!runnerPool.isAlive(preview.getPodName())) {
+            lifecycle.terminate(preview, "The preview's runner stopped unexpectedly");
+            return;
+        }
+
+        Instant proxyVisit = router.lastVisit(preview.getHostname()).orElse(null);
+        boolean visitedRecently = proxyVisit != null && proxyVisit.plus(properties.idleTimeout()).isAfter(now);
+        if (visitedRecently) {
+            router.refresh(preview.getHostname()); // open in its own tab: keep the route from expiring
+            return;
+        }
+
+        synchronized (deploymentService.lockFor(preview.getProjectId())) {
+            deploymentService.shutDownIfUnused(preview, "Nobody has it open");
+        }
+    }
+
+    private void sweepOrphanPods(List<Preview> active, Instant now) {
+        Set<String> owned = active.stream().map(Preview::getPodName).collect(Collectors.toSet());
+        for (PreviewRunnerPool.ClaimedPod pod : runnerPool.claimedPods()) {
+            if (owned.contains(pod.name())) continue;
+            if (pod.claimedAt() != null && pod.claimedAt().plus(ORPHAN_GRACE).isAfter(now)) continue;
+            log.info("Releasing runner pod {}, which no active preview owns", pod.name());
+            runnerPool.release(pod.name());
+        }
+    }
+}

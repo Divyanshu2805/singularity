@@ -22,6 +22,9 @@ public interface SubscriptionService {
     int FREE_TIER_PROJECTS_ALLOWED = 1;
     int FREE_TIER_DAILY_TOKENS = 5_000;
 
+    /** How many live previews a free-tier user may run at once - see {@code projectAllowance}'s same reasoning. */
+    int FREE_TIER_PREVIEWS = 1;
+
     SubscriptionResponse getCurrentSubscription();
 
     void activateSubscription(Long userId, Long planId, String subscriptionId, String customerId);
@@ -48,6 +51,9 @@ public interface SubscriptionService {
 
     /** How many projects this user may own, from their plan or the free constant. */
     int projectAllowance(Long userId);
+
+    /** How many live previews this user may run at once, from their plan or the free constant. */
+    int previewAllowance(Long userId);
 
     /** How many they own now - non-deleted, and owned rather than shared with them. */
     int projectsOwned(Long userId);
