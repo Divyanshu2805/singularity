@@ -1,7 +1,8 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: shuttle-apps
+  # Everything for previews lives here; preview.namespace in application.yaml must match.
+  name: vibecraft-ai
 
 ---
 
@@ -9,7 +10,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: minio-service
-  namespace: shuttle-apps
+  namespace: vibecraft-ai
 spec:
   type: ExternalName
   externalName: host.docker.internal # Points to your laptop/host
@@ -24,7 +25,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis-server
-  namespace: shuttle-apps
+  namespace: vibecraft-ai
 spec:
   replicas: 1
   selector:
@@ -54,7 +55,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis-service
-  namespace: shuttle-apps
+  namespace: vibecraft-ai
 spec:
   selector:
     app: redis

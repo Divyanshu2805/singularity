@@ -1,5 +1,5 @@
 {
-  "name": "shuttle-proxy",
+  "name": "vibecraft-proxy",
   "version": "1.0.0",
   "description": "Wildcard Proxy for Project Previews",
   "main": "index.js",

@@ -6,6 +6,13 @@
       "runtimeExecutable": "./mvnw.cmd",
       "runtimeArgs": ["spring-boot:run"],
       "port": 8080
+    },
+    {
+      "name": "vibecraft-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

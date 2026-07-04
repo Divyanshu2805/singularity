@@ -1,28 +1,36 @@
+# The warm pool of preview runners. The Deployment only selects status=idle pods: when the backend claims one it
+# relabels it status=busy, which detaches it from the ReplicaSet, so a fresh idle pod is started in its place and the
+# claimed pod belongs to that one preview until the backend deletes it (PreviewRunnerPool.java).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: runner-pool
-  namespace: shuttle-apps
+  namespace: vibecraft-ai
 spec:
-  replicas: 2
+  replicas: 2 # idle pods kept warm - the number of previews that can start without waiting for a pod
   selector:
     matchLabels:
       app: runner
-      status: idle #will be changed to running
+      status: idle
   template:
     metadata:
       labels:
         app: runner
         status: idle
     spec:
+      terminationGracePeriodSeconds: 0
+      enableServiceLinks: false
       volumes:
         - name: workspace
           emptyDir: {}
-        - name: pnpm-store
+        # npm's download cache, shared by every runner on the node: the first install of a dependency set is slow,
+        # every later one mostly unpacks from here.
+        - name: npm-cache
           hostPath:
-            path: /mnt/pnpm-store
+            path: /mnt/npm-cache
             type: DirectoryOrCreate
       containers:
+        # 1. THE RUNNER - npm install + the Vite dev server, started by the backend over exec.
         - name: runner
           image: node:20-alpine
           workingDir: /app
@@ -30,21 +38,29 @@ spec:
           volumeMounts:
             - name: workspace
               mountPath: /app
-            - name: pnpm-store
-              mountPath: /root/.local/share/pnpm
+            - name: npm-cache
+              mountPath: /root/.npm
           ports:
             - containerPort: 5173
           resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
             limits:
               memory: "1Gi" # Prevent one user from crashing the node
 
-        # 2. THE SYNCER (File Sync)
+        # 2. THE SYNCER - mirrors the project's MinIO objects into /app and keeps watching them.
         - name: syncer
-          image: minio/mc
+          image: quay.io/minio/mc:latest
           command: ["/bin/sh", "-c", "sleep infinity"]
           env:
+            # Local-dev MinIO from services.docker-compose.yml. On a real cluster, read this from a Secret.
             - name: MC_HOST_myminio
               value: "http://minioadmin:minioadmin123@minio-service:9000"
           volumeMounts:
             - name: workspace
               mountPath: /app
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "32Mi"
