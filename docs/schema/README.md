@@ -208,18 +208,40 @@ A single file belonging to a project; its content lives in object storage, not t
 
 ### PREVIEW
 
-A live, running deployment of a project (`previews` table), so it can be viewed without downloading it.
+One attempt at running a project live (`previews` table, indexed on `project_id` and `status`) — a runner pod claimed from the pool, the project's files synced into it, and a Vite dev server behind the preview proxy. A new row per start, so a failure stays readable after a retry. **Real as of 2026-07-15** (see "Live previews" in [Project Status](../project-status.md#project-status)); every field below `id`/`project`/`namespace`/`podName`/`previewUrl`/`status`/`startedAt`/`terminatedAt`/`createdAt` was added in that pass. Status moves only through `PreviewRepository`'s conditional updates, never by saving a loaded entity — the async bootstrap and a user pressing Stop can race, and a plain save from whichever finished last would resurrect a stopped preview.
 
 | Field | Meaning |
 |---|---|
 | `id` | Primary key. |
 | `project` | FK to the project this preview runs — `@ManyToOne`, not null, lazy-loaded. |
-| `namespace` | Kubernetes namespace the preview pod runs in. |
+| `projectId` | The same column as `project`, read-only (`insertable = false, updatable = false`) — for code running outside a request (the reaper), where touching the lazy relation would throw. Only populated on rows loaded from the database, not on one just built. |
+| `namespace` | Kubernetes namespace the preview pod runs in (`vibecraft-ai`, matching `preview.namespace`). |
 | `podName` | The Kubernetes pod backing this preview. |
-| `previewUrl` | Public URL where the running preview can be viewed. |
-| `status` | Preview lifecycle status — `PreviewStatus` enum (`CREATING`, `RUNNING`, `FAILED`, `TERMINATED`), persisted as a string. |
-| `startedAt` / `terminatedAt` | When the preview pod came up and (if applicable) was torn down. |
+| `hostname` | The host the proxy routes on (`p12-x7k2m9qd4a.localhost`). Reused by every later preview of the same project (`PreviewRepository.findLatestHostname`), so a shared link keeps working across stops and restarts — and random, so it can't be guessed from the project id. |
+| `startedByUserId` | Who started it — the plan whose preview allowance it counts against. |
+| `previewUrl` | Public URL where the running preview can be viewed, built from `hostname` via `PreviewProperties.urlFor`. |
+| `status` | Preview lifecycle status — `PreviewStatus` enum (`CREATING`, `RUNNING`, `FAILED`, `TERMINATED`), persisted as a string. The dev DB's `previews_status_check` constraint lists exactly these four values — adding a status means dropping that constraint first (see the enum-check-constraint gotcha in [Practices / Conventions](../practices/conventions.md#practices--conventions)). |
+| `detail` | While CREATING, the step in progress ("Installing dependencies"); once FAILED or TERMINATED, why. |
+| `failureLog` | The tail of the install/dev-server output when a start fails — the runner pod is gone by then. |
+| `startedAt` / `readyAt` / `terminatedAt` | When the attempt began, when the dev server first answered, and (if applicable) when it was torn down. |
+| `lastAccessedAt` | The last time someone looked at this preview from the app (`PreviewLifecycle`, via polling `GET .../preview`). The proxy records direct visits in Redis instead, separately from this column. |
 | `createdAt` | When the preview record was created. |
+
+### PREVIEW_SESSION
+
+One person's use of a project's preview (`preview_sessions` table), added 2026-07-15. A `Preview` is the runner — one per project, shared, since collaborators work on the same files and a second runner would only be a stale copy. A session is what makes it *theirs*: it shows as running for someone only while they have an open session, their Stop ends only their session, and their plan's preview allowance counts only their sessions. The runner shuts down once no session is left on it (`shutDownIfUnused`). Before sessions existed (found 2026-06-03), one collaborator starting a preview made it appear running for everyone on the project, and any of them pressing Stop took it away from the others.
+
+| Field | Meaning |
+|---|---|
+| `id` | Primary key. |
+| `preview` | FK to the shared `Preview` runner this session is watching — `@ManyToOne`, not null, lazy-loaded. |
+| `projectId` | Denormalised from `preview.project` so "this user's session on this project" is a single-table lookup. |
+| `userId` | Who this session belongs to. |
+| `startedAt` | When this person's session began. |
+| `lastSeenAt` | The last time this person's app asked about the preview — their own idle clock, separate from `Preview.lastAccessedAt`. |
+| `endedAt` | Null while open. |
+| `endReason` | Why it ended — `"Stopped"` when they pressed Stop, otherwise what ended it (the runner failing, or being replaced by a fresh start). |
+| `failed` | True when it ended because the runner failed to start — the one ending shown to the user as an error rather than a normal stop. |
 
 ### CHAT_SESSION
 
