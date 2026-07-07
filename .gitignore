@@ -37,3 +37,12 @@ DEVLOG.md
 
 ### Local secrets (not pushed) ###
 .env
+
+### Frontend (frontend/, Vite/npm) ###
+node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+frontend/bun.lockb
+frontend/*.local
+!frontend/.env.example
