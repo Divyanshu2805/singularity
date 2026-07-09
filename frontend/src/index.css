@@ -1,0 +1,355 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Warm ink, not cold slate - a workshop at night, not a spaceship cockpit. */
+    --background: 30 15% 7%;
+    --foreground: 40 22% 92%;
+
+    --card: 30 14% 10%;
+    --card-foreground: 40 22% 92%;
+
+    --popover: 28 14% 11%;
+    --popover-foreground: 40 22% 92%;
+
+    /* Copper/forge accent - the one bright thing in the room. */
+    --primary: 25 78% 56%;
+    --primary-foreground: 25 40% 9%;
+
+    --secondary: 200 30% 55%;
+    --secondary-foreground: 200 40% 10%;
+
+    --muted: 30 11% 15%;
+    --muted-foreground: 32 10% 58%;
+
+    --accent: 25 38% 19%;
+    --accent-foreground: 30 30% 92%;
+
+    --destructive: 6 62% 50%;
+    --destructive-foreground: 30 30% 95%;
+
+    --border: 30 12% 18%;
+    --input: 30 12% 16%;
+    --ring: 25 78% 56%;
+
+    --radius: 0.375rem;
+
+    /* Custom tokens */
+    --panel: 30 15% 8%;
+    --panel-hover: 30 13% 13%;
+    --panel-active: 25 22% 17%;
+    --chat-user: 25 28% 17%;
+    --chat-ai: 30 12% 10%;
+    --file-active: 25 32% 18%;
+    --syntax-keyword: 12 70% 65%;
+    --syntax-string: 88 30% 55%;
+    --syntax-number: 38 78% 62%;
+    --syntax-comment: 30 9% 46%;
+    --syntax-function: 199 38% 60%;
+    --gradient-primary: linear-gradient(135deg, hsl(32 82% 58%) 0%, hsl(10 68% 47%) 100%);
+    --gradient-panel: linear-gradient(180deg, hsl(28 14% 11%) 0%, hsl(30 15% 7%) 100%);
+    --shadow-glow: 0 0 20px hsl(25 78% 56% / 0.18);
+    --shadow-panel: 0 4px 24px hsl(0 0% 0% / 0.45);
+
+    --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    --font-display: "Fraunces", ui-serif, Georgia, serif;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-mono);
+  }
+
+  /* Scrollbar styling - thin and quiet, like a real terminal's */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-panel border border-border/50 backdrop-blur-sm;
+    box-shadow: var(--shadow-panel);
+  }
+
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .glow-effect {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .streaming-cursor {
+    @apply inline-block w-[0.55em] h-[1.1em] bg-primary animate-cursor-blink ml-0.5 align-text-bottom;
+  }
+
+  /* Terminal window chrome - three traffic-light dots, like a real terminal titlebar */
+  .terminal-dots {
+    @apply flex items-center gap-1.5 shrink-0;
+  }
+
+  .terminal-dots span {
+    @apply w-2.5 h-2.5 rounded-full;
+  }
+
+  .terminal-dots span:nth-child(1) {
+    background: hsl(6 62% 50% / 0.85);
+  }
+
+  .terminal-dots span:nth-child(2) {
+    background: hsl(38 78% 55% / 0.85);
+  }
+
+  .terminal-dots span:nth-child(3) {
+    background: hsl(88 30% 50% / 0.85);
+  }
+
+  /* Prompt glyph, prefixed to command-like inputs */
+  .prompt-glyph {
+    @apply text-primary font-semibold select-none;
+  }
+
+  /* Assistant markdown - the typography plugin isn't registered, so style it explicitly */
+  .chat-markdown {
+    @apply text-[13px] leading-6 text-foreground/90 break-words;
+  }
+
+  .chat-markdown > * + * {
+    @apply mt-3;
+  }
+
+  /* Headings open a new section, so they get more room above than a paragraph does - but never at the very top. */
+  .chat-markdown > :is(h1, h2, h3, h4) {
+    @apply mb-1.5 mt-5;
+  }
+
+  .chat-markdown > :first-child {
+    @apply mt-0;
+  }
+
+  .chat-markdown li + li {
+    @apply mt-1.5;
+  }
+
+  .chat-markdown li > p {
+    @apply m-0;
+  }
+
+  .chat-markdown li > :is(ul, ol) {
+    @apply mt-1.5;
+  }
+
+  .chat-markdown hr {
+    @apply my-4 border-border;
+  }
+
+  .chat-markdown strong {
+    @apply font-semibold text-foreground;
+  }
+
+  .chat-markdown a {
+    @apply text-primary underline underline-offset-2 transition-colors hover:text-primary/80;
+  }
+
+  .chat-markdown ul {
+    @apply list-disc pl-5;
+  }
+
+  .chat-markdown ol {
+    @apply list-decimal pl-5;
+  }
+
+  .chat-markdown li {
+    @apply pl-1;
+  }
+
+  .chat-markdown li::marker {
+    color: hsl(var(--muted-foreground));
+  }
+
+  .chat-markdown h1,
+  .chat-markdown h2,
+  .chat-markdown h3,
+  .chat-markdown h4 {
+    @apply text-[13.5px] font-semibold leading-snug tracking-tight text-foreground;
+  }
+
+  .chat-markdown h1 {
+    @apply text-base;
+  }
+
+  .chat-markdown :not(pre) > code {
+    @apply rounded-md border border-border/60 bg-muted/70 px-1.5 py-px font-mono text-[12px] text-foreground;
+  }
+
+  /* Syntax colours for code blocks in chat, matching the editor's palette (see lib/highlight-code.ts). */
+  .tok-comment { color: hsl(var(--syntax-comment)); font-style: italic; }
+  .tok-keyword { color: hsl(var(--syntax-keyword)); }
+  .tok-string { color: hsl(var(--syntax-string)); }
+  .tok-number { color: hsl(var(--syntax-number)); }
+  .tok-function { color: hsl(var(--syntax-function)); }
+  .tok-type { color: hsl(var(--primary)); }
+  .tok-punctuation { color: hsl(var(--muted-foreground)); }
+
+  .chat-markdown pre {
+    @apply rounded-lg border border-border bg-panel p-3 text-[12px] leading-5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .chat-markdown blockquote {
+    @apply border-l-2 border-border pl-3 text-muted-foreground;
+  }
+
+  .chat-markdown table {
+    @apply w-full border-collapse text-xs;
+  }
+
+  .chat-markdown th,
+  .chat-markdown td {
+    @apply border border-border px-2 py-1 text-left;
+  }
+
+  .chat-markdown th {
+    @apply bg-muted/50 font-semibold;
+  }
+
+  /* Slow, soft sweep for "Thinking..." - a smooth motion, not a blink */
+  .text-shimmer {
+    background-image: linear-gradient(
+      90deg,
+      hsl(var(--muted-foreground)) 30%,
+      hsl(var(--foreground)) 50%,
+      hsl(var(--muted-foreground)) 70%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: text-shimmer 2.4s linear infinite;
+  }
+
+  /* The chat token meter's "this reply is still being counted" sweep. */
+  @keyframes usage-sweep {
+    0% { left: -25%; }
+    100% { left: 100%; }
+  }
+
+  @keyframes text-shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: -100% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .text-shimmer {
+      animation: none;
+    }
+  }
+
+  .tabs-scroll::-webkit-scrollbar {
+    height: 3px;
+  }
+
+  .chat-message {
+    @apply p-4 rounded-lg max-w-[85%] animate-fade-in;
+  }
+
+  .chat-message.user {
+    @apply bg-chat-user ml-auto;
+  }
+
+  .chat-message.ai {
+    @apply bg-chat-ai mr-auto;
+  }
+
+  .code-line {
+    @apply font-mono text-sm leading-6;
+  }
+
+  .tab-button {
+    @apply px-4 py-2 text-sm font-medium transition-all rounded-md;
+    @apply text-muted-foreground hover:text-foreground hover:bg-panel-hover;
+  }
+
+  .tab-button.active {
+    @apply bg-primary/20 text-primary;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .animate-stream {
+    animation: stream 0.05s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes stream {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
