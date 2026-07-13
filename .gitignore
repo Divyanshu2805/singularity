@@ -32,8 +32,8 @@ build/
 ### VS Code ###
 .vscode/
 
-### Local dev log (not pushed) ###
-DEVLOG.md
+### Local TODO scratch file (not pushed) ###
+TODO.md
 
 ### Local secrets (not pushed) ###
 .env
