@@ -1,0 +1,11 @@
+# Hard-Won Gotchas (read before you hit them yourself)
+
+These are silent-failure traps specific to this stack — no compile error, no startup warning, just wrong behavior. Several have bitten this codebase more than once.
+
+| Gotcha | What happens | Where it's explained in full |
+|---|---|---|
+| **`@PreAuthorize` SpEL parameter name must match the method's actual parameter name exactly** | A mismatch (`#projectId` used when the parameter is `id`) evaluates to `null`/deny — **silently**, not a compile or startup error. Denies every caller, including legitimate ones. Has happened 3 times. | `docs/local-development/troubleshooting.md` troubleshooting table |
+| **Adding a value to a persisted `@Enumerated(STRING)` enum, under `ddl-auto: update`** | Hibernate's generated `CHECK` constraint never widens. Every insert of the new value fails at runtime with no compile-time signal — looks like an unrelated feature silently broke. | `docs/schema/` "Persisted enums and the `ddl-auto` trap" |
+| **A `@Configuration`/`@Component`/`@Service` class outside `com.java.vibecraft`'s component-scan root** | Spring never registers it as a bean — no error anywhere, its effect just quietly doesn't happen. Happened once already (`CorsConfig`, a leftover from the reference project this codebase was adapted from). | `docs/local-development/troubleshooting.md` troubleshooting table |
+| **`@Value` + Lombok's `@FieldDefaults(makeFinal = true)`** | `@RequiredArgsConstructor` sweeps the now-final field into its generated constructor as a plain parameter, but drops the `@Value` annotation — Spring tries to autowire a bean instead of resolving a property, fails with "No qualifying bean". | `docs/local-development/troubleshooting.md` troubleshooting table |
+| **Retrying a Spring AI `ChatClient` stream** | Must wrap the *whole* `chatClient.prompt()...` call in `Flux.defer(() -> ...)`, not attach `.retryWhen(...)` to the built stream — the advisor chain is single-use per subscription and throws on a second attempt otherwise. | `docs/architecture/request-flows.md` §3.2 |
