@@ -16,24 +16,31 @@ VibeCraft is a single Spring Boot backend and a separate React SPA frontend, bot
 
 **What this platform is *not* responsible for:** it never executes AI-generated code anywhere except inside a live-preview Kubernetes pod — not in the request thread, not in a background job in the same process. There's no in-process sandbox and never has been; see [§3.3 Live preview](request-flows.md#33-live-preview-request-flow-start-a-preview) for the actual isolation boundary.
 
-```
-                     ┌─────────────────────────┐
-   Browser  ───────▶ │   React SPA (frontend/)  │
-                     └───────────┬──────────────┘
-                                 │ HTTPS (session cookie)
-                     ┌───────────▼──────────────┐
-                     │   Spring Boot backend      │──▶ PostgreSQL (system of record)
-                     │   (src/main/java/...)      │──▶ MinIO (file content)
-                     │                             │──▶ Firebase Admin SDK (verify tokens)
-                     │                             │──▶ OpenRouter (AI calls)
-                     │                             │──▶ Stripe (billing)
-                     └───────────┬──────────────┘
-                                 │ fabric8 kubernetes-client / Redis
-                     ┌───────────▼──────────────┐
-                     │  Kubernetes (kind, local)  │
-                     │  ┌──────────┐ ┌──────────┐ │
-                     │  │ runner   │ │ preview  │ │◀── Browser talks directly to
-                     │  │ pods     │ │ proxy    │ │    the proxy once routed (Redis)
-                     │  └──────────┘ └──────────┘ │
-                     └─────────────────────────────┘
+```mermaid
+flowchart TD
+    Browser["Browser"]
+    Frontend["React SPA<br/>(frontend/)"]
+    Backend["Spring Boot backend<br/>(src/main/java/...)"]
+    DB[("PostgreSQL<br/>system of record")]
+    MinIO[("MinIO<br/>file content")]
+    Firebase["Firebase Admin SDK<br/>verify tokens"]
+    OpenRouter["OpenRouter<br/>AI calls"]
+    Stripe["Stripe<br/>billing"]
+
+    Browser -- "HTTPS (session cookie)" --> Frontend
+    Frontend -- "HTTPS (session cookie)" --> Backend
+    Backend --> DB
+    Backend --> MinIO
+    Backend --> Firebase
+    Backend --> OpenRouter
+    Backend --> Stripe
+
+    subgraph K8s["Kubernetes (kind, local)"]
+        RunnerPods["runner pods"]
+        Proxy["preview proxy"]
+    end
+
+    Backend -- "fabric8 kubernetes-client / Redis" --> K8s
+    Proxy -- routes to --> RunnerPods
+    Browser -- "direct, once routed via Redis" --> Proxy
 ```

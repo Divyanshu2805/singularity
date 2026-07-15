@@ -41,27 +41,31 @@ This README is the entry point. Deeper, accurate reference material lives in [`d
 4. **Preview** — a Kubernetes pod is claimed from a warm pool, the project's files are synced in, and `npm install && vite dev` runs inside it — routed to the browser through Redis and a small reverse proxy.
 5. **Iterate** — further chat turns edit the running project; the live preview reflects a completed turn once its files finish writing.
 
-The full request-flow-with-real-file-paths version of this, including sequence diagrams: [`docs/architecture/`](docs/architecture/README.md).
+The full request-flow-with-real-file-paths version of this, including flowchart diagrams for the AI-generation and live-preview pipelines: [`docs/architecture/`](docs/architecture/README.md).
 
 ## Architecture
 
-```
-                     ┌─────────────────────────┐
-   Browser  ───────▶ │   React SPA (frontend/)  │
-                     └───────────┬──────────────┘
-                                 │ HTTPS (session cookie)
-                     ┌───────────▼──────────────┐
-                     │   Spring Boot backend      │──▶ PostgreSQL (system of record)
-                     │                             │──▶ MinIO (project file content)
-                     │                             │──▶ Firebase Admin SDK (auth)
-                     │                             │──▶ OpenRouter (AI calls)
-                     │                             │──▶ Stripe (billing)
-                     └───────────┬──────────────┘
-                                 │ Kubernetes client / Redis
-                     ┌───────────▼──────────────┐
-                     │  Kubernetes (kind, local)  │
-                     │  runner pods + reverse proxy│◀── browser reaches the running
-                     └─────────────────────────────┘    preview directly once routed
+```mermaid
+flowchart TD
+    Browser["Browser"]
+    Frontend["React SPA<br/>(frontend/)"]
+    Backend["Spring Boot backend"]
+    DB[("PostgreSQL<br/>system of record")]
+    MinIO[("MinIO<br/>project file content")]
+    Firebase["Firebase Admin SDK<br/>auth"]
+    OpenRouter["OpenRouter<br/>AI calls"]
+    Stripe["Stripe<br/>billing"]
+    K8s["Kubernetes (kind, local)<br/>runner pods + reverse proxy"]
+
+    Browser -- "HTTPS (session cookie)" --> Frontend
+    Frontend -- "HTTPS (session cookie)" --> Backend
+    Backend --> DB
+    Backend --> MinIO
+    Backend --> Firebase
+    Backend --> OpenRouter
+    Backend --> Stripe
+    Backend -- "Kubernetes client / Redis" --> K8s
+    Browser -- "direct, once routed" --> K8s
 ```
 
 **Key boundary:** AI-generated/user code executes **only** inside a live-preview Kubernetes pod — never in-process in the backend. Full reasoning and the exact isolation mechanism: [`docs/architecture/`](docs/architecture/README.md) §3.3.
