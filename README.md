@@ -41,7 +41,7 @@ This README is the entry point. Deeper, accurate reference material lives in [`d
 4. **Preview** — a Kubernetes pod is claimed from a warm pool, the project's files are synced in, and `npm install && vite dev` runs inside it — routed to the browser through Redis and a small reverse proxy.
 5. **Iterate** — further chat turns edit the running project; the live preview reflects a completed turn once its files finish writing.
 
-The full request-flow-with-real-file-paths version of this, including flowchart diagrams for the AI-generation and live-preview pipelines: [`docs/architecture/`](docs/architecture/README.md).
+The full request-flow-with-real-file-paths version of this, including sequence diagrams for the AI-generation and live-preview pipelines: [`docs/architecture/`](docs/architecture/README.md).
 
 ## Architecture
 

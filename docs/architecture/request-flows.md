@@ -15,32 +15,25 @@ Three flows, each with real file paths, since these three cover almost everythin
 This is the platform's core loop — a user asks for something, and files actually get written.
 
 ```mermaid
-flowchart TD
-    FE["Frontend<br/>ChatPanel.tsx"]
-    CC["ChatController<br/>POST /api/chat/stream"]
-    Quota{"Within daily<br/>token budget?"}
-    Quota402["402 response<br/>(no stream opened)"]
-    AG["AiGenerationServiceImpl.streamResponse<br/>Flux.defer(chatClient.prompt()...)"]
-    Advisor["FileTreeContextAdvisor<br/>injects project file tree"]
-    Prompt["PromptUtils system prompt<br/>&lt;message&gt;/&lt;todo&gt;/&lt;file&gt;/&lt;tool&gt;/&lt;learn&gt; tags"]
-    AI["OpenRouter<br/>Spring AI ChatClient"]
-    StreamOut["SSE {text} chunks<br/>back to FE, parsed live by<br/>use-stream-parser.ts"]
-    Parser["LlmResponseParser<br/>regex-parses tags -> ChatEvent rows"]
-    SaveFiles["ProjectFileService.saveFile<br/>per &lt;file&gt; tag, one at a time"]
-    SaveDB[("PostgreSQL<br/>ChatMessage + ChatEvent rows")]
-    Usage[("UsageService.recordTokenUsage<br/>UsageLog counter + UsageEvent ledger")]
+sequenceDiagram
+    participant FE as Frontend (ChatPanel.tsx)
+    participant CC as ChatController
+    participant AG as AiGenerationServiceImpl
+    participant AI as OpenRouter (Spring AI ChatClient)
+    participant P as ProjectFileService (MinIO)
+    participant DB as PostgreSQL
 
-    FE -->|"1. message, projectId"| CC
-    CC --> Quota
-    Quota -- no --> Quota402
-    Quota -- yes --> AG
-    AG --> Advisor --> Prompt --> AI
-    AI -->|"2. streamed raw text"| StreamOut
-    StreamOut -.->|"live to browser"| FE
-    AI -->|"3. stream completes"| Parser
-    Parser -->|"4."| SaveFiles
-    Parser -->|"5."| SaveDB
-    SaveDB -->|"6."| Usage
+    FE->>CC: POST /api/chat/stream {message, projectId}
+    CC->>AG: streamResponse() [pre-flight: quota check, 402 if over budget]
+    AG->>AI: Flux.defer(chatClient.prompt()...) [FileTreeContextAdvisor injects file tree]
+    Note over AI: PromptUtils system prompt: <message>/<todo>/<file>/<tool>/<learn> tags
+    AI-->>CC: streamed raw text chunks
+    CC-->>FE: SSE {text} chunks (also parsed live client-side by use-stream-parser.ts)
+    AI-->>AG: stream completes
+    AG->>AG: LlmResponseParser regex-parses tags into ChatEvent rows
+    AG->>P: saveFile() per <file> tag, one at a time (isolated try/catch)
+    AG->>DB: save ChatMessage + ChatEvent rows (batch, falls back to one-at-a-time on failure)
+    AG->>DB: UsageService.recordTokenUsage (UsageLog counter + UsageEvent ledger)
 ```
 
 Real files, in the order the flow touches them:
@@ -60,33 +53,31 @@ Real files, in the order the flow touches them:
 ## 3.3 Live preview: request flow (start a preview)
 
 ```mermaid
-flowchart TD
-    FE["Frontend<br/>PreviewPanel.tsx"]
-    PC["PreviewController<br/>POST /api/projects/{id}/preview"]
-    Allow{"previewAllowance<br/>OK, pod available?"}
-    Deny["402 PREVIEW_LIMIT<br/>or 503 CapacityUnavailable"]
-    KD["KubernetesDeploymentServiceImpl.startPreview"]
-    Pool["PreviewRunnerPool.claim(projectId)<br/>relabels an idle pod to busy"]
-    Label["Kubernetes API<br/>label patch: status idle -> busy"]
-    Boot["PreviewBootstrapper.start"]
-    Sync["exec: syncer container<br/>mc mirror (MinIO -> pod's /app)"]
-    Run["exec: runner container<br/>npm install && vite dev"]
-    Probe{"exec probe script<br/>wget /@vite/client<br/>— serving yet?"}
-    Running["PreviewBootstrapper.markRunning()"]
-    Router["PreviewRouter writes to Redis<br/>route:&lt;hostname&gt; -> podIp:port"]
-    Browser2["Browser loads<br/>http://&lt;hostname&gt;.localhost:8090"]
-    Proxy["proxy/index.js<br/>GET route:&lt;hostname&gt; from Redis"]
-    Dev["Pod's Vite dev server<br/>reverse-proxied to the browser"]
+sequenceDiagram
+    participant FE as Frontend (PreviewPanel.tsx)
+    participant PC as PreviewController
+    participant KD as KubernetesDeploymentServiceImpl
+    participant Pool as PreviewRunnerPool
+    participant Boot as PreviewBootstrapper
+    participant K8s as Kubernetes API (fabric8 client)
+    participant Redis as Redis
+    participant Proxy as proxy/index.js
 
-    FE --> PC --> Allow
-    Allow -- no --> Deny
-    Allow -- yes --> KD --> Pool --> Label
-    Pool --> Boot
-    Boot --> Sync --> Run --> Probe
-    Probe -- "not yet, poll again" --> Probe
-    Probe -- yes --> Running --> Router
-    FE -.->|"browser navigates once ready"| Browser2 --> Proxy --> Dev
-    Router -.->|"read by"| Proxy
+    FE->>PC: POST /api/projects/{id}/preview
+    PC->>KD: startPreview() [pre-flight: previewAllowance check, 402/503]
+    KD->>Pool: claim(projectId) — relabels an idle pod to busy
+    Pool->>K8s: label patch (status: idle -> busy)
+    KD->>Boot: start(previewId, projectId, isNewPreview)
+    Boot->>K8s: exec into syncer container: mc mirror (MinIO -> pod's /app)
+    Boot->>K8s: exec into runner container: npm install && vite dev
+    loop poll every few seconds
+        Boot->>K8s: exec probe script (wget /@vite/client)
+    end
+    Boot->>KD: markRunning() once serving
+    KD->>Redis: PreviewRouter writes route:<hostname> -> podIp:port
+    FE->>Proxy: browser loads http://<hostname>.localhost:8090
+    Proxy->>Redis: GET route:<hostname>
+    Proxy-->>FE: reverse-proxied to the pod's dev server
 ```
 
 Real files:
