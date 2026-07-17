@@ -1,6 +1,6 @@
 # 2. Module Map
 
-## Backend (`src/main/java/com/java/vibecraft/`)
+## Backend (`legacy-monolith/src/main/java/com/java/vibecraft/` — paths below are relative to that, unchanged since the Phase 0 move)
 
 | Package | Owns | Must never |
 |---|---|---|

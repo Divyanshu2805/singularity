@@ -2,9 +2,21 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "vibecraft",
+      "name": "discovery-service",
       "runtimeExecutable": "./mvnw.cmd",
-      "runtimeArgs": ["spring-boot:run"],
+      "runtimeArgs": ["-pl", "discovery-service", "spring-boot:run"],
+      "port": 8761
+    },
+    {
+      "name": "gateway-service",
+      "runtimeExecutable": "./mvnw.cmd",
+      "runtimeArgs": ["-pl", "gateway-service", "spring-boot:run"],
+      "port": 8000
+    },
+    {
+      "name": "legacy-monolith",
+      "runtimeExecutable": "./mvnw.cmd",
+      "runtimeArgs": ["-pl", "legacy-monolith", "spring-boot:run"],
       "port": 8080
     },
     {

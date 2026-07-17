@@ -1,0 +1,18 @@
+server:
+  port: ${DISCOVERY_SERVICE_PORT:8761}
+
+spring:
+  application:
+    name: discovery-service
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    # This instance IS the registry — it doesn't need to register with itself or fetch a registry of its own.
+    register-with-eureka: false
+    fetch-registry: false
+  server:
+    # Local dev only ever runs one Eureka node — the self-preservation heuristic (meant to tolerate a
+    # registry cluster losing contact with peers) just delays noticing a dead service, so it's off here.
+    enable-self-preservation: false

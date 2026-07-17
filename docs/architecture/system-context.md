@@ -1,6 +1,8 @@
 # 1. System Context
 
-VibeCraft is a single Spring Boot backend and a separate React SPA frontend, both in this one repository. There is no microservice split beyond the live-preview subsystem, which really does run as separate processes (Kubernetes pods + a standalone Node proxy) because generated user code has to execute somewhere the backend itself never touches.
+**This codebase is mid-migration from a monolith to microservices** — see `docs/migration/` for what's moved so far, why, and where to look for something that used to live in one place. Everything below describes the monolith's *internal* module structure, which as of this migration's Phase 0 is still exactly accurate: `legacy-monolith/` is the same backend described here, byte-for-byte, just relocated into its own Maven module. What's changed at the system level is the request path in front of it: the browser's single origin is now a new `gateway-service` (Spring Cloud Gateway, reactive so it doesn't buffer the two SSE streams), which today is a purely transparent reverse proxy — every request reaches `legacy-monolith` unmodified, so nothing in the flows below has actually changed yet. A new `discovery-service` (Eureka) exists for `gateway-service` and (from Phase 1 onward) the extracted services to find each other by name instead of hardcoded URLs. As each domain is actually extracted into its own service, this section gets rewritten to match — Phase 0 only changes what's *in front of* the monolith, not what's inside it yet.
+
+VibeCraft's backend logic is still, today, a single Spring Boot application and a separate React SPA frontend. There is no domain-level microservice split yet beyond the live-preview subsystem, which already runs as separate processes (Kubernetes pods + a standalone Node proxy) because generated user code has to execute somewhere the backend itself never touches — and beyond the new Gateway/Eureka pair described above, which changes the network topology in front of the app without changing anything the app itself does.
 
 **External services this depends on:**
 
@@ -20,7 +22,9 @@ VibeCraft is a single Spring Boot backend and a separate React SPA frontend, bot
 flowchart TD
     Browser["Browser"]
     Frontend["React SPA<br/>(frontend/)"]
-    Backend["Spring Boot backend<br/>(src/main/java/...)"]
+    Gateway["gateway-service<br/>(reactive, transparent proxy today)"]
+    Eureka["discovery-service<br/>(Eureka)"]
+    Backend["legacy-monolith<br/>(src/main/java/...)"]
     DB[("PostgreSQL<br/>system of record")]
     MinIO[("MinIO<br/>file content")]
     Firebase["Firebase Admin SDK<br/>verify tokens"]
@@ -28,7 +32,10 @@ flowchart TD
     Stripe["Stripe<br/>billing"]
 
     Browser -- "HTTPS (session cookie)" --> Frontend
-    Frontend -- "HTTPS (session cookie)" --> Backend
+    Frontend -- "HTTPS (session cookie)" --> Gateway
+    Gateway -- "unmodified passthrough" --> Backend
+    Gateway -. registers .-> Eureka
+    Backend -. registers, Phase 1+ .-> Eureka
     Backend --> DB
     Backend --> MinIO
     Backend --> Firebase

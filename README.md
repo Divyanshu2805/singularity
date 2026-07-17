@@ -90,21 +90,25 @@ Java 25, Maven Wrapper (bundled), Node.js + `npm`, Docker. Optional (live previe
 git clone https://github.com/Divyanshu2805/vibecraft.git
 cd vibecraft
 
-# Backend
+# Backend infra
 docker compose -f services.docker-compose.yml up -d
 cp .env.example .env    # fill in real values
-./mvnw spring-boot:run  # mvnw.cmd on Windows
 
-# Frontend, in a second terminal
+# Backend services — mvnw.cmd on Windows, each in its own terminal, in this order
+./mvnw -pl discovery-service spring-boot:run
+./mvnw -pl gateway-service spring-boot:run
+./mvnw -pl legacy-monolith spring-boot:run
+
+# Frontend, in a fourth terminal
 cd frontend
 npm install
 cp .env.example .env.local
 npm run dev
 ```
 
-Backend: http://localhost:8080 · Frontend: http://localhost:5173
+Frontend: http://localhost:5173 · Gateway (the browser's actual API origin): http://localhost:8000 · legacy-monolith direct: http://localhost:8080
 
-Full setup (including live previews, which need a Kubernetes cluster) and a troubleshooting table for known gotchas: [`docs/local-development/`](docs/local-development/README.md).
+The backend is a multi-module Maven reactor mid-migration to microservices — see [`docs/migration/`](docs/migration/README.md) for what's moved so far. Full setup (including live previews, which need a Kubernetes cluster) and a troubleshooting table for known gotchas: [`docs/local-development/`](docs/local-development/README.md).
 
 ## Environment Variables
 
@@ -122,19 +126,23 @@ Every backend value above is a bare placeholder in `application.yaml` with **no*
 ## Project Structure
 
 ```
-src/main/java/com/java/vibecraft/    Spring Boot backend — see docs/architecture/ for per-package ownership
+common-lib/                            shared internal-JWT/Feign/error-handling code for the microservices split
+discovery-service/                     Eureka
+gateway-service/                       Spring Cloud Gateway — the browser's single origin
+legacy-monolith/src/main/java/com/java/vibecraft/    the original Spring Boot backend, unmodified —
+                                        see docs/architecture/ for per-package ownership
 frontend/                              React SPA
 k8s/                                   Kubernetes manifests for live previews
 proxy/                                 standalone Node reverse proxy (preview routing)
-docs/                                  architecture, data model, API reference, local dev setup
+docs/                                  architecture, data model, API reference, local dev setup, migration map
 ```
 
-Full per-module responsibilities and a "where do I change X" table: [`docs/architecture/`](docs/architecture/README.md).
+Full per-module responsibilities and a "where do I change X" table: [`docs/architecture/`](docs/architecture/README.md). What's moved into a microservice so far (nothing yet — Phase 0 is scaffolding only): [`docs/migration/`](docs/migration/README.md).
 
 ## Testing
 
 ```bash
-./mvnw test -Dtest=IdeaServiceImplTest,LlmResponseParserTest,PromptUtilsTest    # backend — see docs/local-development/ for the full named list
+./mvnw -pl legacy-monolith test -Dtest=IdeaServiceImplTest,LlmResponseParserTest,PromptUtilsTest    # backend — see docs/local-development/ for the full named list
 cd frontend && npm test                                                          # frontend — 270 tests
 ```
 

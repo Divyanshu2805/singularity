@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>com.vibecraft</groupId>
+		<artifactId>vibecraft-parent</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+		<relativePath>../pom.xml</relativePath>
+	</parent>
+	<artifactId>gateway-service</artifactId>
+	<name>gateway-service</name>
+	<description>
+		The single origin the browser (and the frontend's Vite dev proxy) talks to. Reactive (WebFlux/Netty),
+		deliberately — a blocking gateway would buffer the two SSE streams (/api/chat/stream, /code/*/stream)
+		instead of forwarding them chunk by chunk. Phase 0: pure transparent passthrough to legacy-monolith,
+		no auth logic of its own. From Phase 1 onward it takes over Firebase verification + session-cookie
+		handling for each domain's routes as that domain is extracted — see this module's routing config and
+		the migration plan's Reliability Strategy section for how a route's cutover is a config change, not a
+		code change.
+	</description>
+
+	<dependencies>
+		<!-- Reactive/WebFlux Gateway (non-blocking — required so SSE streams pass through unbuffered).
+		     Renamed from spring-cloud-starter-gateway as of the 2025.0 release train; -server-webmvc is the
+		     newer blocking sibling, deliberately not used here. -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-loadbalancer</artifactId>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

@@ -33,8 +33,11 @@ export default defineConfig(({ mode }) => {
       // session cookie (SameSite=Strict) is sent, since the browser only ever talks to this one origin.
       proxy: {
         "/api": {
-          // API_PROXY_TARGET points a second dev server at a backend on another port (e.g. a branch build on 8081).
-          target: process.env.API_PROXY_TARGET || "http://localhost:8080",
+          // Points at gateway-service (see docs/local-development/), not legacy-monolith directly, as of the
+          // microservices migration's Phase 0 - the browser's single origin is now the Gateway's, which itself
+          // proxies to whichever service (still legacy-monolith for everything not yet extracted) owns a given
+          // path. API_PROXY_TARGET overrides this for e.g. pointing at a branch build on another port.
+          target: process.env.API_PROXY_TARGET || "http://localhost:8000",
           configure: (proxy) => {
             proxy.on("proxyReq", (proxyReq) => proxyReq.removeHeader("origin"));
           },

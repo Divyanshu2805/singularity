@@ -1,0 +1,41 @@
+server:
+  port: ${GATEWAY_SERVICE_PORT:8000}
+
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    gateway:
+      server:
+        webflux:
+          # Phase 0: one catch-all route, pure transparent passthrough to legacy-monolith — no path rewriting,
+          # no header/cookie manipulation, no auth logic here yet (that stays in legacy-monolith's own
+          # SessionAuthFilter/CSRF chain for now, completely unchanged). This is intentional: it lets Gateway
+          # sit in front of the app with zero behavior change, which is the whole Phase-0 verification bar.
+          #
+          # From Phase 1 onward, this becomes several routes: specific-path routes for each domain that's
+          # been extracted (e.g. Path=/api/auth/session -> account-service, ordered before this one) plus this
+          # same catch-all as the lowest-priority fallback for whatever hasn't been extracted yet. Cutting a
+          # domain over to its new service is then just adding/enabling its specific route ahead of the
+          # fallback — a config change, not a code change — per the migration plan's Reliability Strategy.
+          routes:
+            - id: legacy-monolith-fallback
+              uri: ${routing.legacy-monolith.uri:http://localhost:8080}
+              order: 100
+              predicates:
+                - Path=/**
+
+routing:
+  legacy-monolith:
+    uri: ${LEGACY_MONOLITH_URI:http://localhost:8080}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
