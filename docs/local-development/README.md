@@ -1,6 +1,6 @@
 # Local Development
 
-**This backend is mid-migration to microservices** (see `docs/migration/` for what's moved so far and why). As of Phase 0, `legacy-monolith/` is still the untouched original backend — every flow runs from there exactly as before — but the frontend now talks to it through a new `gateway-service` (a transparent reverse proxy today, so behavior is unchanged) instead of hitting it directly, and both register with a new `discovery-service` (Eureka). This means local dev now starts **four** processes instead of two — see below.
+**This backend is mid-migration to microservices** (see `docs/migration/` for what's moved so far and why). `legacy-monolith/` is still the original backend — every route the frontend actually uses still runs from there — but the frontend now talks to it through a new `gateway-service` (a transparent reverse proxy today, so behavior is unchanged) instead of hitting it directly, and both register with a new `discovery-service` (Eureka). As of Phase 1, `account-service` also exists (User/Plan/Subscription/billing, its own database, its own Firebase/session/CSRF chain) but isn't reachable through Gateway yet — see `docs/migration/` for exactly why. This means local dev now starts **five** processes instead of two — see below.
 
 ## Contents
 

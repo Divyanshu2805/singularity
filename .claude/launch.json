@@ -20,6 +20,12 @@
       "port": 8080
     },
     {
+      "name": "account-service",
+      "runtimeExecutable": "./mvnw.cmd",
+      "runtimeArgs": ["-pl", "account-service", "spring-boot:run"],
+      "port": 8081
+    },
+    {
       "name": "vibecraft-frontend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "frontend", "run", "dev"],

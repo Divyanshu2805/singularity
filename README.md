@@ -129,15 +129,17 @@ Every backend value above is a bare placeholder in `application.yaml` with **no*
 common-lib/                            shared internal-JWT/Feign/error-handling code for the microservices split
 discovery-service/                     Eureka
 gateway-service/                       Spring Cloud Gateway — the browser's single origin
-legacy-monolith/src/main/java/com/java/vibecraft/    the original Spring Boot backend, unmodified —
-                                        see docs/architecture/ for per-package ownership
+account-service/                       Users/Plans/Subscriptions/billing — extracted, but not yet reachable
+                                        through Gateway (see docs/migration/ for why)
+legacy-monolith/src/main/java/com/java/vibecraft/    the original Spring Boot backend, still serving
+                                        every route the frontend actually uses — see docs/architecture/
 frontend/                              React SPA
 k8s/                                   Kubernetes manifests for live previews
 proxy/                                 standalone Node reverse proxy (preview routing)
 docs/                                  architecture, data model, API reference, local dev setup, migration map
 ```
 
-Full per-module responsibilities and a "where do I change X" table: [`docs/architecture/`](docs/architecture/README.md). What's moved into a microservice so far (nothing yet — Phase 0 is scaffolding only): [`docs/migration/`](docs/migration/README.md).
+Full per-module responsibilities and a "where do I change X" table: [`docs/architecture/`](docs/architecture/README.md). What's moved into a microservice so far, and why it isn't all live yet: [`docs/migration/`](docs/migration/README.md).
 
 ## Testing
 
