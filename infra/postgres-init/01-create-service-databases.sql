@@ -10,3 +10,7 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'vibecraft-account-db'
 SELECT 'CREATE DATABASE "vibecraft-workspace-db"'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'vibecraft-workspace-db')
 \gexec
+
+SELECT 'CREATE DATABASE "vibecraft-intelligence-db"'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'vibecraft-intelligence-db')
+\gexec

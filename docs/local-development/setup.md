@@ -12,15 +12,16 @@ cp .env.example .env                                    # fill in real values �
 ./mvnw -pl legacy-monolith spring-boot:run                    # still serves every route - see docs/migration/
 ./mvnw -pl account-service spring-boot:run                     # NOT yet reachable through Gateway - direct :8081 only
 ./mvnw -pl workspace-service spring-boot:run                    # NOT yet reachable through Gateway - direct :8082 only
+./mvnw -pl intelligence-service spring-boot:run                  # NOT yet reachable through Gateway - direct :8083 only
 
-# 3. Frontend, in a sixth terminal
+# 3. Frontend, in a seventh terminal
 cd frontend
 npm install
 cp .env.example .env.local                              # Firebase web config — see frontend/.env.example
 npm run dev
 ```
 
-Standing up all six every time is more ceremony than the old two-process setup — that's the real, honest cost of this migration, not something to paper over. `.claude/launch.json` has them all pre-configured if you're driving this through Claude Code's preview tools instead of raw terminals. `common-lib` only needs re-installing when you actually change it, not on every normal startup — but if you're actively editing `common-lib` itself, note that `mvn compile` alone is **not** enough for a dependent service's `spring-boot:run` to see the change; see [Common Problems](troubleshooting.md#common-problems).
+Standing up all seven every time is more ceremony than the old two-process setup — that's the real, honest cost of this migration, not something to paper over. `.claude/launch.json` has them all pre-configured if you're driving this through Claude Code's preview tools instead of raw terminals. `common-lib` only needs re-installing when you actually change it, not on every normal startup — but if you're actively editing `common-lib` itself, note that `mvn compile` alone is **not** enough for a dependent service's `spring-boot:run` to see the change; see [Common Problems](troubleshooting.md#common-problems).
 
 | Service | URL |
 |---|---|
@@ -30,11 +31,12 @@ Standing up all six every time is more ceremony than the old two-process setup �
 | legacy-monolith (direct — bypasses Gateway, useful for isolating whether a bug is in the proxy or the app) | http://localhost:8080 |
 | account-service (direct only — not yet routed through Gateway, see `docs/migration/`) | http://localhost:8081 |
 | workspace-service (direct only — not yet routed through Gateway, see `docs/migration/`) | http://localhost:8082 |
+| intelligence-service (direct only — not yet routed through Gateway, see `docs/migration/`) | http://localhost:8083 |
 | Swagger UI / OpenAPI spec | `/swagger-ui.html` / `/v3/api-docs` on legacy-monolith directly — currently requires auth like any other endpoint, see `TODO.md` |
 | MinIO console | http://localhost:9001 (`minioadmin` / `minioadmin123` by default) |
 | Mailpit inbox (password-reset emails) | http://localhost:8025 |
 
-**account-service and workspace-service each use their own Postgres database** (`vibecraft-account-db`, `vibecraft-workspace-db`; same server, same credentials — no shared tables/FKs with each other or with `vibecraft-db`). `infra/postgres-init/` creates both automatically on a brand-new `services.docker-compose.yml` volume; against this project's existing volume each was created once by hand (`CREATE DATABASE "vibecraft-workspace-db"` via `docker exec pgvector-vibecraft psql -U user -d vibecraft-db`, same recipe for `-account-db`) — you won't need to repeat that unless you wipe the volume.
+**account-service, workspace-service, and intelligence-service each use their own Postgres database** (`vibecraft-account-db`, `vibecraft-workspace-db`, `vibecraft-intelligence-db`; same server, same credentials — no shared tables/FKs with each other or with `vibecraft-db`). `infra/postgres-init/` creates all three automatically on a brand-new `services.docker-compose.yml` volume; against this project's existing volume each was created once by hand (`CREATE DATABASE "vibecraft-intelligence-db"` via `docker exec pgvector-vibecraft psql -U user -d vibecraft-db`, same recipe for the other two) — you won't need to repeat that unless you wipe the volume.
 
 **Running workspace-service's live-preview pipeline locally**: it points at the exact same `kind` namespace, Redis instance, and MinIO bucket `legacy-monolith` already uses (see [Running Live Previews Locally](live-previews.md#running-live-previews-locally)) — both services can safely run against them side by side, since `PreviewRouter`'s Redis keys are per-hostname, not per-service. The one thing that doesn't tolerate two owners: **only one process should hold the local port-forwards into the cluster's Redis/proxy pods at a time.** `workspace-service`'s `application.yaml` ships with `preview.port-forward.enabled: false` for exactly this reason — leave that to `legacy-monolith`'s own `PreviewPortForwarder` or the standalone `k8s/dev-port-forward` scripts while both services are up.
 

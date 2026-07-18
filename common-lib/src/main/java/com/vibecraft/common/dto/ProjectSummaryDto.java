@@ -8,6 +8,8 @@ package com.vibecraft.common.dto;
 public record ProjectSummaryDto(
         Long id,
         String name,
-        boolean isPublic
+        boolean isPublic,
+        boolean deleted,
+        String templateInitIssue
 ) {
 }

@@ -78,12 +78,14 @@ public class InternalAccountController {
             return new PlanDto(null, "Free",
                     SubscriptionService.FREE_TIER_PROJECTS_ALLOWED,
                     SubscriptionService.FREE_TIER_DAILY_TOKENS,
-                    SubscriptionService.FREE_TIER_PREVIEWS);
+                    SubscriptionService.FREE_TIER_PREVIEWS,
+                    false);
         }
         return new PlanDto(plan.getId(), plan.getName(),
                 plan.getMaxProjects() != null ? plan.getMaxProjects() : SubscriptionService.FREE_TIER_PROJECTS_ALLOWED,
                 plan.getMaxTokensPerDay() != null ? plan.getMaxTokensPerDay() : SubscriptionService.FREE_TIER_DAILY_TOKENS,
-                plan.getMaxPreviews() != null ? plan.getMaxPreviews() : SubscriptionService.FREE_TIER_PREVIEWS);
+                plan.getMaxPreviews() != null ? plan.getMaxPreviews() : SubscriptionService.FREE_TIER_PREVIEWS,
+                Boolean.TRUE.equals(plan.getUnlimitedAi()));
     }
 
     private static UserDto toDto(User user) {

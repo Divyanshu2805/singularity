@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>com.vibecraft</groupId>
+		<artifactId>vibecraft-parent</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+		<relativePath>../pom.xml</relativePath>
+	</parent>
+	<artifactId>intelligence-service</artifactId>
+	<name>intelligence-service</name>
+	<description>
+		ChatSession/ChatMessage/ChatEvent/CodeNote/UsageEvent/UsageLog and the AI-generation/code-insight/idea-
+		clarifier/usage-insights pipeline — extracted from legacy-monolith's equivalent domain. Its own Postgres
+		database, its own Flyway history (replacing ddl-auto: update). Keeps a full copy of the Firebase/
+		session-cookie/CSRF/rate-limit security chain rather than delegating it to gateway-service yet — see
+		WebSecurityConfig's javadoc and docs/migration/ for why. Calls account-service (plan limits, user
+		lookups) and workspace-service (project membership, file read/write, project summaries) via Feign, since
+		it owns neither User nor Project. NOT yet receiving real traffic: legacy-monolith still serves every
+		Chat/Idea/CodeInsight/Usage route until Gateway's routing toggle flips — see docs/migration/'s
+		Phase 3 entry.
+	</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>com.vibecraft</groupId>
+			<artifactId>common-lib</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<!-- Spring Boot 4 moved FlywayAutoConfiguration out of the core autoconfigure jar into this dedicated
+		     module - same gotcha account-service/workspace-service already hit. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.mapstruct</groupId>
+			<artifactId>mapstruct</artifactId>
+			<version>${org.mapstruct.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok-mapstruct-binding</artifactId>
+			<version>0.2.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<!-- Firebase Authentication (Identity Platform) - session-cookie verification only, same as account-
+		     service/workspace-service. -->
+		<dependency>
+			<groupId>com.google.firebase</groupId>
+			<artifactId>firebase-admin</artifactId>
+			<version>9.10.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+		</dependency>
+		<!-- spring-cloud-starter-openfeign is NOT declared here - it's already transitive via common-lib. -->
+		<!-- Every AI call this service makes - build generation, code insight, idea clarification, project
+		     naming - version managed by the root pom.xml's spring-ai-bom import. -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-openai</artifactId>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<!-- .env lives at the repo root, not this module's directory - same as every other service. -->
+					<workingDirectory>${project.parent.basedir}</workingDirectory>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

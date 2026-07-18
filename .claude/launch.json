@@ -32,6 +32,12 @@
       "port": 8082
     },
     {
+      "name": "intelligence-service",
+      "runtimeExecutable": ".\\mvnw.cmd",
+      "runtimeArgs": ["-pl", "intelligence-service", "spring-boot:run"],
+      "port": 8083
+    },
+    {
       "name": "vibecraft-frontend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
