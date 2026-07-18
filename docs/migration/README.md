@@ -9,6 +9,6 @@ Updated in the same change as every migration phase — not written once at the 
 - [How to read this](how-to-read.md)
 - [Phase 0 — Scaffolding (complete)](phase-0-scaffolding.md)
 - [Phase 1 — Account Service (built and verified standalone; **not yet receiving real traffic**)](phase-1-account-service.md)
-- [Phase 2 — Workspace Service (not started)](phase-2-workspace-service.md)
+- [Phase 2 — Workspace Service (built and verified standalone; **not yet receiving real traffic**)](phase-2-workspace-service.md)
 - [Phase 3 — Intelligence Service (not started)](phase-3-intelligence-service.md)
 - [Not yet moved](not-yet-moved.md)

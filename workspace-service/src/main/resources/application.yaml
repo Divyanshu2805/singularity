@@ -1,0 +1,88 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  application:
+    name: workspace-service
+
+  datasource:
+    # A separate logical database on the same local Postgres server account-service already uses — no shared
+    # tables/FKs with legacy-monolith's own vibecraft-db, or with account-service's vibecraft-account-db.
+    url: jdbc:postgresql://localhost:9010/vibecraft-workspace-db
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # Flyway (db/migration/V1__init.sql) owns the schema, not Hibernate - same fix account-service already
+      # applied for the persisted-enum/ddl-auto:update CHECK-constraint trap (docs/schema/).
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+internal-jwt:
+  secret-key: ${INTERNAL_JWT_SECRET}
+  expiration: 2m
+
+internal-service:
+  shared-secret: ${INTERNAL_SERVICE_SHARED_SECRET}
+
+firebase:
+  project-id: ${FIREBASE_PROJECT_ID}
+  credentials-path: ${FIREBASE_CREDENTIALS_PATH}
+
+app:
+  auth:
+    session-cookie:
+      name: vc_session
+      max-age: 5d
+      secure: true
+    revocation-check-interval: 60s
+
+minio:
+  url: http://localhost:9000
+  access-key: ${MINIO_ACCESS_KEY}
+  secret-key: ${MINIO_SECRET_KEY}
+  project-bucket: projects
+
+# Same namespace/Redis/MinIO target legacy-monolith already uses - both can safely run against them
+# simultaneously during the soak period (PreviewRouter's Redis keys are per-hostname, not per-service).
+preview:
+  namespace: vibecraft-ai
+  public-scheme: http
+  public-domain: localhost
+  public-port: 8090
+  runner-port: 5173
+  storage-alias: myminio
+  bucket: ${minio.project-bucket}
+  idle-timeout: 10m
+  boot-timeout: 2m
+  route-ttl: 90s
+  port-forward:
+    # Only one process should hold the local port-forwards into the kind cluster's Redis/proxy pods at a time -
+    # leave this to legacy-monolith's own PreviewPortForwarder (or the standalone k8s/dev-port-forward scripts)
+    # while both services run side by side.
+    enabled: false
+
+client.url: http://localhost:5173
+
+server:
+  port: ${WORKSPACE_SERVICE_PORT:8082}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true

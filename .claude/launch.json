@@ -3,27 +3,33 @@
   "configurations": [
     {
       "name": "discovery-service",
-      "runtimeExecutable": "./mvnw.cmd",
+      "runtimeExecutable": ".\\mvnw.cmd",
       "runtimeArgs": ["-pl", "discovery-service", "spring-boot:run"],
       "port": 8761
     },
     {
       "name": "gateway-service",
-      "runtimeExecutable": "./mvnw.cmd",
+      "runtimeExecutable": ".\\mvnw.cmd",
       "runtimeArgs": ["-pl", "gateway-service", "spring-boot:run"],
       "port": 8000
     },
     {
       "name": "legacy-monolith",
-      "runtimeExecutable": "./mvnw.cmd",
+      "runtimeExecutable": ".\\mvnw.cmd",
       "runtimeArgs": ["-pl", "legacy-monolith", "spring-boot:run"],
       "port": 8080
     },
     {
       "name": "account-service",
-      "runtimeExecutable": "./mvnw.cmd",
+      "runtimeExecutable": ".\\mvnw.cmd",
       "runtimeArgs": ["-pl", "account-service", "spring-boot:run"],
       "port": 8081
+    },
+    {
+      "name": "workspace-service",
+      "runtimeExecutable": ".\\mvnw.cmd",
+      "runtimeArgs": ["-pl", "workspace-service", "spring-boot:run"],
+      "port": 8082
     },
     {
       "name": "vibecraft-frontend",

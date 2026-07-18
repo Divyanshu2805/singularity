@@ -40,12 +40,22 @@ Multi-module Maven reactor, mid-migration to microservices (`docs/migration/` ha
 ```
 pom.xml                     reactor parent (packaging=pom) — module list, shared dependencyManagement
 common-lib/                 shared: internal-JWT issue/verify, JwtAuthFilter, FeignClientInterceptor,
-                             ApiError/exception taxonomy, ClockConfig/AsyncConfig/Hashing. Nothing
-                             depends on it yet — wired in starting Phase 1.
+                             ApiError/exception taxonomy, ClockConfig/AsyncConfig/Hashing. Depended on
+                             by account-service and workspace-service (Phase 1/2); legacy-monolith
+                             still doesn't use it.
 discovery-service/          Eureka server
 gateway-service/            Spring Cloud Gateway (reactive — non-blocking, doesn't buffer SSE streams).
                              The browser's single origin. Transparent passthrough until a domain is
                              actually extracted — see its application.yaml's routing config.
+account-service/            Users, Plans, Subscriptions, Stripe billing, the auth audit trail — its own
+                             DB, its own full Firebase/session/CSRF chain (not delegated to gateway-
+                             service yet). Built and verified standalone; not yet cut over — see
+                             docs/migration/phase-1-account-service.md's Phase 1 entry.
+workspace-service/          Project/ProjectMember/ProjectFile/Preview/PreviewSession, the K8s/MinIO/
+                             Redis live-preview pipeline — its own DB, its own full security chain,
+                             calls account-service via Feign for anything User/Plan-shaped. Built and
+                             verified standalone; not yet cut over — see docs/migration/'s
+                             Phase 2 entry.
 legacy-monolith/            the original backend, unmodified except for its new location — still the
                              source of truth for every domain not yet extracted:
   src/main/java/com/java/vibecraft/
@@ -80,6 +90,8 @@ Full per-module ownership and a "where do I change X" table: `docs/architecture/
 ./mvnw clean package                                     # build every module's jar
 ./mvnw -pl discovery-service spring-boot:run             # Eureka — start before gateway-service
 ./mvnw -pl gateway-service spring-boot:run                # the browser's actual origin now — see docs/local-development/
+./mvnw -pl account-service spring-boot:run                # direct :8081 only — not yet routed through Gateway
+./mvnw -pl workspace-service spring-boot:run               # direct :8082 only — not yet routed through Gateway
 ```
 
 On Windows, `mvnw.cmd` in place of `./mvnw`. A bare `./mvnw spring-boot:run` (no `-pl`) fails — the reactor's root `pom.xml` is an aggregator with no main class.

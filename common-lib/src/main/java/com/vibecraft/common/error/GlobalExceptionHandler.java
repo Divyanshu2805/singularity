@@ -164,6 +164,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
+    /**
+     * Unlike the generic upstream-failure handler above, this preserves the exception's own message - it's
+     * specifically useful ("Every preview runner is busy right now. Try again in a minute."), not a generic
+     * "temporarily unavailable" sentence. Previously had no handler anywhere in this codebase (confirmed against
+     * legacy-monolith's own GlobalExceptionHandler too), so it fell through to the generic 500 below - a
+     * pre-existing latent bug this migration surfaced rather than introduced.
+     */
+    @ExceptionHandler(CapacityUnavailableException.class)
+    public ResponseEntity<ApiError> handleCapacityUnavailable(CapacityUnavailableException ex) {
+        ApiError apiError = new ApiError(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        log.warn(apiError.toString());
+        return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception ex) {
         ApiError apiError = new ApiError(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");

@@ -2,6 +2,7 @@ package com.vibecraft.account.controller;
 
 import com.vibecraft.account.entity.Plan;
 import com.vibecraft.account.entity.User;
+import com.vibecraft.account.repository.RevokedSessionRepository;
 import com.vibecraft.account.repository.UserRepository;
 import com.vibecraft.account.service.SubscriptionService;
 import com.vibecraft.common.dto.PlanDto;
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class InternalAccountController {
 
     private final UserRepository userRepository;
+    private final RevokedSessionRepository revokedSessionRepository;
     private final SubscriptionService subscriptionService;
 
     @GetMapping("/users/{userId}")
@@ -40,11 +42,32 @@ public class InternalAccountController {
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString())));
     }
 
-    /** Used by workspace-service's invite-by-email flow (ProjectMemberService) once it's extracted. */
+    /** Used by workspace-service's invite-by-email flow (ProjectMemberService). */
     @GetMapping("/users/by-username")
     public UserDto getUserByUsername(@RequestParam String username) {
         return toDto(userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User", username)));
+    }
+
+    /**
+     * Used by workspace-service's (and any future service's) SessionAuthenticator to resolve a Firebase-verified
+     * session cookie's uid into a local userId, without owning User itself (see docs/migration/phase-2-workspace-service.md's Phase 2
+     * entry - added alongside workspace-service, not part of Phase 1's original scope).
+     */
+    @GetMapping("/users/by-firebase-uid")
+    public UserDto getUserByFirebaseUid(@RequestParam String uid) {
+        return toDto(userRepository.findByFirebaseUid(uid)
+                .orElseThrow(() -> new ResourceNotFoundException("User", uid)));
+    }
+
+    /**
+     * Backs every other service's own SessionAuthenticator: REVOKED_SESSION lives only here, since sign-out/
+     * sign-out-everywhere is enforced by account-service alone. Added alongside workspace-service for the same
+     * reason as {@link #getUserByFirebaseUid} - a service with no local User table can't do this check locally.
+     */
+    @GetMapping("/sessions/revoked")
+    public boolean isSessionRevoked(@RequestParam String cookieHash) {
+        return revokedSessionRepository.existsById(cookieHash);
     }
 
     /** The effective plan's limits — free-tier fallback included — for a quota check made from another service. */

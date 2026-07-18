@@ -11,15 +11,16 @@ cp .env.example .env                                    # fill in real values �
 ./mvnw -pl gateway-service spring-boot:run                   # the browser's single origin from here on
 ./mvnw -pl legacy-monolith spring-boot:run                    # still serves every route - see docs/migration/
 ./mvnw -pl account-service spring-boot:run                     # NOT yet reachable through Gateway - direct :8081 only
+./mvnw -pl workspace-service spring-boot:run                    # NOT yet reachable through Gateway - direct :8082 only
 
-# 3. Frontend, in a fifth terminal
+# 3. Frontend, in a sixth terminal
 cd frontend
 npm install
 cp .env.example .env.local                              # Firebase web config — see frontend/.env.example
 npm run dev
 ```
 
-Standing up all five every time is more ceremony than the old two-process setup — that's the real, honest cost of this migration, not something to paper over. `.claude/launch.json` has them all pre-configured if you're driving this through Claude Code's preview tools instead of raw terminals. `common-lib` only needs re-installing when you actually change it, not on every normal startup.
+Standing up all six every time is more ceremony than the old two-process setup — that's the real, honest cost of this migration, not something to paper over. `.claude/launch.json` has them all pre-configured if you're driving this through Claude Code's preview tools instead of raw terminals. `common-lib` only needs re-installing when you actually change it, not on every normal startup — but if you're actively editing `common-lib` itself, note that `mvn compile` alone is **not** enough for a dependent service's `spring-boot:run` to see the change; see [Common Problems](troubleshooting.md#common-problems).
 
 | Service | URL |
 |---|---|
@@ -28,11 +29,14 @@ Standing up all five every time is more ceremony than the old two-process setup 
 | Eureka dashboard | http://localhost:8761 |
 | legacy-monolith (direct — bypasses Gateway, useful for isolating whether a bug is in the proxy or the app) | http://localhost:8080 |
 | account-service (direct only — not yet routed through Gateway, see `docs/migration/`) | http://localhost:8081 |
+| workspace-service (direct only — not yet routed through Gateway, see `docs/migration/`) | http://localhost:8082 |
 | Swagger UI / OpenAPI spec | `/swagger-ui.html` / `/v3/api-docs` on legacy-monolith directly — currently requires auth like any other endpoint, see `TODO.md` |
 | MinIO console | http://localhost:9001 (`minioadmin` / `minioadmin123` by default) |
 | Mailpit inbox (password-reset emails) | http://localhost:8025 |
 
-**account-service uses its own Postgres database** (`vibecraft-account-db`, same server, same credentials). `infra/postgres-init/` creates it automatically on a brand-new `services.docker-compose.yml` volume; against this project's existing volume it was created once by hand (`CREATE DATABASE "vibecraft-account-db"` via `docker exec pgvector-vibecraft psql -U user -d vibecraft-db`) — you won't need to repeat that unless you wipe the volume.
+**account-service and workspace-service each use their own Postgres database** (`vibecraft-account-db`, `vibecraft-workspace-db`; same server, same credentials — no shared tables/FKs with each other or with `vibecraft-db`). `infra/postgres-init/` creates both automatically on a brand-new `services.docker-compose.yml` volume; against this project's existing volume each was created once by hand (`CREATE DATABASE "vibecraft-workspace-db"` via `docker exec pgvector-vibecraft psql -U user -d vibecraft-db`, same recipe for `-account-db`) — you won't need to repeat that unless you wipe the volume.
+
+**Running workspace-service's live-preview pipeline locally**: it points at the exact same `kind` namespace, Redis instance, and MinIO bucket `legacy-monolith` already uses (see [Running Live Previews Locally](live-previews.md#running-live-previews-locally)) — both services can safely run against them side by side, since `PreviewRouter`'s Redis keys are per-hostname, not per-service. The one thing that doesn't tolerate two owners: **only one process should hold the local port-forwards into the cluster's Redis/proxy pods at a time.** `workspace-service`'s `application.yaml` ships with `preview.port-forward.enabled: false` for exactly this reason — leave that to `legacy-monolith`'s own `PreviewPortForwarder` or the standalone `k8s/dev-port-forward` scripts while both services are up.
 
 **Verifying Gateway is actually transparent**: `curl http://localhost:8080/api/plans` (direct) and `curl http://localhost:8000/api/plans` (through Gateway) should return byte-identical JSON. If they don't, something in the proxy path changed behavior it shouldn't have — see this migration's Reliability Strategy in the plan doc for why that's treated as a hard blocker, not a nitpick.
 
