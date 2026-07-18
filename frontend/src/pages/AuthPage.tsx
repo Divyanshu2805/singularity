@@ -15,7 +15,7 @@ import {
 } from "@/components/auth/AuthLayout";
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
-import { api, isAuthenticated, setAuthToken, setUserInfo } from "@/lib/api";
+import { isAuthenticated } from "@/lib/api";
 import {
     MAX_NAME_LENGTH,
     firstInvalidField,
@@ -25,7 +25,7 @@ import {
     type AuthMode,
     type FriendlyAuthError,
 } from "@/lib/auth-form";
-import { firebaseEnabled, friendlyFirebaseError } from "@/lib/firebase";
+import { friendlyFirebaseError } from "@/lib/firebase";
 import {
     completeSecondFactor,
     passwordPolicyProblem,
@@ -149,7 +149,7 @@ export default function AuthPage() {
                   }
         );
         // Optional, but worth a nudge: a password alone is one leaked database away from someone else's hands.
-        if (firebaseEnabled && !secondFactorUsed) {
+        if (!secondFactorUsed) {
             toast({
                 title: "Protect your account",
                 description: "Add two-step verification with an authenticator app.",
@@ -196,7 +196,7 @@ export default function AuthPage() {
         e.preventDefault();
         if (isGoogleLoading) return;
         const errors = validateAuthForm(mode, { name, email, password });
-        if (firebaseEnabled && isSignup && !errors.password) {
+        if (isSignup && !errors.password) {
             const problem = await passwordPolicyProblem(password);
             if (problem) errors.password = problem;
         }
@@ -210,36 +210,20 @@ export default function AuthPage() {
         }
 
         setIsLoading(true);
-        if (firebaseEnabled) {
-            try {
-                if (isSignup) {
-                    await signUpWithPassword(name.trim(), email.trim(), password);
-                    setInbox({ email: email.trim(), reason: "signup" });
-                    setStep("check-inbox");
-                    setPassword("");
-                    setIsLoading(false);
-                } else {
-                    handleOutcome(await signInWithPassword(email.trim(), password));
-                }
-            } catch (error) {
-                const fallback = isSignup ? "We couldn't create your account. Please try again." : "We couldn't sign you in. Please try again.";
-                const message = friendlyFirebaseError(error, "") || friendlyAuthError(error, mode).message || fallback;
-                setFormError({ message, suggestSignIn: /already exists/i.test(message) });
-                setIsLoading(false);
-            }
-            return;
-        }
-
         try {
-            const response = isSignup
-                ? await api.signup({ name: name.trim(), username: email.trim(), password })
-                : await api.login({ username: email.trim(), password });
-            setAuthToken(response.token);
-            if (response.user) setUserInfo(response.user);
-            greet(response.user, isSignup, true);
-            navigate("/projects", { replace: true });
+            if (isSignup) {
+                await signUpWithPassword(name.trim(), email.trim(), password);
+                setInbox({ email: email.trim(), reason: "signup" });
+                setStep("check-inbox");
+                setPassword("");
+                setIsLoading(false);
+            } else {
+                handleOutcome(await signInWithPassword(email.trim(), password));
+            }
         } catch (error) {
-            setFormError(friendlyAuthError(error, mode));
+            const fallback = isSignup ? "We couldn't create your account. Please try again." : "We couldn't sign you in. Please try again.";
+            const message = friendlyFirebaseError(error, "") || friendlyAuthError(error, mode).message || fallback;
+            setFormError({ message, suggestSignIn: /already exists/i.test(message) });
             setIsLoading(false);
         }
     };
@@ -391,14 +375,10 @@ export default function AuthPage() {
                     )
                 )}
 
-                {firebaseEnabled && (
-                    <>
-                        <GoogleButton onClick={handleGoogle} isLoading={isGoogleLoading} disabled={isLoading}>
-                            {isSignup ? "Sign up with Google" : "Continue with Google"}
-                        </GoogleButton>
-                        <AuthDivider label="or use email" />
-                    </>
-                )}
+                <GoogleButton onClick={handleGoogle} isLoading={isGoogleLoading} disabled={isLoading}>
+                    {isSignup ? "Sign up with Google" : "Continue with Google"}
+                </GoogleButton>
+                <AuthDivider label="or use email" />
 
                 {/* Name opens to its measured height. Anchored to the bottom, it grows out of the email field when
                     opening and sinks back into it when closing. */}

@@ -33,9 +33,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     /** Everything else under /api: generous for a person clicking around, tight for a script. */
     static final RateLimiter.Rule API = new RateLimiter.Rule("api", 600, Duration.ofMinutes(1));
 
-    private static final Set<String> AUTH_PATHS = Set.of(
-            "/api/auth/session", "/api/auth/login", "/api/auth/signup",
-            "/api/auth/forgot-password", "/api/auth/reset-password");
+    private static final Set<String> AUTH_PATHS = Set.of("/api/auth/session");
 
     private static final Pattern AI_PATH = Pattern.compile(
             "^/api/(chat/stream|ideas/.+|projects/from-prompt|projects/\\d+/code/(explain|ask)(/stream)?)$");

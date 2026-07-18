@@ -6,7 +6,7 @@ export interface AuthFieldErrors {
     password?: string;
 }
 
-// Mirror the backend's LoginRequest/SignupRequest constraints, so most mistakes are caught before a round trip.
+// Mirror Firebase's own password/name rules, so most mistakes are caught before a round trip to Firebase.
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_NAME_LENGTH = 30;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -93,7 +93,7 @@ export interface ResetPasswordErrors {
     confirm?: string;
 }
 
-/** Mirrors ResetPasswordRequest's constraint, plus the confirmation only the browser can check. */
+/** Mirrors the password rule above, plus the confirmation only the browser can check. */
 export function validateNewPassword(password: string, confirm: string): ResetPasswordErrors {
     const errors: ResetPasswordErrors = {};
     if (!password) errors.password = "Choose a new password";

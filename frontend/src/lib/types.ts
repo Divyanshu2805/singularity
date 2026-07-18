@@ -1,17 +1,3 @@
-export interface LoginCredentials {
-  username: string;
-  password: string;
-}
-
-export interface LoginResponse {
-  token: string;
-  user: {
-    id: number;
-    username: string;
-    name: string;
-  };
-}
-
 export interface FileNode {
   name: string;
   path: string;
@@ -148,21 +134,6 @@ export interface InviteMemberRequest {
   role: ProjectRole;
 }
 
-export interface SignupRequest {
-  username: string;
-  name: string;
-  password: string;
-}
-
-export interface AuthResponse {
-  token: string;
-  user: {
-    id: number;
-    username: string;
-    name: string;
-    plan?: any;
-  };
-}
 /** One matching line from a code search. `column`/`length` index into `text`, which is already trimmed. */
 export interface CodeSearchMatch {
   line: number;

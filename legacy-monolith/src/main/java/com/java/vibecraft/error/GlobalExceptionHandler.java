@@ -1,6 +1,5 @@
 package com.java.vibecraft.error;
 
-import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
@@ -112,14 +111,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleAuthenticationFailure(AuthenticationException ex) {
         ApiError apiError = new ApiError(HttpStatus.UNAUTHORIZED, ex.getMessage());
         log.warn(apiError.toString());
-        return ResponseEntity.status(apiError.status()).body(apiError);
-    }
-
-    @ExceptionHandler(JwtException.class)
-    public ResponseEntity<ApiError> handleJwtError(JwtException ex) {
-        ApiError apiError = new ApiError(HttpStatus.UNAUTHORIZED, "Invalid or expired token");
-        // The response message is deliberately vague; the log still needs to say expired vs. malformed vs. bad signature.
-        log.warn("{} (cause: {})", apiError, ex.getMessage());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 

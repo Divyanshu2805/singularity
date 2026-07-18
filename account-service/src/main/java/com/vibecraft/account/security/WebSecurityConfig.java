@@ -8,10 +8,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -43,15 +41,13 @@ public class WebSecurityConfig {
 
     private final SessionAuthenticator sessionAuthenticator;
     private final SessionCookies sessionCookies;
-    private final AuthUtil authUtil;
-    private final AuthProperties authProperties;
     private final HandlerExceptionResolver handlerExceptionResolver;
     private final InternalServiceAuthFilter internalServiceAuthFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) {
         SessionAuthFilter sessionAuthFilter = new SessionAuthFilter(
-                sessionAuthenticator, sessionCookies, authUtil, authProperties, handlerExceptionResolver);
+                sessionAuthenticator, sessionCookies, handlerExceptionResolver);
         RateLimitFilter rateLimitFilter = new RateLimitFilter(new RateLimiter(), handlerExceptionResolver);
 
         httpSecurity
@@ -60,11 +56,7 @@ public class WebSecurityConfig {
                         // Stripe can't hold a CSRF token; its webhook is authenticated by signature instead.
                         // /internal/** can't either - it's a machine-to-machine call authenticated by the
                         // shared internal-service secret, structurally unable to carry a browser's CSRF header.
-                        .ignoringRequestMatchers("/webhooks/**", "/internal/**")
-                        .ignoringRequestMatchers(request -> {
-                            String header = request.getHeader("Authorization");
-                            return header != null && header.startsWith("Bearer ") && sessionCookies.read(request).isEmpty();
-                        }))
+                        .ignoringRequestMatchers("/webhooks/**", "/internal/**"))
                 .cors(Customizer.withDefaults())
                 .sessionManagement(sessionConfig -> sessionConfig.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .headers(headers -> headers
@@ -80,8 +72,6 @@ public class WebSecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/session", "/api/auth/logout").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login",
-                                "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                         .requestMatchers("/webhooks/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/plans").permitAll()
                         .anyRequest().authenticated()
@@ -102,10 +92,5 @@ public class WebSecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) {
-        return authenticationConfiguration.getAuthenticationManager();
     }
 }

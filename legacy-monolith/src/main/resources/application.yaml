@@ -20,13 +20,6 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false
 
-  # Password-reset emails. Locally this is Mailpit from services.docker-compose.yml (no auth, inbox at
-  # http://localhost:8025). A real relay's credentials come from SPRING_MAIL_USERNAME / SPRING_MAIL_PASSWORD in
-  # the environment - deliberately not written here, so no placeholder credential ever looks like a working one.
-  mail:
-    host: localhost
-    port: 1025
-
   ai:
     openai:
       api-key: ${OPENROUTER_API_KEY}
@@ -41,12 +34,9 @@ spring:
           # build simply stopped mid-plan with no error - four files written, eight steps never started.
           max-tokens: 32000
 
-jwt:
-  secret-key: ${JWT_SECRET}
-
-# Firebase Authentication (Identity Platform). Every sign-in method - email/password, Google, two-step codes -
-# happens against Firebase from the browser; this server only verifies what Firebase issued and turns it into its
-# own httpOnly session cookie. Both values have no fallback, like every other secret:
+# Firebase Authentication (Identity Platform) is the only sign-in method - email/password, Google, two-step
+# codes all happen against Firebase from the browser; this server only verifies what Firebase issued and turns
+# it into its own httpOnly session cookie. Both values have no fallback, like every other secret:
 #   FIREBASE_PROJECT_ID        - the Firebase project id (Project settings -> General)
 #   FIREBASE_CREDENTIALS_PATH  - path to a service-account JSON key (Project settings -> Service accounts). A file
 #                                OUTSIDE this repo: it can mint tokens for any user, so it must never be committed.
@@ -67,21 +57,6 @@ app:
     # How long a verified session is trusted before checking Firebase again for revocation (sign out everywhere,
     # password change, disabled account). The upper bound on how long a revoked session keeps working here.
     revocation-check-interval: 60s
-    # The pre-Firebase username/password endpoints (/api/auth/signup, /login, /forgot-password, /reset-password)
-    # and Bearer-token requests. Kept only as a rollback path during the migration: they bypass two-step
-    # verification, so switch this to false as soon as Firebase sign-in is confirmed working.
-    legacy:
-      enabled: true
-  firebase:
-    # One-off: on startup, copy every local user without a Firebase account into Firebase, keeping their BCrypt
-    # password hashes so they sign in with the same password. Safe to re-run; leave false otherwise.
-    import-users: false
-
-# Legacy (app.auth.legacy.enabled) reset links only - Firebase sends its own reset emails.
-password-reset:
-  # How long an emailed reset link works. Short on purpose: the link is a password-equivalent sitting in an inbox.
-  token-validity: 30m
-  mail-from: "VibeCraft <no-reply@vibecraft.dev>"
 
 stripe:
   api:

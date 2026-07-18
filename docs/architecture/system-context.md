@@ -10,7 +10,7 @@ VibeCraft's backend logic is still, today, a single Spring Boot application and 
 |---|---|---|
 | PostgreSQL | The only system-of-record database | `spring.datasource` |
 | MinIO (S3-compatible) | Project file content (the DB only stores file *metadata*) | `config.StorageConfig` |
-| Firebase Authentication | Every sign-in method — this server only verifies tokens, never collects passwords itself (except the legacy rollback path) | `config.FirebaseConfig` |
+| Firebase Authentication | Every sign-in method — this server only verifies tokens, never collects passwords itself | `config.FirebaseConfig` |
 | OpenRouter (OpenAI-compatible API) | Every AI call — code generation, the idea clarifier, code insight, project naming | `config.AiConfig`, `spring.ai.openai.*` |
 | Stripe | Subscription billing | `config.PaymentConfig` |
 | Kubernetes (a `kind` cluster locally) + Redis | Live preview runner pods and hostname routing | `config.KubernetesConfig`/`RedisConfig` |

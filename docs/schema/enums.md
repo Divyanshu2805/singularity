@@ -11,4 +11,4 @@
 | `PreviewStatus` | `CREATING`, `RUNNING`, `FAILED`, `TERMINATED` | Persisted `@Enumerated(STRING)` — has a live `CHECK` constraint in the dev DB; adding a 5th value means dropping it first. |
 | `SubscriptionStatus` | `ACTIVE`, `TRIALING`, `CANCELED`, `PAST_DUE`, `INCOMPLETE` | `getActivePlan` treats `ACTIVE`/`TRIALING`/`PAST_DUE` as still-entitled. |
 | `UsageFeature` | `BUILD`, `BUILD_RETRY`, `EXPLAIN`, `IDEA_INTERVIEW`, `PROJECT_NAMING` | Stored as a plain string on `UsageEvent` (not this enum's `@Enumerated` form) — see below. |
-| `AuthAuditEventType` | 13 values (`ACCOUNT_CREATED`, `SIGN_IN`, `MFA_ENROLLED`, `LEGACY_SIGN_UP`, …) | Stored `varchar(64)`, no `CHECK` constraint. |
+| `AuthAuditEventType` | 13 values (`ACCOUNT_CREATED`, `SIGN_IN`, `MFA_ENROLLED`, …), 4 of them (`LEGACY_SIGN_UP`, `LEGACY_SIGN_IN`, `LEGACY_PASSWORD_RESET_REQUESTED`, `LEGACY_PASSWORD_RESET_COMPLETED`) historical-only since the legacy auth path was removed — kept so old rows still deserialize, never written by anything now | Stored `varchar(64)`, no `CHECK` constraint. |

@@ -10,6 +10,13 @@ public enum AuthAuditEventType {
     MFA_ENROLLED,
     MFA_REMOVED,
     PASSWORD_CHANGED,
+
+    /**
+     * Historical only, as of the legacy-auth removal - nothing writes these anymore (the legacy Bearer
+     * signup/login/password-reset endpoints are gone). Kept so existing {@code auth_audit_events} rows with
+     * these values still deserialize instead of throwing on read (e.g. {@code GET /api/auth/security-events}
+     * for an account old enough to have one).
+     */
     LEGACY_SIGN_UP,
     LEGACY_SIGN_IN,
     LEGACY_PASSWORD_RESET_REQUESTED,

@@ -72,7 +72,7 @@ flowchart TD
 
 ## Tech Stack
 
-**Backend:** Java 25, Spring Boot 4.1 (Web MVC / Data JPA / Security), PostgreSQL, Maven, Lombok, MapStruct, Spring AI (OpenRouter), Firebase Admin SDK, JJWT (legacy rollback), Stripe Java SDK, MinIO Java SDK, fabric8 `kubernetes-client`, Spring Data Redis.
+**Backend:** Java 25, Spring Boot 4.1 (Web MVC / Data JPA / Security), PostgreSQL, Maven, Lombok, MapStruct, Spring AI (OpenRouter), Firebase Admin SDK (the only sign-in method), Stripe Java SDK, MinIO Java SDK, fabric8 `kubernetes-client`, Spring Data Redis. JJWT lives only in `common-lib`, for the internal service-to-service JWT.
 
 **Frontend:** React 18 + TypeScript, Vite 5, Tailwind CSS + shadcn/ui, `@tanstack/react-query`, CodeMirror 6, Firebase JS SDK, Vitest.
 
@@ -115,11 +115,11 @@ The backend is a multi-module Maven reactor mid-migration to microservices — s
 | Variable | Required | Purpose |
 |---|---|---|
 | `DB_USERNAME` / `DB_PASSWORD` | ✅ | PostgreSQL credentials |
-| `JWT_SECRET` | ✅ | Legacy Bearer-token signing (rollback auth path) |
-| `FIREBASE_PROJECT_ID` / `FIREBASE_CREDENTIALS_PATH` | ✅ | Primary auth — verifying Firebase ID tokens |
+| `FIREBASE_PROJECT_ID` / `FIREBASE_CREDENTIALS_PATH` | ✅ | The only sign-in method — verifying Firebase ID tokens |
 | `OPENROUTER_API_KEY` | ✅ | Every AI call (generation, idea clarifier, code insight) |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | ✅ | Project file storage |
 | `STRIPE_SECRET` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_PRO` / `STRIPE_PRICE_BUSINESS` | for billing | Everything else works without these |
+| `INTERNAL_JWT_SECRET` / `INTERNAL_SERVICE_SHARED_SECRET` | ✅ (microservices) | Service-to-service auth — see `docs/migration/` |
 
 Every backend value above is a bare placeholder in `application.yaml` with **no** committed fallback — a missing one fails startup rather than running insecurely. Full list with context: [`.env.example`](.env.example). The frontend has its own [`frontend/.env.example`](frontend/.env.example) (Firebase web config). Never commit real values for either.
 

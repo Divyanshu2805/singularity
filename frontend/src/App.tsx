@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
 import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
 import AuthAction from "./pages/AuthAction";
 import SecuritySettings from "./pages/SecuritySettings";
 import { ProjectView } from "./pages/ProjectView";
@@ -31,8 +30,6 @@ const App = () => (
           <Route path="/login" element={<AuthPage />} />
           <Route path="/signup" element={<AuthPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          {/* Opened from the reset email: /reset-password?token=... */}
-          <Route path="/reset-password" element={<ResetPassword />} />
           {/* Firebase email links (reset, verify, recover) - the templates' custom action URL in the Firebase console. */}
           <Route path="/auth/action" element={<AuthAction />} />
           <Route path="/projects" element={<ProjectsDashboard />} />

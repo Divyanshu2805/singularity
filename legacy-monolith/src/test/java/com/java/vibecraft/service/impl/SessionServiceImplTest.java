@@ -41,8 +41,7 @@ class SessionServiceImplTest {
     private static final Instant NOW = Instant.parse("2026-09-16T10:00:00Z");
     private static final AuthProperties PROPS = new AuthProperties(
             new AuthProperties.SessionCookie("vc_session", Duration.ofDays(5), true),
-            Duration.ofSeconds(60),
-            new AuthProperties.Legacy(false));
+            Duration.ofSeconds(60));
 
     private IdentityVerifier verifier;
     private UserRepository userRepository;

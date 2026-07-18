@@ -13,25 +13,24 @@ import java.io.IOException;
 import java.util.Optional;
 
 /**
- * Authenticates a request from its session cookie or, while the legacy path is enabled, a Bearer token.
+ * Authenticates a request from its Firebase-backed session cookie.
  *
  * <p>Deliberately not a {@code @Component}: Spring Boot registers every Filter bean as a servlet filter as well, so it
  * would run a second time outside the security chain. {@code WebSecurityConfig} constructs it.
+ *
+ * <p>A cookie that no longer works is cleared and the request simply continues unauthenticated - so a stale cookie
+ * never stands between someone and the sign-in endpoint. Protected endpoints then answer 401.
  */
 public class SessionAuthFilter extends OncePerRequestFilter {
 
     private final SessionAuthenticator sessionAuthenticator;
     private final SessionCookies sessionCookies;
-    private final AuthUtil authUtil;
-    private final AuthProperties authProperties;
     private final HandlerExceptionResolver handlerExceptionResolver;
 
-    public SessionAuthFilter(SessionAuthenticator sessionAuthenticator, SessionCookies sessionCookies, AuthUtil authUtil,
-                             AuthProperties authProperties, HandlerExceptionResolver handlerExceptionResolver) {
+    public SessionAuthFilter(SessionAuthenticator sessionAuthenticator, SessionCookies sessionCookies,
+                             HandlerExceptionResolver handlerExceptionResolver) {
         this.sessionAuthenticator = sessionAuthenticator;
         this.sessionCookies = sessionCookies;
-        this.authUtil = authUtil;
-        this.authProperties = authProperties;
         this.handlerExceptionResolver = handlerExceptionResolver;
     }
 
@@ -43,6 +42,7 @@ public class SessionAuthFilter extends OncePerRequestFilter {
                 authenticate(request, response);
             }
         } catch (Exception ex) {
+            // Firebase unreachable... Resolved to an ApiError like every other failure.
             handlerExceptionResolver.resolveException(request, response, null, ex);
             return;
         }
@@ -58,12 +58,6 @@ public class SessionAuthFilter extends OncePerRequestFilter {
             } else {
                 sessionCookies.clear(response);
             }
-            return;
-        }
-
-        String header = request.getHeader("Authorization");
-        if (authProperties.legacy().enabled() && header != null && header.startsWith("Bearer ")) {
-            setAuthentication(authUtil.verifyAccessToken(header.substring("Bearer ".length())));
         }
     }
 

@@ -1,4 +1,4 @@
-import { Preview, PreviewLogs, ActiveGeneration, AuthSecurityEvent, AuthSecurityEventType, SessionResponse, ChatMessage, ClarifyingQuestion, CodeNote, CodeSearchResponse, CodeSelection, FileNode, Plan, QuotaDetails, Subscription, UsageEventPage, UsageInsights, UsageRange, UsageToday, IdeaAnswer, LoginCredentials, LoginResponse, ProjectSummaryResponse, ProjectResponse, ProjectMember, ProjectRole, SignupRequest, AuthResponse } from "./types";
+import { Preview, PreviewLogs, ActiveGeneration, AuthSecurityEvent, AuthSecurityEventType, SessionResponse, ChatMessage, ClarifyingQuestion, CodeNote, CodeSearchResponse, CodeSelection, FileNode, Plan, QuotaDetails, Subscription, UsageEventPage, UsageInsights, UsageRange, UsageToday, IdeaAnswer, ProjectSummaryResponse, ProjectResponse, ProjectMember, ProjectRole } from "./types";
 import { createSseParser } from "./sse";
 import { CSRF_HEADER, ensureCsrfToken, needsCsrf, readCsrfToken } from "./csrf";
 import { clearSignedInState, signOutRedirect } from "./session";
@@ -75,15 +75,6 @@ export const startSession = (session: SessionResponse) => {
   localStorage.removeItem("auth_token");
   localStorage.setItem(SESSION_HINT_KEY, session.expiresAt);
   setUserInfo(session.user);
-};
-
-/**
- * Starts a session. Anything the page was still holding for a previous account is dropped first: the sign-in
- * page is reachable while already signed in, so this can run without a sign-out having happened.
- */
-export const setAuthToken = (token: string) => {
-  clearSignedInState();
-  localStorage.setItem("auth_token", token);
 };
 
 export const removeAuthToken = () => localStorage.removeItem("auth_token");
@@ -379,26 +370,6 @@ function consumeChatStream(request: Promise<Response>, { onChunk, onFile, onComp
 }
 
 export const api = {
-  async login(credentials: LoginCredentials): Promise<LoginResponse> {
-    const response = await apiFetch(`${BASE_URL}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(credentials),
-    });
-    await ensureOk(response, "Login failed");
-    return response.json();
-  },
-
-  async signup(data: SignupRequest): Promise<AuthResponse> {
-    const response = await apiFetch(`${BASE_URL}/api/auth/signup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    await ensureOk(response, "Signup failed");
-    return response.json();
-  },
-
   /**
    * Exchanges a fresh Firebase ID token for the httpOnly session cookie. The only moment an ID token leaves the
    * Firebase SDK - and nothing keeps it afterwards.
@@ -433,25 +404,6 @@ export const api = {
       body: JSON.stringify({ type, idToken }),
     });
     await ensureOk(response, "Couldn't record the change");
-  },
-
-  /** Resolves the same way whether or not the email has an account - the backend never says. */
-  async forgotPassword(email: string): Promise<void> {
-    const response = await apiFetch(`${BASE_URL}/api/auth/forgot-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: email }),
-    });
-    await ensureOk(response, "Couldn't send the reset email");
-  },
-
-  async resetPassword(token: string, newPassword: string): Promise<void> {
-    const response = await apiFetch(`${BASE_URL}/api/auth/reset-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, newPassword }),
-    });
-    await ensureOk(response, "Couldn't reset your password");
   },
 
   /** Flat file paths - build the tree with `buildFileTree`, merged with any files that have only been streamed so far. */

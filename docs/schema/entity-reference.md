@@ -8,7 +8,7 @@ An account holder — owns/collaborates on projects, chats, holds a subscription
 |---|---|
 | `id` | Primary key. |
 | `username` | Login identifier, unique, not null. Despite the name it's validated as email-shaped at the DTO layer (`@Email`) — nothing on the entity itself constrains the format. |
-| `password` | BCrypt hash of the legacy login password (Spring Security `PasswordEncoder`) — only meaningful for accounts using the legacy auth path. |
+| `password` | A BCrypt hash. `NOT NULL`, but never a real user-chosen password — Firebase holds the actual credential. Set to an unguessable random secret at account creation (`SessionServiceImpl.resolveAccount`) purely to satisfy the column constraint; nothing ever authenticates against it (the legacy username/password login path that used to set this to a real password was removed). |
 | `name` | Display name. |
 | `stripeCustomerId` | Unique, nullable. Set once the user's first Stripe Checkout completes; reused on every later checkout so Stripe never mints a duplicate customer. |
 | `firebaseUid` | Unique, nullable. Set on Firebase sign-in, or by the one-off `FirebaseUserImportRunner` for pre-Firebase accounts. |
@@ -134,10 +134,11 @@ Usage is recorded **twice, on purpose, in one transaction** (`UsageServiceImpl.r
 
 The two serve different reads and neither can stand in for the other: the counter can't say *where* tokens went, and the ledger is too expensive to check on every single AI request. `config.UsageLedgerBackfill` ran once, only while `usage_events` was empty, reconstructing `BUILD` events from `chat_messages` history so the insights page has data predating the ledger.
 
-## AUTH_AUDIT_EVENT / REVOKED_SESSION / PASSWORD_RESET_TOKEN
+## AUTH_AUDIT_EVENT / REVOKED_SESSION
 
-Three small tables backing the Firebase-session auth model (`docs/architecture/`'s auth flow has the full picture):
+Two small tables backing the Firebase-session auth model (`docs/architecture/`'s auth flow has the full picture):
 
 - **`AUTH_AUDIT_EVENT`** — append-only sign-in history (`AuthAuditEventType`: `SIGN_IN`, `SIGN_IN_REJECTED`, `MFA_ENROLLED`, etc.). `userId` is a plain nullable column, not a relation — a rejected sign-in often has no matched user yet.
 - **`REVOKED_SESSION`** — a session cookie that's been signed out of but hasn't naturally expired. Firebase can only revoke *every* session for a user at once; single-device sign-out is enforced here. Only the cookie's SHA-256 is stored, keyed as the primary key itself.
-- **`PASSWORD_RESET_TOKEN`** — legacy-flow-only (Firebase sends its own reset emails). Only the token's SHA-256 is stored; a leaked row alone can't take over an account since the real token only ever existed in the sent email. A successful reset deletes every token the user has, so a used or superseded link can't work twice.
+
+`PASSWORD_RESET_TOKEN` (legacy-flow-only — Firebase sends its own reset emails) was removed along with the rest of the legacy username/password auth path. No entity maps to it anymore, but — since this project has no migration tool and `ddl-auto` never drops anything on its own — the underlying `password_reset_tokens` table is still physically present in any database that had it; drop it by hand (`DROP TABLE password_reset_tokens;`) whenever convenient, it's orphaned and safe to remove.

@@ -4,7 +4,7 @@ import { MailCheck } from "lucide-react";
 import { applyActionCode, checkActionCode } from "firebase/auth";
 import { AuthLayout, AuthSubmitButton, AuthTextLink, FormAlert } from "@/components/auth/AuthLayout";
 import { NewPasswordForm } from "@/components/auth/NewPasswordForm";
-import { firebaseEnabled, friendlyFirebaseError, getFirebaseAuth } from "@/lib/firebase";
+import { friendlyFirebaseError, getFirebaseAuth } from "@/lib/firebase";
 import { applyResetCode, checkResetCode, passwordPolicyProblem, sendResetEmail } from "@/lib/firebase-auth";
 
 type View =
@@ -37,7 +37,7 @@ export default function AuthAction() {
         hasRun.current = true;
         window.history.replaceState(null, "", window.location.pathname);
 
-        if (!firebaseEnabled || !mode || !oobCode) {
+        if (!mode || !oobCode) {
             setView({ kind: "error", message: "This link is incomplete. Open it from the email again." });
             return;
         }

@@ -4,8 +4,7 @@ Every `@RequestBody` DTO carries Bean Validation constraints; response DTOs neve
 
 | DTO | Field | Constraint | Note |
 |---|---|---|---|
-| `SignupRequest`/`LoginRequest`/`InviteMemberRequest` | `username` | `@NotBlank @Email` | Field is called `username` but is still validated as email-shaped — a rename from `email` never touched the validation. |
-| `LoginRequest` | `password` | `@Size(min = 8)` | **Undecided reversal, flagged in the code itself**: an account created before this constraint existed can no longer log in via the legacy path at all, since length is checked before any password comparison. Not yet resolved either way. |
+| `InviteMemberRequest` | `username` | `@NotBlank @Email` | Field is called `username` but is still validated as email-shaped — a rename from `email` never touched the validation. |
 | `ChatRequest` | `teachingMode` | none | Deliberately unconstrained — a missing/`null` value means off, boxed `Boolean` so absence isn't a deserialization error. |
 | `AskCodeRequest` | `path` | `@Size(max = 500)`, required only when `code` is present (`@AssertTrue isSelectionComplete`) | Selection is optional as a pair, not per-field. |
 | `CodeChatTurn.role` | — | `@NotBlank @Size(max = 20)` **and** checked by value in code | Length alone wouldn't stop a client sending `role: "system"` to smuggle instructions into the replayed history — see the `CodeInsightController` note above. |

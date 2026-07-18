@@ -9,9 +9,9 @@ Everything under `com.vibecraft.account` in the new `account-service` module, po
 | Entities | `entity/User,Plan,Subscription,PasswordResetToken,AuthAuditEvent,RevokedSession` | `entity/` (identical fields; own Postgres database, `vibecraft-account-db`) |
 | Enums | `enums/SubscriptionStatus,AuthAuditEventType` | `enums/` |
 | Repositories, mappers | `repository/`, `mapper/` (the 6 Account-owned ones) | same names, `account.repository`/`account.mapper` |
-| Legacy Bearer auth | `AuthService`/`AuthServiceImpl`, `LegacyAuthController` | same names |
+| ~~Legacy Bearer auth~~ | ~~`AuthService`/`AuthServiceImpl`, `LegacyAuthController`~~ | **Removed from both places** shortly after this port — see below |
 | Firebase session auth | `SessionService`/`SessionServiceImpl`, `AuthController` | same names — **kept whole**, not split with a Gateway (see below) |
-| Password reset | `PasswordResetService`/`Impl`, `PasswordResetMailer` | same names |
+| ~~Password reset~~ | ~~`PasswordResetService`/`Impl`, `PasswordResetMailer`~~ | **Removed from both places** shortly after this port — see below |
 | Audit trail | `AuthAuditService` | same name |
 | Plans/billing | `PlanService`/`Impl`, `SubscriptionService`/`Impl`, `PaymentProcessor`/`StripePaymentProcessor`, `BillingController`, `PlanSeeder`, `PaymentConfig` | same names, `PaymentConfig` → **`StripeConfig`** (renaming pass) |
 | Full security chain | `security/*` (Firebase verifier, session cookies/cache, CSRF, rate limiter, `WebSecurityConfig`) | `security/*`, unchanged in shape — **own full copy**, not delegated to `gateway-service` |
@@ -20,6 +20,18 @@ Everything under `com.vibecraft.account` in the new `account-service` module, po
 **Deliberate simplification**: `SubscriptionService.projectsOwned()`/`canCreateNewProject()` did **not** come across. Counting owned projects is workspace-service's job (it owns `ProjectMember`); account-service now only ever answers "what does this plan allow" (`projectAllowance`), and lets the caller do its own counting. The old interface conflated the two.
 
 **New in this service, not a port**: Flyway (`db/migration/V1__init.sql`) replaces `ddl-auto: update` — see "Known fragile points" below for why this was worth doing now rather than carrying the old approach into a fresh database.
+
+## Follow-up: legacy username/password auth removed entirely (2026-07-18)
+
+Shortly after the port above, the legacy Bearer-token auth path (username/password signup/login, the separate password-reset flow) was removed **from both `legacy-monolith` and `account-service`** — Firebase is now the only sign-in method anywhere in this codebase. This is a feature removal, not a migration step, but it touched files this doc already tracks, so it's recorded here rather than only in commit history:
+
+- Deleted everywhere: `LegacyAuthController`, `AuthService`/`AuthServiceImpl`, `PasswordResetService`/`Impl`, `PasswordResetMailer`, `PasswordResetToken` entity + repository, `SignupRequest`/`LoginRequest`/`ForgotPasswordRequest`/`ResetPasswordRequest`/`AuthResponse` DTOs, `FirebaseUserImportRunner` (its one-off job — migrating 15 pre-existing legacy-only accounts into Firebase, keeping their password hashes — was run against `legacy-monolith`'s live database first; see git history for the exact command).
+- Simplified: `AuthUtil` (dropped `generateAccessToken`/`verifyAccessToken` and its `jwt.secret-key` dependency — now a bare `SecurityContextHolder` reader), `SessionAuthFilter` (dropped the Bearer fallback branch), `WebSecurityConfig` (dropped the Bearer CSRF exemption, the legacy-route `permitAll` rules, and the now-unused `AuthenticationManager` bean), `AuthProperties` (dropped the `Legacy` record), `RateLimitFilter` (its `AUTH_PATHS` rule now only covers `/api/auth/session`), `UserServiceImpl` (dropped `implements UserDetailsService`).
+- Removed dependencies: `spring-boot-starter-mail`, `io.jsonwebtoken:jjwt-*` (from `legacy-monolith` and `account-service` directly — `common-lib` still depends on `jjwt-*` for its own, unrelated internal-JWT mechanism).
+- `AuthAuditEventType`'s four `LEGACY_*` values were kept, not deleted — existing audit rows with those values still exist and need to deserialize on read; nothing writes them anymore.
+- `password_reset_tokens` is now an orphaned table in any database that had it (no entity maps to it, and this project has no migration tool to drop it automatically) — safe to `DROP TABLE password_reset_tokens;` by hand.
+- Frontend: removed the `firebaseEnabled`-gated fallback UI (the app now assumes Firebase is always configured), the `/reset-password` page and route (Firebase's own reset flow already goes through `/auth/action`), and the four legacy `api.*` methods (`signup`, `login`, `forgotPassword`, `resetPassword`) plus their now-unused types.
+- Full verification performed for this removal: backend compiled and booted clean, all 95+17 named/session tests pass, live end-to-end curl checks against `legacy-monolith` (legacy routes now unreachable, Firebase session/CSRF/plans flows unaffected), frontend typecheck/build/lint clean, and a real browser pass confirming `/forgot-password` calls Firebase directly with zero `/api/auth/*` network calls.
 
 ## The architecture revision this phase forced
 

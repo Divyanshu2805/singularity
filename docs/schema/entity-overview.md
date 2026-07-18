@@ -1,6 +1,6 @@
 # Entity Overview
 
-17 entity types, 19 files under `src/main/java/com/java/vibecraft/entity/` (two — `ChatSessionId`, `ProjectMemberId` — are `@Embeddable` composite-key classes, not entities in their own right). Every entity carries a `Long id` (`IDENTITY` strategy) unless it uses a composite key, plus `createdAt`/`updatedAt` via Hibernate's `@CreationTimestamp`/`@UpdateTimestamp`.
+16 entity types, 18 files under `src/main/java/com/java/vibecraft/entity/` (two — `ChatSessionId`, `ProjectMemberId` — are `@Embeddable` composite-key classes, not entities in their own right). Every entity carries a `Long id` (`IDENTITY` strategy) unless it uses a composite key, plus `createdAt`/`updatedAt` via Hibernate's `@CreationTimestamp`/`@UpdateTimestamp`.
 
 ```mermaid
 erDiagram
@@ -12,7 +12,6 @@ erDiagram
     USER ||--o{ CODE_NOTE : asked
     USER ||--o{ PREVIEW_SESSION : watches
     USER ||--o{ AUTH_AUDIT_EVENT : "audited for"
-    USER ||--o{ PASSWORD_RESET_TOKEN : requests
 
     PROJECT ||--o{ PROJECT_MEMBER : "has members"
     PROJECT ||--o{ PROJECT_FILE : contains
@@ -203,14 +202,6 @@ erDiagram
     REVOKED_SESSION {
         string cookieHash PK "SHA-256"
         timestamp expiresAt
-    }
-
-    PASSWORD_RESET_TOKEN {
-        bigint id PK
-        bigint userId FK
-        string tokenHash UK "SHA-256"
-        timestamp expiresAt
-        timestamp createdAt
     }
 ```
 

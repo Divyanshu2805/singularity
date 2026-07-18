@@ -16,15 +16,4 @@ Sign-in itself happens client-side against **Firebase Authentication** (password
 
 **CSRF:** every write above except `POST /api/auth/session`/`/logout` (which happen before a session, and therefore a CSRF cookie, exists) needs a matching `X-XSRF-TOKEN` header (Spring Security's `.spa()` double-submit cookie).
 
-## `LegacyAuthController` (`/api/auth`) — rollback path
-
-Gated by `app.auth.legacy.enabled` (default `true`). The pre-Firebase username/password flow, kept only until Firebase sign-in is confirmed stable in production.
-
-| Method | Path | Request | Response | Notes |
-|---|---|---|---|---|
-| POST | `/api/auth/signup` | `SignupRequest` | `AuthResponse` (Bearer JWT) | |
-| POST | `/api/auth/login` | `LoginRequest` | `AuthResponse` (Bearer JWT) | |
-| POST | `/api/auth/forgot-password` | `{ email }` | 202 always | Never reveals whether the address has an account. If one exists, emails a reset link (Mailpit in dev). |
-| POST | `/api/auth/reset-password` | `{ token, newPassword }` | 204, or 400 if invalid/expired | Deletes every reset token the user has on success, so a used or superseded link can't work twice. |
-
-A request carrying `Authorization: Bearer ...` with **no** session cookie present is verified via this legacy JWT path by `SessionAuthFilter`; either auth method lands the same `UserPrincipal` in the `SecurityContext`.
+**Removed:** the legacy username/password rollback path (`LegacyAuthController` — `/api/auth/signup`, `/login`, `/forgot-password`, `/reset-password`, all returning a Bearer JWT) was removed once Firebase sign-in was confirmed stable. If you're reading old commit history or an old client integration, those routes no longer exist (401, not 404 — Spring Security's `anyRequest().authenticated()` rejects the request before routing ever determines there's no controller mapping).

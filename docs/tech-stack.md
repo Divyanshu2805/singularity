@@ -1,6 +1,6 @@
 # Tech Stack
 
-**Backend:** Java 25, Spring Boot 4.1 (Web MVC, Data JPA, Security), PostgreSQL, Maven (via `mvnw`/`mvnw.cmd` — never a system Maven install), Lombok, MapStruct, Spring AI (OpenRouter via its OpenAI-compatible API), Firebase Admin SDK, JJWT (legacy rollback path), Stripe Java SDK, MinIO Java SDK, fabric8 `kubernetes-client`, Spring Data Redis.
+**Backend:** Java 25, Spring Boot 4.1 (Web MVC, Data JPA, Security), PostgreSQL, Maven (via `mvnw`/`mvnw.cmd` — never a system Maven install), Lombok, MapStruct, Spring AI (OpenRouter via its OpenAI-compatible API), Firebase Admin SDK (the only sign-in method — the legacy username/password Bearer path was removed), Stripe Java SDK, MinIO Java SDK, fabric8 `kubernetes-client`, Spring Data Redis. JJWT lives only in `common-lib` now, for the internal service-to-service JWT.
 
 **Frontend:** React 18 + TypeScript, Vite 5, Tailwind CSS + shadcn/ui (Radix primitives), `@tanstack/react-query`, CodeMirror 6, Firebase JS SDK, Vitest + Testing Library.
 

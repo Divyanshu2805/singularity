@@ -23,7 +23,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useToast } from "@/hooks/use-toast";
 import { api, getUserInfo, isAuthenticated, loginRedirectPath, signOut } from "@/lib/api";
-import { firebaseEnabled, friendlyFirebaseError } from "@/lib/firebase";
+import { friendlyFirebaseError } from "@/lib/firebase";
 import {
     changePassword,
     confirmSecondFactor,
@@ -382,7 +382,7 @@ export default function SecuritySettings() {
                                         With two-step verification, a stolen password alone isn't enough to get into your account.
                                     </p>
                                 </div>
-                                {firebaseEnabled && !user && (
+                                {!user && (
                                     <Button variant="outline" onClick={() => setConfirmOpen(true)}>
                                         Manage
                                     </Button>
@@ -393,12 +393,6 @@ export default function SecuritySettings() {
                                     </Button>
                                 )}
                             </div>
-
-                            {!firebaseEnabled && (
-                                <p className="mt-4 text-sm text-muted-foreground">
-                                    Available once Firebase sign-in is configured for this deployment.
-                                </p>
-                            )}
 
                             {user && (
                                 <div className="mt-5 space-y-5 border-t border-border/50 pt-5">
@@ -552,7 +546,7 @@ export default function SecuritySettings() {
             </div>
 
             <AppSidebar sidebar={sidebar} />
-            {firebaseEnabled && <ConfirmIdentityDialog open={confirmOpen} onOpenChange={setConfirmOpen} onConfirmed={onConfirmed} />}
+            <ConfirmIdentityDialog open={confirmOpen} onOpenChange={setConfirmOpen} onConfirmed={onConfirmed} />
         </div>
     );
 }

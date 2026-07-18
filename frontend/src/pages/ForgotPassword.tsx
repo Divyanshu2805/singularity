@@ -2,9 +2,8 @@ import { useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { MailCheck } from "lucide-react";
 import { AuthField, AuthLayout, AuthSubmitButton, AuthTextLink, FormAlert } from "@/components/auth/AuthLayout";
-import { api } from "@/lib/api";
 import { validateEmail } from "@/lib/auth-form";
-import { firebaseEnabled, friendlyFirebaseError } from "@/lib/firebase";
+import { friendlyFirebaseError } from "@/lib/firebase";
 import { sendResetEmail } from "@/lib/firebase-auth";
 
 /**
@@ -34,8 +33,7 @@ export default function ForgotPassword() {
 
         setIsLoading(true);
         try {
-            if (firebaseEnabled) await sendResetEmail(email.trim());
-            else await api.forgotPassword(email.trim());
+            await sendResetEmail(email.trim());
             setSentTo(email.trim());
         } catch (err) {
             setFormError(friendlyFirebaseError(err, "Couldn't send the reset email. Please try again."));
@@ -52,7 +50,7 @@ export default function ForgotPassword() {
                     <h2 className="mt-4 text-lg font-semibold tracking-tight text-foreground">Check your inbox</h2>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
                         If an account exists for <span className="font-medium text-foreground">{sentTo}</span>, we've sent a link to
-                        reset its password. It expires in {firebaseEnabled ? "an hour" : "30 minutes"}.
+                        reset its password. It expires in an hour.
                     </p>
                     <p className="mt-4 text-xs leading-5 text-muted-foreground">
                         Nothing arrived? Check spam, or{" "}

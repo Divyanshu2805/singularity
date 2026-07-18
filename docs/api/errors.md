@@ -2,7 +2,7 @@
 
 Every error response is the same JSON shape (`ApiError`): `{ status, message, timestamp, errors?, quota? }`. `errors` (a list of `{ field, message }`) appears only on a validation failure; `quota` (`{ reason, limit, used, resetsAt?, planName }`) appears only on a 402. A client should branch on `status` and the presence of `quota`, never on parsing `message` text.
 
-18 handlers in `error/GlobalExceptionHandler.java`, one per exception type — logging follows the status code, not a blanket policy: client-fault 4xx logs at WARN with the message only (three exceptions carry a `(cause: ...)` suffix in the log because their user-facing message is deliberately vague — see below); only genuine server faults log at ERROR with a full stack trace.
+17 handlers in `error/GlobalExceptionHandler.java`, one per exception type — logging follows the status code, not a blanket policy: client-fault 4xx logs at WARN with the message only (two exceptions carry a `(cause: ...)` suffix in the log because their user-facing message is deliberately vague — see below); only genuine server faults log at ERROR with a full stack trace.
 
 | Exception | Status | Meaning | Log |
 |---|---|---|---|
@@ -17,7 +17,6 @@ Every error response is the same JSON shape (`ApiError`): `{ status, message, ti
 | `AccessDeniedException` | 403 | Any other security-chain denial — without this handler it fell through to the catch-all 500. | WARN |
 | `RateLimitExceededException` | 429 | Sliding-window rate limit exceeded — response carries `Retry-After`. | WARN |
 | `AuthenticationException` | 401 | Spring Security auth failure. | WARN |
-| `JwtException` | 401 | Legacy Bearer-token verification failed. Response message is deliberately vague ("Invalid or expired token"); the log still distinguishes expired/malformed/bad-signature via the cause. | WARN + cause |
 | `MethodArgumentTypeMismatchException` | 400 | A path/query param couldn't bind to its declared type. | WARN |
 | `MissingServletRequestParameterException` | 400 | A required `@RequestParam` was absent (e.g. `files/content` with no `path`). | WARN |
 | `HttpMessageNotReadableException` | 400 | Malformed request body (bad JSON). | WARN + cause |

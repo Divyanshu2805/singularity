@@ -19,12 +19,6 @@ const config = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID as string | undefined,
 };
 
-/**
- * Whether Firebase sign-in is configured. Until it is, the pages fall back to the legacy username/password flow, so
- * the app keeps working through the migration.
- */
-export const firebaseEnabled = Boolean(config.apiKey && config.authDomain && config.projectId);
-
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 
@@ -37,7 +31,9 @@ let auth: Auth | null = null;
  * SDK straight away. A reload forgets it, which is exactly the point.
  */
 export function getFirebaseAuth(): Auth {
-  if (!firebaseEnabled) throw new Error("Firebase sign-in isn't configured.");
+  if (!config.apiKey || !config.authDomain || !config.projectId) {
+    throw new Error("Firebase sign-in isn't configured. Set VITE_FIREBASE_* in frontend/.env.local.");
+  }
   if (!auth) {
     app = initializeApp(config);
     auth = initializeAuth(app, {
