@@ -11,11 +11,15 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.csrf.CsrfException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
 
@@ -138,6 +142,45 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleMissingParameter(MissingServletRequestParameterException ex) {
         ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST,
                 "Missing required parameter '" + ex.getParameterName() + "'");
+        log.warn(apiError.toString());
+        return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
+    /**
+     * A required header that isn't there is the caller's mistake, so 400. It used to fall through to the generic
+     * 500 below - e.g. Stripe's webhook endpoint answered 500 to a request with no {@code Stripe-Signature}.
+     */
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ApiError> handleMissingHeader(MissingRequestHeaderException ex) {
+        ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST,
+                "Missing required header '" + ex.getHeaderName() + "'");
+        log.warn(apiError.toString());
+        return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
+    /**
+     * A URL nothing serves. Spring MVC 6.1+ raises this instead of answering 404 itself, so without a handler
+     * every unknown path was a 500 with a stack trace in the log. The path is deliberately not echoed back.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiError> handleNoResource(NoResourceFoundException ex) {
+        ApiError apiError = new ApiError(HttpStatus.NOT_FOUND, "Not found");
+        log.warn("{} ({} {})", apiError, ex.getHttpMethod(), ex.getResourcePath());
+        return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
+    /** Right URL, wrong verb. Carries the {@code Allow} header the response is required to have. */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiError> handleMethodNotAllowed(HttpRequestMethodNotSupportedException ex) {
+        ApiError apiError = new ApiError(HttpStatus.METHOD_NOT_ALLOWED, "This endpoint doesn't support " + ex.getMethod());
+        log.warn(apiError.toString());
+        return ResponseEntity.status(apiError.status()).headers(ex.getHeaders()).body(apiError);
+    }
+
+    /** A body in a content type the endpoint doesn't read (e.g. text/plain sent to a JSON endpoint). */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiError> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException ex) {
+        ApiError apiError = new ApiError(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported content type");
         log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }

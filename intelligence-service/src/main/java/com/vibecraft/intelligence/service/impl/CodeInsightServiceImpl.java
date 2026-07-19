@@ -76,6 +76,9 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public CodeInsightResponse explain(Long projectId, ExplainCodeRequest request) {
+        // Same daily allowance as the streamed variant below. This one was ungated (in legacy-monolith too), so a
+        // caller over the limit could keep spending tokens by using the non-streaming endpoint instead.
+        usageService.assertWithinDailyTokenBudget();
         String answer = callModel(
                 CodeInsightPrompts.explainSystemPrompt(),
                 List.of(new UserMessage(CodeInsightPrompts.selectionBlock(
@@ -89,6 +92,7 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public CodeInsightResponse ask(Long projectId, AskCodeRequest request) {
+        usageService.assertWithinDailyTokenBudget();
         return new CodeInsightResponse(
                 callModel(CodeInsightPrompts.askSystemPrompt(), askMessages(projectId, request), projectId, "code question"));
     }

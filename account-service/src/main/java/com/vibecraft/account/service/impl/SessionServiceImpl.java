@@ -54,6 +54,7 @@ public class SessionServiceImpl implements SessionService {
     private final PasswordEncoder passwordEncoder;
     private final SessionCookies sessionCookies;
     private final SessionCache sessionCache;
+    private final SessionEvictionNotifier sessionEvictionNotifier;
     private final RevokedSessionRepository revokedSessionRepository;
     private final AuthAuditService auditService;
     private final AuthProperties authProperties;
@@ -167,6 +168,8 @@ public class SessionServiceImpl implements SessionService {
             } catch (BadCredentialsException ex) {
                 // Already expired or invalid - nothing left to revoke.
             }
+            // After the revocation is recorded, so a service that misses its cache finds it revoked.
+            sessionEvictionNotifier.evictSession(cookieHash);
         });
         sessionCookies.clear(httpResponse);
     }
@@ -179,6 +182,8 @@ public class SessionServiceImpl implements SessionService {
         }
         identityVerifier.revokeAllSessions(principal.firebaseUid());
         sessionCache.evictUser(principal.firebaseUid());
+        // After Firebase has revoked them, so the other services' next check of an evicted session fails.
+        sessionEvictionNotifier.evictUser(principal.firebaseUid());
         sessionCookies.clear(httpResponse);
         auditService.record(AuthAuditEventType.SIGN_OUT_EVERYWHERE, principal.userId(), principal.firebaseUid(),
                 ClientInfo.from(httpRequest), null);
