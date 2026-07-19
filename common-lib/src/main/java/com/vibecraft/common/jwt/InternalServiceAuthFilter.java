@@ -20,7 +20,8 @@ import java.util.List;
  */
 public class InternalServiceAuthFilter extends OncePerRequestFilter {
 
-    private static final String HEADER = "X-Internal-Service-Token";
+    /** Shared with {@code FeignClientInterceptor}, which sends it - one constant so the two sides can't drift. */
+    public static final String HEADER = "X-Internal-Service-Token";
 
     private final String expectedToken;
 

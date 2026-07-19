@@ -95,20 +95,23 @@ docker compose -f services.docker-compose.yml up -d
 cp .env.example .env    # fill in real values
 
 # Backend services — mvnw.cmd on Windows, each in its own terminal, in this order
+./mvnw -pl common-lib install
 ./mvnw -pl discovery-service spring-boot:run
-./mvnw -pl gateway-service spring-boot:run
-./mvnw -pl legacy-monolith spring-boot:run
+./mvnw -pl account-service spring-boot:run
+./mvnw -pl workspace-service spring-boot:run
+./mvnw -pl intelligence-service spring-boot:run
+./mvnw -pl gateway-service spring-boot:run      # last, so the three services are already registered
 
-# Frontend, in a fourth terminal
+# Frontend, in a sixth terminal
 cd frontend
 npm install
 cp .env.example .env.local
 npm run dev
 ```
 
-Frontend: http://localhost:5173 · Gateway (the browser's actual API origin): http://localhost:8000 · legacy-monolith direct: http://localhost:8080
+Frontend: http://localhost:5173 · Gateway (the browser's actual API origin): http://localhost:8000 · services directly: account `:8081`, workspace `:8082`, intelligence `:8083`
 
-The backend is a multi-module Maven reactor mid-migration to microservices — see [`docs/migration/`](docs/migration/README.md) for what's moved so far. Full setup (including live previews, which need a Kubernetes cluster) and a troubleshooting table for known gotchas: [`docs/local-development/`](docs/local-development/README.md).
+The backend is a multi-module Maven reactor of three domain services behind a Gateway, migrated from the original monolith (`legacy-monolith/`, now switched off and kept only as a rollback target) — see [`docs/migration/`](docs/migration/README.md) for what moved where, and how to roll back. Full setup (including live previews, which need a Kubernetes cluster) and a troubleshooting table for known gotchas: [`docs/local-development/`](docs/local-development/README.md).
 
 ## Environment Variables
 

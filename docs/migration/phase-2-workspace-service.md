@@ -1,4 +1,4 @@
-# Phase 2 — Workspace Service (built and verified standalone; **not yet receiving real traffic**)
+# Phase 2 — Workspace Service (built and verified standalone; cut over in Phase 4)
 
 ## What moved
 
@@ -36,6 +36,8 @@ Porting account-service's security chain verbatim (per Phase 1's own "each servi
 Both are small, additive endpoints on account-service's own module (not legacy-monolith) — the same class of "extraction surfaces a real cross-service dependency" finding Phase 1's `SubscriptionService.projectsOwned()` omission already illustrated, just discovered from the other direction this time.
 
 ## Why this hasn't been cut over yet
+
+> **Resolved in Phase 4** — same resolution as Phase 1's note above (data migrated by script; the legacy-side association refactor was never needed).
 
 Same shape as Phase 1's reasoning, just for `Project` instead of `User`: flipping Gateway's routing for `/api/projects/**`, `/api/previews` to `workspace-service` today would fork project data — any project created via `workspace-service` writes to `vibecraft-workspace-db`, but `legacy-monolith`'s still-active `ChatSession`/`ChatMessage`/`CodeNote` entities have real `@ManyToOne Project` JPA associations that only resolve against `legacy-monolith`'s **own** `projects` table. A real cutover needs the same two-step recipe Phase 1 described for `User`: a one-time data migration, and `ChatSession`/`CodeNote` switched from JPA associations to plain `projectId` longs (Phase 3's job, when those entities themselves move to `intelligence-service`). Neither is done yet. Workspace-service today is built, verified, and **inert** — reachable directly on `:8082` for testing, not reachable through Gateway, not depended on by anything else. `legacy-monolith`'s own Project/Workspace-domain code is untouched — there was nothing to disconnect, since nothing outside it calls that code today either.
 

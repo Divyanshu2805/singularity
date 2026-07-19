@@ -7,8 +7,10 @@ Updated in the same change as every migration phase — not written once at the 
 ## Contents
 
 - [How to read this](how-to-read.md)
+- [Where things stand (after Phase 4, 2026-07-19)](status.md)
 - [Phase 0 — Scaffolding (complete)](phase-0-scaffolding.md)
-- [Phase 1 — Account Service (built and verified standalone; **not yet receiving real traffic**)](phase-1-account-service.md)
-- [Phase 2 — Workspace Service (built and verified standalone; **not yet receiving real traffic**)](phase-2-workspace-service.md)
-- [Phase 3 — Intelligence Service (built and verified standalone; **not yet receiving real traffic**)](phase-3-intelligence-service.md)
+- [Phase 1 — Account Service (built and verified standalone; cut over in Phase 4)](phase-1-account-service.md)
+- [Phase 2 — Workspace Service (built and verified standalone; cut over in Phase 4)](phase-2-workspace-service.md)
+- [Phase 3 — Intelligence Service (built and verified standalone; cut over in Phase 4)](phase-3-intelligence-service.md)
+- [Phase 4 — Cutover (traffic now runs through the three services; `legacy-monolith` kept as rollback)](phase-4-cutover.md)
 - [Not yet moved](not-yet-moved.md)

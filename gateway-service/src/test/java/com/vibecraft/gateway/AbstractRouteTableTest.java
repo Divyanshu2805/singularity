@@ -1,0 +1,160 @@
+package com.vibecraft.gateway;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.gateway.route.Route;
+import org.springframework.cloud.gateway.route.RouteLocator;
+import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
+import org.springframework.mock.web.server.MockServerWebExchange;
+import reactor.core.publisher.Mono;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Which service owns which URL - the single highest-stakes fact in the Phase 4 cutover, and one that can be
+ * checked exhaustively with no login. Evaluates the real route table (the same {@link RouteLocator} the running
+ * Gateway uses, in the order it evaluates it) against every endpoint the browser can call.
+ *
+ * <p>Routes here are path-only (no method predicates), so each URL is listed once even where several verbs share
+ * it; the verbs are in the trailing comments. <b>When a controller gains or loses an endpoint, this list must
+ * change in the same commit</b> - a new path that lands on no domain route silently falls through to the
+ * fallback (legacy-monolith, which is off), which surfaces as a 5xx rather than a compile or startup error.
+ *
+ * <p>Both concrete subclasses run the identical path table: switching to the rollback profile must change only
+ * where traffic goes, never which route claims which path.
+ */
+abstract class AbstractRouteTableTest {
+
+    static final String INTELLIGENCE_CODE = "intelligence-code-insight";
+    static final String INTELLIGENCE = "intelligence";
+    static final String WORKSPACE = "workspace";
+    static final String ACCOUNT = "account";
+    static final String FALLBACK = "legacy-monolith-fallback";
+
+    @Autowired
+    private RouteLocator routeLocator;
+
+    static Stream<Arguments> ownedPaths() {
+        Map<String, List<String>> pathsByRoute = Map.of(
+                ACCOUNT, List.of(
+                        "/api/auth/csrf",               // GET
+                        "/api/auth/session",            // POST
+                        "/api/auth/logout",             // POST
+                        "/api/auth/logout-all",         // POST
+                        "/api/auth/me",                 // GET
+                        "/api/auth/security-events",    // GET, POST
+                        "/api/plans",                   // GET
+                        "/api/me/subscription",         // GET
+                        "/api/payments/checkout",       // POST
+                        "/api/payments/portal",         // POST
+                        "/api/payments/change-plan",    // POST
+                        "/api/payments/confirm",        // POST
+                        "/webhooks/payment"),           // POST (Stripe - no session, CSRF-exempt)
+                WORKSPACE, List.of(
+                        "/api/projects",                             // GET, POST
+                        "/api/projects/7",                           // GET, PATCH, DELETE
+                        "/api/projects/from-prompt",                 // POST
+                        "/api/projects/7/fork",                      // POST
+                        "/api/projects/7/retry-template-init",       // POST
+                        "/api/projects/7/pin",                       // PUT, DELETE
+                        "/api/projects/7/star",                      // PUT, DELETE
+                        "/api/projects/7/members",                   // GET, POST
+                        "/api/projects/7/members/accept",            // POST
+                        "/api/projects/7/members/9",                 // PATCH, DELETE
+                        "/api/projects/7/files",                     // GET
+                        "/api/projects/7/files/content",             // GET
+                        "/api/projects/7/files/search",              // GET
+                        "/api/projects/7/files/download-zip",        // GET
+                        "/api/projects/7/preview",                   // GET, POST, DELETE
+                        "/api/projects/7/deploy",                    // POST (alias of POST /preview)
+                        "/api/projects/7/preview/restart",           // POST
+                        "/api/projects/7/preview/logs",              // GET
+                        "/api/previews"),                            // GET
+                INTELLIGENCE, List.of(
+                        "/api/chat/stream",                          // POST (SSE)
+                        "/api/chat/projects/7",                      // GET
+                        "/api/chat/projects/7/last-turn-changes",    // GET
+                        "/api/chat/projects/7/active",               // GET
+                        "/api/chat/projects/7/active/stream",        // GET (SSE)
+                        "/api/chat/projects/7/active/stop",          // POST
+                        "/api/ideas/clarify",                        // POST
+                        "/api/ideas/compile",                        // POST
+                        "/api/usage/today",                          // GET
+                        "/api/usage/insights",                       // GET
+                        "/api/usage/events",                         // GET
+                        "/api/usage/events/export",                  // GET
+                        "/api/usage/limits"),                        // GET
+                // Same /api/projects/{id}/... prefix as workspace-service's routes above, different owner - the
+                // reason this route has to be evaluated first.
+                INTELLIGENCE_CODE, List.of(
+                        "/api/projects/7/code/explain",              // POST
+                        "/api/projects/7/code/explain/stream",       // POST (SSE)
+                        "/api/projects/7/code/ask",                  // POST
+                        "/api/projects/7/code/ask/stream",           // POST (SSE)
+                        "/api/projects/7/code/notes",                // GET, POST, DELETE
+                        "/api/projects/7/code/notes/3"),             // DELETE
+                // Nothing here belongs to a service: must never reach account/workspace/intelligence.
+                FALLBACK, List.of(
+                        "/internal/v1/users/1",                      // service-to-service only, never via the Gateway
+                        "/internal/v1/projects/7/members/3",
+                        "/internal/v1/project-names",
+                        "/api/projects-archive",                     // shares a string prefix with /api/projects, not a path prefix
+                        "/api/chatter",
+                        "/nope"));
+
+        return pathsByRoute.entrySet().stream()
+                .flatMap(entry -> entry.getValue().stream().map(path -> Arguments.of(path, entry.getKey())));
+    }
+
+    @ParameterizedTest(name = "{0} -> {1}")
+    @MethodSource("ownedPaths")
+    @DisplayName("every URL is claimed by exactly the route that owns it")
+    void routesToOwningRoute(String path, String expectedRouteId) {
+        assertThat(firstMatchingRouteId(path)).isEqualTo(expectedRouteId);
+    }
+
+    @Test
+    @DisplayName("a project's code-insight URLs go to intelligence-service, its files/members/preview to workspace-service")
+    void codeInsightPrecedesTheGenericProjectsRoute() {
+        assertThat(firstMatchingRouteId("/api/projects/7/code/explain")).isEqualTo(INTELLIGENCE_CODE);
+        assertThat(firstMatchingRouteId("/api/projects/7/files")).isEqualTo(WORKSPACE);
+        // A path that merely starts with "code" is not the code-insight subtree.
+        assertThat(firstMatchingRouteId("/api/projects/7/codex")).isEqualTo(WORKSPACE);
+    }
+
+    @Test
+    @DisplayName("exactly five routes exist, evaluated in the documented order")
+    void routeOrder() {
+        assertThat(routes()).extracting(Route::getId)
+                .containsExactly(INTELLIGENCE_CODE, INTELLIGENCE, WORKSPACE, ACCOUNT, FALLBACK);
+    }
+
+    URI uriOf(String routeId) {
+        return routes().stream().filter(route -> route.getId().equals(routeId)).findFirst()
+                .orElseThrow(() -> new AssertionError("no route with id " + routeId)).getUri();
+    }
+
+    private List<Route> routes() {
+        return routeLocator.getRoutes().collectList().block();
+    }
+
+    private String firstMatchingRouteId(String path) {
+        for (Route route : routes()) {
+            // A fresh exchange per route: the Path predicate records what it matched in the exchange's attributes.
+            MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get(path).build());
+            if (Boolean.TRUE.equals(Mono.from(route.getPredicate().apply(exchange)).block())) {
+                return route.getId();
+            }
+        }
+        return null;
+    }
+}

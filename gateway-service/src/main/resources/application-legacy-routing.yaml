@@ -1,0 +1,14 @@
+# The rollback switch: `--spring.profiles.active=legacy-routing` sends all three domains back to
+# legacy-monolith at once (start legacy-monolith first). All-or-nothing on purpose - see the comment above the
+# route table in application.yaml for why the domains can't be flipped independently.
+#
+# This only changes where the Gateway sends traffic. legacy-monolith's own database was never modified by the
+# cutover, so it comes back exactly as it was - but anything written to the new services' databases since the
+# cutover is NOT copied back (docs/migration/phase-4-cutover.md, Phase 4).
+routing:
+  account:
+    uri: ${routing.legacy-monolith.uri}
+  workspace:
+    uri: ${routing.legacy-monolith.uri}
+  intelligence:
+    uri: ${routing.legacy-monolith.uri}

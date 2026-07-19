@@ -8,9 +8,9 @@ VibeCraft is an AI-assisted project-building platform: a user describes an idea,
 
 **Two codebases, one repo:** a Spring Boot 4.1 (Java 25) backend, and a React 18 + TypeScript SPA in `frontend/`. Read `docs/architecture/` before assuming you know which one owns a given piece of behavior — several features (the streaming chat UI, the sign-out data-isolation fix, the live-preview panel) are genuinely split across both, with the file paths on each side named explicitly there.
 
-**The backend is mid-migration from a monolith to microservices** — a multi-module Maven reactor now, not a single `pom.xml` at the repo root. `legacy-monolith/` is the original backend, unmodified except for its new location, still the source of truth for every domain not yet extracted; `common-lib`, `discovery-service`, and `gateway-service` are the new scaffolding in front of and around it. **Read `docs/migration/` before assuming a class, endpoint, or table still lives where an older doc or your own memory says it does** — it's the running record of what's moved, where, and why, updated in the same change as every migration phase.
+**The backend has been migrated from a monolith to microservices** — a multi-module Maven reactor now, not a single `pom.xml` at the repo root. Live traffic runs Gateway → `account-service` / `workspace-service` / `intelligence-service` (each with its own database), with `common-lib` and `discovery-service` around them. `legacy-monolith/` is the original backend, unmodified, **switched off** and kept only as the rollback target until a separate step deletes it. **Read `docs/migration/` before assuming a class, endpoint, or table lives where an older doc or your own memory says it does** — `docs/architecture/`, `docs/schema/`, and `docs/api/` still describe the pre-migration monolith until Phase 5 rewrites them. `migration-map.md` is the running record of what moved, where, and why.
 
-**Stage:** actively developed, not yet launched. Every backend service is implemented (no stubs remain) as of the last full audit; open gaps and deferred work are tracked in `TODO.md`, not here. The microservices migration is tracked in `docs/migration/` (moves so far) and a plan doc outside the repo (phase design and reliability strategy) — this is a separate, ongoing effort layered on top of the audited-complete backend, not a sign that something regressed.
+**Stage:** actively developed, not yet launched. Every backend service is implemented (no stubs remain) as of the last full audit; open gaps and deferred work are tracked in `TODO.md`, not here. The microservices migration is tracked in `docs/migration/` (what moved, the cutover, rollback) and a plan doc outside the repo (phase design and reliability strategy) — cutover is done; deleting `legacy-monolith` and rewriting the architecture/data-model/API docs are the remaining steps. It is layered on top of the audited-complete backend, not a sign that something regressed.
 
 ## Read Before Acting
 
@@ -22,7 +22,7 @@ Don't guess at structure or reconstruct decisions from scratch — these are aut
 | Entities, relationships, enum/schema conventions | [`docs/schema/`](docs/schema/README.md) |
 | Every endpoint, request/response shapes, SSE stream formats, error taxonomy | [`docs/api/`](docs/api/README.md) |
 | Setup, running live previews locally, troubleshooting | [`docs/local-development/`](docs/local-development/README.md) |
-| **What's moved to a microservice already, what's still in `legacy-monolith/`** | [`docs/migration/`](docs/migration/README.md) |
+| **Which service owns which URL/table, how the cutover was done, how to roll back** | [`docs/migration/`](docs/migration/README.md) |
 | Known gaps, deferred features, open product/design questions | [`TODO.md`](TODO.md) *(local, gitignored — not on GitHub)* |
 
 If a change you're making would make any of the four tracked docs above inaccurate, **update that doc in the same change**. Don't leave it for later — "later" is how the previous docs on this project drifted enough to need this rewrite.
@@ -35,34 +35,41 @@ If a change you're making would make any of the four tracked docs above inaccura
 
 ## Repository Structure
 
-Multi-module Maven reactor, mid-migration to microservices (`docs/migration/` has the moves so far):
+Multi-module Maven reactor, migrated to microservices (`docs/migration/` has the full record):
 
 ```
 pom.xml                     reactor parent (packaging=pom) — module list, shared dependencyManagement
 common-lib/                 shared: internal-JWT issue/verify, JwtAuthFilter, FeignClientInterceptor,
                              ApiError/exception taxonomy, ClockConfig/AsyncConfig/Hashing. Depended on
-                             by account-service, workspace-service, and intelligence-service (Phase
-                             1-3); legacy-monolith still doesn't use it.
+                             by account-service, workspace-service, and intelligence-service;
+                             legacy-monolith never used it.
 discovery-service/          Eureka server
 gateway-service/            Spring Cloud Gateway (reactive — non-blocking, doesn't buffer SSE streams).
-                             The browser's single origin. Transparent passthrough until a domain is
-                             actually extracted — see its application.yaml's routing config.
+                             The browser's single origin. Transparent passthrough (no auth logic of its
+                             own) with an ordered route table sending each URL to the service that owns
+                             it — see its application.yaml, and RoutingTableTest, which pins every path.
+                             Route ORDER is load-bearing: /api/projects/{id}/code/** (intelligence) sits
+                             under /api/projects/** (workspace). Rollback to the monolith is the
+                             `legacy-routing` profile.
 account-service/            Users, Plans, Subscriptions, Stripe billing, the auth audit trail — its own
                              DB, its own full Firebase/session/CSRF chain (not delegated to gateway-
-                             service yet). Built and verified standalone; not yet cut over — see
-                             docs/migration/phase-1-account-service.md's Phase 1 entry.
+                             service). Owns /api/auth/**, /api/plans, /api/me/**, /api/payments/**,
+                             /webhooks/payment. Live since the Phase 4 cutover.
 workspace-service/          Project/ProjectMember/ProjectFile/Preview/PreviewSession, the K8s/MinIO/
                              Redis live-preview pipeline — its own DB, its own full security chain,
-                             calls account-service via Feign for anything User/Plan-shaped. Built and
-                             verified standalone; not yet cut over — see docs/migration/'s
-                             Phase 2 entry.
+                             calls account-service via Feign for anything User/Plan-shaped. Owns
+                             /api/projects/** (except .../code/**) and /api/previews.
 intelligence-service/       ChatSession/ChatMessage/ChatEvent/CodeNote/UsageEvent/UsageLog, the AI-
                              generation/code-insight/idea/usage pipeline — its own DB, its own full
                              security chain, calls account-service and workspace-service via Feign for
-                             anything User/Project-shaped. Built and verified standalone; not yet cut
-                             over — see docs/migration/phase-3-intelligence-service.md's Phase 3 entry.
-legacy-monolith/            the original backend, unmodified except for its new location — still the
-                             source of truth for every domain not yet extracted:
+                             anything User/Project-shaped. Owns /api/chat/**, /api/ideas/**,
+                             /api/usage/**, /api/projects/{id}/code/**.
+infra/data-migration/       legacy-to-services.sh — the one-off legacy-DB → service-DBs copy used at the
+                             Phase 4 cutover. Dry-run by default; --execute TRUNCATES the service
+                             databases first, so never run it against services holding real writes.
+legacy-monolith/            the original backend, unmodified and OFF — kept only as the rollback target
+                             (docs/migration/phase-4-cutover.md, Phase 4) until a separate step deletes it. Nothing
+                             is routed to it. Do not add features here:
   src/main/java/com/java/vibecraft/
     entity/, enums/          JPA schema — see docs/schema/
     repository/               Spring Data JPA interfaces
@@ -89,15 +96,16 @@ Full per-module ownership and a "where do I change X" table: `docs/architecture/
 ## Commands
 
 ```bash
-./mvnw -pl legacy-monolith spring-boot:run              # run the backend — goes through main(), verifies it actually boots
-./mvnw -pl legacy-monolith test -Dtest=ClassName        # run one test class
-./mvnw -pl legacy-monolith test -Dtest=ClassName#methodName   # run one test method
-./mvnw clean package                                     # build every module's jar
-./mvnw -pl discovery-service spring-boot:run             # Eureka — start before gateway-service
-./mvnw -pl gateway-service spring-boot:run                # the browser's actual origin now — see docs/local-development/
-./mvnw -pl account-service spring-boot:run                # direct :8081 only — not yet routed through Gateway
-./mvnw -pl workspace-service spring-boot:run               # direct :8082 only — not yet routed through Gateway
-./mvnw -pl intelligence-service spring-boot:run            # direct :8083 only — not yet routed through Gateway
+./mvnw -pl discovery-service spring-boot:run             # Eureka — start first
+./mvnw -pl account-service spring-boot:run                # :8081
+./mvnw -pl workspace-service spring-boot:run               # :8082
+./mvnw -pl intelligence-service spring-boot:run            # :8083
+./mvnw -pl gateway-service spring-boot:run                 # LAST — the browser's origin (:8000); resolves the three services from Eureka
+./mvnw -pl gateway-service test -Dtest='RoutingTableTest,LegacyRoutingProfileTest'   # the URL → service table; rerun after any controller/route change
+./mvnw -pl <module> test -Dtest=ClassName                  # one test class (works for any module)
+./mvnw -pl <module> test -Dtest=ClassName#methodName       # one test method
+./mvnw clean package                                       # build every module's jar
+./mvnw -pl legacy-monolith spring-boot:run                 # OFF by default — only for a rollback (see docs/migration/phase-4-cutover.md, Phase 4)
 ```
 
 On Windows, `mvnw.cmd` in place of `./mvnw`. A bare `./mvnw spring-boot:run` (no `-pl`) fails — the reactor's root `pom.xml` is an aggregator with no main class.

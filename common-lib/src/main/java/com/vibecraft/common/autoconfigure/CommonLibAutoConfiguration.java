@@ -39,8 +39,9 @@ public class CommonLibAutoConfiguration {
     }
 
     @Bean
-    public FeignClientInterceptor feignClientInterceptor() {
-        return new FeignClientInterceptor();
+    public FeignClientInterceptor feignClientInterceptor(
+            @Value("${internal-service.shared-secret}") String sharedSecret) {
+        return new FeignClientInterceptor(sharedSecret);
     }
 
     @Bean

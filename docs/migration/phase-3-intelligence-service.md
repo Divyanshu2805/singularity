@@ -1,4 +1,4 @@
-# Phase 3 — Intelligence Service (built and verified standalone; **not yet receiving real traffic**)
+# Phase 3 — Intelligence Service (built and verified standalone; cut over in Phase 4)
 
 ## What moved
 
@@ -40,6 +40,8 @@ Everything under `com.vibecraft.intelligence` in the new `intelligence-service` 
 - `workspace-service`'s `InternalWorkspaceController` gained four endpoints: batch project summaries (`GET /internal/v1/projects?ids=`), file content read (`GET .../files/content`), file save (`POST .../files` — **the first write-capable `/internal/v1/**` endpoint in this codebase**, guarded by the same shared secret as every read-only one), file delete (`DELETE .../files`), and owned-project count (`GET /internal/v1/projects/owned-count` — wired onto `ProjectMemberRepository.countProjectOwnedByUser`, which already existed but had no caller).
 
 ## Why this hasn't been cut over yet
+
+> **Resolved in Phase 4.** Note that this section's last claim ("`intelligence-service`'s database starts completely empty") no longer holds: the Phase 4 migration copied legacy's chat/usage history into it.
 
 Same shape as Phase 1/2's reasoning: flipping Gateway's routing for `/api/chat/**`, `/api/ideas/**`, `/api/projects/{id}/code/**`, `/api/usage/**` to `intelligence-service` today would fork chat/usage data the same way a `Project`/`User` cutover would have forked those. `legacy-monolith`'s own copies of `ChatSession`/`CodeNote` still hold real JPA associations to its own `Project`/`User` tables — untouched, since nothing outside `legacy-monolith` calls this code today either. Once this migration's monolith is eventually decommissioned (Phase 4+), nothing further needs fixing on this front; there's no partial state to reconcile in the interim because `intelligence-service`'s database starts completely empty and independent.
 

@@ -1,4 +1,4 @@
-# Phase 1 — Account Service (built and verified standalone; **not yet receiving real traffic**)
+# Phase 1 — Account Service (built and verified standalone; cut over in Phase 4)
 
 ## What moved
 
@@ -40,6 +40,8 @@ The original Phase 1 plan (written before reading the actual security code) assu
 **Revised for real**: `account-service` keeps a complete, independent copy of the Firebase/session/CSRF/CORS/rate-limit chain — functionally identical to `legacy-monolith`'s, verified byte-for-byte behaviorally equal (see Verification below). `gateway-service` remains a dumb, transparent proxy for every route, Account's included. Consolidating this into gateway-service is deferred to a later cleanup phase, once Workspace and Intelligence also exist and duplicating the chain three times is a clear, justified refactor rather than a same-phase risk multiplier.
 
 ## Why this hasn't been cut over yet
+
+> **Resolved in Phase 4.** Step (1) below was done by `infra/data-migration/legacy-to-services.sh`. Step (2) — switching `legacy-monolith`'s own `User`-referencing entities to Feign-resolved ids — turned out to be unnecessary: all three domains were cut over *together*, so `legacy-monolith`'s internal joins are never exercised again (it is switched off, with its own database frozen as the rollback source). See Phase 4, "Why one atomic cutover".
 
 Flipping Gateway's routing for `/api/auth/**`, `/api/plans`, `/api/me/subscription`, `/api/payments/**`, `/webhooks/payment` to `account-service` today would immediately fork user data: any sign-up handled by `account-service` writes to `vibecraft-account-db`, but `legacy-monolith`'s still-active `ProjectMember`/`ChatSession`/etc. tables have `@ManyToOne User`/plain-`userId` references that only resolve against `legacy-monolith`'s **own** `users` table. A real cutover needs, in order: (1) a one-time data migration copying `users`/`plans`/`subscriptions` from `legacy-monolith`'s database into `account-service`'s, (2) `legacy-monolith`'s own `User`-referencing entities/services switched from JPA associations to plain `userId` longs resolved via Feign — a real schema change to `ProjectMember`, `ChatSession`, `ChatMessage`, `CodeNote`, and every service method that currently does `userRepository.findById(...)`. Neither is done yet. Account-service today is built, verified, and **inert** — reachable directly on `:8081` for testing, not reachable through Gateway, not depended on by anything else.
 

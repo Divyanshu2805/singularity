@@ -8,24 +8,62 @@ spring:
     gateway:
       server:
         webflux:
-          # Phase 0: one catch-all route, pure transparent passthrough to legacy-monolith — no path rewriting,
-          # no header/cookie manipulation, no auth logic here yet (that stays in legacy-monolith's own
-          # SessionAuthFilter/CSRF chain for now, completely unchanged). This is intentional: it lets Gateway
-          # sit in front of the app with zero behavior change, which is the whole Phase-0 verification bar.
+          # Phase 4: the browser's traffic goes to the three extracted services, resolved through Eureka
+          # (lb://). Still a transparent passthrough - no path rewriting, no header/cookie manipulation, no
+          # auth logic here; every service runs its own full Firebase/session/CSRF chain.
           #
-          # From Phase 1 onward, this becomes several routes: specific-path routes for each domain that's
-          # been extracted (e.g. Path=/api/auth/session -> account-service, ordered before this one) plus this
-          # same catch-all as the lowest-priority fallback for whatever hasn't been extracted yet. Cutting a
-          # domain over to its new service is then just adding/enabling its specific route ahead of the
-          # fallback — a config change, not a code change — per the migration plan's Reliability Strategy.
+          # ORDER MATTERS (lower `order` wins): /api/projects/{id}/code/** belongs to intelligence-service but
+          # sits under /api/projects/**, which belongs to workspace-service - so the more specific route has
+          # to be evaluated first. RoutingTableTest pins this for every endpoint; run it after touching this
+          # table.
+          #
+          # The three domains cut over TOGETHER, never one at a time: legacy-monolith's tables are joined in
+          # one DB, so a partial flip leaves the two sides disagreeing about users/plans/projects. That is why
+          # rollback is one profile (application-legacy-routing.yaml) rather than three independent toggles.
+          #
+          # /internal/** matches none of the domain routes - only the fallback - so the services' machine-to-
+          # machine endpoints are never reachable from the browser's origin.
           routes:
+            - id: intelligence-code-insight
+              uri: ${routing.intelligence.uri}
+              order: 10
+              predicates:
+                - Path=/api/projects/*/code/**
+
+            - id: intelligence
+              uri: ${routing.intelligence.uri}
+              order: 20
+              predicates:
+                - Path=/api/chat/**,/api/ideas/**,/api/usage/**
+
+            - id: workspace
+              uri: ${routing.workspace.uri}
+              order: 30
+              predicates:
+                - Path=/api/projects/**,/api/previews/**
+
+            - id: account
+              uri: ${routing.account.uri}
+              order: 40
+              predicates:
+                - Path=/api/auth/**,/api/plans/**,/api/me/**,/api/payments/**,/webhooks/payment
+
+            # Anything not owned by a domain above. legacy-monolith is switched off after the cutover, so this
+            # only ever answers 5xx for unknown paths - it stays as the last leg of the rollback path until
+            # legacy-monolith itself is deleted (a later, separate step).
             - id: legacy-monolith-fallback
-              uri: ${routing.legacy-monolith.uri:http://localhost:8080}
+              uri: ${routing.legacy-monolith.uri}
               order: 100
               predicates:
                 - Path=/**
 
 routing:
+  account:
+    uri: ${ACCOUNT_ROUTE_URI:lb://account-service}
+  workspace:
+    uri: ${WORKSPACE_ROUTE_URI:lb://workspace-service}
+  intelligence:
+    uri: ${INTELLIGENCE_ROUTE_URI:lb://intelligence-service}
   legacy-monolith:
     uri: ${LEGACY_MONOLITH_URI:http://localhost:8080}
 

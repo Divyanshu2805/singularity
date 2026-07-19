@@ -13,11 +13,11 @@
 	<description>
 		The single origin the browser (and the frontend's Vite dev proxy) talks to. Reactive (WebFlux/Netty),
 		deliberately — a blocking gateway would buffer the two SSE streams (/api/chat/stream, /code/*/stream)
-		instead of forwarding them chunk by chunk. Phase 0: pure transparent passthrough to legacy-monolith,
-		no auth logic of its own. From Phase 1 onward it takes over Firebase verification + session-cookie
-		handling for each domain's routes as that domain is extracted — see this module's routing config and
-		the migration plan's Reliability Strategy section for how a route's cutover is a config change, not a
-		code change.
+		instead of forwarding them chunk by chunk. Transparent passthrough with no auth logic of its own:
+		every service runs its own Firebase/session/CSRF chain. Phase 4 routes each domain to its extracted
+		service (account/workspace/intelligence, via Eureka); the legacy-monolith route is now only the
+		fallback and the rollback target — see this module's routing config, and RoutingTableTest for the
+		exact path-to-service table.
 	</description>
 
 	<dependencies>
@@ -35,6 +35,15 @@
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-loadbalancer</artifactId>
+		</dependency>
+
+		<!-- RoutingTableTest boots the Gateway's context (no server, no Eureka) to evaluate the real route
+		     table. Unlike the other services this needs no database, so the Windows-timezone reason those
+		     modules avoid @SpringBootTest doesn't apply here. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
 		</dependency>
 	</dependencies>
 
