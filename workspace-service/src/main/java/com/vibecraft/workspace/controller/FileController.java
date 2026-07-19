@@ -9,6 +9,7 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -19,12 +20,20 @@ public class FileController {
 
     private final ProjectFileService projectFileService;
 
+    /**
+     * The tree and content reads are guarded here rather than on {@link ProjectFileService}, unlike search and
+     * download-zip: {@code InternalWorkspaceController} reads file content through the same service as a trusted
+     * machine caller with no user id, so a {@code @security.canViewProject} check on the service would deny every
+     * AI-generation file read. {@code #projectId} must match the parameter name exactly, or it silently denies everyone.
+     */
     @GetMapping
+    @PreAuthorize("@security.canViewProject(#projectId)")
     public ResponseEntity<FileTreeResponse> getFileTree(@PathVariable Long projectId) {
         return ResponseEntity.ok(projectFileService.getFileTree(projectId));
     }
 
     @GetMapping("/content")
+    @PreAuthorize("@security.canViewProject(#projectId)")
     public ResponseEntity<FileContentResponse> getFile(
             @PathVariable Long projectId,
             @RequestParam String path) {

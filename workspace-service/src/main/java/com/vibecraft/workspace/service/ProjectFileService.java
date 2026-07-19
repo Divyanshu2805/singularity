@@ -8,6 +8,7 @@ import com.vibecraft.workspace.dto.project.FileTreeResponse;
 public interface ProjectFileService {
     FileTreeResponse getFileTree(Long projectId);
 
+    /** Not {@code @PreAuthorize}d on purpose, like {@link #saveFile}/{@link #deleteFile} - the browser guard is on {@code FileController}. */
     FileContentResponse getFileContent(Long projectId, String path);
 
     void saveFile(Long projectId, String filePath, String fileContent);
