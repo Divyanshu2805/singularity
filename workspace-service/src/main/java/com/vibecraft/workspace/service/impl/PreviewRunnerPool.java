@@ -4,11 +4,14 @@ import com.vibecraft.workspace.config.PreviewProperties;
 import com.vibecraft.common.error.ExternalServiceException;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.dsl.ExecWatch;
 import io.fabric8.kubernetes.client.dsl.NonNamespaceOperation;
 import io.fabric8.kubernetes.client.dsl.PodResource;
+import io.fabric8.kubernetes.client.dsl.base.PatchContext;
+import io.fabric8.kubernetes.client.dsl.base.PatchType;
 import io.fabric8.kubernetes.api.model.PodList;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,9 +64,16 @@ public class PreviewRunnerPool {
     /**
      * Claims a ready idle pod for the project, or empty when the pool has none free right now.
      *
-     * <p>The relabel is an {@code update} carrying the resourceVersion the pod was listed with, so two requests
-     * that picked the same pod can't both win: the API server rejects the second with 409 and it moves on to the
-     * next pod. A {@code patch}/{@code edit} would have let both succeed and put two projects in one pod.
+     * <p>The relabel is a JSON merge patch that carries the resourceVersion the pod was listed with, which the API
+     * server enforces as a precondition: two requests that picked the same pod can't both win, the second is
+     * rejected with 409 and moves on to the next pod. A patch without it would let both succeed and put two
+     * projects in one pod.
+     *
+     * <p>It patches rather than {@code update}s the listed Pod because kubernetes-client 6.13.4 can't serialize
+     * one back under Boot 4.1's Jackson 2.21.4 ({@code NullPointerException: "keySerializer" is null}). Anything a
+     * real API server returns that the 6.13.4 model doesn't know lands in an {@code additionalProperties} map, and
+     * a non-empty one is what trips it - every listed pod has some ({@code managedFields}, and on a current server
+     * {@code status.observedGeneration}), so trimming one field off isn't enough. See {@link #claimPatch}.
      */
     public Optional<Pod> claim(Long projectId) {
         try {
@@ -73,11 +83,10 @@ public class PreviewRunnerPool {
                     .toList();
 
             for (Pod pod : idle) {
-                pod.getMetadata().getLabels().put(POOL_LABEL, BUSY);
-                pod.getMetadata().getLabels().put(PROJECT_LABEL, projectId.toString());
-                pod.getMetadata().getAnnotations().put(CLAIMED_AT_ANNOTATION, Instant.now().toString());
+                String patch = client.getKubernetesSerialization().asJson(claimPatch(pod, projectId, Instant.now()));
                 try {
-                    Pod claimed = pods().resource(pod).update();
+                    Pod claimed = pods().withName(pod.getMetadata().getName())
+                            .patch(PatchContext.of(PatchType.JSON_MERGE), patch);
                     log.info("Claimed runner pod {} for project {}", claimed.getMetadata().getName(), projectId);
                     return Optional.of(claimed);
                 } catch (KubernetesClientException e) {
@@ -90,6 +99,19 @@ public class PreviewRunnerPool {
         } catch (KubernetesClientException e) {
             throw clusterUnreachable(e);
         }
+    }
+
+    /**
+     * The body of the claim: the two labels and the annotation, plus the resourceVersion {@code idle} was listed
+     * with as the precondition. Deliberately nothing else from the listed pod goes back to the server.
+     */
+    static Pod claimPatch(Pod idle, Long projectId, Instant claimedAt) {
+        return new PodBuilder().withNewMetadata()
+                .withResourceVersion(idle.getMetadata().getResourceVersion())
+                .addToLabels(POOL_LABEL, BUSY)
+                .addToLabels(PROJECT_LABEL, projectId.toString())
+                .addToAnnotations(CLAIMED_AT_ANNOTATION, claimedAt.toString())
+                .endMetadata().build();
     }
 
     /** Deletes a claimed pod outright. Idempotent - releasing a pod that's already gone is fine. */
