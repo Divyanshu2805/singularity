@@ -19,6 +19,10 @@ Every error response is the same JSON shape (`ApiError`): `{ status, message, ti
 | `AuthenticationException` | 401 | Spring Security auth failure. | WARN |
 | `MethodArgumentTypeMismatchException` | 400 | A path/query param couldn't bind to its declared type. | WARN |
 | `MissingServletRequestParameterException` | 400 | A required `@RequestParam` was absent (e.g. `files/content` with no `path`). | WARN |
+| `MissingRequestHeaderException` | 400 | A required header was absent (e.g. `Stripe-Signature` on `/webhooks/payment`); the message names it. *`common-lib`'s shared handler only — added after the Phase 4 cutover; it used to fall through to the 500 catch-all.* | WARN |
+| `NoResourceFoundException` | 404 | A URL nothing serves. The path is deliberately not echoed back. *`common-lib` only, same change.* | WARN |
+| `HttpRequestMethodNotSupportedException` | 405 | Right URL, wrong verb; carries the required `Allow` header. *`common-lib` only, same change.* | WARN |
+| `HttpMediaTypeNotSupportedException` | 415 | A body in a content type the endpoint doesn't read. *`common-lib` only, same change.* | WARN |
 | `HttpMessageNotReadableException` | 400 | Malformed request body (bad JSON). | WARN + cause |
 | `DataIntegrityViolationException` | 409 | A DB constraint violation (duplicate, dangling reference). Keeps its stack trace even at WARN — the violated constraint lives in the cause chain, not the generic message. | WARN + trace |
 | `FileStorageException` | 503 | MinIO unreachable or failed. | **ERROR + trace** |
