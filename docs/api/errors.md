@@ -1,6 +1,6 @@
 # Error Taxonomy
 
-Every error response is the same JSON shape (`ApiError`): `{ status, message, timestamp, errors?, quota? }`. `errors` (a list of `{ field, message }`) appears only on a validation failure; `quota` (`{ reason, limit, used, resetsAt?, planName }`) appears only on a 402. A client should branch on `status` and the presence of `quota`, never on parsing `message` text.
+Every error response is the same JSON shape (`ApiError`): `{ status, message, timestamp, errors?, quota?, code? }`. `errors` (a list of `{ field, message }`) appears only on a validation failure; `quota` (`{ reason, limit, used, resetsAt?, planName }`) appears only on a 402; `code` appears only on a 503 that a client has to tell apart from another 503 — `CAPACITY_UNAVAILABLE` (nothing free right now, try again shortly; the message is specific) or `UPSTREAM_UNAVAILABLE` (something the request depends on failed; the message is deliberately generic and the cause stays in the server log). A client should branch on `status` and on the presence of `quota` or `code`, never on parsing `message` text — a bare 503 with neither comes from the Gateway or a dev proxy, not from a service.
 
 17 handlers in `error/GlobalExceptionHandler.java`, one per exception type — logging follows the status code, not a blanket policy: client-fault 4xx logs at WARN with the message only (two exceptions carry a `(cause: ...)` suffix in the log because their user-facing message is deliberately vague — see below); only genuine server faults log at ERROR with a full stack trace.
 
@@ -25,7 +25,9 @@ Every error response is the same JSON shape (`ApiError`): `{ status, message, ti
 | `HttpMediaTypeNotSupportedException` | 415 | A body in a content type the endpoint doesn't read. *`common-lib` only, same change.* | WARN |
 | `HttpMessageNotReadableException` | 400 | Malformed request body (bad JSON). | WARN + cause |
 | `DataIntegrityViolationException` | 409 | A DB constraint violation (duplicate, dangling reference). Keeps its stack trace even at WARN — the violated constraint lives in the cause chain, not the generic message. | WARN + trace |
-| `FileStorageException` | 503 | MinIO unreachable or failed. | **ERROR + trace** |
+| `FileStorageException` | 503 | MinIO unreachable or failed. `code: UPSTREAM_UNAVAILABLE`. | **ERROR + trace** |
+| `ExternalServiceException` | 503 | A dependency failed or was unreachable: Firebase, Stripe, OpenRouter, another service over Feign, the Kubernetes cluster. The message is generic on purpose. `code: UPSTREAM_UNAVAILABLE`. | **ERROR + trace** |
+| `CapacityUnavailableException` | 503 | Nothing wrong with the request, no free capacity right now (every preview runner busy). Keeps its own message. `code: CAPACITY_UNAVAILABLE`. | WARN |
 | `Exception` (catch-all) | 500 | Anything genuinely unexpected. | **ERROR + trace** |
 
-Only `FileStorageException` (503) and the catch-all (500) log at ERROR — every other status is a client-fault or an expected refusal, not a platform failure, so it doesn't deserve a stack trace burying the genuine 500s in the logs.
+Only `FileStorageException` and `ExternalServiceException` (503) and the catch-all (500) log at ERROR — every other status is a client-fault or an expected refusal, not a platform failure, so it doesn't deserve a stack trace burying the genuine 500s in the logs.

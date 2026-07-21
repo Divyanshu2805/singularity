@@ -200,9 +200,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
+    /**
+     * The message is deliberately generic - the cause (a cluster address, a bucket, an upstream's error text) stays
+     * in the log. The {@code code} is what lets a client say "the service failed" without saying "it's busy": both
+     * are a 503, and until this carried one the preview panel told everyone the runners were busy.
+     */
     @ExceptionHandler({ExternalServiceException.class, FileStorageException.class})
     public ResponseEntity<ApiError> handleUpstreamFailure(RuntimeException ex) {
-        ApiError apiError = new ApiError(HttpStatus.SERVICE_UNAVAILABLE, "This is temporarily unavailable. Please try again.");
+        ApiError apiError = ApiError.withCode(HttpStatus.SERVICE_UNAVAILABLE,
+                "This is temporarily unavailable. Please try again.", ApiError.UPSTREAM_UNAVAILABLE);
         log.error(apiError.toString(), ex);
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
@@ -210,13 +216,14 @@ public class GlobalExceptionHandler {
     /**
      * Unlike the generic upstream-failure handler above, this preserves the exception's own message - it's
      * specifically useful ("Every preview runner is busy right now. Try again in a minute."), not a generic
-     * "temporarily unavailable" sentence. Previously had no handler anywhere in this codebase (confirmed against
+     * "temporarily unavailable" sentence - and tags it {@code CAPACITY_UNAVAILABLE} so a client can tell it from a
+     * failure with the same status. Previously had no handler anywhere in this codebase (confirmed against
      * legacy-monolith's own GlobalExceptionHandler too), so it fell through to the generic 500 below - a
      * pre-existing latent bug this migration surfaced rather than introduced.
      */
     @ExceptionHandler(CapacityUnavailableException.class)
     public ResponseEntity<ApiError> handleCapacityUnavailable(CapacityUnavailableException ex) {
-        ApiError apiError = new ApiError(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        ApiError apiError = ApiError.withCode(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), ApiError.CAPACITY_UNAVAILABLE);
         log.warn(apiError.toString());
         return ResponseEntity.status(apiError.status()).body(apiError);
     }

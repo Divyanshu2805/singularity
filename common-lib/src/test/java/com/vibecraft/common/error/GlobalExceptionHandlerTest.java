@@ -72,4 +72,62 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE);
     }
+
+    /**
+     * Two different failures share the 503, and the preview panel used to call both "every runner is busy" because
+     * that was all it could see. The {@code code} is what tells them apart, so it must be there and it must differ.
+     */
+    @Test
+    @DisplayName("a full pool is a 503 that keeps its own message and says CAPACITY_UNAVAILABLE")
+    void fullPoolIsCodedAsCapacity() {
+        ResponseEntity<ApiError> response = handler.handleCapacityUnavailable(
+                new CapacityUnavailableException("Every preview runner is busy right now. Try again in a minute."));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getBody().message()).isEqualTo("Every preview runner is busy right now. Try again in a minute.");
+        assertThat(response.getBody().code()).isEqualTo("CAPACITY_UNAVAILABLE");
+    }
+
+    @Test
+    @DisplayName("a failed dependency is the same 503 but says UPSTREAM_UNAVAILABLE, and keeps its detail out of the body")
+    void failedDependencyIsCodedAsUpstream() {
+        var cluster = new ExternalServiceException("Kubernetes API at https://10.1.2.3:6443 refused the connection",
+                new RuntimeException("connection refused"));
+        var storage = new FileStorageException("bucket projects, key 7/src/App.tsx: timeout");
+
+        for (RuntimeException failure : List.of(cluster, storage)) {
+            ResponseEntity<ApiError> response = handler.handleUpstreamFailure(failure);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+            assertThat(response.getBody().code()).isEqualTo("UPSTREAM_UNAVAILABLE");
+            assertThat(response.getBody().message()).isEqualTo("This is temporarily unavailable. Please try again.")
+                    .doesNotContain("10.1.2.3").doesNotContain("bucket");
+        }
+    }
+
+    @Test
+    @DisplayName("the two 503s can be told apart by code alone")
+    void theTwo503sDiffer() {
+        String busy = handler.handleCapacityUnavailable(new CapacityUnavailableException("busy")).getBody().code();
+        String failed = handler.handleUpstreamFailure(new ExternalServiceException("x", null)).getBody().code();
+
+        assertThat(busy).isNotBlank();
+        assertThat(failed).isNotBlank();
+        assertThat(busy).isNotEqualTo(failed);
+    }
+
+    @Test
+    @DisplayName("an error with no code serializes exactly as before - the field is omitted, not null")
+    void codeIsOmittedWhenAbsent() throws Exception {
+        // A bare mapper: the java.time module isn't on this module's test classpath, and `timestamp` isn't what's under
+        // test, so let it fall back to bean serialization rather than pulling a dependency in for it.
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+                .disable(com.fasterxml.jackson.databind.MapperFeature.REQUIRE_HANDLERS_FOR_JAVA8_TIMES);
+
+        String plain = mapper.writeValueAsString(new ApiError(HttpStatus.NOT_FOUND, "Not found"));
+        String coded = mapper.writeValueAsString(ApiError.withCode(HttpStatus.SERVICE_UNAVAILABLE, "busy", ApiError.CAPACITY_UNAVAILABLE));
+
+        assertThat(plain).doesNotContain("\"code\"");
+        assertThat(coded).contains("\"code\":\"CAPACITY_UNAVAILABLE\"");
+    }
 }
