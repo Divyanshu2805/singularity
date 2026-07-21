@@ -6,7 +6,7 @@ import { clearSignedInState, signOutRedirect } from "./session";
 // Relative by default: in dev, Vite proxies /api to the backend (see vite.config.ts).
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
-const SERVER_UNREACHABLE = "Can't reach the VibeCraft server. Make sure the backend is running on port 8080.";
+const SERVER_UNREACHABLE = "Can't reach the VibeCraft server. Make sure the backend is running (the Gateway listens on port 8000).";
 
 const rawFetch = (input: string, init?: RequestInit) =>
   // A network failure (backend or dev server down) would otherwise surface as a vague "Failed to fetch".
@@ -162,12 +162,18 @@ export class ApiRequestError extends Error {
   readonly status: number;
   /** Present on a 402 only - the limit, what's been used, and when it refills. */
   readonly quota?: QuotaDetails;
+  /**
+   * Present on a 503 the client has to tell apart from another 503 (`CAPACITY_UNAVAILABLE`, `UPSTREAM_UNAVAILABLE` -
+   * see `ApiError` in docs/api/). The same reasoning as `quota`: branch on this, never on the wording.
+   */
+  readonly code?: string;
 
-  constructor(message: string, status: number, quota?: QuotaDetails) {
+  constructor(message: string, status: number, quota?: QuotaDetails, code?: string) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
     this.quota = quota;
+    this.code = code;
   }
 }
 
@@ -182,15 +188,17 @@ async function ensureOk(response: Response, fallbackMessage: string): Promise<Re
 
   let message = fallbackMessage;
   let quota: QuotaDetails | undefined;
+  let code: string | undefined;
   try {
     const body = await response.json();
     if (typeof body?.message === "string" && body.message) message = body.message;
     if (body?.quota && typeof body.quota?.reason === "string") quota = body.quota as QuotaDetails;
+    if (typeof body?.code === "string" && body.code) code = body.code;
   } catch {
     // Not an ApiError body - a bare 5xx here means the dev proxy couldn't reach the backend.
     if (response.status >= 500) message = SERVER_UNREACHABLE;
   }
-  throw new ApiRequestError(message, response.status, quota);
+  throw new ApiRequestError(message, response.status, quota, code);
 }
 
 // API response format for files endpoint

@@ -31,6 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   PREVIEW_STEPS,
   autoStartKey,
+  describePreviewStartFailure,
   formatStopsIn,
   previewOrigin,
   previewStepIndex,
@@ -576,17 +577,17 @@ function StartErrorState({ error, onRetry, onDownload }: { error: unknown; onRet
     );
   }
 
-  const status = error instanceof ApiRequestError ? error.status : 0;
-  const message = error instanceof Error ? error.message : "Something went wrong.";
-  const isBusy = status === 503;
+  const failure = describePreviewStartFailure(error);
+  const isBusy = failure.kind === "busy";
 
   return (
     <CenteredState
       icon={isBusy ? <Loader2 className="h-5 w-5" /> : <ServerCrash className="h-5 w-5" />}
-      title={isBusy ? "Every preview runner is busy" : "The preview service isn't reachable"}
+      title={failure.title}
       tone={isBusy ? "default" : "error"}
     >
-      <p className="max-w-[340px] text-xs leading-5 text-muted-foreground">{message}</p>
+      <p className="max-w-[340px] text-xs leading-5 text-muted-foreground">{failure.message}</p>
+      {failure.hint && <p className="max-w-[340px] text-xs leading-5 text-muted-foreground/70">{failure.hint}</p>}
       <div className="flex gap-2">
         <Button size="sm" onClick={onRetry} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
           <RotateCcw /> Try again

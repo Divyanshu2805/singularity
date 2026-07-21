@@ -116,7 +116,7 @@ On Windows, `mvnw.cmd` in place of `./mvnw`. A bare `./mvnw spring-boot:run` (no
 cd frontend
 npm run dev      # dev server, :5173
 npm run build    # production build
-npm test         # vitest, 270 tests
+npm test         # vitest, 282 tests
 npx tsc --noEmit # typecheck only
 ```
 

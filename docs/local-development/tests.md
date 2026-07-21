@@ -8,7 +8,7 @@
 
 ```bash
 cd frontend
-npm test          # 270 tests across 27 files, vitest
+npm test          # 282 tests across 28 files, vitest
 npx tsc --noEmit  # typecheck only
 npm run build     # production build — watch for the "chunks larger than 500kB" warning, see TODO.md
 ```

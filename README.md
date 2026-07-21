@@ -148,7 +148,7 @@ Full per-module responsibilities and a "where do I change X" table: [`docs/archi
 
 ```bash
 ./mvnw -pl legacy-monolith test -Dtest=IdeaServiceImplTest,LlmResponseParserTest,PromptUtilsTest    # backend — see docs/local-development/ for the full named list
-cd frontend && npm test                                                          # frontend — 270 tests
+cd frontend && npm test                                                          # frontend — 282 tests
 ```
 
 A bare `./mvnw test` does not currently pass (a pre-existing Windows timezone issue, unrelated to code correctness) — see `docs/local-development/troubleshooting.md`'s troubleshooting table before assuming a red run means something's broken.

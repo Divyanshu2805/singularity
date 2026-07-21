@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   autoStartKey,
   changedDependencies,
+  describePreviewStartFailure,
   formatStopsIn,
   previewOrigin,
   previewStepIndex,
@@ -88,5 +89,60 @@ describe("formatStopsIn", () => {
     expect(formatStopsIn("2026-09-16T11:05:00Z", now)).toBe("1h 5m");
     expect(formatStopsIn("2026-09-16T09:00:00Z", now)).toBe("0m");
     expect(formatStopsIn(null, now)).toBeNull();
+  });
+});
+
+describe("describePreviewStartFailure", () => {
+  // What the API client throws: an Error carrying the response's status and the ApiError `code`.
+  const apiError = (message: string, status: number, code?: string) => Object.assign(new Error(message), { status, code });
+
+  it("says the runners are busy only for the capacity code, and keeps the server's own words", () => {
+    const failure = describePreviewStartFailure(
+      apiError("Every preview runner is busy right now. Try again in a minute.", 503, "CAPACITY_UNAVAILABLE")
+    );
+
+    expect(failure.kind).toBe("busy");
+    expect(failure.title).toBe("Every preview runner is busy");
+    expect(failure.message).toBe("Every preview runner is busy right now. Try again in a minute.");
+  });
+
+  it("does not call a failed dependency 'busy' - the same 503 with a different code, which is the bug this replaced", () => {
+    const failure = describePreviewStartFailure(
+      apiError("This is temporarily unavailable. Please try again.", 503, "UPSTREAM_UNAVAILABLE")
+    );
+
+    expect(failure.kind).toBe("failed");
+    expect(failure.title).toBe("The preview couldn't start");
+    expect(failure.title).not.toMatch(/busy/i);
+    expect(failure.message).toBe("This is temporarily unavailable. Please try again.");
+    expect(failure.hint).toMatch(/your files are untouched/i);
+  });
+
+  it("goes by the code, not the wording", () => {
+    expect(describePreviewStartFailure(apiError("Every preview runner is busy", 503, "UPSTREAM_UNAVAILABLE")).kind).toBe("failed");
+    expect(describePreviewStartFailure(apiError("Try later", 503, "CAPACITY_UNAVAILABLE")).kind).toBe("busy");
+  });
+
+  it("treats a 502/503/504 with no code as unreachable: the Gateway or dev proxy had nobody to ask", () => {
+    for (const status of [502, 503, 504]) {
+      expect(describePreviewStartFailure(apiError("Can't reach the VibeCraft server.", status)).kind).toBe("unreachable");
+    }
+  });
+
+  it("treats a request that got no response at all as unreachable", () => {
+    const failure = describePreviewStartFailure(new Error("Can't reach the VibeCraft server."));
+
+    expect(failure.kind).toBe("unreachable");
+    expect(failure.title).toBe("The preview service isn't reachable");
+  });
+
+  it("treats a service's own failures (500, 403) as the preview failing, not as unreachable or busy", () => {
+    expect(describePreviewStartFailure(apiError("An unexpected error occurred", 500)).kind).toBe("failed");
+    expect(describePreviewStartFailure(apiError("Access Denied", 403)).kind).toBe("failed");
+  });
+
+  it("survives being handed something that isn't an error", () => {
+    expect(describePreviewStartFailure(undefined)).toMatchObject({ kind: "unreachable", message: "Something went wrong." });
+    expect(describePreviewStartFailure("boom")).toMatchObject({ kind: "unreachable" });
   });
 });
