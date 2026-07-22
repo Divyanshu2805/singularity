@@ -1,3 +1,14 @@
+/**
+ * Renders an assistant turn: the thought, the build checklist, the files it wrote, the lessons it taught and the
+ * prose in between.
+ *
+ * Handles: grouping the raw events into blocks, resolving each checklist step's status as the turn progresses,
+ * folding teaching-mode walkthroughs underneath the step that wrote their file, opening a file at the line a lesson
+ * or message points at, and the separate rendering for a turn that ended in an error.
+ *
+ * The checklist has a hard cap matching the parser's, so the live view shows exactly what gets saved. Its real length
+ * is set by the work - the model is told to emit one step per file - so the cap only bites when it ignores that.
+ */
 import { Fragment, useId, useState } from 'react';
 import { ArrowUpRight, Check, ChevronDown, Circle, CircleAlert, Clock, FilePen, FileSearch, GraduationCap, ListChecks, Loader2, Trash2 } from 'lucide-react';
 import { LogoMark } from '@/components/VibeCraftLogo';
@@ -9,23 +20,12 @@ import { cn } from '@/lib/utils';
 
 type OpenFile = (path: string, target?: CodeTarget) => void;
 
-/**
- * A build step, with the walkthroughs of what that step did folded underneath it. A step usually writes one
- * file, but may write two or three that only make sense together - then it carries one walkthrough per file.
- */
 type ChecklistItem = { label: string; path?: string; status: 'done' | 'active' | 'pending'; lessons: LessonItem[] };
 
-/** A checklist step before its status is resolved - built as the events arrive, so lessons can be hung on it. */
 type RawStep = { label: string; path?: string; lessons: LessonItem[] };
 
-/**
- * Backstop on a runaway checklist, matching LlmResponseParser.MAX_CHECKLIST_STEPS so the live view shows
- * exactly what gets saved. The real length is set by the work - the model is told to emit one step per file
- * it writes - so this only bites when it ignores that.
- */
 const MAX_CHECKLIST_STEPS = 12;
 
-/** Teaching mode's walkthrough of one file, and whether it has finished arriving. */
 type LessonView = Lesson & { isComplete: boolean };
 type EditItem = { path: string; active: boolean; deleted?: boolean };
 type LessonItem = { path?: string; lesson: LessonView };
@@ -35,10 +35,8 @@ type Block =
   | { kind: 'reads'; key: string; files: string[]; active: boolean }
   | { kind: 'checklist'; key: string; items: ChecklistItem[] }
   | { kind: 'edits'; key: string; items: EditItem[] }
-  // Only for walkthroughs with no build step to sit under - normally they live on their step's row.
   | { kind: 'lessons'; key: string; items: LessonItem[] };
 
-// A half-revealed "**bold" or "`code" would render its opening marker literally until the closer arrives.
 function tidyPartialMarkdown(text: string) {
   let tidy = text;
   if ((tidy.match(/\*\*/g)?.length ?? 0) % 2 === 1) tidy = tidy.replace(/\*\*(?!.*\*\*)/s, "");
@@ -46,12 +44,6 @@ function tidyPartialMarkdown(text: string) {
   return tidy;
 }
 
-/**
- * Which checklist steps are done. A step is done when the file it named has finished being written; a step
- * that named no file is carried by the ones around it, since the model works through them in order - you
- * can't be on step four if step two hasn't happened. Once the response is over, a step whose file never
- * arrived stays unticked on purpose: that's the honest record of a plan the model didn't finish.
- */
 function resolveChecklist(
   items: RawStep[],
   writtenPaths: Set<string>,
@@ -62,7 +54,6 @@ function resolveChecklist(
     if (done[i + 1]) done[i] = true;
   }
   if (!isStreaming) {
-    // Nothing more is coming, so a step with no file of its own can't be waiting on anything.
     items.forEach((item, i) => { if (!item.path) done[i] = true; });
   }
   const activeIndex = isStreaming ? done.indexOf(false) : -1;
@@ -73,15 +64,6 @@ function resolveChecklist(
   }));
 }
 
-/**
- * The build step a walkthrough belongs under. That's where a learner reads it - beside the sentence saying what
- * the step set out to do - rather than in the list of files that were touched.
- *
- * <p>First choice is the step that named this exact file. A step that writes more than one file can only name
- * one of them, so a walkthrough for an unclaimed file joins the step currently being explained - the last one
- * that has taken a walkthrough, since the model works through its steps in order. Failing both, it gets its
- * own card.
- */
 function findLessonStep(checklists: Map<string, RawStep[]>, path: string | undefined): RawStep | undefined {
   let current: RawStep | undefined;
   for (const steps of checklists.values()) {
@@ -93,32 +75,23 @@ function findLessonStep(checklists: Map<string, RawStep[]>, path: string | undef
   return current;
 }
 
-// Consecutive reads collapse into one row, consecutive todos into one checklist, and consecutive edits
-// into one card, so a five-file change reads as a single step instead of five near-identical lines.
-// Exported for tests: the checklist's done/active/pending resolution is the part worth pinning.
 export function buildBlocks(events: ChatEvent[], isStreaming: boolean): Block[] {
   const blocks: Block[] = [];
   const lastIndex = events.length - 1;
   const lessonPaths = new Set<string>();
 
-  // Collected up front: the checklist is emitted before any file is written, so it has to be able to look
-  // ahead at edits that arrive after it.
   const writtenPaths = new Set(
     events
-      // A deleted file ticks off its step too - removing the old copy is how a rename finishes.
       .filter((event) => (event.type === ChatEventType.FILE_EDIT || event.type === ChatEventType.FILE_DELETE)
         && event.filePath && event.isComplete !== false)
       .map((event) => event.filePath as string)
   );
-  // What each file looked like in this turn, for finding the lines a walkthrough quotes.
   const fileContents = new Map(
     events
       .filter((event) => event.type === ChatEventType.FILE_EDIT && event.filePath)
       .map((event) => [event.filePath as string, event.content])
   );
   const rawChecklists = new Map<string, RawStep[]>();
-  // Edits and walkthroughs are tracked by hand rather than by looking at the previous block, because a
-  // walkthrough lands between two files: the file after it still belongs in the same "Edited N files" card.
   let openEdits: Extract<Block, { kind: 'edits' }> | undefined;
   let openLessons: Extract<Block, { kind: 'lessons' }> | undefined;
   let lastWrittenPath: string | undefined;
@@ -168,23 +141,18 @@ export function buildBlocks(events: ChatEvent[], isStreaming: boolean): Block[] 
         blocks.push(openEdits);
       }
     } else if (event.type === ChatEventType.LEARN && event.content) {
-      // One lesson per file, as LlmResponseParser saves them - a repeat shown live would vanish on refresh.
       if (event.filePath && lessonPaths.has(event.filePath)) return;
       if (event.filePath) lessonPaths.add(event.filePath);
 
       const isComplete = event.isComplete !== false;
       const parsed = parseLesson(event.content, event.metadata || undefined, isComplete);
-      // Only the prose is tidied mid-stream - a quoted line of code keeps every backtick it really has.
       if (!isComplete) {
         parsed.summary = tidyPartialMarkdown(parsed.summary);
         parsed.parts = parsed.parts.map((part) => ({ ...part, text: tidyPartialMarkdown(part.text) }));
       }
-      // A walkthrough that named no file - or one this turn never wrote - is about the file just written, since
-      // the model writes each walkthrough straight after its file.
       const path = event.filePath && fileContents.has(event.filePath) ? event.filePath : lastWrittenPath ?? event.filePath;
       const lesson = { ...withLines(parsed, path ? fileContents.get(path) : undefined), isComplete };
       const step = findLessonStep(rawChecklists, path);
-      // Attaching to a step pushes no block, so the edits card is left as a plain list of what changed.
       if (step) step.lessons.push({ path, lesson });
       else if (openLessons) openLessons.items.push({ path, lesson });
       else {
@@ -194,7 +162,6 @@ export function buildBlocks(events: ChatEvent[], isStreaming: boolean): Block[] 
     }
   });
 
-  // Resolved last, so every checklist sees every edit in the turn regardless of ordering.
   for (const block of blocks) {
     if (block.kind === 'checklist') {
       block.items = resolveChecklist(rawChecklists.get(block.key) ?? [], writtenPaths, isStreaming);
@@ -245,7 +212,6 @@ function ReadsBlock({ files, active, onOpen }: { files: string[]; active: boolea
 function ChecklistBlock({ items, onOpen }: { items: ChecklistItem[]; onOpen?: OpenFile }) {
   const doneCount = items.filter((item) => item.status === 'done').length;
   const isRunning = items.some((item) => item.status === 'active');
-  // Every walkthrough starts folded: the learner opens only the steps they want to read about.
   const [openItems, setOpenItems] = useState<ReadonlySet<number>>(() => new Set());
   const lessonIndexes = items.flatMap((item, index) => (item.lessons.length > 0 ? [index] : []));
   const isAllOpen = lessonIndexes.length > 0 && lessonIndexes.every((index) => openItems.has(index));
@@ -287,7 +253,6 @@ function ChecklistBlock({ items, onOpen }: { items: ChecklistItem[]; onOpen?: Op
           const isOpen = lessons.length > 0 && openItems.has(index);
           const detailsId = `${idPrefix}-lesson-${index}`;
           const fileName = path ? splitPath(path).base : undefined;
-          // With more than one file under a step, every quoted line has to say which file it is from.
           const showFileOnRefs = lessons.length > 1;
           const row = (
             <>
@@ -313,13 +278,9 @@ function ChecklistBlock({ items, onOpen }: { items: ChecklistItem[]; onOpen?: Op
 
           return (
             <li key={`${label}-${index}`}>
-              {/* The step itself doesn't open a file: its walkthrough's quoted lines are the way into the code,
-                  and they point at the exact line being explained rather than the top of the file. */}
               <div className="flex items-center">
                 <div className="flex min-h-7 min-w-0 flex-1 items-center gap-2 py-0.5 pl-3 pr-2">
                   {row}
-                  {/* Which file this step is about. Plain text, not a link: opening it here would land at the
-                      top of the file, while the walkthrough's quoted lines land on the code being explained. */}
                   {fileName && (
                     <span title={path} className="ml-auto shrink-0 pl-2 font-mono text-[11px] text-muted-foreground/80">
                       {fileName}
@@ -337,7 +298,6 @@ function ChecklistBlock({ items, onOpen }: { items: ChecklistItem[]; onOpen?: Op
                   />
                 )}
               </div>
-              {/* Indented to line up under the step's own text, so it reads as belonging to this step. */}
               {isOpen && (
                 <div id={detailsId} className="mb-2 ml-[34px] mr-3 space-y-2">
                   {lessons.map((item, lessonIndex) => (
@@ -359,7 +319,6 @@ function ChecklistBlock({ items, onOpen }: { items: ChecklistItem[]; onOpen?: Op
   );
 }
 
-/** Walkthrough prose is plain sentences, so backticked code names are the only formatting worth honouring. */
 function LessonText({ text }: { text: string }) {
   return (
     <>
@@ -376,11 +335,6 @@ function LessonText({ text }: { text: string }) {
   );
 }
 
-/**
- * A quoted line of code: where it lives and what it says, jumping to that line in the editor when clicked.
- * `showFile` names the file alongside the line number - needed whenever the surrounding step covers more than
- * one file, since the line number alone wouldn't say which.
- */
 function CodeReference({ path, part, showFile, onOpen }: {
   path?: string;
   part: LessonPart;
@@ -416,13 +370,11 @@ function LessonDetails({ id, lesson, path, showFileOnRefs, onOpen, className }: 
   id?: string;
   lesson: LessonView;
   path?: string;
-  /** Put the file name on every quoted line - for a step whose walkthroughs span more than one file. */
   showFileOnRefs?: boolean;
   onOpen?: OpenFile;
   className?: string;
 }) {
-  // A one-sentence lesson from before walkthroughs existed has no parts, just its concept and sentence.
-  const legacyConcept = lesson.parts.length === 0 ? lesson.concepts[0] : undefined;
+  const singleConcept = lesson.parts.length === 0 ? lesson.concepts[0] : undefined;
 
   return (
     <div id={id} className={cn("rounded-md border border-l-2 border-border/60 border-l-primary/60 bg-muted/20 px-3 py-2.5", className)}>
@@ -432,10 +384,9 @@ function LessonDetails({ id, lesson, path, showFileOnRefs, onOpen, className }: 
         </p>
       )}
 
-      {(lesson.summary || legacyConcept) && (
+      {(lesson.summary || singleConcept) && (
         <p className="break-words text-[12px] leading-[1.7] text-foreground/90">
-          {/* A real space, not just margin, so screen readers and copied text don't run the label into the sentence. */}
-          {legacyConcept && <><strong className="font-semibold text-primary">{legacyConcept}</strong>{" "}</>}
+          {singleConcept && <><strong className="font-semibold text-primary">{singleConcept}</strong>{" "}</>}
           <LessonText text={lesson.summary} />
         </p>
       )}
@@ -474,7 +425,6 @@ function LessonToggle({ open, lesson, fileName, fileCount = 1, controls, onToggl
   open: boolean;
   lesson: LessonView;
   fileName?: string;
-  /** How many files this toggle opens - shown when a step wrote more than one. */
   fileCount?: number;
   controls: string;
   onToggle: () => void;
@@ -484,7 +434,6 @@ function LessonToggle({ open, lesson, fileName, fileCount = 1, controls, onToggl
       type="button"
       aria-expanded={open}
       aria-controls={controls}
-      // The summary on hover, so a folded walkthrough still says what's inside before it's opened.
       title={lesson.summary || undefined}
       onClick={onToggle}
       className={cn(
@@ -503,10 +452,6 @@ function LessonToggle({ open, lesson, fileName, fileCount = 1, controls, onToggl
   );
 }
 
-/**
- * Walkthroughs with no build step to sit under - a turn that wrote files without listing steps first, or one
- * explaining something it never wrote. Shown together in their own card, folded like the rest.
- */
 function LessonsBlock({ items, onOpen }: { items: LessonItem[]; onOpen?: OpenFile }) {
   const [openItems, setOpenItems] = useState<ReadonlySet<number>>(() => new Set());
   const isAllOpen = items.every((_, index) => openItems.has(index));
@@ -622,7 +567,6 @@ function EditsBlock({ items, onOpen }: { items: EditItem[]; onOpen?: OpenFile })
 
           return (
             <li key={`${path}-${index}`}>
-              {/* A deleted file has nothing left to open. */}
               {onOpen && !deleted ? (
                 <button
                   type="button"
@@ -647,14 +591,8 @@ function EditsBlock({ items, onOpen }: { items: EditItem[]; onOpen?: OpenFile })
 interface AssistantEventsProps {
   events: ChatEvent[];
   isStreaming: boolean;
-  /** True once nothing new has arrived for a moment - used to surface "Working..." between steps. */
   isIdle: boolean;
-  /**
-   * How long the turn took, for a response that just finished. The server writes a `THOUGHT` event, but only
-   * when it saves the turn afterwards - without this the time appeared out of nowhere on the next refresh.
-   */
   fallbackThought?: string;
-  /** `target` is set when a walkthrough points at a particular line of the file. */
   onOpenFile?: OpenFile;
 }
 
@@ -664,8 +602,6 @@ export function AssistantEvents({ events, isStreaming, isIdle, fallbackThought, 
 
   const lastEvent = events[events.length - 1];
   const lastBlock = blocks[blocks.length - 1];
-  // A walkthrough is written after its file but shown up in the checklist, so it isn't the last block while it
-  // streams - without this the turn would look idle and print "Working..." over a card that's still filling in.
   const hasStreamingLesson = blocks.some(
     (block) =>
       (block.kind === 'checklist' && block.items.some((item) => item.lessons.some((one) => !one.lesson.isComplete))) ||

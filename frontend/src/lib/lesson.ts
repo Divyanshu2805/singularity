@@ -1,15 +1,15 @@
 /**
- * Teaching mode walkthroughs: the `<learn>` body the AI writes after each file - a summary, then one part per important
- * piece of code, each anchored by a line quoted from the file.
+ * Teaching-mode walkthroughs: the lesson body the AI writes after each file.
+ *
+ * Handles: parsing that body into a summary and one part per important piece of code, collecting the concepts it
+ * introduces, and resolving each part's quoted line back to a line number in the file as it is now.
+ *
+ * The quoted line is searched for again when a lesson is opened rather than trusted as a stored line number, because
+ * the file may have changed since the lesson was written.
  */
-
-/** Where a chat reference points in a file. */
 export interface CodeTarget {
-  /** 1-based line the quoted code was found on in the file as the AI wrote it. */
   line?: number;
-  /** Last line of a highlighted block, when the target is a range rather than a single line. */
   endLine?: number;
-  /** The line as the AI quoted it - searched for again when opened, since the file may have changed since. */
   code?: string;
 }
 
@@ -17,20 +17,15 @@ export interface LessonPart {
   code?: string;
   line?: number;
   text: string;
-  /** Set when this part introduces a named idea, e.g. "State". */
   concept?: string;
 }
 
 export interface Lesson {
   summary: string;
   parts: LessonPart[];
-  /** Concepts this lesson introduces - from its parts, or the single concept a one-sentence lesson carried. */
   concepts: string[];
 }
 
-// Each is lenient about a missing closer, both for a lesson still streaming and for a model that forgot one.
-// `<related>` is no longer asked for or shown, but walkthroughs saved while it was still carry one - so it stays
-// in the terminators and in STRAY_TAG, which is what keeps an old one from leaking into a summary as raw text.
 const STRUCTURE = /<(summary|part|related)\b/i;
 const SUMMARY = /<summary>([\s\S]*?)(?:<\/summary>|(?=<part\b|<related\b)|$)/i;
 const PART = /<part\b([^>]*)>([\s\S]*?)(?:<\/part>|(?=<part\b|<related\b)|$)/gi;
@@ -40,8 +35,6 @@ const STRAY_TAG = /<\/?(?:summary|part|code|related)\b[^>]*>|<\/?[a-z]*$/gi;
 const readAttr = (attrs: string, name: string) =>
   new RegExp(`\\b${name}="([^"]*)"`, "i").exec(attrs)?.[1]?.trim() || undefined;
 
-// Told not to escape, but a model writing inside tags treats them as XML: seen live as `&lt;number[]&gt;` and even
-// `$&#123;lapNumber&#125;` for `${lapNumber}` - 7 of 73 quoted lines. `&amp;` goes last so `&amp;lt;` stays `&lt;`.
 const NAMED_ENTITIES: Record<string, string> = { lt: "<", gt: ">", quot: '"', apos: "'" };
 const decodeEntities = (text: string) =>
   text
@@ -52,11 +45,6 @@ const decodeEntities = (text: string) =>
 
 const cleanText = (text: string) => decodeEntities(text.replace(STRAY_TAG, "")).trim();
 
-/**
- * A one-sentence lesson's concept is shown as its label, so a sentence that opens with it would read "Composition
- * Composition means...". While the text is still arriving and could yet turn out to be that name, it's held back
- * rather than flashing in and then vanishing.
- */
 export function withoutLeadingConcept(text: string, concept: string | undefined, isComplete: boolean) {
   if (!concept) return text;
   const name = concept.toLowerCase();
@@ -66,15 +54,10 @@ export function withoutLeadingConcept(text: string, concept: string | undefined,
   return text.slice(concept.length).replace(/^[\s,:;.–—-]+/, "") || text;
 }
 
-/**
- * Reads a `<learn>` body. A body with none of the walkthrough's tags is a one-sentence lesson from before walkthroughs
- * existed (or a model that ignored the format) and becomes a summary, with `legacyConcept` - the concept those lessons
- * saved as metadata - as its only concept.
- */
-export function parseLesson(content: string, legacyConcept?: string, isComplete = true): Lesson {
+export function parseLesson(content: string, singleConcept?: string, isComplete = true): Lesson {
   if (!STRUCTURE.test(content)) {
-    const concepts = legacyConcept ? [legacyConcept] : [];
-    return { summary: withoutLeadingConcept(content.trim(), legacyConcept, isComplete), parts: [], concepts };
+    const concepts = singleConcept ? [singleConcept] : [];
+    return { summary: withoutLeadingConcept(content.trim(), singleConcept, isComplete), parts: [], concepts };
   }
 
   const summary = cleanText(SUMMARY.exec(content)?.[1] ?? "");
@@ -95,11 +78,6 @@ export function parseLesson(content: string, legacyConcept?: string, isComplete 
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
-/**
- * The line a quoted piece of code is on. Parts walk through a file in order, so the search starts at `fromLine` and
- * only wraps to the top if nothing matches below it - which is what tells two identical `type="button"` lines apart.
- * Whitespace differences don't count, and a quote the model shortened with "..." is matched on the part before it.
- */
 export function findCodeLine(fileContent: string | undefined, code: string | undefined, fromLine = 1): number | undefined {
   if (!fileContent || !code) return undefined;
   const quoted = code.split("\n").map(normalize).find(Boolean);
@@ -118,7 +96,6 @@ export function findCodeLine(fileContent: string | undefined, code: string | und
   return undefined;
 }
 
-/** Fills in each part's line from the file the lesson is about, walking forward from the previous part's line. */
 export function withLines(lesson: Lesson, fileContent: string | undefined): Lesson {
   if (!fileContent || lesson.parts.length === 0) return lesson;
   let from = 1;
