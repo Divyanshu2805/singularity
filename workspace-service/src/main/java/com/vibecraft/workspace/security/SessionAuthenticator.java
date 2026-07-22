@@ -21,9 +21,9 @@ import java.util.Optional;
  * hash - against a local table: {@code User} and {@code RevokedSession} both live in account-service's own
  * database, not this one. Both checks go through account-service's internal API instead
  * ({@code AccountServiceClient.getUserByFirebaseUid}/{@code isSessionRevoked}), which is exactly what lets a
- * session cookie minted by account-service (on {@code :8081}) also authenticate a direct call to
- * workspace-service (on {@code :8082}) during the not-yet-cut-over soak period - see docs/migration/'s
- * Phase 2 entry.
+ * session cookie minted by account-service also authenticate a request to this service. A validated session is
+ * cached in-process for {@code app.auth.revocation-check-interval}; account-service pushes an eviction here on
+ * sign-out ({@code InternalSessionController}) so a signed-out cookie doesn't outlive that interval.
  */
 @Slf4j
 @Component

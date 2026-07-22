@@ -26,9 +26,10 @@ import java.util.List;
 /**
  * workspace-service's API for the other services, not the browser - never routed through gateway-service, and
  * guarded by common-lib's {@code InternalServiceAuthFilter} (a shared secret) rather than {@code @PreAuthorize},
- * exactly like account-service's {@code InternalAccountController}. Not yet called by anything: intelligence-
- * service doesn't exist yet (see docs/migration/phase-2-workspace-service.md's Phase 2 entry) - built now, same rationale account-
- * service's own internal API was.
+ * exactly like account-service's {@code InternalAccountController}. Called by intelligence-service through its
+ * {@code feign/WorkspaceServiceClient}: the membership lookup behind every {@code @PreAuthorize} check there, the
+ * file reads for prompts and code insight, and the file writes when a generated turn lands. The full internal-API
+ * table is in docs/architecture/service-communication.md §3.
  */
 @RestController
 @RequiredArgsConstructor
@@ -43,7 +44,7 @@ public class InternalWorkspaceController {
     /**
      * {@code role == null} means "not a member" - see {@link ProjectMembershipDto}'s own javadoc - so this never
      * 404s for a real project with no such member; it 404s only if the project itself doesn't exist (or is
-     * soft-deleted). A future intelligence-service {@code @security} bean's {@code @PreAuthorize} check depends
+     * soft-deleted). intelligence-service's {@code @security} bean's {@code @PreAuthorize} check depends
      * on evaluating that distinction correctly, not on an exception either way.
      */
     @GetMapping("/projects/{projectId}/members/{userId}")

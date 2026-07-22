@@ -22,10 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code @PreAuthorize} — the caller here is another service acting on a request it already authenticated
  * itself, not an end user.
  *
- * <p>Not yet called by anything: workspace-service and intelligence-service don't exist yet, and
- * legacy-monolith's own equivalent code paths haven't been switched over (see docs/migration/ — that
- * cutover needs a real data migration first, since legacy-monolith's own {@code users} table would otherwise
- * fork from this service's). This exists now so that work doesn't block Phase 2/3 on writing it later.
+ * <p>Called by workspace-service and intelligence-service through their {@code feign/AccountServiceClient}: every
+ * signed-in request to either one makes the session lookups below on a session-cache miss, and every quota check
+ * asks for the plan limits. The full internal-API table is in docs/architecture/service-communication.md §3.
  */
 @RestController
 @RequiredArgsConstructor
@@ -50,9 +49,8 @@ public class InternalAccountController {
     }
 
     /**
-     * Used by workspace-service's (and any future service's) SessionAuthenticator to resolve a Firebase-verified
-     * session cookie's uid into a local userId, without owning User itself (see docs/migration/phase-2-workspace-service.md's Phase 2
-     * entry - added alongside workspace-service, not part of Phase 1's original scope).
+     * Used by workspace-service's and intelligence-service's SessionAuthenticator to resolve a Firebase-verified
+     * session cookie's uid into a local userId, without owning User itself.
      */
     @GetMapping("/users/by-firebase-uid")
     public UserDto getUserByFirebaseUid(@RequestParam String uid) {

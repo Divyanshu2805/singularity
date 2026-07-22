@@ -9,10 +9,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  * workspace-service's only way to reach User/Plan data now that it lives in account-service's own database.
- * Resolved via Eureka ("account-service" is that service's {@code spring.application.name}); the internal JWT
- * riding on the current request is forwarded automatically onto every call by common-lib's
- * {@code FeignClientInterceptor}, so this reaches account-service's {@code /internal/v1/**} "as" the caller
- * without either side re-authenticating anything.
+ * Resolved via Eureka ("account-service" is that service's {@code spring.application.name}). Every call is
+ * authenticated by common-lib's {@code FeignClientInterceptor}, which adds the shared-secret header for any path
+ * starting {@code /internal/} - which is why this interface must not carry a {@code @FeignClient(path = ...)}
+ * prefix: the interceptor would stop seeing {@code /internal/} and every call would be a 401.
  *
  * <p>Every call site using this client catches {@code feign.FeignException.NotFound} locally and translates it
  * to the matching typed exception - no shared {@code ErrorDecoder} exists yet (see docs/migration/'s

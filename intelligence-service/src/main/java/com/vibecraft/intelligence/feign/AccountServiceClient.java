@@ -9,8 +9,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  * intelligence-service's own copy of the same Feign client account-service's other callers already have
- * (workspace-service's `AccountServiceClient`). Resolved via Eureka; the internal JWT riding on the current
- * request is forwarded automatically onto every call by common-lib's {@code FeignClientInterceptor}.
+ * (workspace-service's `AccountServiceClient`). Resolved via Eureka; every call is authenticated by common-lib's
+ * {@code FeignClientInterceptor}, which adds the shared-secret header for any path starting {@code /internal/} -
+ * so, as there, no {@code @FeignClient(path = ...)} prefix.
  */
 @FeignClient(name = "account-service")
 public interface AccountServiceClient {

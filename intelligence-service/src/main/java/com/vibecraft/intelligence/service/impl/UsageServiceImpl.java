@@ -68,9 +68,10 @@ public class UsageServiceImpl implements UsageService {
                 .orElse(null);
         PlanDto plan = accountServiceClient.getPlanLimits(userId);
 
-        // No live preview execution exists yet (see CLAUDE.md's Preview-is-schema-only note),
-        // so nothing can actually be running. Project ownership is workspace-service's own count - the
-        // allowance is Account's, the count is Workspace's, same split every quota check in this codebase uses.
+        // previewsRunning is hard-wired to 0: the running-preview count is workspace-service's, and it exposes no
+        // internal endpoint for it yet, so this service has nothing to ask (a known gap - docs/api/).
+        // Project ownership is workspace-service's own count - the allowance is Account's, the count is
+        // Workspace's, same split every quota check in this codebase uses.
         return new UsageTodayResponse(
                 tokensUsedToday(userId),
                 plan.maxTokensPerDay(),
