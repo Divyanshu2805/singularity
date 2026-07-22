@@ -310,11 +310,7 @@ export type AuthSecurityEventType =
   | "SIGN_OUT_EVERYWHERE"
   | "MFA_ENROLLED"
   | "MFA_REMOVED"
-  | "PASSWORD_CHANGED"
-  | "LEGACY_SIGN_UP"
-  | "LEGACY_SIGN_IN"
-  | "LEGACY_PASSWORD_RESET_REQUESTED"
-  | "LEGACY_PASSWORD_RESET_COMPLETED";
+  | "PASSWORD_CHANGED";
 
 export interface AuthSecurityEvent {
   id: number;

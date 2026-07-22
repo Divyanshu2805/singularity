@@ -113,19 +113,6 @@ function saveView(projectId: string) {
   }
 }
 
-/**
- * Clears the pre-2026-09-16 key, which held the whole transcript under `code_notes_<projectId>` with no user in
- * it - the leak itself. Nothing reads it any more, but a browser that has one is still holding somebody's notes
- * where the next account to sign in could reach them, so it goes on the way past.
- */
-function dropLegacyNotes(projectId: string) {
-  try {
-    sessionStorage.removeItem(`code_notes_${projectId}`);
-  } catch {
-    // Storage unavailable - there is nothing stored to drop either.
-  }
-}
-
 const getThread = (projectId: string): LensThread | null => threads.get(projectId) ?? null;
 
 /** A saved exchange becomes the two turns it was: the question that was asked, then the answer it got. */
@@ -237,7 +224,6 @@ function openThread(projectId: string, selection: CodeSelection | null) {
     isLoading: !loaded.has(projectId),
     error: null,
   });
-  dropLegacyNotes(projectId);
   loadNotes(projectId);
 }
 

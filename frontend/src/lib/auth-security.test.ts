@@ -63,7 +63,6 @@ describe("session hint", () => {
     startSession({ user: { id: 1, username: "a@b.co", name: "A" }, expiresAt: new Date(Date.now() + 60_000).toISOString(), newAccount: false, secondFactorUsed: false });
 
     expect(isAuthenticated()).toBe(true);
-    expect(localStorage.getItem("auth_token")).toBeNull();
     expect(JSON.stringify(localStorage)).not.toMatch(/eyJ/); // no JWT-looking value anywhere
   });
 

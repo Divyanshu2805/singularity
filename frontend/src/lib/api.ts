@@ -45,9 +45,6 @@ async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
   return rawFetch(input, withCsrfHeader(init));
 }
 
-/** Legacy (pre-Firebase) Bearer token. Firebase sign-ins never put a credential in page-readable storage. */
-export const getAuthToken = () => localStorage.getItem("auth_token");
-
 /**
  * The session cookie is httpOnly, so this page can't see it. What it keeps instead is when that session ends - a
  * routing hint only ("show the dashboard, or go straight to sign-in?"), never a credential. If the server has
@@ -72,37 +69,16 @@ export const renewSession = (session: SessionResponse) => {
 /** Starts a Firebase-backed session on this page, once the backend has set the cookie. */
 export const startSession = (session: SessionResponse) => {
   clearSignedInState();
-  localStorage.removeItem("auth_token");
   localStorage.setItem(SESSION_HINT_KEY, session.expiresAt);
   setUserInfo(session.user);
 };
 
-export const removeAuthToken = () => localStorage.removeItem("auth_token");
-
-// The backend rejects an expired or malformed JWT with 401, so treat those as signed out up front.
-const isTokenUsable = (token: string) => {
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return typeof payload.exp !== "number" || payload.exp * 1000 > Date.now();
-  } catch {
-    return false;
-  }
-};
-
-export const isAuthenticated = () => {
-  if (hasSessionHint() && getUserInfo()) return true;
-  const token = getAuthToken();
-  return !!token && isTokenUsable(token);
-};
+export const isAuthenticated = () => hasSessionHint() && !!getUserInfo();
 
 /** Where to send someone who isn't signed in - flags the case where they were, but it lapsed. */
 export const loginRedirectPath = () =>
-  getAuthToken() || localStorage.getItem(SESSION_HINT_KEY) ? "/login?expired=1" : "/login";
+  localStorage.getItem(SESSION_HINT_KEY) ? "/login?expired=1" : "/login";
 
-const getAuthHeaders = (): HeadersInit => {
-  const token = getAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
 
 // User info storage
 export const setUserInfo = (user: { id: number; username: string; name: string }) => {
@@ -140,7 +116,6 @@ export const signOut = (to = "/login") => {
   }).catch(() => undefined);
 
   localStorage.removeItem(SESSION_HINT_KEY);
-  removeAuthToken();
   removeUserInfo();
   clearSignedInState();
   if (!window.location.pathname.startsWith("/login")) {
@@ -394,12 +369,12 @@ export const api = {
 
   /** Ends every session of this account on every device, this one included. */
   async signOutEverywhere(): Promise<void> {
-    const response = await apiFetch(`${BASE_URL}/api/auth/logout-all`, { method: "POST", headers: { ...getAuthHeaders() } });
+    const response = await apiFetch(`${BASE_URL}/api/auth/logout-all`, { method: "POST" });
     await ensureOk(response, "Couldn't sign out of your other devices");
   },
 
   async getSecurityEvents(): Promise<AuthSecurityEvent[]> {
-    const response = await apiFetch(`${BASE_URL}/api/auth/security-events`, { headers: { ...getAuthHeaders() } });
+    const response = await apiFetch(`${BASE_URL}/api/auth/security-events`);
     await ensureOk(response, "Couldn't load recent account activity");
     return response.json();
   },
@@ -408,7 +383,7 @@ export const api = {
   async reportSecurityEvent(type: AuthSecurityEventType, idToken: string): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/auth/security-events`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, idToken }),
     });
     await ensureOk(response, "Couldn't record the change");
@@ -417,7 +392,6 @@ export const api = {
   /** Flat file paths - build the tree with `buildFileTree`, merged with any files that have only been streamed so far. */
   async getFilePaths(projectId: string): Promise<string[]> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/files`, {
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Failed to fetch files");
     const data: FilesApiResponse = await response.json();
@@ -426,8 +400,7 @@ export const api = {
 
   async getFileContent(projectId: string, path: string): Promise<string> {
     const response = await apiFetch(
-      `${BASE_URL}/api/projects/${projectId}/files/content?path=${encodeURIComponent(path)}`,
-      { headers: { ...getAuthHeaders() } }
+      `${BASE_URL}/api/projects/${projectId}/files/content?path=${encodeURIComponent(path)}`
     );
     await ensureOk(response, "Failed to fetch file content");
     const data = await response.json();
@@ -436,7 +409,6 @@ export const api = {
 
   async getProjects(): Promise<ProjectSummaryResponse[]> {
     const response = await apiFetch(`${BASE_URL}/api/projects`, {
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Failed to fetch projects");
     return response.json();
@@ -446,7 +418,7 @@ export const api = {
   async clarifyIdea(idea: string): Promise<ClarifyingQuestion[]> {
     const response = await apiFetch(`${BASE_URL}/api/ideas/clarify`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ idea }),
     });
     await ensureOk(response, "Couldn't prepare questions for your idea");
@@ -458,7 +430,7 @@ export const api = {
   async compileIdea(idea: string, answers: IdeaAnswer[]): Promise<string> {
     const response = await apiFetch(`${BASE_URL}/api/ideas/compile`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ idea, answers }),
     });
     await ensureOk(response, "Couldn't write the project brief");
@@ -470,7 +442,7 @@ export const api = {
   async createProjectFromPrompt(prompt: string): Promise<ProjectResponse> {
     const response = await apiFetch(`${BASE_URL}/api/projects/from-prompt`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt }),
     });
     await ensureOk(response, "Failed to create project");
@@ -479,7 +451,6 @@ export const api = {
 
   async getProject(id: string): Promise<ProjectResponse> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${id}`, {
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Failed to fetch project");
     return response.json();
@@ -488,7 +459,7 @@ export const api = {
   async updateProject(id: string, name: string): Promise<ProjectResponse> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     });
     await ensureOk(response, "Failed to update project");
@@ -499,7 +470,6 @@ export const api = {
   async setProjectPinned(id: string, pinned: boolean): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${id}/pin`, {
       method: pinned ? "PUT" : "DELETE",
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, pinned ? "Failed to pin project" : "Failed to unpin project");
   },
@@ -508,7 +478,6 @@ export const api = {
   async setProjectStarred(id: string, starred: boolean): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${id}/star`, {
       method: starred ? "PUT" : "DELETE",
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, starred ? "Failed to star project" : "Failed to unstar project");
   },
@@ -517,7 +486,7 @@ export const api = {
   async forkProject(id: string, name?: string): Promise<ProjectResponse> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${id}/fork`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: name?.trim() || null }),
     });
     await ensureOk(response, "Failed to fork project");
@@ -527,14 +496,13 @@ export const api = {
   async deleteProject(id: string): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${id}`, {
       method: "DELETE",
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Failed to delete project");
   },
 
   /** The project's latest preview in any state, or null if it has never had one (204). */
   async getPreview(projectId: string): Promise<Preview | null> {
-    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/preview`, { headers: { ...getAuthHeaders() } });
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/preview`);
     await ensureOk(response, "Couldn't check the preview");
     return response.status === 204 ? null : response.json();
   },
@@ -543,7 +511,6 @@ export const api = {
   async startPreview(projectId: string): Promise<Preview> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/preview`, {
       method: "POST",
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Couldn't start the preview");
     return response.json();
@@ -553,7 +520,6 @@ export const api = {
   async restartPreview(projectId: string): Promise<Preview> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/preview/restart`, {
       method: "POST",
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Couldn't restart the preview");
     return response.json();
@@ -562,27 +528,25 @@ export const api = {
   async stopPreview(projectId: string | number): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/preview`, {
       method: "DELETE",
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Couldn't stop the preview");
   },
 
   async getPreviewLogs(projectId: string): Promise<PreviewLogs> {
-    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/preview/logs`, { headers: { ...getAuthHeaders() } });
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/preview/logs`);
     await ensureOk(response, "Couldn't load the preview output");
     return response.json();
   },
 
   /** The caller's own starting or running previews across all projects - what their plan's allowance is spent on. */
   async getMyPreviews(): Promise<Preview[]> {
-    const response = await apiFetch(`${BASE_URL}/api/previews`, { headers: { ...getAuthHeaders() } });
+    const response = await apiFetch(`${BASE_URL}/api/previews`);
     await ensureOk(response, "Couldn't load your running previews");
     return response.json();
   },
 
   async downloadProjectZip(id: string): Promise<Blob> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${id}/files/download-zip`, {
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Failed to download project");
     return response.blob();
@@ -605,7 +569,7 @@ export const api = {
 
     apiFetch(`${BASE_URL}/api/projects/${projectId}/code/${kind}/stream`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: controller.signal,
     })
@@ -650,14 +614,14 @@ export const api = {
 
   /** The plan catalogue, cheapest first. Public: the pricing page works signed out. */
   async getPlans(): Promise<Plan[]> {
-    const response = await apiFetch(`${BASE_URL}/api/plans`, { headers: { ...getAuthHeaders() } });
+    const response = await apiFetch(`${BASE_URL}/api/plans`);
     await ensureOk(response, "Couldn't load the plans");
     return response.json();
   },
 
   /** What this account is on. Always returns a plan - free users get the free one. */
   async getMySubscription(): Promise<Subscription> {
-    const response = await apiFetch(`${BASE_URL}/api/me/subscription`, { headers: { ...getAuthHeaders() } });
+    const response = await apiFetch(`${BASE_URL}/api/me/subscription`);
     await ensureOk(response, "Couldn't load your subscription");
     return response.json();
   },
@@ -665,26 +629,26 @@ export const api = {
   /** `projectId` adds that project's share of today, for the chat meter. */
   async getUsageToday(projectId?: string | number): Promise<UsageToday> {
     const query = projectId != null ? `?projectId=${encodeURIComponent(String(projectId))}` : "";
-    const response = await apiFetch(`${BASE_URL}/api/usage/today${query}`, { headers: { ...getAuthHeaders() } });
+    const response = await apiFetch(`${BASE_URL}/api/usage/today${query}`);
     await ensureOk(response, "Couldn't load your usage");
     return response.json();
   },
 
   async getUsageInsights(range: UsageRange): Promise<UsageInsights> {
-    const response = await apiFetch(`${BASE_URL}/api/usage/insights?range=${range}`, { headers: { ...getAuthHeaders() } });
+    const response = await apiFetch(`${BASE_URL}/api/usage/insights?range=${range}`);
     await ensureOk(response, "Couldn't load your usage insights");
     return response.json();
   },
 
   async getUsageEvents(page: number, size = 25): Promise<UsageEventPage> {
-    const response = await apiFetch(`${BASE_URL}/api/usage/events?page=${page}&size=${size}`, { headers: { ...getAuthHeaders() } });
+    const response = await apiFetch(`${BASE_URL}/api/usage/events?page=${page}&size=${size}`);
     await ensureOk(response, "Couldn't load your recent activity");
     return response.json();
   },
 
   /** The range's AI calls as CSV - a Blob, downloaded the same way a project ZIP is. */
   async exportUsageCsv(range: UsageRange): Promise<Blob> {
-    const response = await apiFetch(`${BASE_URL}/api/usage/events/export?range=${range}`, { headers: { ...getAuthHeaders() } });
+    const response = await apiFetch(`${BASE_URL}/api/usage/events/export?range=${range}`);
     await ensureOk(response, "Couldn't export your usage");
     return response.blob();
   },
@@ -693,7 +657,7 @@ export const api = {
   async createCheckout(planId: number): Promise<string> {
     const response = await apiFetch(`${BASE_URL}/api/payments/checkout`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ planId }),
     });
     await ensureOk(response, "Couldn't start checkout");
@@ -704,7 +668,6 @@ export const api = {
   async openBillingPortal(): Promise<string> {
     const response = await apiFetch(`${BASE_URL}/api/payments/portal`, {
       method: "POST",
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Couldn't open the billing portal");
     return (await response.json()).portalUrl;
@@ -717,7 +680,7 @@ export const api = {
   async changePlan(planId: number): Promise<Subscription> {
     const response = await apiFetch(`${BASE_URL}/api/payments/change-plan`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ planId }),
     });
     await ensureOk(response, "Couldn't change your plan");
@@ -731,7 +694,7 @@ export const api = {
   async confirmCheckout(sessionId: string): Promise<Subscription> {
     const response = await apiFetch(`${BASE_URL}/api/payments/confirm`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId }),
     });
     await ensureOk(response, "Couldn't confirm your payment");
@@ -747,7 +710,6 @@ export const api = {
   /** The caller's saved thread for this project, oldest first. */
   async getCodeNotes(projectId: string): Promise<CodeNote[]> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/notes`, {
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Couldn't load your ExplainLLM notes");
     return response.json();
@@ -760,7 +722,7 @@ export const api = {
   ): Promise<CodeNote> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/notes`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...note, selection: note.selection ?? null }),
     });
     await ensureOk(response, "Couldn't save this note");
@@ -771,7 +733,6 @@ export const api = {
   async deleteCodeNote(projectId: string, noteId: number): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/notes/${noteId}`, {
       method: "DELETE",
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Couldn't delete this note");
   },
@@ -780,7 +741,6 @@ export const api = {
   async clearCodeNotes(projectId: string): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/notes`, {
       method: "DELETE",
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Couldn't clear these notes");
   },
@@ -789,7 +749,7 @@ export const api = {
   async searchCode(projectId: string, query: string, signal?: AbortSignal): Promise<CodeSearchResponse> {
     const response = await apiFetch(
       `${BASE_URL}/api/projects/${projectId}/files/search?q=${encodeURIComponent(query)}`,
-      { headers: { ...getAuthHeaders() }, signal }
+      { signal }
     );
     await ensureOk(response, "Couldn't search this project");
     return response.json();
@@ -799,7 +759,7 @@ export const api = {
   async explainCode(projectId: string, selection: CodeSelection): Promise<string> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/explain`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(selection),
     });
     await ensureOk(response, "Couldn't explain this code");
@@ -819,7 +779,7 @@ export const api = {
   ): Promise<string> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/ask`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...selection, question, history }),
     });
     await ensureOk(response, "Couldn't answer that question");
@@ -829,7 +789,6 @@ export const api = {
 
   async getProjectMembers(projectId: string): Promise<ProjectMember[]> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/members`, {
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Failed to fetch project members");
     return response.json();
@@ -838,7 +797,7 @@ export const api = {
   async inviteMember(projectId: string, username: string, role: ProjectRole): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/members`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, role }),
     });
     await ensureOk(response, "Failed to invite member");
@@ -847,7 +806,7 @@ export const api = {
   async updateMemberRole(projectId: string, userId: number, role: ProjectRole): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/members/${userId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role }),
     });
     await ensureOk(response, "Failed to update member role");
@@ -856,14 +815,12 @@ export const api = {
   async removeMember(projectId: string, userId: number): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/members/${userId}`, {
       method: "DELETE",
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Failed to remove member");
   },
 
   async getChatHistory(projectId: string): Promise<ChatMessage[]> {
     const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}`, {
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Failed to fetch chat history");
     return response.json();
@@ -875,7 +832,6 @@ export const api = {
    */
   async getLastTurnChanges(projectId: string): Promise<{ files: { path: string; previousContent: string }[] }> {
     const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/last-turn-changes`, {
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Couldn't load the last changes");
     return response.json();
@@ -884,7 +840,6 @@ export const api = {
   /** The caller's response still being generated for this project, or null. Survives a page refresh - it runs server-side. */
   async getActiveGeneration(projectId: string): Promise<ActiveGeneration | null> {
     const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/active`, {
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Couldn't check for a response in progress");
     return response.status === 204 ? null : response.json();
@@ -894,7 +849,6 @@ export const api = {
   async stopGeneration(projectId: string): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/active/stop`, {
       method: "POST",
-      headers: { ...getAuthHeaders() },
     });
     await ensureOk(response, "Couldn't stop the response");
   },
@@ -914,7 +868,7 @@ export const api = {
     const controller = new AbortController();
     const request = apiFetch(`${BASE_URL}/api/chat/stream`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, projectId, teachingMode: options.teachingMode === true }),
       signal: controller.signal,
     });
@@ -937,7 +891,6 @@ export const api = {
   ) {
     const controller = new AbortController();
     const request = apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/active/stream`, {
-      headers: { ...getAuthHeaders() },
       signal: controller.signal,
     });
     consumeChatStream(request, { onChunk, onFile, onComplete, onError, onGone });

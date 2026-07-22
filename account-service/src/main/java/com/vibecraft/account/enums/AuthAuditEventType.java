@@ -9,17 +9,7 @@ public enum AuthAuditEventType {
     SIGN_OUT_EVERYWHERE,
     MFA_ENROLLED,
     MFA_REMOVED,
-    PASSWORD_CHANGED,
-
-    /**
-     * Historical only, as of the legacy-auth removal - nothing writes these anymore (the legacy Bearer
-     * signup/login/password-reset endpoints are gone). Kept so any pre-existing {@code auth_audit_events}
-     * row with these values still deserializes instead of throwing on read.
-     */
-    LEGACY_SIGN_UP,
-    LEGACY_SIGN_IN,
-    LEGACY_PASSWORD_RESET_REQUESTED,
-    LEGACY_PASSWORD_RESET_COMPLETED;
+    PASSWORD_CHANGED;
 
     /** The events a signed-in client may report about changes it made directly with Firebase. */
     public boolean isClientReportable() {

@@ -57,10 +57,6 @@ const EVENT_LABELS: Record<AuthSecurityEventType, string> = {
     MFA_ENROLLED: "Two-step verification turned on",
     MFA_REMOVED: "Two-step verification turned off",
     PASSWORD_CHANGED: "Password changed",
-    LEGACY_SIGN_UP: "Account created",
-    LEGACY_SIGN_IN: "Signed in",
-    LEGACY_PASSWORD_RESET_REQUESTED: "Password reset requested",
-    LEGACY_PASSWORD_RESET_COMPLETED: "Password reset",
 };
 
 /** "Chrome on Windows" rather than a 200-character user agent. Rough on purpose - it's a hint, not an identity. */

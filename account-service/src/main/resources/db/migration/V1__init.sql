@@ -1,7 +1,6 @@
 -- Baseline schema for account-service, matching the entities in com.vibecraft.account.entity exactly.
--- Flyway-managed from day one (see the migration plan's decision to introduce it here rather than carry
--- ddl-auto: update's persisted-enum trap into a fresh database) — validate against this in the same change
--- if you add or change a field, rather than letting Hibernate widen anything silently.
+-- Flyway owns this schema (ddl-auto: validate): change it with a new V<n> migration, never by editing this file
+-- once it has been applied anywhere - see docs/schema/conventions.md, "Changing the schema".
 
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
@@ -46,15 +45,6 @@ CREATE TABLE subscriptions (
     cancel_at_period_end BOOLEAN,
     created_at TIMESTAMP,
     updated_at TIMESTAMP
-);
-
-CREATE TABLE password_reset_tokens (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL REFERENCES users (id),
-    token_hash VARCHAR(64) NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP,
-    CONSTRAINT uk_password_reset_tokens_token_hash UNIQUE (token_hash)
 );
 
 CREATE TABLE auth_audit_events (
