@@ -5,16 +5,16 @@ services:
     image: pgvector/pgvector:0.8.1-pg18-trixie
     container_name: pgvector-vibecraft
     environment:
-      POSTGRES_DB: vibecraft-db
+      # The server's own maintenance database. Each service's database is created by the init script below.
+      POSTGRES_DB: postgres
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
     ports:
       - "9010:5432"
     volumes:
       - pgvector-data:/var/lib/postgresql
-      # Creates each microservice's own database on first-ever container init - see the file's own comment.
-      # Only runs against a brand-new data volume; an existing one (like this project's) needs the one-time
-      # `CREATE DATABASE` run by hand instead - see docs/local-development/.
+      # Creates each service's own database on first-ever container init - see the file's own comment. Only
+      # runs against a brand-new data volume; docs/local-development/, "Resetting local data", has the steps.
       - ./infra/postgres-init:/docker-entrypoint-initdb.d
     restart: unless-stopped
 
@@ -30,15 +30,6 @@ services:
       - "9001:9001"    # Console
     volumes:
       - minio-data:/data
-    restart: unless-stopped
-
-  # Catches every email the app sends in local dev (password resets) - SMTP on 1025, inbox UI on 8025.
-  mailpit:
-    image: axllent/mailpit:latest
-    container_name: mailpit-vibecraft
-    ports:
-      - "1025:1025"    # SMTP
-      - "8025:8025"    # Web inbox
     restart: unless-stopped
 
 volumes:
