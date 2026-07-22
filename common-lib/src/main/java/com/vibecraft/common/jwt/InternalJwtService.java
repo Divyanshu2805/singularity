@@ -10,9 +10,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 /**
- * Issues and verifies the short-lived internal JWT that carries caller identity between vibecraft
- * services, mirroring {@code AuthUtil}'s legacy-Bearer HMAC scheme in legacy-monolith so the mechanics are
- * already familiar. gateway-service is the only issuer; every other service only ever verifies.
+ * Issues and verifies a short-lived internal JWT that can carry caller identity between vibecraft services
+ * (HMAC-signed). <b>No live request path uses it today</b>: gateway-service issues nothing, and calls between
+ * services authenticate with the shared secret ({@link InternalServiceAuthFilter}), not with a token. It is kept
+ * as the plumbing a gateway-issued identity would need; {@code FeignClientInterceptor} still forwards a Bearer
+ * token if one happens to be on the current request.
  */
 public class InternalJwtService {
 

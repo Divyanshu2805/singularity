@@ -1,10 +1,12 @@
 # Running the Backend Test Suite
 
 ```bash
-./mvnw test -Dtest=IdeaServiceImplTest,LlmResponseParserTest,PromptUtilsTest,CodeSearchScannerTest,MoneyFormatTest,UsageInsightsAssemblerTest,ActiveGenerationTest,CodeInsightPromptsTest,NarrationFilterTest,DurationFormatTest,UsageInsightsServiceImplTest,PreviewPlumbingTest,PreviewReaperTest
+./mvnw test                                      # every module (113 tests: common-lib 14, gateway 60, account 9, workspace 24, intelligence 6)
+./mvnw -pl common-lib,workspace-service test     # one service, as a reactor with common-lib (see the shared ~/.m2 jar problem below)
+./mvnw -pl <module> test -Dtest=ClassName        # one test class
 ```
 
-**A bare `./mvnw test` does not currently pass on a Windows machine reporting the legacy `Asia/Calcutta` timezone alias** — see [Common Problems](troubleshooting.md#common-problems) below. Run the named test classes instead of the whole suite. All 127 backend tests are plain JUnit with no Spring context, so none of them need a running database.
+The service tests are plain JUnit with no Spring context, so none of them need a running database, cluster or Docker — and the Windows timezone problem below can't affect them. The Gateway's `RoutingTableTest` is the one `@SpringBootTest`, and it needs no database (Eureka is switched off for it). If you add a test that starts a Spring context against Postgres, read the first row of [Common Problems](troubleshooting.md#common-problems) first.
 
 ```bash
 cd frontend

@@ -1,4 +1,4 @@
-# Phase 4 — Cutover (traffic now runs through the three services; `legacy-monolith` kept as rollback)
+# Phase 4 — Cutover (traffic now runs through the three services; `legacy-monolith` was kept as rollback until it was removed on 2026-08-11)
 
 No domain code moved in this phase. Three things changed: the Gateway's route table, the data, and the tests that pin the routing.
 
@@ -16,13 +16,13 @@ No domain code moved in this phase. Three things changed: the Gateway's route ta
 | 20 | `intelligence` | `/api/chat/**`, `/api/ideas/**`, `/api/usage/**` | `lb://intelligence-service` |
 | 30 | `workspace` | `/api/projects/**`, `/api/previews/**` | `lb://workspace-service` |
 | 40 | `account` | `/api/auth/**`, `/api/plans/**`, `/api/me/**`, `/api/payments/**`, `/webhooks/payment` | `lb://account-service` |
-| 100 | `legacy-monolith-fallback` | `/**` | `http://localhost:8080` |
+| 100 | `legacy-monolith-fallback` *(removed 2026-08-11)* | `/**` | `http://localhost:8080` |
 
-Targets are `${routing.<domain>.uri}` (env `ACCOUNT_ROUTE_URI` / `WORKSPACE_ROUTE_URI` / `INTELLIGENCE_ROUTE_URI` / `LEGACY_MONOLITH_URI`). `/internal/**` matches only the fallback, so the services' machine-to-machine endpoints are never reachable from the browser's origin.
+Targets are `${routing.<domain>.uri}` (env `ACCOUNT_ROUTE_URI` / `WORKSPACE_ROUTE_URI` / `INTELLIGENCE_ROUTE_URI` / `LEGACY_MONOLITH_URI`). `/internal/**` matched only the fallback (and, since the fallback was removed, matches nothing), so the services' machine-to-machine endpoints are never reachable from the browser's origin.
 
-**2. Rollback profile** (`application-legacy-routing.yaml`) repoints all three domain routes at `legacy-monolith` at once. See "Rolling back".
+**2. Rollback profile** (`application-legacy-routing.yaml`, *removed 2026-08-11*) repointed all three domain routes at `legacy-monolith` at once. See "Rolling back".
 
-**3. Tests** (`gateway-service/src/test/.../`, the first tests in that module). `RoutingTableTest` and `LegacyRoutingProfileTest` boot the real Gateway context (Eureka off, no DB, no server) and evaluate the actual `RouteLocator` against every distinct URL the 62 controller mappings expose (51 paths, checked mechanically against the legacy controllers), plus the boundary cases (`/api/projects/7/codex` is *not* code-insight; `/api/projects-archive` is not `/api/projects`; `/internal/**` never reaches a service). 120 assertions, run under both the default and rollback profiles. **Mutation-checked**: moving the code-insight route behind the workspace route fails 8 of them. Run: `./mvnw.cmd -pl gateway-service test -Dtest='RoutingTableTest,LegacyRoutingProfileTest'`.
+**3. Tests** (`gateway-service/src/test/.../`, the first tests in that module). `RoutingTableTest` and `LegacyRoutingProfileTest` boot the real Gateway context (Eureka off, no DB, no server) and evaluate the actual `RouteLocator` against every distinct URL the 62 controller mappings expose (51 paths, checked mechanically against the legacy controllers), plus the boundary cases (`/api/projects/7/codex` is *not* code-insight; `/api/projects-archive` is not `/api/projects`; `/internal/**` never reaches a service). 120 assertions, run under both the default and rollback profiles. **Mutation-checked**: moving the code-insight route behind the workspace route fails 8 of them. Run: `./mvnw.cmd -pl gateway-service test -Dtest='RoutingTableTest,LegacyRoutingProfileTest'`. *(After the removal `LegacyRoutingProfileTest` is gone and `RoutingTableTest` is a single class — 60 checks — that also asserts there are exactly four routes and that the unowned paths match none: `./mvnw.cmd -pl gateway-service test -Dtest=RoutingTableTest`.)*
 
 **4. Data migration** (`infra/data-migration/legacy-to-services.sh`). Copies every legacy table into its service's database, one transaction per database. **Dry-run by default (rolls back); `--execute` commits.** Legacy is only ever read.
 
@@ -61,6 +61,8 @@ The migration also wiped what the services had accumulated while being verified 
 **Do not re-run `--execute` after the new services have taken real writes** — it truncates them. That is the reason for the dry-run default.
 
 ## Rolling back
+
+> **Retired 2026-08-11.** The module, the fallback route, the `legacy-routing` profile and `LEGACY_MONOLITH_URI` were removed in one commit (see "Removing the monolith" below), so this is now history plus a recipe: reverting that commit brings all of it back, and the caveats below about data written after the cutover apply in full — more so the longer the new stack has run.
 
 > **Exercised live (2026-08-11)** — it had only been unit-tested before. With `legacy-monolith` started on a side port and the Gateway restarted with `--spring.profiles.active=legacy-routing`: `/api/plans` came back **byte-identical** to the monolith answering directly, a monolith-only path (`/v3/api-docs`) now reached it instead of the off fallback's 5xx, and **an existing signed-in Firebase session worked unchanged** — `/api/auth/me`, the same 4 projects, Business/ACTIVE, and project 126's 19 files, no re-login. **Caveat found doing it:** the monolith knows nothing written after the cutover. Besides the data, that includes **sign-outs**: single-session revocations live in `revoked_sessions`, so a session signed out on the new stack *after* the cutover is not revoked in legacy's copy and would be accepted again until its cookie expires (a sign-out-everywhere is different — Firebase revokes it, so it stays revoked). Fine for a pre-launch rollback within hours; worth knowing before relying on one.
 
@@ -157,16 +159,41 @@ Sign-out-everywhere and a true revoked-cookie replay (the cookie is `httpOnly`, 
 
 ## Known fragile points
 
-- **Route order is load-bearing.** `/api/projects/{id}/code/**` (intelligence) sits under `/api/projects/**` (workspace); it only works because it has the lower `order`. `RoutingTableTest` pins this — when a controller gains or loses an endpoint, its path table changes in the same commit, or the new path silently falls through to the (off) fallback and shows up as a 5xx.
+- **Route order is load-bearing.** `/api/projects/{id}/code/**` (intelligence) sits under `/api/projects/**` (workspace); it only works because it has the lower `order`. `RoutingTableTest` pins this — when a controller gains or loses an endpoint, its path table changes in the same commit, or the new path matches no route and is a 404 from the Gateway.
 - **Cross-service calls authenticate with the shared secret, added by `FeignClientInterceptor` only for `/internal/**` paths.** Don't put `@FeignClient(path = "...")` on an internal client: interceptors run before that prefix is applied, so the path check misses it and every call is a 401. New internal endpoints need no extra wiring, but they must live under `/internal/`.
 - **Testing an internal endpoint with `curl` and the secret proves the callee, not the calling service.** That is precisely how the Feign bug above survived three phases. Exercise a cross-service path through a real (or bogus-cookie) request to the *calling* service.
 - **The file-read guards live on `FileController`, not on `ProjectFileService`.** The service is shared with `InternalWorkspaceController`, which calls it as a machine principal, so a user-permission `@PreAuthorize` there breaks every AI file read and write. The flip side: a new browser endpoint that reaches an *unguarded* service method is open to every signed-in user, silently. `FileReadAuthorizationTest` covers the four file reads; a new one needs the same treatment.
-- **Partial cutover is unsafe.** Don't point one domain back at legacy on its own (the per-domain `*_ROUTE_URI` env vars allow it): the two sides hold different data.
+- **The per-domain `ACCOUNT_ROUTE_URI` / `WORKSPACE_ROUTE_URI` / `INTELLIGENCE_ROUTE_URI` env vars remain** (defaults `lb://<service>`) — useful for pointing the Gateway at a service on a fixed address without Eureka. There is no longer a monolith to point them at; if one is ever restored from history, a partial flip is unsafe (the two sides hold different data).
 - **`setval` is non-transactional**, so a dry-run deliberately skips it; a real run that fails after the sequence step would leave sequences advanced while the data rolled back (harmless — ids only skip — but worth knowing).
 - **The Stripe CLI forward target changed** from `:8080` to the Gateway (`:8000`); `.env.example` was updated. A stale forward to `:8080` now hits nothing.
 - **The preview tool caps a worktree at 5 servers.** The backend needs 5 (discovery, account, workspace, intelligence, gateway); the frontend (`npm run dev`) has to run from your own terminal.
 
+## Removing the monolith (2026-08-11)
+
+Done as one commit, separate from the docs rewrite, so that reverting it alone restores the fallback. **Deleted:** `legacy-monolith/` (240 tracked files) and its module entry in the root `pom.xml`; the Gateway's `legacy-monolith-fallback` route, `routing.legacy-monolith.uri` / `LEGACY_MONOLITH_URI`, `application-legacy-routing.yaml` and `LegacyRoutingProfileTest` (`AbstractRouteTableTest` was folded into a single `RoutingTableTest`); the `legacy-monolith` entry in `.claude/launch.json`; and every doc and comment that described it as running or as the rollback target. Two pom comments pointed at its `pom.xml` for their rationale (why Firebase's Firestore/Cloud Storage dependencies must not be excluded; the okhttp pin) — the Firebase reasoning was carried into `account-service/pom.xml`, the okhttp one is in `docs/local-development/`.
+
+**Deliberately kept:**
+- **The old database, `vibecraft-db`, in Postgres.** The migration never modified it and nothing connects to it now. Dropping a database is irreversible, so that is a separate decision.
+- **`infra/data-migration/legacy-to-services.sh`** — the record of how the data moved. It only makes sense against the untouched `vibecraft-db`, and `--execute` truncates the service databases.
+- **`workspace-service`'s `V1__init.sql`, including a comment that names the monolith.** Flyway checksums an applied migration file, comments included, so editing it would stop every existing database from starting.
+- Historical mentions in comments ("ported from the monolith", "was ungated in the original monolith too") and in this file.
+
+**Behaviour change:** a path no service owns is now a **404 from the Gateway** — it used to be a 500 (a connection-refused to the switched-off fallback). Verified live on a restarted Gateway: `/nope`, `/`, `/internal/v1/users/1` and `/internal/v1/sessions/revoked` all 404, while every real route answers from its own service exactly as before (public 200/204, protected 401), directly and through the Vite proxy; the dashboard's requests all 200. `RoutingTableTest` now asserts there are exactly four routes and no catch-all.
+
+**Side effect:** a bare `./mvnw test` passes (113 tests: common-lib 14, gateway 60, account 9, workspace 24, intelligence 6). It had been documented as failing because of the monolith's Spring-context tests on Windows; the services' tests are plain JUnit, and the Gateway's needs no database.
+
+**To get it back:** `git log --diff-filter=D -1 --format=%h -- legacy-monolith/pom.xml` prints the removing commit; `git revert` it (or check out its parent) to restore the module, the route, the profile and the test. Remember the caveat under "Rolling back": the restored monolith knows nothing written to the new databases since the cutover.
+
 ## What's left
 
-1. Once you've used the new stack for a while: delete `legacy-monolith/`, the `legacy-monolith-fallback` route, the `legacy-routing` profile (and `LegacyRoutingProfileTest`), and `LEGACY_MONOLITH_URI` — a separate commit, so reverting it alone restores the fallback.
-2. ~~Phase 5: rewrite `docs/architecture/` / `docs/schema/` / `docs/api/` for the service split.~~ Done 2026-08-11. Checking the old docs against the code turned up things they had wrong or missing, all corrected: `POST /api/auth/security-events` (the doc said `report-security-event`); three chat endpoints the API doc never listed (`last-turn-changes`, `active`, `active/stream`); `POST /api/projects/from-prompt` uses a local heuristic, not a billed AI call; `POST /api/auth/session` and `/logout` *do* need the CSRF header (the doc said they were exempt); `ChatEventType.FILE_DELETE` and `chat_events.previous_content` were missing from the data model, and `CODE_NOTE` was described with relations where the columns are plain ids. Several code comments also still said an internal endpoint was "not yet called by anything" or that a service "doesn't exist yet"; those are fixed (comments only).
+The migration itself is finished. What remains are follow-ups, none of which blocks anything and none of which is scheduled:
+
+1. Drop the old `vibecraft-db` (and delete `legacy-to-services.sh`) once there is no chance of wanting to re-read it.
+2. `GET /api/usage/today`'s `previewsRunning` is always `0`: the count is workspace-service's and there is no internal endpoint to ask for it.
+3. The CORS origin allowlist exists only in account-service; the right home is one `spring.cloud.gateway.globalcors` rule.
+4. Per-service in-process state (session cache, rate limiter, generation registry, the preview lock) is correct for one instance of each and wrong past that.
+5. `POST /internal/v1/project-names` is unused (`from-prompt` uses the local heuristic); decide which naming is wanted.
+6. Leftovers nothing uses: the orphaned `password_reset_tokens` table in account's database, `common-lib`'s internal-JWT issue/verify code, and the Mailpit container in `services.docker-compose.yml`.
+7. A stopped generation is discarded and never billed — a product decision, not a migration one.
+
+Done: ~~delete `legacy-monolith`~~ (2026-08-11, above); ~~Phase 5: rewrite `docs/architecture/` / `docs/schema/` / `docs/api/` for the service split~~ (2026-08-11). Checking the old docs against the code turned up things they had wrong or missing, all corrected: `POST /api/auth/security-events` (the doc said `report-security-event`); three chat endpoints the API doc never listed (`last-turn-changes`, `active`, `active/stream`); `POST /api/projects/from-prompt` uses a local heuristic, not a billed AI call; `POST /api/auth/session` and `/logout` *do* need the CSRF header (the doc said they were exempt); `ChatEventType.FILE_DELETE` and `chat_events.previous_content` were missing from the data model, and `CODE_NOTE` was described with relations where the columns are plain ids. Several code comments also still said an internal endpoint was "not yet called by anything" or that a service "doesn't exist yet"; those are fixed (comments only).

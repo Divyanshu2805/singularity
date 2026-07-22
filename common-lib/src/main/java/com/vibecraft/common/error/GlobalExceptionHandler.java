@@ -25,10 +25,9 @@ import java.util.List;
 
 /**
  * One error shape ({@link ApiError}) for every service. Registered automatically via
- * {@code CommonLibAutoConfiguration} — a service doesn't need to import this itself. A faithful port of
- * legacy-monolith's own handler (same exception set, same status mapping) — kept in lockstep with it
- * rather than reinvented, since a divergent error taxonomy between services is exactly the kind of subtle
- * regression this migration's reliability strategy exists to avoid.
+ * {@code CommonLibAutoConfiguration} — a service doesn't need to import this itself. Every service shares this
+ * one handler on purpose: a divergent error taxonomy between services is exactly the kind of subtle regression
+ * that is hard to notice from the browser. Full table: docs/api/errors.md, "Error Taxonomy".
  */
 @Slf4j
 @RestControllerAdvice
@@ -217,9 +216,8 @@ public class GlobalExceptionHandler {
      * Unlike the generic upstream-failure handler above, this preserves the exception's own message - it's
      * specifically useful ("Every preview runner is busy right now. Try again in a minute."), not a generic
      * "temporarily unavailable" sentence - and tags it {@code CAPACITY_UNAVAILABLE} so a client can tell it from a
-     * failure with the same status. Previously had no handler anywhere in this codebase (confirmed against
-     * legacy-monolith's own GlobalExceptionHandler too), so it fell through to the generic 500 below - a
-     * pre-existing latent bug this migration surfaced rather than introduced.
+     * failure with the same status. It had no handler at all in the original monolith either, so it fell through
+     * to the generic 500 below - a pre-existing latent bug the migration surfaced rather than introduced.
      */
     @ExceptionHandler(CapacityUnavailableException.class)
     public ResponseEntity<ApiError> handleCapacityUnavailable(CapacityUnavailableException ex) {

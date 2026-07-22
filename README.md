@@ -111,7 +111,7 @@ npm run dev
 
 Frontend: http://localhost:5173 · Gateway (the browser's actual API origin): http://localhost:8000 · services directly: account `:8081`, workspace `:8082`, intelligence `:8083`
 
-The backend is a multi-module Maven reactor of three domain services behind a Gateway, migrated from the original monolith (`legacy-monolith/`, now switched off and kept only as a rollback target) — see [`docs/migration/`](docs/migration/README.md) for what moved where, and how to roll back. Full setup (including live previews, which need a Kubernetes cluster) and a troubleshooting table for known gotchas: [`docs/local-development/`](docs/local-development/README.md).
+The backend is a multi-module Maven reactor of three domain services behind a Gateway, migrated from the original monolith (since removed; it survives in git history) — see [`docs/migration/`](docs/migration/README.md) for what moved where and how the cutover went. Full setup (including live previews, which need a Kubernetes cluster) and a troubleshooting table for known gotchas: [`docs/local-development/`](docs/local-development/README.md).
 
 ## Environment Variables
 
@@ -122,36 +122,36 @@ The backend is a multi-module Maven reactor of three domain services behind a Ga
 | `OPENROUTER_API_KEY` | ✅ | Every AI call (generation, idea clarifier, code insight) |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | ✅ | Project file storage |
 | `STRIPE_SECRET` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_PRO` / `STRIPE_PRICE_BUSINESS` | for billing | Everything else works without these |
-| `INTERNAL_JWT_SECRET` / `INTERNAL_SERVICE_SHARED_SECRET` | ✅ (microservices) | Service-to-service auth — see `docs/migration/` |
+| `INTERNAL_JWT_SECRET` / `INTERNAL_SERVICE_SHARED_SECRET` | ✅ (microservices) | Service-to-service auth (the shared secret is the one on the live path) — see `docs/architecture/service-communication.md` §3 |
 
 Every backend value above is a bare placeholder in `application.yaml` with **no** committed fallback — a missing one fails startup rather than running insecurely. Full list with context: [`.env.example`](.env.example). The frontend has its own [`frontend/.env.example`](frontend/.env.example) (Firebase web config). Never commit real values for either.
 
 ## Project Structure
 
 ```
-common-lib/                            shared internal-JWT/Feign/error-handling code for the microservices split
+common-lib/                            shared error shape, internal-call plumbing and cross-service DTOs
 discovery-service/                     Eureka
-gateway-service/                       Spring Cloud Gateway — the browser's single origin
-account-service/                       Users/Plans/Subscriptions/billing — extracted, but not yet reachable
-                                        through Gateway (see docs/migration/ for why)
-legacy-monolith/src/main/java/com/java/vibecraft/    the original Spring Boot backend, still serving
-                                        every route the frontend actually uses — see docs/architecture/
+gateway-service/                       Spring Cloud Gateway — the browser's single origin (:8000)
+account-service/                       Users, plans, subscriptions, Stripe billing, sign-in sessions (:8081)
+workspace-service/                     Projects, members, files and the live-preview pipeline (:8082)
+intelligence-service/                  AI chat generation, code insight, idea clarifier, usage metering (:8083)
+infra/data-migration/                  one-off script that copied the old monolith's database into the services'
 frontend/                              React SPA
 k8s/                                   Kubernetes manifests for live previews
 proxy/                                 standalone Node reverse proxy (preview routing)
 docs/                                  architecture, data model, API reference, local dev setup, migration map
 ```
 
-Full per-module responsibilities and a "where do I change X" table: [`docs/architecture/`](docs/architecture/README.md). What's moved into a microservice so far, and why it isn't all live yet: [`docs/migration/`](docs/migration/README.md).
+Full per-module responsibilities and a "where do I change X" table: [`docs/architecture/`](docs/architecture/README.md). How the monolith was split into these services, and what was found afterwards: [`docs/migration/`](docs/migration/README.md).
 
 ## Testing
 
 ```bash
-./mvnw -pl legacy-monolith test -Dtest=IdeaServiceImplTest,LlmResponseParserTest,PromptUtilsTest    # backend — see docs/local-development/ for the full named list
-cd frontend && npm test                                                          # frontend — 282 tests
+./mvnw test                          # backend — every module's tests (113); needs no database or cluster
+cd frontend && npm test              # frontend — 282 tests
 ```
 
-A bare `./mvnw test` does not currently pass (a pre-existing Windows timezone issue, unrelated to code correctness) — see `docs/local-development/troubleshooting.md`'s troubleshooting table before assuming a red run means something's broken.
+The service tests are plain JUnit with no Spring context, deliberately — see `docs/local-development/troubleshooting.md`'s troubleshooting table for the Windows timezone problem a Spring-context test would hit. Neither the Kubernetes/Redis-backed live-preview pipeline nor Stripe billing has end-to-end automated coverage; both are verified by hand.
 
 ## Documentation Map
 

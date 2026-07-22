@@ -13,9 +13,9 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * Authenticates a downstream service's request using the internal JWT gateway-service attached. Not
- * auto-registered as a blanket servlet filter — like today's {@code SessionAuthFilter} in legacy-monolith,
- * each service's own Spring Security chain decides where to insert this (before
+ * Authenticates a service's request using an internal JWT (see {@link InternalJwtService} - nothing attaches one
+ * on a live request path today, and no service's security chain inserts this filter). Not auto-registered as a
+ * blanket servlet filter: each service's own Spring Security chain would decide where to insert it (before
  * {@code UsernamePasswordAuthenticationFilter}), since public routes (health checks, internal-service
  * endpoints authenticated a different way) shouldn't go through it at all.
  */

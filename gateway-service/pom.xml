@@ -14,10 +14,9 @@
 		The single origin the browser (and the frontend's Vite dev proxy) talks to. Reactive (WebFlux/Netty),
 		deliberately — a blocking gateway would buffer the two SSE streams (/api/chat/stream, /code/*/stream)
 		instead of forwarding them chunk by chunk. Transparent passthrough with no auth logic of its own:
-		every service runs its own Firebase/session/CSRF chain. Phase 4 routes each domain to its extracted
-		service (account/workspace/intelligence, via Eureka); the legacy-monolith route is now only the
-		fallback and the rollback target — see this module's routing config, and RoutingTableTest for the
-		exact path-to-service table.
+		every service runs its own Firebase/session/CSRF chain. Routes each domain to its service
+		(account/workspace/intelligence, via Eureka) — see this module's routing config, and RoutingTableTest
+		for the exact path-to-service table.
 	</description>
 
 	<dependencies>

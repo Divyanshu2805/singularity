@@ -2,7 +2,7 @@
 
 | Command | Purpose |
 |---|---|
-| `./mvnw -pl <module> spring-boot:run` | Run one service (`legacy-monolith`, `gateway-service`, `discovery-service`) — goes through `main()`, unlike `test`, so it's the way to verify a change actually boots. Reactor-wide, so always target a module explicitly; a bare `./mvnw spring-boot:run` at the root fails since the parent POM has no main class |
+| `./mvnw -pl <module> spring-boot:run` | Run one service (`discovery-service`, `gateway-service`, `account-service`, `workspace-service`, `intelligence-service`) — goes through `main()`, unlike `test`, so it's the way to verify a change actually boots. Reactor-wide, so always target a module explicitly; a bare `./mvnw spring-boot:run` at the root fails since the parent POM has no main class |
 | `./mvnw clean package` | Build every module's jar |
 | `./mvnw -pl <module> test -Dtest=ClassName#methodName` | Run one test method in one module |
 | `npm run build` | Frontend production build |

@@ -11,14 +11,12 @@
 	<artifactId>workspace-service</artifactId>
 	<name>workspace-service</name>
 	<description>
-		Project/ProjectMember/ProjectFile/Preview/PreviewSession and the K8s/MinIO/Redis live-preview pipeline —
-		extracted from legacy-monolith's equivalent domain. Its own Postgres database, its own Flyway history
-		(replacing ddl-auto: update). Keeps a full copy of the Firebase/session-cookie/CSRF/rate-limit security
-		chain rather than delegating it to gateway-service yet — see WebSecurityConfig's javadoc and
-		docs/migration/ for why. Calls account-service via Feign (the first real Feign consumer in this
-		codebase) for anything User/Plan-shaped, since it owns neither. NOT yet receiving real traffic:
-		legacy-monolith still serves every Workspace-owned route until Gateway's routing toggle flips — see
-		docs/migration/phase-2-workspace-service.md's Phase 2 entry.
+		Project/ProjectMember/ProjectFile/Preview/PreviewSession and the K8s/MinIO/Redis live-preview pipeline.
+		Its own Postgres database, its own Flyway history. Keeps its own copy of the Firebase/session-cookie/
+		CSRF/rate-limit security chain rather than delegating it to gateway-service — see WebSecurityConfig's
+		javadoc and docs/migration/ for why. Calls account-service via Feign for anything User/Plan-shaped,
+		since it owns neither, and exposes /internal/v1/** to intelligence-service (membership, project
+		summaries, file reads and writes).
 	</description>
 
 	<dependencies>
@@ -102,7 +100,7 @@
 			<version>8.6.0</version>
 		</dependency>
 		<!-- Pinned explicitly - io.minio:minio otherwise resolves a Gradle-metadata-only okhttp:5.1.0 transitively
-		     (documented gotcha, docs/local-development/), same as legacy-monolith's own pom.xml. -->
+		     (documented gotcha, docs/local-development/). -->
 		<dependency>
 			<groupId>com.squareup.okhttp3</groupId>
 			<artifactId>okhttp</artifactId>

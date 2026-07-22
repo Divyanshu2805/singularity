@@ -5,8 +5,8 @@ spring:
     name: intelligence-service
 
   datasource:
-    # A separate logical database on the same local Postgres server the other services already use — no
-    # shared tables/FKs with legacy-monolith's, account-service's, or workspace-service's own databases.
+    # A separate logical database on the same local Postgres server the other services use — no shared
+    # tables/FKs with account-service's or workspace-service's databases.
     url: jdbc:postgresql://localhost:9010/vibecraft-intelligence-db
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}

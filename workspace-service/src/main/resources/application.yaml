@@ -5,8 +5,8 @@ spring:
     name: workspace-service
 
   datasource:
-    # A separate logical database on the same local Postgres server account-service already uses — no shared
-    # tables/FKs with legacy-monolith's own vibecraft-db, or with account-service's vibecraft-account-db.
+    # A separate logical database on the same local Postgres server the other services use — no tables/FKs
+    # shared with account-service's vibecraft-account-db or intelligence-service's database.
     url: jdbc:postgresql://localhost:9010/vibecraft-workspace-db
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
@@ -56,8 +56,8 @@ minio:
   secret-key: ${MINIO_SECRET_KEY}
   project-bucket: projects
 
-# Same namespace/Redis/MinIO target legacy-monolith already uses - both can safely run against them
-# simultaneously during the soak period (PreviewRouter's Redis keys are per-hostname, not per-service).
+# The kind namespace, Redis and MinIO bucket the live-preview pipeline runs against (PreviewRouter's Redis keys
+# are per-hostname).
 preview:
   namespace: vibecraft-ai
   public-scheme: http
@@ -70,9 +70,9 @@ preview:
   boot-timeout: 2m
   route-ttl: 90s
   port-forward:
-    # Only one process should hold the local port-forwards into the kind cluster's Redis/proxy pods at a time -
-    # leave this to legacy-monolith's own PreviewPortForwarder (or the standalone k8s/dev-port-forward scripts)
-    # while both services run side by side.
+    # Only one process should hold the local port-forwards into the kind cluster's Redis/proxy pods at a time.
+    # Off by default: the standalone k8s/dev-port-forward scripts hold them (docs/local-development/). Set
+    # true to have this service's PreviewPortForwarder open them itself instead - never both.
     enabled: false
 
 client.url: http://localhost:5173

@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Note: {@code projectsOwned}/{@code canCreateNewProject} that legacy-monolith's copy of this interface has
+ * Note: {@code projectsOwned}/{@code canCreateNewProject}, which this interface had in the original monolith,
  * are deliberately NOT here. Counting owned projects is workspace-service's job (it owns {@code ProjectMember});
  * this service only ever answers "what does this user's plan allow" — {@link #projectAllowance} — and lets the
  * caller do its own counting and comparison. See docs/migration/ for why the boundary was redrawn here

@@ -5,8 +5,8 @@ spring:
     name: account-service
 
   datasource:
-    # A separate logical database on the same local Postgres server — see the migration plan's "fully
-    # separate database per service" decision. No shared tables/FKs with legacy-monolith's own vibecraft-db.
+    # A separate logical database on the same local Postgres server — every service owns its own database
+    # (docs/schema/). No tables/FKs shared with the other services' databases.
     url: jdbc:postgresql://localhost:9010/vibecraft-account-db
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}

@@ -5,7 +5,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
-/** Renamed from legacy-monolith's PaymentConfig as part of this service's self-explanatory-naming pass. */
+/** Stripe SDK configuration (formerly {@code PaymentConfig} in the original monolith). */
 @Configuration
 public class StripeConfig {
 

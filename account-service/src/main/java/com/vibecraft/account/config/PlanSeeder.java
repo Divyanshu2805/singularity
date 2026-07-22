@@ -15,7 +15,9 @@ import java.util.Optional;
 
 /**
  * Puts the plan catalogue in the database at startup, and keeps it there. Upsert keyed on the Stripe price
- * id - see legacy-monolith's original for the full rationale, ported here unchanged.
+ * id (Free, which has none, on its name), so a restart never duplicates a plan. Free's limits come from the same
+ * {@code SubscriptionService.FREE_TIER_*} constants that gate a user with no subscription, so the seeded row and
+ * enforcement can't disagree.
  */
 @Component
 @RequiredArgsConstructor

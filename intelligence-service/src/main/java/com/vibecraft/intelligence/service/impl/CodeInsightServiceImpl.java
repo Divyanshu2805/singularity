@@ -76,7 +76,7 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public CodeInsightResponse explain(Long projectId, ExplainCodeRequest request) {
-        // Same daily allowance as the streamed variant below. This one was ungated (in legacy-monolith too), so a
+        // Same daily allowance as the streamed variant below. This one was ungated (in the original monolith too), so a
         // caller over the limit could keep spending tokens by using the non-streaming endpoint instead.
         usageService.assertWithinDailyTokenBudget();
         String answer = callModel(

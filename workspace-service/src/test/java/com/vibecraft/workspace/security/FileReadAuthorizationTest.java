@@ -36,7 +36,7 @@ import static org.mockito.Mockito.when;
 /**
  * The gap found live after the Phase 4 cutover: {@code GET /api/projects/{id}/files} and {@code .../files/content}
  * carried no {@code @PreAuthorize}, so any signed-in user could read any project's files - while download-zip and
- * {@code GET /api/projects/{id}}, which were guarded, correctly 403'd. Inherited unchanged from legacy-monolith.
+ * {@code GET /api/projects/{id}}, which were guarded, correctly 403'd. Inherited unchanged from the original monolith.
  *
  * <p>These evaluate the real annotations through Spring Security's own {@link PreAuthorizeAuthorizationManager}
  * against the real {@link SecurityExpressions}, so they fail on a missing annotation and also on a {@code #projectId}

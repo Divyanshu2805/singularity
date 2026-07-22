@@ -8,21 +8,18 @@ spring:
     gateway:
       server:
         webflux:
-          # Phase 4: the browser's traffic goes to the three extracted services, resolved through Eureka
-          # (lb://). Still a transparent passthrough - no path rewriting, no header/cookie manipulation, no
-          # auth logic here; every service runs its own full Firebase/session/CSRF chain.
+          # The browser's traffic goes to the three domain services, resolved through Eureka (lb://). A
+          # transparent passthrough - no path rewriting, no header/cookie manipulation, no auth logic here;
+          # every service runs its own full Firebase/session/CSRF chain.
           #
           # ORDER MATTERS (lower `order` wins): /api/projects/{id}/code/** belongs to intelligence-service but
           # sits under /api/projects/**, which belongs to workspace-service - so the more specific route has
           # to be evaluated first. RoutingTableTest pins this for every endpoint; run it after touching this
           # table.
           #
-          # The three domains cut over TOGETHER, never one at a time: legacy-monolith's tables are joined in
-          # one DB, so a partial flip leaves the two sides disagreeing about users/plans/projects. That is why
-          # rollback is one profile (application-legacy-routing.yaml) rather than three independent toggles.
-          #
-          # /internal/** matches none of the domain routes - only the fallback - so the services' machine-to-
-          # machine endpoints are never reachable from the browser's origin.
+          # There is deliberately no catch-all route. /internal/** matches none of these, so the services'
+          # machine-to-machine endpoints are never reachable from the browser's origin, and any other path
+          # nothing owns is a 404 from the Gateway itself.
           routes:
             - id: intelligence-code-insight
               uri: ${routing.intelligence.uri}
@@ -48,15 +45,6 @@ spring:
               predicates:
                 - Path=/api/auth/**,/api/plans/**,/api/me/**,/api/payments/**,/webhooks/payment
 
-            # Anything not owned by a domain above. legacy-monolith is switched off after the cutover, so this
-            # only ever answers 5xx for unknown paths - it stays as the last leg of the rollback path until
-            # legacy-monolith itself is deleted (a later, separate step).
-            - id: legacy-monolith-fallback
-              uri: ${routing.legacy-monolith.uri}
-              order: 100
-              predicates:
-                - Path=/**
-
 routing:
   account:
     uri: ${ACCOUNT_ROUTE_URI:lb://account-service}
@@ -64,8 +52,6 @@ routing:
     uri: ${WORKSPACE_ROUTE_URI:lb://workspace-service}
   intelligence:
     uri: ${INTELLIGENCE_ROUTE_URI:lb://intelligence-service}
-  legacy-monolith:
-    uri: ${LEGACY_MONOLITH_URI:http://localhost:8080}
 
 eureka:
   client:

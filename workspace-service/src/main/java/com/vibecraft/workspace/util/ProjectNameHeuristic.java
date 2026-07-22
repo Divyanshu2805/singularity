@@ -8,10 +8,11 @@ import java.util.regex.Pattern;
 
 /**
  * Turns the description a user types on the dashboard into a short plain name (e.g. "Habit tracker with daily
- * streaks"), without an AI call. This is exactly the deterministic fallback legacy-monolith's
- * {@code llm.ProjectNameGenerator} already falls back to when its AI call fails - ported here as workspace-
- * service's *only* naming strategy, since an AI-quality name is intelligence-service's concern once it exists
- * (this deliberately carries no Spring AI/OpenRouter dependency). See docs/migration/phase-2-workspace-service.md's Phase 2 entry.
+ * streaks"), without an AI call. This is exactly the deterministic fallback the original monolith's
+ * {@code llm.ProjectNameGenerator} fell back to when its AI call failed - here it is workspace-service's *only*
+ * naming strategy: an AI-quality name is intelligence-service's concern ({@code POST /internal/v1/project-names},
+ * which nothing calls yet), and this service deliberately carries no Spring AI/OpenRouter dependency. See
+ * docs/migration/phase-2-workspace-service.md's Phase 2 entry.
  */
 public final class ProjectNameHeuristic {
 

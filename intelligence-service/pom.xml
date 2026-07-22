@@ -12,14 +12,11 @@
 	<name>intelligence-service</name>
 	<description>
 		ChatSession/ChatMessage/ChatEvent/CodeNote/UsageEvent/UsageLog and the AI-generation/code-insight/idea-
-		clarifier/usage-insights pipeline — extracted from legacy-monolith's equivalent domain. Its own Postgres
-		database, its own Flyway history (replacing ddl-auto: update). Keeps a full copy of the Firebase/
-		session-cookie/CSRF/rate-limit security chain rather than delegating it to gateway-service yet — see
-		WebSecurityConfig's javadoc and docs/migration/ for why. Calls account-service (plan limits, user
-		lookups) and workspace-service (project membership, file read/write, project summaries) via Feign, since
-		it owns neither User nor Project. NOT yet receiving real traffic: legacy-monolith still serves every
-		Chat/Idea/CodeInsight/Usage route until Gateway's routing toggle flips — see docs/migration/'s
-		Phase 3 entry.
+		clarifier/usage-insights pipeline. Its own Postgres database, its own Flyway history. Keeps its own copy
+		of the Firebase/session-cookie/CSRF/rate-limit security chain rather than delegating it to
+		gateway-service — see WebSecurityConfig's javadoc and docs/migration/ for why. Calls
+		account-service (plan limits, user lookups) and workspace-service (project membership, file read/write,
+		project summaries) via Feign, since it owns neither User nor Project.
 	</description>
 
 	<dependencies>

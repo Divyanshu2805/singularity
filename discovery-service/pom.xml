@@ -11,9 +11,9 @@
 	<artifactId>discovery-service</artifactId>
 	<name>discovery-service</name>
 	<description>
-		Eureka server. Every other vibecraft service (gateway-service, legacy-monolith from Phase 1 onward,
-		and account/workspace/intelligence-service as they're extracted) registers here and discovers each
-		other's addresses through it instead of hardcoded URLs — the mechanism Feign clients resolve against.
+		Eureka server. Every other vibecraft service (gateway-service and account/workspace/intelligence-
+		service) registers here and discovers each other's addresses through it instead of hardcoded URLs —
+		the mechanism Feign clients and the Gateway's lb:// routes resolve against.
 	</description>
 
 	<dependencies>

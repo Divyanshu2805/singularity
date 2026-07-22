@@ -22,7 +22,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * The daily token allowance has to be checked before a code-insight call spends anything. The two streamed
- * variants always did that; the non-streaming {@code explain} and {@code ask} did not (in legacy-monolith either),
+ * variants always did that; the non-streaming {@code explain} and {@code ask} did not (in the original monolith either),
  * so a caller already over the limit could keep spending tokens by using them instead. Over budget must throw
  * before the model is so much as touched.
  */

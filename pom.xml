@@ -14,17 +14,14 @@
 	<packaging>pom</packaging>
 	<name>vibecraft-parent</name>
 	<description>
-		Reactor parent for the vibecraft microservices migration. See docs/architecture/ and
-		C:\Users\divya\.claude\plans\glistening-swinging-crane.md for the target shape. Modules are added
-		incrementally, one per migration phase — see legacy-monolith's module comment below for the
-		strangler-fig fallback this reactor exists to support.
+		Reactor parent for the vibecraft backend: a Gateway and Eureka in front of three domain services
+		(account, workspace, intelligence) that share common-lib. See docs/architecture/ for the shape and
+		docs/migration/ for how it was split out of the original monolith (since removed).
 	</description>
 
 	<!--
 		Module order matters only for readability here — Maven's reactor resolves the real build order from
-		inter-module dependencies. legacy-monolith is the untouched original backend, kept as a normal module
-		so the whole tree still builds and boots as one reactor while services are extracted from it one at a
-		time (see the migration plan's Phase 0-4 breakdown). It is deleted only once nothing depends on it.
+		inter-module dependencies.
 	-->
 	<modules>
 		<module>common-lib</module>
@@ -33,7 +30,6 @@
 		<module>account-service</module>
 		<module>workspace-service</module>
 		<module>intelligence-service</module>
-		<module>legacy-monolith</module>
 	</modules>
 
 	<properties>

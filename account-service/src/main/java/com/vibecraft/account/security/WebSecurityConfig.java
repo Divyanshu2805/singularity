@@ -21,13 +21,14 @@ import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWrite
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /**
- * A faithful copy of legacy-monolith's own {@code WebSecurityConfig} — same CSRF/CORS/security-header/rate-limit
- * behavior for browser-facing traffic, plus one addition: {@code /internal/v1/**} is guarded by common-lib's
- * {@link InternalServiceAuthFilter} instead of a session cookie, since that's how Workspace/Intelligence will
- * call in once they exist. Deliberately NOT delegated to gateway-service yet — see the migration plan's
- * discovery that Firebase verification, CSRF, and rate limiting are too entangled to safely split off before
- * Workspace and Intelligence exist to share the consolidation with. Each service keeps its own full copy until
- * that later cleanup phase.
+ * The browser-facing security chain: CSRF ({@code .spa()}), CORS, security headers, rate limiting and session
+ * authentication — plus {@code /internal/v1/**}, which is guarded by common-lib's
+ * {@link InternalServiceAuthFilter} (a shared secret) instead of a session cookie, since that's how
+ * workspace-service and intelligence-service call in. Deliberately NOT delegated to gateway-service: Firebase
+ * verification, CSRF and rate limiting are too entangled to split off safely, so each service keeps its own
+ * copy of this chain (the other two resolve the signed-in user over Feign instead of a local table, and don't
+ * serve the public auth/plan/webhook routes). A change to session or rate-limit behaviour has to be made in
+ * all three; see docs/architecture/.
  */
 @Configuration
 @RequiredArgsConstructor

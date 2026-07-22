@@ -14,12 +14,6 @@
       "port": 8000
     },
     {
-      "name": "legacy-monolith",
-      "runtimeExecutable": ".\\mvnw.cmd",
-      "runtimeArgs": ["-pl", "legacy-monolith", "spring-boot:run"],
-      "port": 8080
-    },
-    {
       "name": "account-service",
       "runtimeExecutable": ".\\mvnw.cmd",
       "runtimeArgs": ["-pl", "account-service", "spring-boot:run"],

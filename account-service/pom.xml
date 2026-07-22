@@ -11,13 +11,11 @@
 	<artifactId>account-service</artifactId>
 	<name>account-service</name>
 	<description>
-		Users, Plans, Subscriptions, Stripe billing, the legacy Bearer auth rollback path, and the auth audit
-		trail — extracted from legacy-monolith's User/Plan/Subscription/PasswordResetToken/AuthAuditEvent/
-		RevokedSession domain. Its own Postgres database, its own Flyway history (replacing ddl-auto: update).
-		Keeps a full copy of the Firebase/session-cookie/CSRF/rate-limit security chain rather than delegating
-		it to gateway-service yet — see WebSecurityConfig's javadoc and docs/migration/ for why. NOT yet
-		receiving real traffic: legacy-monolith still serves every Account-owned route until the data-migration
-		work that a real cutover needs is done — see docs/migration/phase-1-account-service.md's Phase 1 entry.
+		Users, Plans, Subscriptions, Stripe billing, and the auth audit trail. Its own Postgres database, its own
+		Flyway history. Keeps its own copy of the Firebase/session-cookie/CSRF/rate-limit security chain rather
+		than delegating it to gateway-service — see WebSecurityConfig's javadoc and docs/migration/ for
+		why. Exposes /internal/v1/** to workspace-service and intelligence-service (users, plan limits, revoked
+		sessions) and pushes session evictions to them on sign-out.
 	</description>
 
 	<dependencies>
@@ -85,8 +83,10 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
-		<!-- Firebase Authentication (Identity Platform) - see legacy-monolith's pom.xml comment for why
-		     Firestore/Cloud Storage aren't excluded. -->
+		<!-- Firebase Authentication (Identity Platform): verifies ID tokens and session cookies, revokes sessions.
+		     Only the auth client is used, but don't exclude Firestore/Cloud Storage to slim it down:
+		     FirebaseOptions and FirebaseAuth depend on classes (JacksonFactory, gax) that only arrive through them,
+		     and the app then compiles fine and fails at startup with NoClassDefFoundError. -->
 		<dependency>
 			<groupId>com.google.firebase</groupId>
 			<artifactId>firebase-admin</artifactId>
@@ -109,7 +109,7 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
-					<!-- Same reason as legacy-monolith's: .env lives at the repo root, not this module's directory. -->
+					<!-- .env lives at the repo root, not this module's directory. -->
 					<workingDirectory>${project.parent.basedir}</workingDirectory>
 				</configuration>
 			</plugin>

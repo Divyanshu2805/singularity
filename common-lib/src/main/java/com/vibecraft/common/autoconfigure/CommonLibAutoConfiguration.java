@@ -21,7 +21,7 @@ import com.vibecraft.common.config.ClockConfig;
  * {@code META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports}). Constructing
  * {@code JwtAuthFilter}/{@code InternalServiceAuthFilter} as beans here does not, by itself, put them in
  * any security chain — each service's own {@code SecurityFilterChain} config wires them in at the right
- * position, exactly like legacy-monolith's {@code SessionAuthFilter} today.
+ * position, next to its own {@code SessionAuthFilter}.
  */
 @AutoConfiguration
 @Import({GlobalExceptionHandler.class, ClockConfig.class, AsyncConfig.class})
