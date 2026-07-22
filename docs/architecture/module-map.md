@@ -1,20 +1,56 @@
 # 2. Module Map
 
-## Backend (`legacy-monolith/src/main/java/com/java/vibecraft/` — paths below are relative to that, unchanged since the Phase 0 move)
+## Repository layout
+
+```
+pom.xml               reactor parent — module list, shared dependencyManagement
+common-lib/           shared code (below)
+discovery-service/    Eureka server
+gateway-service/      Spring Cloud Gateway — application.yaml is the route table; RoutingTableTest pins every path
+account-service/      the account domain
+workspace-service/    the workspace domain, including the preview pipeline
+intelligence-service/ the AI/usage domain
+infra/data-migration/ legacy-to-services.sh — the one-off copy of the old monolith's database into the three service databases
+frontend/             the React SPA
+k8s/                  manifests for the runner pool and the preview proxy
+proxy/                the standalone Node reverse proxy that routes preview hostnames via Redis
+docs/                 this documentation
+```
+
+## `common-lib`
+
+| Package | Owns |
+|---|---|
+| `error` | `ApiError` (the one error shape), the typed exceptions, `GlobalExceptionHandler` — shared by all three services, so an error is the same JSON whichever service raised it |
+| `feign` | `FeignClientInterceptor` — adds the shared-secret header to any call whose path starts `/internal/` |
+| `jwt` | `InternalServiceAuthFilter` (the shared-secret guard on `/internal/**`), plus the internal-JWT issue/verify code (`InternalJwtService`, `JwtAuthFilter`) that no live request path uses today — calls between services authenticate with the shared secret |
+| `dto` | The wire types services exchange (`UserDto`, `PlanDto`, `ProjectSummaryDto`, `ProjectMembershipDto`, `FileTreeDto`, `FileContentDto`, `EvictSessionRequest`, and the wire copy of `ProjectRole`/`ProjectPermission`) |
+| `config`, `util`, `autoconfigure` | `ClockConfig`, `AsyncConfig`, `Hashing`, `WindowsTimezoneWorkaround` (see §6), and `CommonLibAutoConfiguration`, which registers all of it on each consuming service without widening its component scan |
+
+## Inside a domain service
+
+The three domain services share one layering. Package names are relative to `com.vibecraft.<account|workspace|intelligence>`.
 
 | Package | Owns | Must never |
 |---|---|---|
-| `entity`, `enums` | JPA schema — see `docs/schema/` | Contain business logic beyond `@PrePersist`-free lifecycle |
+| `entity`, `enums` | JPA schema — see `docs/schema/` | Contain business logic |
 | `repository` | Spring Data JPA interfaces, `@Query` JPQL added only as a service needs it | Contain business logic — a repository answers a query, it doesn't decide anything |
 | `mapper` | Entity↔DTO conversion (MapStruct, plus a couple of hand-written `default` methods where the shapes genuinely differ — `CodeNoteMapper`) | Duplicate what MapStruct would auto-match |
 | `service` / `service.impl` | Business logic — one interface + one `@Service` impl per concern | Be skipped — a controller never talks to a repository directly |
-| `controller` | REST endpoints, `@PreAuthorize` gates, request/response mapping | Contain business logic beyond orchestrating a service call |
+| `controller` | REST endpoints and `@PreAuthorize` gates, request/response mapping. Each service also has `Internal*Controller`s under `/internal/v1` for the other services | Contain business logic beyond orchestrating a service call |
 | `dto` | Request/response records, one subpackage per domain | Carry validation annotations on a *response* record |
-| `security` | Session/JWT auth, rate limiting, `@PreAuthorize` SpEL root (`SecurityExpressions`) | Be bypassed by a controller reading `userId` from anywhere but `AuthUtil` |
-| `error` | `ApiError`, typed exceptions, `GlobalExceptionHandler` | Let a new exception type fall through to the generic 500 handler unintentionally |
-| `llm` | The AI code-generation prompt/parser/tools/advisors, the code-insight prompts, teaching mode, usage recording | Let `CodeInsightPrompts` (read-only) ever see the `<file>`/`<todo>`/`<learn>` write protocol |
-| `config` | Bean wiring — Stripe, MinIO, Spring AI, Kubernetes, Redis, CORS, Firebase, the plan-seeding `ApplicationRunner` | Live outside `com.java.vibecraft`'s component-scan root (a real historical bug — see `CLAUDE.md`) |
-| `util` | Small, framework-free, directly-unit-testable helpers (content-type detection, code search's line matcher, money/duration formatting) | Depend on Spring, a repository, or anything not passed as a plain argument |
+| `security` | Session auth, rate limiting, CSRF/CORS/headers (`WebSecurityConfig`); `SecurityExpressions`, the `@PreAuthorize` SpEL root, in workspace and intelligence | Be bypassed by a controller reading `userId` from anywhere but `AuthUtil` |
+| `feign` (workspace, intelligence) | Typed clients for the other services' internal APIs | Be given a `@FeignClient(path = "...")` prefix — see §3 |
+| `config` | Bean wiring — Stripe, MinIO, Spring AI, Kubernetes, Redis, Firebase, CORS, the plan-seeding `ApplicationRunner` | Live outside the service's component-scan root (a real historical bug — see `CLAUDE.md`) |
+| `util` | Small, framework-free, directly unit-testable helpers | Depend on Spring, a repository, or anything not passed as a plain argument |
+
+Each service's own additions:
+
+- **`account-service`** — `security/` also holds the session minting (`SessionCookies`, `IdentityVerifier` → `FirebaseIdentityVerifier`) and `SessionEvictionNotifier`; `service.impl` has `SessionServiceImpl`, `SubscriptionServiceImpl`, `StripePaymentProcessor` behind `PaymentProcessor`.
+- **`workspace-service`** — `service.impl` also holds the preview pipeline: `PreviewDeploymentServiceImpl` (start/stop/restart, per-project locking), `PreviewRunnerPool` (claims a warm pod), `PreviewBootstrapper` (files → install → dev server), `PreviewRouter` (Redis routes), `PreviewLifecycle` + `PreviewReaper` (teardown, idle sweep); `ProjectTemplateServiceImpl` (starter files); `util/CodeSearchScanner`, `util/ProjectNameHeuristic`.
+- **`intelligence-service`** — `llm/` holds the AI code-generation prompt/parser/tools/advisors, the code-insight prompts, teaching mode, and usage recording. It must never let `CodeInsightPrompts` (read-only) see the `<file>`/`<todo>`/`<learn>` write protocol. `service.impl` has `AiGenerationServiceImpl` (the build pipeline), `GenerationRegistry` (in-flight generations), `CodeInsightServiceImpl`, `IdeaServiceImpl`, `UsageServiceImpl`, `UsageInsightsServiceImpl`; `service/ProjectFileReader` is the read-only file view (§6).
+
+The security classes (`WebSecurityConfig`, `SessionAuthFilter`, `SessionCache`, `RateLimiter`, …) exist as one copy **per service**, deliberately — each service authenticates its own requests rather than trusting the Gateway. It also means a change to session or rate-limit behaviour has to be made three times.
 
 ## Frontend (`frontend/src/`)
 
@@ -25,4 +61,4 @@
 | `hooks/` | Custom React hooks — most wrap a `lib/` store or add React lifecycle around it | Contain business logic that doesn't need React (put that in `lib/`, test it there) |
 | `lib/` | API client, SSE/stream parsing, module-level state stores (chat, code notes), and the framework-free logic most of the 282 frontend tests actually exercise | Import from `components/`/`pages/` (the dependency direction is one-way) |
 
-**Module-level stores, not a global state library:** the streaming chat transcript (`lib/project-chat-store.ts`) and code-notes threads (`lib/code-lens-store.ts`) live in plain module-level maps rather than React context or a state library. This means they persist for the life of the *page*, not just a component's lifecycle — which is exactly why `lib/session.ts`'s `onSignOut(...)` registry exists: every such store must register a reset, or its contents survive a client-side route change after sign-out (see §6 Auth & Tenancy).
+**Module-level stores, not a global state library:** the streaming chat transcript (`lib/project-chat-store.ts`) and code-notes threads (`lib/code-lens-store.ts`) live in plain module-level maps rather than React context or a state library. This means they persist for the life of the *page*, not just a component's lifecycle — which is exactly why `lib/session.ts`'s `onSignOut(...)` registry exists: every such store must register a reset, or its contents survive a client-side route change after sign-out (see §6).

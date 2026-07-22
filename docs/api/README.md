@@ -1,10 +1,21 @@
 # API Reference
 
-Contracts for the backend's REST API. No OpenAPI spec is currently exposed publicly — `springdoc-openapi` is installed and serves `/v3/api-docs`/`/swagger-ui.html`, but neither path is exempted in `security/WebSecurityConfig.java`, so an unauthenticated visit gets a plain 403 (see `TODO.md`). This page is the narrative reference until that's fixed.
+Contracts for the backend's REST API. There is no OpenAPI spec: the services don't ship `springdoc-openapi`, so this page is the reference. When an endpoint's shape changes, change it here in the same commit.
 
-**Base URL:** `http://localhost:8000` locally — the Gateway, which routes each path to the service that owns it (see `docs/migration/phase-4-cutover.md`, Phase 4, for the table). The endpoint shapes below are unchanged by the microservice split: they were verified endpoint-for-endpoint identical (62 method+path mappings), but this page is otherwise still written against the original monolith until Phase 5 rewrites it, and its Swagger remark above is true only of `legacy-monolith` (the new services don't ship springdoc). **Auth:** an `httpOnly` session cookie, minted after verifying a Firebase ID token — see [Authentication](authentication.md#authentication) below. (The legacy `Authorization: Bearer <jwt>` rollback path and its username/password endpoints were removed — Firebase is the only sign-in method now.) **Errors:** see [Error Taxonomy](errors.md#error-taxonomy).
+**Base URL:** `http://localhost:8000` locally — the Gateway. The browser only ever talks to it (in development the Vite dev server proxies `/api` there), and it forwards each path, unmodified, to the service that owns it:
 
-Every endpoint requires authentication except `/api/auth/**` and `/webhooks/**` (Stripe can't carry a session). Every `@RequestBody` is validated (`@Valid` + Bean Validation) — see [Request Validation](validation.md#request-validation).
+| Path prefix | Owning service |
+|---|---|
+| `/api/auth/**`, `/api/plans`, `/api/me/**`, `/api/payments/**`, `/webhooks/payment` | `account-service` |
+| `/api/projects/**` (except `.../code/**`), `/api/previews` | `workspace-service` |
+| `/api/chat/**`, `/api/ideas/**`, `/api/usage/**`, `/api/projects/{id}/code/**` | `intelligence-service` |
+| `/internal/**` | *never routed* — service-to-service only, see [Internal API](internal.md#internal-api-service-to-service) |
+
+The route table is `gateway-service/src/main/resources/application.yaml`; `RoutingTableTest` pins every path in this file to its owner. A path no route owns is a 404 from the Gateway.
+
+**Auth:** an `httpOnly` session cookie (`vc_session`, 5 days), minted after verifying a Firebase ID token — see [Authentication](authentication.md#authentication) below. Every service authenticates its own requests; the Gateway adds no auth. **CSRF:** every write needs the `X-XSRF-TOKEN` header (details under Authentication). **Errors:** see [Error Taxonomy](errors.md#error-taxonomy).
+
+Every endpoint requires authentication except `GET /api/auth/csrf`, `POST /api/auth/session`, `POST /api/auth/logout`, `GET /api/plans` and `/webhooks/**` (Stripe can't carry a session). Every `@RequestBody` is validated (`@Valid` + Bean Validation) — see [Request Validation](validation.md#request-validation).
 
 ## Contents
 
@@ -17,6 +28,7 @@ Every endpoint requires authentication except `/api/auth/**` and `/webhooks/**` 
 - [Live Previews](previews.md)
 - [Billing](billing.md)
 - [Usage](usage.md)
+- [Internal API (service-to-service)](internal.md)
 - [Request Validation](validation.md)
 - [Error Taxonomy](errors.md)
 - [Known Behavior Worth Knowing About](../known-gaps/api-behavior.md)

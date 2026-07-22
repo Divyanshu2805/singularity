@@ -1,12 +1,15 @@
 # Data Model
 
-Entities, relationships, and the conventions that keep them consistent. Update this in the same change as any schema edit — a mismatch between this file and `entity/`/`enums/` is worse than no doc at all.
+Entities, relationships, and the conventions that keep them consistent. Update this in the same change as any schema edit — a mismatch between this file and a service's `entity/`, `enums/` and `db/migration/` is worse than no doc at all.
 
-There is no migration tool in this project — schema changes happen via Hibernate's `ddl-auto: update`, which creates and widens tables automatically but never alters or drops an existing constraint. That single fact explains several rules on this page (most importantly [Persisted enums](conventions.md#persisted-enums-and-the-ddl-auto-trap) below); read it before adding a column or an enum value.
+The data is split across **three databases, one per service**, and each service owns its schema through Flyway migrations. Hibernate only *validates* (`ddl-auto: validate`); it never creates or alters anything. Two consequences run through this page: a service can only join its own tables (a reference into another service's data is a plain id, never a foreign key — see [Cross-service references](cross-service-references.md#cross-service-references)), and adding a column or an enum value is a new migration, not just an entity edit (see [Changing the schema](conventions.md#changing-the-schema)).
 
 ## Contents
 
-- [Entity Overview](entity-overview.md)
-- [Entity Reference](entity-reference.md)
+- [The Three Databases](databases.md)
+- [Cross-service references](cross-service-references.md)
+- [account-service](account-service.md)
+- [workspace-service](workspace-service.md)
+- [intelligence-service](intelligence-service.md)
 - [Domain Vocabulary (Enums)](enums.md)
 - [Design Conventions Worth Knowing](conventions.md)

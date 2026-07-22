@@ -4,6 +4,7 @@ Every `@RequestBody` DTO carries Bean Validation constraints; response DTOs neve
 
 | DTO | Field | Constraint | Note |
 |---|---|---|---|
+| `CreateSessionRequest` / `ReportSecurityEventRequest` | `idToken` | `@NotBlank @Size(max = 8192)` | |
 | `InviteMemberRequest` | `username` | `@NotBlank @Email` | Field is called `username` but is still validated as email-shaped — a rename from `email` never touched the validation. |
 | `ChatRequest` | `teachingMode` | none | Deliberately unconstrained — a missing/`null` value means off, boxed `Boolean` so absence isn't a deserialization error. |
 | `AskCodeRequest` | `path` | `@Size(max = 500)`, required only when `code` is present (`@AssertTrue isSelectionComplete`) | Selection is optional as a pair, not per-field. |

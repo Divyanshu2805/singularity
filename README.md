@@ -68,7 +68,7 @@ flowchart TD
     Browser -- "direct, once routed" --> K8s
 ```
 
-**Key boundary:** AI-generated/user code executes **only** inside a live-preview Kubernetes pod — never in-process in the backend. Full reasoning and the exact isolation mechanism: [`docs/architecture/`](docs/architecture/README.md) §3.3.
+**Key boundary:** AI-generated/user code executes **only** inside a live-preview Kubernetes pod — never in-process in the backend. Full reasoning and the exact isolation mechanism: [`docs/architecture/`](docs/architecture/README.md) §4.3.
 
 ## Tech Stack
 

@@ -9,4 +9,4 @@ The browser's traffic now goes **Gateway (`:8000`) → account-service / workspa
 | `/api/chat/**`, `/api/ideas/**`, `/api/usage/**`, `/api/projects/{id}/code/**` | `intelligence-service` (`:8083`) |
 | everything else (incl. `/internal/**`) | the fallback → `legacy-monolith`, which is off — so it answers a 5xx |
 
-Remaining work: delete `legacy-monolith` after a soak (its own step), then Phase 5 (rewrite `docs/architecture/`/`docs/schema/`/`docs/api/` for the split).
+**Phase 5 (2026-08-11)** rewrote `docs/architecture/`, `docs/schema/` and `docs/api/` for the split — checked against the controllers, entities, Flyway migrations and configs rather than adapted from the monolith's text — and corrected the pre-cutover wording left in code comments. Remaining work: delete `legacy-monolith` (its own step).

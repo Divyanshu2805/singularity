@@ -1,7 +1,7 @@
 -- intelligence-service's schema, matching entity/ChatSession.java, ChatMessage.java, ChatEvent.java,
 -- CodeNote.java, UsageEvent.java, UsageLog.java exactly. Flyway owns this schema (ddl-auto: validate) - no
 -- CHECK constraints on any enum-backed column, same reasoning as account-service's/workspace-service's own
--- Flyway migrations (see docs/schema/conventions.md's "Persisted enums and the ddl-auto trap").
+-- Flyway migrations (see docs/schema/'s "Persisted enums and the ddl-auto trap").
 
 -- project_id/user_id plain columns, no FK: Project lives in workspace-service's own database, User in
 -- account-service's - neither is ever joinable locally.

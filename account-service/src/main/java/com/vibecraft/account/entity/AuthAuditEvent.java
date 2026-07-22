@@ -34,7 +34,7 @@ public class AuthAuditEvent {
     String firebaseUid;
 
     // No CHECK constraint on an enum column: an unmanaged schema-evolution tool never widens one, so a new
-    // value would fail every insert. See docs/schema/conventions.md's "Persisted enums" trap.
+    // value would fail every insert. See docs/schema/'s "Persisted enums" trap.
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "varchar(64)")
     AuthAuditEventType type;
