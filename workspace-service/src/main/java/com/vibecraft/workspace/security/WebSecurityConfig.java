@@ -18,7 +18,7 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /**
  * Modeled on account-service's own {@code WebSecurityConfig} (same CSRF/CORS/security-header/rate-limit shape,
- * same reasoning for why it's NOT delegated to gateway-service yet — see docs/migration/phase-1-account-service.md's Phase 1/2
+ * same reasoning for why it's NOT delegated to gateway-service yet — see docs/migration/'s Phase 1/2
  * entries), trimmed for what workspace-service actually has: no {@code /webhooks/**} (no billing here), no
  * public GET route (every {@code /api/projects/**}/{@code /api/previews} route requires a session), and no
  * {@code User} entity, so no {@code passwordEncoder()} bean either — account-service only carries that to

@@ -19,7 +19,7 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 /**
  * Modeled on account-service's/workspace-service's own {@code WebSecurityConfig} (same CSRF/CORS/security-
  * header/rate-limit shape, same reasoning for why it's NOT delegated to gateway-service yet — see
- * docs/migration/phase-1-account-service.md's Phase 1/2/3 entries), trimmed for what intelligence-service actually has: no
+ * docs/migration/'s Phase 1/2/3 entries), trimmed for what intelligence-service actually has: no
  * {@code /webhooks/**} (no billing here), no public GET route (every {@code /api/chat/**}/{@code /api/ideas/**}/
  * {@code /api/projects/{id}/code/**}/{@code /api/usage/**} route requires a session — even idea-clarification,
  * since it checks the daily token budget against the authenticated caller), and no {@code User} entity, so no

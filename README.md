@@ -111,7 +111,7 @@ npm run dev
 
 Frontend: http://localhost:5173 · Gateway (the browser's actual API origin): http://localhost:8000 · services directly: account `:8081`, workspace `:8082`, intelligence `:8083`
 
-The backend is a multi-module Maven reactor of three domain services behind a Gateway, migrated from the original monolith (since removed; it survives in git history) — see [`docs/migration/`](docs/migration/README.md) for what moved where and how the cutover went. Full setup (including live previews, which need a Kubernetes cluster) and a troubleshooting table for known gotchas: [`docs/local-development/`](docs/local-development/README.md).
+The backend is a multi-module Maven reactor of three domain services behind a Gateway, migrated from the original monolith (since removed; it survives in git history) — see [`docs/migration/`](docs/migration/) for what moved where and how the cutover went. Full setup (including live previews, which need a Kubernetes cluster) and a troubleshooting table for known gotchas: [`docs/local-development/`](docs/local-development/README.md).
 
 ## Environment Variables
 
@@ -142,7 +142,7 @@ proxy/                                 standalone Node reverse proxy (preview ro
 docs/                                  architecture, data model, API reference, local dev setup, migration map
 ```
 
-Full per-module responsibilities and a "where do I change X" table: [`docs/architecture/`](docs/architecture/README.md). How the monolith was split into these services, and what was found afterwards: [`docs/migration/`](docs/migration/README.md).
+Full per-module responsibilities and a "where do I change X" table: [`docs/architecture/`](docs/architecture/README.md). How the monolith was split into these services, and what was found afterwards: [`docs/migration/`](docs/migration/).
 
 ## Testing
 

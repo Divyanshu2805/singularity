@@ -22,7 +22,7 @@ Don't guess at structure or reconstruct decisions from scratch — these are aut
 | Entities, relationships, enum/schema conventions | [`docs/schema/`](docs/schema/README.md) |
 | Every endpoint, request/response shapes, SSE stream formats, error taxonomy | [`docs/api/`](docs/api/README.md) |
 | Setup, running live previews locally, troubleshooting | [`docs/local-development/`](docs/local-development/README.md) |
-| **Which service owns which URL/table, how the cutover was done, how to roll back** | [`docs/migration/`](docs/migration/README.md) |
+| **Which service owns which URL/table, how the cutover was done, how to roll back** | [`docs/migration/`](docs/migration/) |
 | Known gaps, deferred features, open product/design questions | [`TODO.md`](TODO.md) *(local, gitignored — not on GitHub)* |
 
 If a change you're making would make any of the four tracked docs above inaccurate, **update that doc in the same change**. Don't leave it for later — "later" is how the previous docs on this project drifted enough to need this rewrite.

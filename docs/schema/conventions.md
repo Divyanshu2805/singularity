@@ -27,7 +27,7 @@ Each service's schema lives in `src/main/resources/db/migration/`; today that is
 3. **Another service's data is never joined.** A new reference to a user or project is a plain id column (see above), not a foreign key.
 4. Update this file in the same change.
 
-The `V1` baselines were derived from the monolith's schema; the differences that were intentional (the dropped columns, the `timestamptz` → `timestamp` conversion) are recorded in `docs/migration/phase-4-cutover.md`, Phase 4, "What changed".
+The `V1` baselines were derived from the monolith's schema; the differences that were intentional (the dropped columns, the `timestamptz` → `timestamp` conversion) are recorded in `docs/migration/`, Phase 4, "What changed".
 
 ## No checkpoint/rollback system
 

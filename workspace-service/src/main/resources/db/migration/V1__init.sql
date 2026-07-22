@@ -1,9 +1,8 @@
 -- workspace-service's schema, matching entity/Project.java, ProjectMember.java, ProjectFile.java, Preview.java,
--- PreviewSession.java exactly. Flyway owns this schema (ddl-auto: validate) - see docs/schema/'s
--- "Persisted enums and the ddl-auto trap" for why no @Enumerated(STRING) column below has a CHECK constraint:
--- this is a brand-new database via a brand-new migration, so there is no ddl-auto:update-generated constraint
--- to begin with, and writing one back in by hand would just recreate the exact trap Flyway exists to avoid
--- (previews.status has already grown a 4th value once in legacy-monolith's own history).
+-- PreviewSession.java exactly. Flyway owns this schema (ddl-auto: validate). No @Enumerated(STRING) column below
+-- has a CHECK constraint, on purpose - see docs/schema/conventions.md, "Enum columns carry no CHECK constraint": a
+-- constraint listing an enum's values would have to be widened by hand every time a value is added
+-- (previews.status has already grown a 4th value once).
 
 CREATE TABLE projects (
     id BIGSERIAL PRIMARY KEY,

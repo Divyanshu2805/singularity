@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
  * {@code llm.ProjectNameGenerator} fell back to when its AI call failed - here it is workspace-service's *only*
  * naming strategy: an AI-quality name is intelligence-service's concern ({@code POST /internal/v1/project-names},
  * which nothing calls yet), and this service deliberately carries no Spring AI/OpenRouter dependency. See
- * docs/migration/phase-2-workspace-service.md's Phase 2 entry.
+ * docs/migration/'s Phase 2 entry.
  */
 public final class ProjectNameHeuristic {
 
