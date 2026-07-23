@@ -11,7 +11,15 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
-
+/**
+ * Reads and writes project memberships.
+ *
+ * <p>Handles: listing a project's members or a user's memberships, resolving a user's role on a project - the query
+ * behind every permission check - and counting the projects a user owns for the plan's project quota.
+ *
+ * <p>Both queries that answer a question about entitlement exclude soft-deleted projects. Without that, a deleted
+ * project's members would still pass every permission check on it.
+ */
 @Repository
 public interface ProjectMemberRepository extends JpaRepository<ProjectMember, ProjectMemberId> {
 
@@ -22,6 +30,7 @@ public interface ProjectMemberRepository extends JpaRepository<ProjectMember, Pr
     @Query("""
             SELECT pm.projectRole FROM ProjectMember pm
             WHERE pm.id.projectId = :projectId AND pm.id.userId = :userId
+            AND pm.project.deletedAt IS NULL
             """)
     Optional<ProjectRole> findRoleByProjectIdAndUserId(@Param("projectId") Long projectId,
                                                        @Param("userId") Long userId);
