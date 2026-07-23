@@ -20,31 +20,28 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Which service owns which URL - the single highest-stakes fact about the Gateway, and one that can be checked
- * exhaustively with no login. Evaluates the real route table (the same {@link RouteLocator} the running Gateway
- * uses, in the order it evaluates it) against every endpoint the browser can call.
- *
- * <p>Routes here are path-only (no method predicates), so each URL is listed once even where several verbs share
- * it; the verbs are in the trailing comments. <b>When a controller gains or loses an endpoint, this list must
- * change in the same commit</b> - a new path that lands on no route is a 404 from the Gateway rather than a compile
- * or startup error.
- *
- * <p>Eureka is switched off for the test - {@code lb://} URIs are only resolved when a request is actually
- * forwarded, and this test never forwards one. No database, no server, so none of the reasons the other services
- * avoid {@code @SpringBootTest} apply here.
- */
 @SpringBootTest(properties = {
         "eureka.client.enabled=false",
         "spring.cloud.discovery.enabled=false"
 })
+/**
+ * Covers which service owns which URL - the single highest-stakes fact about the Gateway, and one that can be checked
+ * exhaustively with no login.
+ *
+ * <p>Evaluates the real route table, the same one the running Gateway uses and in the order it evaluates it, against
+ * every endpoint the browser can call - plus paths that must reach nothing: the internal service-to-service APIs, and
+ * URLs that merely share a string prefix with a real route.
+ *
+ * <p>Routes are path-only, so each URL is listed once even where several verbs share it. When a controller gains or
+ * loses an endpoint this list must change in the same commit: a new path that lands on no route is a 404 from the
+ * Gateway rather than a compile error, and an internal path that gained a route would be reachable from the browser.
+ */
 class RoutingTableTest {
 
     static final String INTELLIGENCE_CODE = "intelligence-code-insight";
     static final String INTELLIGENCE = "intelligence";
     static final String WORKSPACE = "workspace";
     static final String ACCOUNT = "account";
-    /** Not a route id: the marker for "no route claims this path", which the Gateway answers with a 404. */
     static final String NO_ROUTE = "(no route)";
 
     @Autowired
@@ -53,68 +50,65 @@ class RoutingTableTest {
     static Stream<Arguments> ownedPaths() {
         Map<String, List<String>> pathsByRoute = Map.of(
                 ACCOUNT, List.of(
-                        "/api/auth/csrf",               // GET
-                        "/api/auth/session",            // POST
-                        "/api/auth/logout",             // POST
-                        "/api/auth/logout-all",         // POST
-                        "/api/auth/me",                 // GET
-                        "/api/auth/security-events",    // GET, POST
-                        "/api/plans",                   // GET
-                        "/api/me/subscription",         // GET
-                        "/api/payments/checkout",       // POST
-                        "/api/payments/portal",         // POST
-                        "/api/payments/change-plan",    // POST
-                        "/api/payments/confirm",        // POST
-                        "/webhooks/payment"),           // POST (Stripe - no session, CSRF-exempt)
+                        "/api/auth/csrf",
+                        "/api/auth/session",
+                        "/api/auth/logout",
+                        "/api/auth/logout-all",
+                        "/api/auth/me",
+                        "/api/auth/security-events",
+                        "/api/plans",
+                        "/api/me/subscription",
+                        "/api/payments/checkout",
+                        "/api/payments/portal",
+                        "/api/payments/change-plan",
+                        "/api/payments/confirm",
+                        "/webhooks/payment"),
                 WORKSPACE, List.of(
-                        "/api/projects",                             // GET, POST
-                        "/api/projects/7",                           // GET, PATCH, DELETE
-                        "/api/projects/from-prompt",                 // POST
-                        "/api/projects/7/fork",                      // POST
-                        "/api/projects/7/retry-template-init",       // POST
-                        "/api/projects/7/pin",                       // PUT, DELETE
-                        "/api/projects/7/star",                      // PUT, DELETE
-                        "/api/projects/7/members",                   // GET, POST
-                        "/api/projects/7/members/accept",            // POST
-                        "/api/projects/7/members/9",                 // PATCH, DELETE
-                        "/api/projects/7/files",                     // GET
-                        "/api/projects/7/files/content",             // GET
-                        "/api/projects/7/files/search",              // GET
-                        "/api/projects/7/files/download-zip",        // GET
-                        "/api/projects/7/preview",                   // GET, POST, DELETE
-                        "/api/projects/7/deploy",                    // POST (alias of POST /preview)
-                        "/api/projects/7/preview/restart",           // POST
-                        "/api/projects/7/preview/logs",              // GET
-                        "/api/previews"),                            // GET
+                        "/api/projects",
+                        "/api/projects/7",
+                        "/api/projects/from-prompt",
+                        "/api/projects/7/fork",
+                        "/api/projects/7/retry-template-init",
+                        "/api/projects/7/pin",
+                        "/api/projects/7/star",
+                        "/api/projects/7/members",
+                        "/api/projects/7/members/accept",
+                        "/api/projects/7/members/9",
+                        "/api/projects/7/files",
+                        "/api/projects/7/files/content",
+                        "/api/projects/7/files/search",
+                        "/api/projects/7/files/download-zip",
+                        "/api/projects/7/preview",
+                        "/api/projects/7/deploy",
+                        "/api/projects/7/preview/restart",
+                        "/api/projects/7/preview/logs",
+                        "/api/previews"),
                 INTELLIGENCE, List.of(
-                        "/api/chat/stream",                          // POST (SSE)
-                        "/api/chat/projects/7",                      // GET
-                        "/api/chat/projects/7/last-turn-changes",    // GET
-                        "/api/chat/projects/7/active",               // GET
-                        "/api/chat/projects/7/active/stream",        // GET (SSE)
-                        "/api/chat/projects/7/active/stop",          // POST
-                        "/api/ideas/clarify",                        // POST
-                        "/api/ideas/compile",                        // POST
-                        "/api/usage/today",                          // GET
-                        "/api/usage/insights",                       // GET
-                        "/api/usage/events",                         // GET
-                        "/api/usage/events/export",                  // GET
-                        "/api/usage/limits"),                        // GET
-                // Same /api/projects/{id}/... prefix as workspace-service's routes above, different owner - the
-                // reason this route has to be evaluated first.
+                        "/api/chat/stream",
+                        "/api/chat/projects/7",
+                        "/api/chat/projects/7/last-turn-changes",
+                        "/api/chat/projects/7/active",
+                        "/api/chat/projects/7/active/stream",
+                        "/api/chat/projects/7/active/stop",
+                        "/api/ideas/clarify",
+                        "/api/ideas/compile",
+                        "/api/usage/today",
+                        "/api/usage/insights",
+                        "/api/usage/events",
+                        "/api/usage/events/export",
+                        "/api/usage/limits"),
                 INTELLIGENCE_CODE, List.of(
-                        "/api/projects/7/code/explain",              // POST
-                        "/api/projects/7/code/explain/stream",       // POST (SSE)
-                        "/api/projects/7/code/ask",                  // POST
-                        "/api/projects/7/code/ask/stream",           // POST (SSE)
-                        "/api/projects/7/code/notes",                // GET, POST, DELETE
-                        "/api/projects/7/code/notes/3"),             // DELETE
-                // Nothing here belongs to a service: must never reach account/workspace/intelligence.
+                        "/api/projects/7/code/explain",
+                        "/api/projects/7/code/explain/stream",
+                        "/api/projects/7/code/ask",
+                        "/api/projects/7/code/ask/stream",
+                        "/api/projects/7/code/notes",
+                        "/api/projects/7/code/notes/3"),
                 NO_ROUTE, List.of(
-                        "/internal/v1/users/1",                      // service-to-service only, never via the Gateway
+                        "/internal/v1/users/1",
                         "/internal/v1/projects/7/members/3",
-                        "/internal/v1/project-names",
-                        "/api/projects-archive",                     // shares a string prefix with /api/projects, not a path prefix
+                        "/internal/v1/sessions/evict",
+                        "/api/projects-archive",
                         "/api/chatter",
                         "/nope"));
 
@@ -134,7 +128,6 @@ class RoutingTableTest {
     void codeInsightPrecedesTheGenericProjectsRoute() {
         assertThat(firstMatchingRouteId("/api/projects/7/code/explain")).isEqualTo(INTELLIGENCE_CODE);
         assertThat(firstMatchingRouteId("/api/projects/7/files")).isEqualTo(WORKSPACE);
-        // A path that merely starts with "code" is not the code-insight subtree.
         assertThat(firstMatchingRouteId("/api/projects/7/codex")).isEqualTo(WORKSPACE);
     }
 
@@ -165,7 +158,6 @@ class RoutingTableTest {
 
     private String firstMatchingRouteId(String path) {
         for (Route route : routes()) {
-            // A fresh exchange per route: the Path predicate records what it matched in the exchange's attributes.
             MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get(path).build());
             if (Boolean.TRUE.equals(Mono.from(route.getPredicate().apply(exchange)).block())) {
                 return route.getId();
