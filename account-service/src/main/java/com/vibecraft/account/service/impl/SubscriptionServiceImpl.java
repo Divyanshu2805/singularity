@@ -12,7 +12,7 @@ import com.vibecraft.account.mapper.SubscriptionMapper;
 import com.vibecraft.account.repository.PlanRepository;
 import com.vibecraft.account.repository.SubscriptionRepository;
 import com.vibecraft.account.repository.UserRepository;
-import com.vibecraft.account.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.account.service.SubscriptionService;
 import com.vibecraft.common.error.ResourceNotFoundException;
 import jakarta.transaction.Transactional;
@@ -23,9 +23,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Subscription state and entitlement.
+ *
+ * <p>Handles: reading the caller's current subscription and falling back to the free plan when there is none,
+ * resolving the plan and subscription a user is entitled to, and applying the state changes the webhooks drive -
+ * activation, a field-by-field update that writes only when something actually changed, cancellation, renewal (which
+ * also lifts a past-due or incomplete subscription back to active) and marking past due.
+ *
+ * <p>One constant decides which statuses still entitle someone to their plan: active, trialing and past due do;
+ * cancelled and incomplete do not. Every entitlement question in the system funnels through it.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -39,7 +51,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     SubscriptionMapper subscriptionMapper;
     PlanMapper planMapper;
 
-    /** The statuses that still entitle someone to their plan. Cancelled and incomplete do not. */
     private static final Set<SubscriptionStatus> ENTITLING = Set.of(
             SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE, SubscriptionStatus.TRIALING);
 
@@ -114,7 +125,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             hasSubscriptionUpdated = true;
         }
 
-        if (cancelAtPeriodEnd != null && !java.util.Objects.equals(cancelAtPeriodEnd, subscription.getCancelAtPeriodEnd())) {
+        if (cancelAtPeriodEnd != null && !Objects.equals(cancelAtPeriodEnd, subscription.getCancelAtPeriodEnd())) {
             subscription.setCancelAtPeriodEnd(cancelAtPeriodEnd);
             hasSubscriptionUpdated = true;
         }
@@ -164,18 +175,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         subscription.setStatus(SubscriptionStatus.PAST_DUE);
         subscriptionRepository.save(subscription);
-    }
-
-    @Override
-    public int projectAllowance(Long userId) {
-        Plan plan = getActivePlan(userId);
-        return plan != null && plan.getMaxProjects() != null ? plan.getMaxProjects() : FREE_TIER_PROJECTS_ALLOWED;
-    }
-
-    @Override
-    public int previewAllowance(Long userId) {
-        Plan plan = getActivePlan(userId);
-        return plan != null && plan.getMaxPreviews() != null ? plan.getMaxPreviews() : FREE_TIER_PREVIEWS;
     }
 
     private User getUser(Long userId) {
