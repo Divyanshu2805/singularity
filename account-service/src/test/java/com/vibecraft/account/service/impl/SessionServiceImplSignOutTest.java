@@ -4,14 +4,14 @@ import com.vibecraft.account.entity.RevokedSession;
 import com.vibecraft.account.mapper.UserMapper;
 import com.vibecraft.account.repository.RevokedSessionRepository;
 import com.vibecraft.account.repository.UserRepository;
-import com.vibecraft.account.security.AuthProperties;
-import com.vibecraft.account.security.AuthUtil;
-import com.vibecraft.account.security.IdentityVerifier;
-import com.vibecraft.account.security.SessionCache;
-import com.vibecraft.account.security.SessionCookies;
+import com.vibecraft.common.security.AuthProperties;
+import com.vibecraft.common.security.AuthUtil;
+import com.vibecraft.common.security.IdentityVerifier;
+import com.vibecraft.common.security.SessionCache;
+import com.vibecraft.common.security.SessionCookies;
 import com.vibecraft.account.security.SessionEvictionNotifier;
-import com.vibecraft.account.security.UserPrincipal;
-import com.vibecraft.account.security.VerifiedIdentity;
+import com.vibecraft.common.security.UserPrincipal;
+import com.vibecraft.common.security.VerifiedIdentity;
 import com.vibecraft.account.service.AuthAuditService;
 import com.vibecraft.common.util.Hashing;
 import org.junit.jupiter.api.DisplayName;
@@ -20,7 +20,6 @@ import org.mockito.InOrder;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -37,9 +36,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * account-service is the only service that hears about a sign-out, so it has to tell the others - and in the right
- * order: the revocation must already be recorded (and Firebase must already have revoked, for sign-out-everywhere)
- * when the other services drop their cache entry, or their very next check would still find the session valid.
+ * Covers that a sign-out reaches the other services, and in the right order.
+ *
+ * <p>account-service is the only service that hears about a sign-out, so it has to tell the others - and the
+ * revocation must already be recorded, and Firebase must already have revoked for sign-out-everywhere, by the time
+ * they drop their cache entry. Otherwise their very next check would still find the session valid and re-cache it.
  */
 class SessionServiceImplSignOutTest {
 
@@ -54,7 +55,7 @@ class SessionServiceImplSignOutTest {
     private final AuthUtil authUtil = mock(AuthUtil.class);
 
     private final SessionServiceImpl service = new SessionServiceImpl(
-            identityVerifier, userRepository, mock(UserMapper.class), mock(PasswordEncoder.class), sessionCookies,
+            identityVerifier, userRepository, mock(UserMapper.class), sessionCookies,
             sessionCache, notifier, revokedSessionRepository, mock(AuthAuditService.class),
             new AuthProperties(new AuthProperties.SessionCookie("vc_session", Duration.ofDays(5), false), Duration.ofSeconds(60)),
             authUtil, Clock.fixed(NOW, ZoneOffset.UTC));

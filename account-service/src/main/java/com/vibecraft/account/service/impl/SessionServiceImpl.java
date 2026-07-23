@@ -10,7 +10,15 @@ import com.vibecraft.account.enums.AuthAuditEventType;
 import com.vibecraft.account.mapper.UserMapper;
 import com.vibecraft.account.repository.RevokedSessionRepository;
 import com.vibecraft.account.repository.UserRepository;
-import com.vibecraft.account.security.*;
+import com.vibecraft.account.security.SessionEvictionNotifier;
+import com.vibecraft.common.security.AuthProperties;
+import com.vibecraft.common.security.AuthUtil;
+import com.vibecraft.common.security.ClientInfo;
+import com.vibecraft.common.security.IdentityVerifier;
+import com.vibecraft.common.security.SessionCache;
+import com.vibecraft.common.security.SessionCookies;
+import com.vibecraft.common.security.UserPrincipal;
+import com.vibecraft.common.security.VerifiedIdentity;
 import com.vibecraft.account.service.AuthAuditService;
 import com.vibecraft.account.service.SessionService;
 import com.vibecraft.common.error.BadRequestException;
@@ -21,37 +29,43 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * The session lifecycle: turning a verified Firebase sign-in into a cookie, and ending sessions again.
+ *
+ * <p>Handles: verifying the ID token, refusing a sign-in that is too old or whose email is missing or unverified,
+ * resolving the account (existing Firebase uid, then an unlinked local account with the same verified email, then
+ * creating one), minting and writing the session cookie, and recording every outcome in the audit trail - including
+ * rejections. Sign-out records the revocation, evicts the local cache and tells the other services;
+ * sign-out-everywhere revokes at Firebase first and then does the same.
+ *
+ * <p>The maximum sign-in age is what stops an ID token lifted from somewhere being turned into a days-long session
+ * long after the person actually signed in. Linking is refused when the matching local account already has a
+ * different Firebase uid, so two identities can never merge silently. The eviction broadcast happens after the
+ * revocation is recorded, so a service that misses its cache finds the session already revoked.
+ *
+ * <p>Deliberately not transactional: the Firebase round trips would hold a database connection for their whole
+ * duration, and the one write in account resolution is a single save, atomic on its own.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SessionServiceImpl implements SessionService {
 
-    /**
-     * A session may only be minted from a sign-in this recent. Without it, an ID token lifted from somewhere (a log,
-     * a compromised extension) could be turned into a five-day session long after the person signed in.
-     */
     static final Duration MAX_SIGN_IN_AGE = Duration.ofMinutes(5);
 
-    /** Mirrors SignupRequest's name limit, so a Firebase-created account can't hold a name signup would reject. */
     static final int MAX_NAME_LENGTH = 30;
-
-    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final IdentityVerifier identityVerifier;
     private final UserRepository userRepository;
     private final UserMapper userMapper;
-    private final PasswordEncoder passwordEncoder;
     private final SessionCookies sessionCookies;
     private final SessionCache sessionCache;
     private final SessionEvictionNotifier sessionEvictionNotifier;
@@ -61,8 +75,6 @@ public class SessionServiceImpl implements SessionService {
     private final AuthUtil authUtil;
     private final Clock clock;
 
-    // Deliberately not @Transactional: the Firebase round trips would hold a database connection for their whole
-    // duration. The one write in account resolution is a single save, atomic on its own.
     @Override
     public SessionResponse createSession(CreateSessionRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
         ClientInfo client = ClientInfo.from(httpRequest);
@@ -124,7 +136,6 @@ public class SessionServiceImpl implements SessionService {
     record AccountResolution(User user, Outcome outcome) {
     }
 
-    /** Matches the Firebase uid first, then a local account with the same verified email, and only then creates one. */
     AccountResolution resolveAccount(VerifiedIdentity identity) {
         Optional<User> byUid = userRepository.findByFirebaseUid(identity.uid());
         if (byUid.isPresent()) return new AccountResolution(byUid.get(), Outcome.EXISTING);
@@ -144,7 +155,6 @@ public class SessionServiceImpl implements SessionService {
         User created = userRepository.save(User.builder()
                 .username(identity.email())
                 .name(displayName(identity))
-                .password(passwordEncoder.encode(unguessableSecret()))
                 .firebaseUid(identity.uid())
                 .build());
         log.info("Created user {} from Firebase sign-in ({})", created.getId(), identity.signInProvider());
@@ -166,9 +176,7 @@ public class SessionServiceImpl implements SessionService {
                 Long userId = userRepository.findByFirebaseUid(identity.uid()).map(User::getId).orElse(null);
                 auditService.record(AuthAuditEventType.SIGN_OUT, userId, identity.uid(), ClientInfo.from(httpRequest), null);
             } catch (BadCredentialsException ex) {
-                // Already expired or invalid - nothing left to revoke.
             }
-            // After the revocation is recorded, so a service that misses its cache finds it revoked.
             sessionEvictionNotifier.evictSession(cookieHash);
         });
         sessionCookies.clear(httpResponse);
@@ -182,7 +190,6 @@ public class SessionServiceImpl implements SessionService {
         }
         identityVerifier.revokeAllSessions(principal.firebaseUid());
         sessionCache.evictUser(principal.firebaseUid());
-        // After Firebase has revoked them, so the other services' next check of an evicted session fails.
         sessionEvictionNotifier.evictUser(principal.firebaseUid());
         sessionCookies.clear(httpResponse);
         auditService.record(AuthAuditEventType.SIGN_OUT_EVERYWHERE, principal.userId(), principal.firebaseUid(),
@@ -215,11 +222,5 @@ public class SessionServiceImpl implements SessionService {
         }
         if (name.isEmpty()) name = "VibeCraft user";
         return name.length() > MAX_NAME_LENGTH ? name.substring(0, MAX_NAME_LENGTH).trim() : name;
-    }
-
-    private static String unguessableSecret() {
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        return Base64.getEncoder().encodeToString(bytes);
     }
 }

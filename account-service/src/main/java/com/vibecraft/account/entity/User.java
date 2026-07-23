@@ -5,13 +5,20 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.Instant;
-import java.util.Collection;
-import java.util.List;
 
+/**
+ * An account on this platform.
+ *
+ * <p>Handles: the email used as the username, the display name, the Firebase uid, the Stripe customer id once they
+ * have one, and a nullable deletedAt for soft deletion.
+ *
+ * <p>The Firebase uid is the identity every sign-in method resolves to, and accounts are matched on it rather than on
+ * email: an address can change hands, the uid cannot. Soft deletion is a plain column with no automatic filter, so
+ * every query that must exclude deleted users has to say so itself. There is no password column - Firebase is the
+ * only sign-in method.
+ */
 @Getter
 @Setter
 @FieldDefaults(level = AccessLevel.PRIVATE)
@@ -20,7 +27,7 @@ import java.util.List;
 @NoArgsConstructor
 @Builder
 @Table(name = "users")
-public class User implements UserDetails {
+public class User {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     Long id;
@@ -28,16 +35,8 @@ public class User implements UserDetails {
     @Column(nullable = false, unique = true)
     String username;
 
-    @Column(nullable = false)
-    String password;
-
     String name;
 
-    /**
-     * The Firebase Authentication uid - the identity every sign-in method (password, Google, two-step) resolves
-     * to. Matched on this, never on email: an address can change hands, the uid can't. Null only for a legacy
-     * account that hasn't signed in through Firebase or been imported yet.
-     */
     @Column(unique = true)
     String firebaseUid;
 
@@ -50,10 +49,5 @@ public class User implements UserDetails {
     @UpdateTimestamp
     Instant updatedAt;
 
-    Instant deletedAt; //soft delete
-
-    @Override
-    public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of();
-    }
+    Instant deletedAt;
 }
