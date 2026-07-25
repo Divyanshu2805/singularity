@@ -22,6 +22,16 @@ import java.time.Instant;
                 @Index(name = "idx_project_deleted_at", columnList = "deleted_at")
         }
 )
+/**
+ * A project: the thing a user builds, and what every file, chat, preview and membership hangs off.
+ *
+ * <p>Handles: the name, whether it is public, the lifecycle timestamps, a nullable deletedAt for soft deletion, any
+ * outstanding starter-template problem, and the project it was forked from.
+ *
+ * <p>Soft deletion is a plain column with no automatic filter, so every query that must exclude deleted projects has
+ * to say so itself. The fork reference is a plain id rather than a relation: a fork is its own project from the
+ * moment it is made and must keep working if the original is later deleted.
+ */
 public class Project {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -30,6 +40,7 @@ public class Project {
     @Column(nullable = false)
     String name;
 
+    @Builder.Default
     Boolean isPublic = false;
 
     @CreationTimestamp
@@ -38,16 +49,9 @@ public class Project {
     @UpdateTimestamp
     Instant updatedAt;
 
-    Instant deletedAt; //soft delete
+    Instant deletedAt;
 
-    // Null when the starter template initialized fully (or wasn't applicable). Set when
-    // some template files couldn't be created even after retries, describing what's missing
-    // so both API clients and the AI generation context can react to it.
     String templateInitIssue;
 
-    /**
-     * The project this one was forked from, or null for an original. A plain id rather than a relation: the fork is
-     * its own project from the moment it's made, and must keep working if the original is later deleted.
-     */
     Long forkedFromProjectId;
 }

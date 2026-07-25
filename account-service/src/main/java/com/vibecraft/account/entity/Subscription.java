@@ -9,6 +9,12 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 
+/**
+ * A user's subscription to a plan, mirroring what Stripe holds.
+ *
+ * <p>Handles: who is subscribed to what, the status that decides entitlement, the Stripe subscription id the webhooks
+ * arrive against, the current billing period, and whether it is set to stop at the end of that period.
+ */
 @Getter
 @Setter
 @FieldDefaults(level = AccessLevel.PRIVATE)
@@ -39,6 +45,7 @@ public class Subscription {
 
     Instant currentPeriodStart;
     Instant currentPeriodEnd;
+    @Builder.Default
     Boolean cancelAtPeriodEnd = false;
 
     @CreationTimestamp
