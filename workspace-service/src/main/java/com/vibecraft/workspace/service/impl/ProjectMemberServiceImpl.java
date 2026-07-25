@@ -7,13 +7,15 @@ import com.vibecraft.workspace.dto.member.UpdateMemberRoleRequest;
 import com.vibecraft.workspace.entity.Project;
 import com.vibecraft.workspace.entity.ProjectMember;
 import com.vibecraft.workspace.entity.ProjectMemberId;
-import com.vibecraft.common.error.ForbiddenException;
+import com.vibecraft.workspace.enums.ProjectRole;
+import com.vibecraft.common.error.BadRequestException;
+import com.vibecraft.common.error.ConflictException;
 import com.vibecraft.common.error.ResourceNotFoundException;
-import com.vibecraft.workspace.feign.AccountServiceClient;
+import com.vibecraft.common.feign.AccountServiceClient;
 import com.vibecraft.workspace.mapper.ProjectMemberMapper;
 import com.vibecraft.workspace.repository.ProjectMemberRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
-import com.vibecraft.workspace.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.workspace.service.ProjectMemberService;
 import feign.FeignException;
 import jakarta.transaction.Transactional;
@@ -26,6 +28,19 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * A project's collaborators.
+ *
+ * <p>Handles: listing members with their names resolved from account-service, inviting one by email, accepting an
+ * invitation, changing a role and removing a member.
+ *
+ * <p>It enforces the single-owner invariant: owner cannot be granted by invitation or by a role change, the owner's
+ * own role cannot be changed, and the owner cannot be removed - deleting the project is the way to end it. Without
+ * those checks a project could end up with two owners or none.
+ *
+ * <p>Listing makes one lookup per member because account-service has no batch user endpoint today. That is fine for
+ * the membership sizes this feature actually has.
+ */
 @Service
 @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
 @RequiredArgsConstructor
@@ -42,9 +57,6 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     @PreAuthorize("@security.canViewMembers(#projectId)")
     public List<MemberResponse> getProjectMembers(Long projectId) {
 
-        // One Feign call per member to build its MemberResponse - there is no batch user-lookup endpoint on
-        // account-service today. Fine for the small membership lists this feature actually has; a candidate for
-        // a future GET /internal/v1/users?ids= if it ever shows up as real latency.
         return projectMemberRepository.findByIdProjectId(projectId)
                 .stream()
                 .map(member -> projectMemberMapper.toMemberResponse(member, resolveUser(member.getId().getUserId())))
@@ -66,13 +78,16 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         }
 
         if (invitee.id().equals(userId)) {
-            throw new ForbiddenException("Cannot invite yourself");
+            throw new BadRequestException("You're already on this project.");
+        }
+        if (request.role() == ProjectRole.OWNER) {
+            throw new BadRequestException("A project has exactly one owner, and it can't be granted by invitation.");
         }
 
         ProjectMemberId projectMemberId = new ProjectMemberId(projectId, invitee.id());
 
         if (projectMemberRepository.existsById(projectMemberId)) {
-            throw new ForbiddenException("Cannot invite once again");
+            throw new ConflictException("That person is already on this project.");
         }
 
         ProjectMember member = ProjectMember.builder()
@@ -112,6 +127,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         ProjectMember projectMember = projectMemberRepository.findById(projectMemberId)
                 .orElseThrow(() -> new ResourceNotFoundException("ProjectMember", memberId.toString()));
 
+        assertOwnershipUnchanged(projectMember, request.role());
         projectMember.setProjectRole(request.role());
 
         projectMemberRepository.save(projectMember);
@@ -124,11 +140,23 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     public void removeProjectMember(Long projectId, Long memberId) {
 
         ProjectMemberId projectMemberId = new ProjectMemberId(projectId, memberId);
-        if (!projectMemberRepository.existsById(projectMemberId)) {
-            throw new ResourceNotFoundException("ProjectMember", memberId.toString());
+        ProjectMember projectMember = projectMemberRepository.findById(projectMemberId)
+                .orElseThrow(() -> new ResourceNotFoundException("ProjectMember", memberId.toString()));
+
+        if (projectMember.getProjectRole() == ProjectRole.OWNER) {
+            throw new BadRequestException("The owner can't be removed from their own project. Delete the project instead.");
         }
 
-        projectMemberRepository.deleteById(projectMemberId);
+        projectMemberRepository.delete(projectMember);
+    }
+
+    private static void assertOwnershipUnchanged(ProjectMember member, ProjectRole requested) {
+        if (member.getProjectRole() == ProjectRole.OWNER && requested != ProjectRole.OWNER) {
+            throw new BadRequestException("A project always has an owner, so the owner's role can't be changed.");
+        }
+        if (member.getProjectRole() != ProjectRole.OWNER && requested == ProjectRole.OWNER) {
+            throw new BadRequestException("A project has exactly one owner, and ownership can't be handed over here.");
+        }
     }
 
     public Project getAccessibleProjectById(Long projectId, Long userId) {
