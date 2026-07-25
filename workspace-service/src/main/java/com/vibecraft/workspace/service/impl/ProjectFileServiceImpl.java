@@ -16,6 +16,7 @@ import com.vibecraft.workspace.repository.ProjectRepository;
 import com.vibecraft.workspace.service.ProjectFileService;
 import com.vibecraft.workspace.util.CodeSearchScanner;
 import com.vibecraft.workspace.util.ContentTypeUtils;
+import com.vibecraft.workspace.util.ProjectFilePath;
 import io.minio.CopyObjectArgs;
 import io.minio.CopySource;
 import io.minio.GetObjectArgs;
@@ -40,6 +41,20 @@ import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+/**
+ * A project's files: metadata in the database, bytes in MinIO.
+ *
+ * <p>Handles: listing the tree, reading and writing one file, deleting one, copying a whole project's files inside
+ * storage for a fork, building a ZIP, and plain-text search with per-file and overall caps.
+ *
+ * <p>Every path goes through the shared validator, so a path that could escape the project is rejected before it
+ * reaches storage, a ZIP entry name or a preview pod. Reads and writes derive the object key the same way, so they
+ * cannot disagree about the same file.
+ *
+ * <p>Several operations degrade rather than fail: a file listed but missing from storage is skipped when zipping,
+ * forking and searching, and an unreadable file is skipped mid-search. Forking copies inside storage rather than
+ * downloading bytes, so images and other binaries come through intact.
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -53,8 +68,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     @Value("${minio.project-bucket}")
     private String projectBucket;
 
-    // Search caps. Per-file keeps one generated file from filling the panel; the total keeps a common word
-    // ("import", "const") from returning thousands of rows nobody scrolls through.
     private static final int MAX_MATCHES_PER_FILE = 50;
     private static final int MAX_TOTAL_MATCHES = 300;
     private static final int MAX_QUERY_CHARS = 200;
@@ -69,8 +82,8 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     @Override
     public FileContentResponse getFileContent(Long projectId, String path) {
-        String cleanPath = normalizePath(path);
-        String objectName = objectKey(projectId, path);
+        String cleanPath = ProjectFilePath.normalize(path);
+        String objectName = ProjectFilePath.objectKey(projectId, path);
         try (
                 InputStream is = minioClient.getObject(
                         GetObjectArgs.builder()
@@ -95,22 +108,17 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     @Override
     public void saveFile(Long projectId, String path, String content) {
-        if (path == null || path.isBlank()) {
-            throw new BadRequestException("File path must not be blank");
-        }
-
         Project project = projectRepository.findById(projectId).orElseThrow(
                 () -> new ResourceNotFoundException("Project", projectId.toString())
         );
 
-        String cleanPath = normalizePath(path);
-        String objectName = objectKey(projectId, path);
+        String cleanPath = ProjectFilePath.normalize(path);
+        String objectName = ProjectFilePath.objectKey(projectId, path);
 
         try {
             byte[] contentBytes = content.getBytes(StandardCharsets.UTF_8);
             InputStream inputStream = new ByteArrayInputStream(contentBytes);
             String contentType = ContentTypeUtils.determineContentType(path);
-            // saving the file content
             minioClient.putObject(
                     PutObjectArgs.builder()
                             .bucket(projectBucket)
@@ -119,7 +127,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                             .contentType(contentType)
                             .build());
 
-            // Saving the metaData
             ProjectFile file = projectFileRepository.findByProjectIdAndPath(projectId, cleanPath)
                     .orElseGet(() -> ProjectFile.builder()
                             .project(project)
@@ -148,8 +155,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
         try (ZipOutputStream zip = new ZipOutputStream(buffer)) {
             for (ProjectFile file : files) {
-                String objectName = file.getMinioObjectKey() != null ? file.getMinioObjectKey() : objectKey(projectId, file.getPath());
-                // Open the object before adding the entry, so a missing object is skipped instead of leaving an empty entry.
+                String objectName = file.getMinioObjectKey() != null ? file.getMinioObjectKey() : ProjectFilePath.objectKey(projectId, file.getPath());
                 try (InputStream is = minioClient.getObject(
                         GetObjectArgs.builder().bucket(projectBucket).object(objectName).build())) {
                     zip.putNextEntry(new ZipEntry(file.getPath()));
@@ -184,7 +190,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
         int matchCount = 0;
         boolean truncated = false;
 
-        // Sorted so results come back in a stable, predictable order rather than however the DB returned them.
         files.sort(Comparator.comparing(ProjectFile::getPath, Comparator.nullsLast(Comparator.naturalOrder())));
 
         for (ProjectFile file : files) {
@@ -214,7 +219,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
         return new CodeSearchResponse(needle, results.size(), matchCount, truncated, List.copyOf(results));
     }
 
-    /** Binaries have no lines worth showing, and a huge file would cost more to scan than the hit is worth. */
     private boolean isSearchable(ProjectFile file) {
         if (file.getPath() == null || file.getPath().isBlank()) {
             return false;
@@ -225,18 +229,17 @@ public class ProjectFileServiceImpl implements ProjectFileService {
         }
         String type = file.getType();
         if (type == null) {
-            return true; // Older rows predate the type column; scanning one costs a read, missing it costs a result.
+            return true;
         }
         return type.startsWith("text/")
                 || type.equals("application/json")
-                || type.equals("image/svg+xml"); // markup, and genuinely searchable
+                || type.equals("image/svg+xml");
     }
 
-    /** A file that can't be read is skipped rather than failing the whole search - one missing object isn't fatal. */
     private String readForSearch(Long projectId, ProjectFile file) {
         String objectName = file.getMinioObjectKey() != null
                 ? file.getMinioObjectKey()
-                : objectKey(projectId, file.getPath());
+                : ProjectFilePath.objectKey(projectId, file.getPath());
         try (InputStream is = minioClient.getObject(
                 GetObjectArgs.builder().bucket(projectBucket).object(objectName).build())) {
             return new String(is.readAllBytes(), StandardCharsets.UTF_8);
@@ -244,15 +247,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             log.warn("Skipping unreadable file while searching project {}: {}", projectId, objectName, e);
             return null;
         }
-    }
-
-    /**
-     * The canonical form of a file path: no leading slash. The AI protocol's {@code <file path="...">} emits
-     * both {@code "/src/App.tsx"} and {@code "src/App.tsx"} for the same file, and this is what's stored in
-     * {@code ProjectFile.path} and reported by the file tree, so reads and writes must agree on it.
-     */
-    private static String normalizePath(String path) {
-        return path.startsWith("/") ? path.substring(1) : path;
     }
 
     @Override
@@ -263,8 +257,8 @@ public class ProjectFileServiceImpl implements ProjectFileService {
         int failed = 0;
 
         for (ProjectFile file : projectFileRepository.findByProjectId(sourceProjectId)) {
-            String sourceKey = file.getMinioObjectKey() != null ? file.getMinioObjectKey() : objectKey(sourceProjectId, file.getPath());
-            String targetKey = objectKey(targetProjectId, file.getPath());
+            String sourceKey = file.getMinioObjectKey() != null ? file.getMinioObjectKey() : ProjectFilePath.objectKey(sourceProjectId, file.getPath());
+            String targetKey = ProjectFilePath.objectKey(targetProjectId, file.getPath());
             try {
                 minioClient.copyObject(CopyObjectArgs.builder()
                         .bucket(projectBucket)
@@ -287,7 +281,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
             projectFileRepository.save(ProjectFile.builder()
                     .project(target)
-                    .path(normalizePath(file.getPath()))
+                    .path(ProjectFilePath.normalize(file.getPath()))
                     .minioObjectKey(targetKey)
                     .size(file.getSize())
                     .type(file.getType())
@@ -298,13 +292,9 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     @Override
     public void deleteFile(Long projectId, String path) {
-        if (path == null || path.isBlank()) {
-            throw new BadRequestException("File path must not be blank");
-        }
-        String cleanPath = normalizePath(path);
-        String objectName = objectKey(projectId, path);
+        String cleanPath = ProjectFilePath.normalize(path);
+        String objectName = ProjectFilePath.objectKey(projectId, path);
         try {
-            // MinIO treats removing a missing object as success, so this is idempotent without a lookup first.
             minioClient.removeObject(RemoveObjectArgs.builder().bucket(projectBucket).object(objectName).build());
             projectFileRepository.findByProjectIdAndPath(projectId, cleanPath).ifPresent(projectFileRepository::delete);
             log.info("Deleted file: {}", objectName);
@@ -312,15 +302,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             log.error("Failed to delete file {}/{}", projectId, cleanPath, e);
             throw new FileStorageException("Failed to delete file " + path, e);
         }
-    }
-
-    /**
-     * The MinIO object key for a project file. Every read and write goes through here — {@code getFileContent}
-     * used to build the key inline without normalizing, so a path sent with a leading slash produced the key
-     * {@code "22//src/App.tsx"} and 404'd a file that {@code saveFile} had stored at {@code "22/src/App.tsx"}.
-     */
-    private static String objectKey(Long projectId, String path) {
-        return projectId + "/" + normalizePath(path);
     }
 
 }

@@ -8,10 +8,12 @@ import com.vibecraft.workspace.repository.ProjectRepository;
 import com.vibecraft.workspace.service.ProjectTemplateService;
 import com.vibecraft.workspace.service.TemplateInitResult;
 import com.vibecraft.workspace.util.ContentTypeUtils;
+import com.vibecraft.workspace.util.ProjectFilePath;
 import io.minio.*;
 import io.minio.messages.Item;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -20,6 +22,17 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Copies the starter template's files into a new project.
+ *
+ * <p>Handles: listing the template's objects, copying each one that the project does not already have inside storage,
+ * recording its metadata, and retrying the whole pass a few times while anything is still missing. It never throws
+ * for a partial failure - the result says what is missing so the caller can surface it.
+ *
+ * <p>Skipping files the project already has is what makes a retry safe, including the user-triggered retry much
+ * later. Both the source and destination buckets come from configuration rather than being hard-coded, so template
+ * files land in the same bucket every other write uses.
+ */
 @RequiredArgsConstructor
 @Service
 @Slf4j
@@ -29,8 +42,11 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
     private final ProjectFileRepository projectFileRepository;
     private final ProjectRepository projectRepository;
 
+    @Value("${minio.project-bucket}")
+    private String projectBucket;
+
     private static final String TEMPLATE_BUCKET = "starter-projects";
-    private static final String TARGET_BUCKET = "projects";
+
     private static final String TEMPLATE_NAME = "react-vite-tailwind-daisyui-starter";
 
     private static final int MAX_ATTEMPTS = 3;
@@ -94,11 +110,11 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
                     continue;
                 }
 
-                String destKey = projectId + "/" + cleanPath;
+                String destKey = ProjectFilePath.objectKey(projectId, cleanPath);
 
                 minioClient.copyObject(
                         CopyObjectArgs.builder()
-                                .bucket(TARGET_BUCKET)
+                                .bucket(projectBucket)
                                 .object(destKey)
                                 .source(
                                         CopySource.builder()
@@ -111,7 +127,7 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
 
                 projectFileRepository.save(ProjectFile.builder()
                         .project(project)
-                        .path(cleanPath)
+                        .path(ProjectFilePath.normalize(cleanPath))
                         .minioObjectKey(destKey)
                         .size(item.size())
                         .type(ContentTypeUtils.determineContentType(cleanPath))
