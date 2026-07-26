@@ -11,14 +11,20 @@ import com.vibecraft.account.entity.User;
 import com.vibecraft.account.enums.SubscriptionStatus;
 import com.vibecraft.account.repository.PlanRepository;
 import com.vibecraft.account.repository.UserRepository;
-import com.vibecraft.account.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.account.service.PaymentProcessor;
 import com.vibecraft.account.service.SubscriptionService;
 import com.vibecraft.common.error.BadRequestException;
+import com.vibecraft.common.error.ExternalServiceException;
 import com.vibecraft.common.error.ResourceNotFoundException;
 import com.stripe.exception.CardException;
 import com.stripe.exception.StripeException;
-import com.stripe.model.*;
+import com.stripe.model.Customer;
+import com.stripe.model.Invoice;
+import com.stripe.model.Price;
+import com.stripe.model.StripeObject;
+import com.stripe.model.Subscription;
+import com.stripe.model.SubscriptionItem;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.SubscriptionUpdateParams;
 import com.stripe.param.checkout.SessionCreateParams;
@@ -33,6 +39,20 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.Map;
 
+/**
+ * The Stripe implementation of everything this platform does with payments.
+ *
+ * <p>Handles: creating a checkout session for a user with no subscription, opening the billing portal, changing plan
+ * in place (upgrade with an immediate prorated invoice, downgrade with ordinary prorations, cancel to free, or resume
+ * a cancellation), confirming a checkout the browser returned with, and consuming the five webhook events that matter
+ * - checkout completed, subscription updated and deleted, invoice paid and invoice payment failed.
+ *
+ * <p>Confirming a checkout re-fetches the session from Stripe and checks both that it was paid and that its user_id
+ * metadata is the caller's, so a session id alone proves nothing. A declined card on an upgrade is reported as a 400
+ * saying the plan has not changed, rather than as a failure of unknown effect. Stripe being unreachable is an
+ * ExternalServiceException, which becomes a 503 tagged as an upstream failure - not a bare runtime exception, which
+ * would surface as a generic 500.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -90,7 +110,7 @@ public class StripePaymentProcessor implements PaymentProcessor {
             Session session = Session.create(params.build());
             return new CheckoutResponse(session.getUrl());
         } catch (StripeException e) {
-            throw new RuntimeException(e);
+            throw new ExternalServiceException("Stripe rejected the checkout session for user " + userId, e);
         }
     }
 
@@ -101,7 +121,7 @@ public class StripePaymentProcessor implements PaymentProcessor {
         String stripeCustomerId = user.getStripeCustomerId();
 
         if (stripeCustomerId == null || stripeCustomerId.isEmpty()) {
-            throw new BadRequestException("User does not have a Stripe Customer Id, UserId:" + userId);
+            throw new BadRequestException("You don't have a billing account yet - subscribe to a plan first.");
         }
 
         try {
@@ -114,7 +134,7 @@ public class StripePaymentProcessor implements PaymentProcessor {
 
             return new PortalResponse(portalSession.getUrl());
         } catch (StripeException e) {
-            throw new RuntimeException(e);
+            throw new ExternalServiceException("Stripe rejected the billing-portal session for user " + userId, e);
         }
     }
 
@@ -335,7 +355,7 @@ public class StripePaymentProcessor implements PaymentProcessor {
 
             subscriptionService.renewSubscriptionPeriod(subId, periodStart, periodEnd);
         } catch (StripeException e) {
-            throw new RuntimeException(e);
+            throw new ExternalServiceException("Couldn't read subscription " + subId + " from Stripe", e);
         }
     }
 
