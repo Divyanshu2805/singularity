@@ -48,4 +48,7 @@ public interface WorkspaceServiceClient {
 
     @GetMapping("/internal/v1/projects/owned-count")
     int getOwnedProjectCount(@RequestParam Long userId);
+
+    @GetMapping("/internal/v1/previews/running-count")
+    int getRunningPreviewCount(@RequestParam Long userId);
 }

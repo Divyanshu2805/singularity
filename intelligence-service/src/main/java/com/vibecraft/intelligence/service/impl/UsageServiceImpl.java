@@ -1,17 +1,18 @@
 package com.vibecraft.intelligence.service.impl;
 
 import com.vibecraft.common.dto.PlanDto;
+import com.vibecraft.intelligence.dto.usage.LastRequestUsage;
 import com.vibecraft.intelligence.dto.usage.PlanLimitsResponse;
 import com.vibecraft.intelligence.dto.usage.UsageTodayResponse;
 import com.vibecraft.intelligence.dto.usage.UsageRecord;
 import com.vibecraft.intelligence.entity.UsageEvent;
 import com.vibecraft.intelligence.entity.UsageLog;
 import com.vibecraft.common.error.QuotaExceededException;
-import com.vibecraft.intelligence.feign.AccountServiceClient;
+import com.vibecraft.common.feign.AccountServiceClient;
 import com.vibecraft.intelligence.feign.WorkspaceServiceClient;
 import com.vibecraft.intelligence.repository.UsageEventRepository;
 import com.vibecraft.intelligence.repository.UsageLogRepository;
-import com.vibecraft.intelligence.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.intelligence.service.UsageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,20 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+/**
+ * Token metering and the daily budget gate.
+ *
+ * <p>Handles: writing each call to both the daily counter and the ledger in one transaction, reading today's usage
+ * alongside the plan's ceilings and the counts workspace-service owns, and refusing a request whose daily allowance
+ * is spent.
+ *
+ * <p>A plan flagged as unlimited is let through before the numeric check, which is still set for display - without
+ * that, an unlimited plan would be throttled like any other. The refusal is a 402 carrying the limit, the amount used
+ * and the refill time, so the client can offer an upgrade rather than show an error.
+ *
+ * <p>The refill instant is computed in the same zone the daily rows are bucketed by, or it would promise a refill at
+ * the wrong moment.
+ */
 @Service
 @RequiredArgsConstructor
 public class UsageServiceImpl implements UsageService {
@@ -63,19 +78,15 @@ public class UsageServiceImpl implements UsageService {
         Long projectTokens = projectId == null ? null
                 : usageEventRepository.sumForProjectBetween(userId, projectId, startOfToday, dailyResetInstant());
         var lastRequest = usageEventRepository.findFirstByUserIdOrderByCreatedAtDescIdDesc(userId)
-                .map(e -> new com.vibecraft.intelligence.dto.usage.LastRequestUsage(e.getFeature(), e.getProjectId(),
+                .map(e -> new LastRequestUsage(e.getFeature(), e.getProjectId(),
                         e.getInputTokens(), e.getOutputTokens(), e.getTotalTokens(), e.getCreatedAt()))
                 .orElse(null);
         PlanDto plan = accountServiceClient.getPlanLimits(userId);
 
-        // previewsRunning is hard-wired to 0: the running-preview count is workspace-service's, and it exposes no
-        // internal endpoint for it yet, so this service has nothing to ask (a known gap - docs/api/).
-        // Project ownership is workspace-service's own count - the allowance is Account's, the count is
-        // Workspace's, same split every quota check in this codebase uses.
         return new UsageTodayResponse(
                 tokensUsedToday(userId),
                 plan.maxTokensPerDay(),
-                0,
+                workspaceServiceClient.getRunningPreviewCount(userId),
                 plan.maxPreviews(),
                 workspaceServiceClient.getOwnedProjectCount(userId),
                 plan.maxProjects(),
@@ -87,8 +98,6 @@ public class UsageServiceImpl implements UsageService {
 
     @Override
     public PlanLimitsResponse getCurrentSubscriptionLimitsOfUser() {
-        // account-service's endpoint already folds in the free-tier fallback - never null, so the null-check
-        // branch this used to need is gone.
         PlanDto plan = accountServiceClient.getPlanLimits(authUtil.getCurrentUserId());
         return new PlanLimitsResponse(plan.name(), plan.maxTokensPerDay(), plan.maxProjects(), plan.unlimitedAi());
     }
@@ -97,6 +106,10 @@ public class UsageServiceImpl implements UsageService {
     public void assertWithinDailyTokenBudget() {
         Long userId = authUtil.getCurrentUserId();
         PlanDto plan = accountServiceClient.getPlanLimits(userId);
+
+        if (plan.unlimitedAi()) {
+            return;
+        }
 
         int limit = plan.maxTokensPerDay();
         int used = tokensUsedToday(userId);
@@ -111,12 +124,6 @@ public class UsageServiceImpl implements UsageService {
                 limit, used, dailyResetInstant(), plan.name());
     }
 
-    /**
-     * Midnight tonight, in the zone the daily rows are bucketed by. {@code recordTokenUsage} keys a
-     * {@code UsageLog} on {@code LocalDate.now()}, which is the JVM default zone - forced to Asia/Kolkata in
-     * {@code VibecraftApplication.main()} - so the countdown has to be computed against that same zone or
-     * it would promise a refill at the wrong moment.
-     */
     @Override
     public Instant dailyResetInstant() {
         ZoneId zone = ZoneId.systemDefault();

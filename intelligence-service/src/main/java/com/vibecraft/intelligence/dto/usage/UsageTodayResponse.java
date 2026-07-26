@@ -3,13 +3,15 @@ package com.vibecraft.intelligence.dto.usage;
 import java.time.Instant;
 
 /**
- * Everything the UI needs to answer "how much have I got left?" in one call - tokens for today, projects
- * against the plan's ceiling, and when the daily allowance refills.
+ * Everything the UI needs to answer "how much have I got left?" in one call.
  *
- * <p>{@code resetsAt} is computed server-side on purpose: the day a {@code UsageLog} row belongs to is
- * {@code LocalDate.now()} in the <em>server's</em> zone (forced to Asia/Kolkata in
- * {@code VibecraftApplication.main}), so a browser working it out from its own midnight would count down to
- * the wrong moment for anyone in another timezone.
+ * <p>Handles: today's tokens against the plan's ceiling, previews running and projects owned against theirs, the
+ * plan's name, today's tokens on one project when one was asked about, the caller's last call, and when the daily
+ * allowance refills.
+ *
+ * <p>The reset instant is computed server-side on purpose: the day a usage row belongs to is decided in the server's
+ * zone, so a browser working it out from its own midnight would count down to the wrong moment for anyone elsewhere.
+ * The two counts come from workspace-service, which owns the rows; the allowances come from account-service.
  */
 public record UsageTodayResponse(
         Integer tokensUsed,
@@ -18,12 +20,9 @@ public record UsageTodayResponse(
         Integer previewsLimit,
         Integer projectsUsed,
         Integer projectsLimit,
-        /** The instant the token allowance refills - the next midnight in the server's zone. */
         Instant resetsAt,
         String planName,
-        /** Today's tokens on the project asked about, or null when no project was given. */
         Long projectTokensToday,
-        /** The caller's most recent AI call - the chat meter's "last reply" line. Null before their first. */
-        com.vibecraft.intelligence.dto.usage.LastRequestUsage lastRequest
+        LastRequestUsage lastRequest
 ) {
 }

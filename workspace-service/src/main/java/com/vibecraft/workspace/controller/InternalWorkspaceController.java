@@ -10,6 +10,7 @@ import com.vibecraft.workspace.entity.Project;
 import com.vibecraft.workspace.repository.ProjectFileRepository;
 import com.vibecraft.workspace.repository.ProjectMemberRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
+import com.vibecraft.workspace.service.PreviewDeploymentService;
 import com.vibecraft.workspace.service.ProjectFileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -24,12 +25,20 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * workspace-service's API for the other services, not the browser - never routed through gateway-service, and
- * guarded by common-lib's {@code InternalServiceAuthFilter} (a shared secret) rather than {@code @PreAuthorize},
- * exactly like account-service's {@code InternalAccountController}. Called by intelligence-service through its
- * {@code feign/WorkspaceServiceClient}: the membership lookup behind every {@code @PreAuthorize} check there, the
- * file reads for prompts and code insight, and the file writes when a generated turn lands. The full internal-API
- * table is in docs/architecture/service-communication.md §3.
+ * workspace-service's API for the other services, not the browser.
+ *
+ * <p>Handles: the membership lookup behind every cross-service permission check, project summaries singly and in
+ * batch, the file tree and file content that AI prompts and code insight read, the file writes and deletes a
+ * generated turn lands, and the two counts the usage meter shows - projects owned and previews running.
+ *
+ * <p>Guarded by the shared internal-service secret rather than a caller's permissions, exactly like account-service's
+ * equivalent: the caller is intelligence-service acting on a request it has already authorized itself. These
+ * endpoints therefore enforce no per-project permission of their own, which is why the shared secret - and the
+ * distinct authority it grants - is what keeps an end user's session cookie out.
+ *
+ * <p>The membership endpoint returns a null role for "not a member" and 404s only when the project itself does not
+ * exist or is soft-deleted; the caller's permission check depends on telling those two apart. Project summaries are
+ * the one place deleted projects are included, so usage insights can still attribute tokens spent before a delete.
  */
 @RestController
 @RequiredArgsConstructor
@@ -40,13 +49,8 @@ public class InternalWorkspaceController {
     private final ProjectMemberRepository projectMemberRepository;
     private final ProjectFileRepository projectFileRepository;
     private final ProjectFileService projectFileService;
+    private final PreviewDeploymentService previewDeploymentService;
 
-    /**
-     * {@code role == null} means "not a member" - see {@link ProjectMembershipDto}'s own javadoc - so this never
-     * 404s for a real project with no such member; it 404s only if the project itself doesn't exist (or is
-     * soft-deleted). intelligence-service's {@code @security} bean's {@code @PreAuthorize} check depends
-     * on evaluating that distinction correctly, not on an exception either way.
-     */
     @GetMapping("/projects/{projectId}/members/{userId}")
     public ProjectMembershipDto getMembership(@PathVariable Long projectId, @PathVariable Long userId) {
         assertProjectExists(projectId);
@@ -62,7 +66,6 @@ public class InternalWorkspaceController {
         return toSummaryDto(project);
     }
 
-    /** Batched by id, deleted projects included — usage-insights attributes tokens spent before a delete. */
     @GetMapping("/projects")
     public List<ProjectSummaryDto> getProjectSummaries(@RequestParam List<Long> ids) {
         return projectRepository.findAllById(ids).stream().map(this::toSummaryDto).toList();
@@ -77,20 +80,12 @@ public class InternalWorkspaceController {
         return new FileTreeDto(projectId, entries);
     }
 
-    /** Backs intelligence-service's CodeGenerationTools.readFiles and AiGenerationServiceImpl's pre-edit snapshot. */
     @GetMapping("/projects/{projectId}/files/content")
     public FileContentDto getFileContent(@PathVariable Long projectId, @RequestParam String path) {
         var response = projectFileService.getFileContent(projectId, path);
         return new FileContentDto(response.path(), response.content());
     }
 
-    /**
-     * Write-capable — the first such /internal/v1/** endpoint in this codebase. Guarded by the same
-     * InternalServiceAuthFilter shared secret as every read-only internal endpoint; nothing about the guard
-     * changes for a write. The caller (intelligence-service) is trusted to have already run its own
-     * @security.canEditProject check before reaching here — this endpoint itself enforces no permission,
-     * exactly like every other /internal/v1/** endpoint doesn't re-check what the caller already checked.
-     */
     @PostMapping("/projects/{projectId}/files")
     public void saveFile(@PathVariable Long projectId, @RequestBody FileContentDto request) {
         projectFileService.saveFile(projectId, request.path(), request.content());
@@ -101,10 +96,14 @@ public class InternalWorkspaceController {
         projectFileService.deleteFile(projectId, path);
     }
 
-    /** Backs UsageServiceImpl.getTodayUsageOfUser's projectsOwned call - counting is workspace-service's job. */
     @GetMapping("/projects/owned-count")
     public int getOwnedProjectCount(@RequestParam Long userId) {
         return projectMemberRepository.countProjectOwnedByUser(userId);
+    }
+
+    @GetMapping("/previews/running-count")
+    public int getRunningPreviewCount(@RequestParam Long userId) {
+        return previewDeploymentService.countActivePreviews(userId);
     }
 
     private ProjectSummaryDto toSummaryDto(Project project) {
