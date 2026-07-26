@@ -12,11 +12,11 @@ import com.vibecraft.common.error.CapacityUnavailableException;
 import com.vibecraft.common.error.ExternalServiceException;
 import com.vibecraft.common.error.QuotaExceededException;
 import com.vibecraft.common.error.ResourceNotFoundException;
-import com.vibecraft.workspace.feign.AccountServiceClient;
+import com.vibecraft.common.feign.AccountServiceClient;
 import com.vibecraft.workspace.repository.PreviewRepository;
 import com.vibecraft.workspace.repository.PreviewSessionRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
-import com.vibecraft.workspace.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.workspace.service.PreviewDeploymentService;
 import io.fabric8.kubernetes.api.model.Pod;
 import lombok.RequiredArgsConstructor;
@@ -32,19 +32,20 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Live previews on the Kubernetes runner pool. The moving parts, each in its own class:
- * {@link PreviewRunnerPool} (claiming and running commands in pods), {@link PreviewBootstrapper} (sync, install,
- * start - asynchronously), {@link PreviewRouter} (the Redis routes the proxy serves), {@link PreviewLifecycle}
- * (ending a runner cleanly) and {@code PreviewReaper} (stopping idle ones, sweeping leftovers).
+ * Live previews on the Kubernetes runner pool - the entry point the other preview classes hang off.
  *
- * <p><b>Runner per project, session per person.</b> A {@link Preview} row is the runner: collaborators share it, since
- * they edit the same files. Everything a person sees and does goes through their own {@link PreviewSession}: the tab
- * shows a preview as running only while <em>they</em> have one open, Stop ends only theirs (the runner goes once no
- * session is left), and the plan allowance counts only theirs. Joining a runner a collaborator already started is
- * instant - no second install.
+ * <p>Handles: opening a preview for the caller (joining an existing runner or claiming a pod and starting one),
+ * enforcing the plan's concurrent-preview allowance, recording visits that keep a preview alive, restarting the dev
+ * server in place, closing a session and shutting the runner down once nobody has it open, reading the runner's
+ * output, listing the caller's open previews, and re-publishing a route Redis has lost.
  *
- * <p>Deliberately <b>not</b> {@code @Transactional}: every status change is a single conditional UPDATE, and the async
- * bootstrap must see the CREATING row committed before it starts.
+ * <p>Runner per project, session per person. The preview row is the runner: collaborators share it, since they edit
+ * the same files. Everything a person sees and does goes through their own session - the tab shows a preview as
+ * running only while they have one open, Stop ends only theirs, and the plan allowance counts only theirs. Joining a
+ * runner a collaborator already started is instant, with no second install.
+ *
+ * <p>Deliberately not transactional: every status change is a single conditional update, and the asynchronous
+ * bootstrap must see the committed row before it starts.
  */
 @Service
 @RequiredArgsConstructor
@@ -53,10 +54,8 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
 
     static final List<PreviewStatus> ACTIVE = List.of(PreviewStatus.CREATING, PreviewStatus.RUNNING);
 
-    /** What a session's end reason is when the person pressed Stop. The client won't auto-start over it. */
     static final String STOPPED_BY_USER = "Stopped";
 
-    /** How often a poll may write a visit - the tab polls every few seconds while starting. */
     private static final Duration TOUCH_THROTTLE = Duration.ofSeconds(30);
     private static final String SLUG_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -72,11 +71,6 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
     private final AccountServiceClient accountServiceClient;
     private final AuthUtil authUtil;
 
-    /**
-     * One start/stop at a time per project, so two people opening Preview together share one runner rather than
-     * claiming two, and a Stop can't shut a runner someone is joining. In-process only: with more than one backend
-     * instance this needs a distributed lock (Redis SETNX).
-     */
     private final ConcurrentHashMap<Long, Object> projectLocks = new ConcurrentHashMap<>();
 
     @Override
@@ -139,14 +133,12 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
                 return startPreview(projectId);
             }
             if (runner.getStatus() == PreviewStatus.CREATING) {
-                return toResponse(runner, open.get(), null); // already on its way up
+                return toResponse(runner, open.get(), null);
             }
             if (previewRepository.markRestarting(runner.getId(), "Restarting the dev server", Instant.now()) == 0) {
                 return startPreview(projectId);
             }
 
-            // The runner is shared, so this restarts it for everyone with it open - which is right: it's the same
-            // dependencies for all of them. The route comes down so the proxy answers "restarting", not a broken page.
             router.remove(runner.getHostname());
             bootstrapper.stopDevServer(runner.getPodName());
             bootstrapper.start(runner.getId(), projectId, false);
@@ -164,8 +156,6 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
         synchronized (lockFor(projectId)) {
             sessionRepository.findFirstByProjectIdAndUserIdAndEndedAtIsNullOrderByIdDesc(projectId, userId)
                     .ifPresent(session -> {
-                        // Loaded in full first: end() clears the persistence context, and a lazy proxy left
-                        // uninitialised by then couldn't be read afterwards.
                         Preview runner = previewRepository.findById(session.getPreview().getId()).orElseThrow();
                         sessionRepository.end(session.getId(), STOPPED_BY_USER, Instant.now());
                         shutDownIfUnused(runner, STOPPED_BY_USER);
@@ -213,8 +203,6 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
         }
     }
 
-    /** Ends a runner nobody has open any more. Call with {@link #lockFor} held. Public because the reaper reaches it
-     * through this bean's security proxy, which only forwards public methods to the real instance. */
     public void shutDownIfUnused(Preview runner, String reason) {
         if (sessionRepository.countByPreviewIdAndEndedAtIsNull(runner.getId()) == 0) {
             lifecycle.terminate(runner, reason);
@@ -225,7 +213,6 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
         return projectLocks.computeIfAbsent(projectId, id -> new Object());
     }
 
-    /** The project's starting or running runner, ending one whose pod has vanished (evicted, deleted by hand). */
     private Optional<Preview> activeRunner(Long projectId) {
         Optional<Preview> runner = previewRepository.findFirstByProjectIdAndStatusInOrderByIdDesc(projectId, ACTIVE);
         if (runner.isPresent() && !runnerPool.isAlive(runner.get().getPodName())) {
@@ -276,7 +263,6 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
                 QuotaExceededException.Reason.PREVIEW_LIMIT, allowance, open, null, planName);
     }
 
-    /** Keeps an in-use preview alive: this person's idle clock, the runner's, and the route's expiry. */
     private void markVisited(Preview runner, PreviewSession session) {
         Instant now = Instant.now();
         if (session.getLastSeenAt() != null && session.getLastSeenAt().plus(TOUCH_THROTTLE).isAfter(now)) {
@@ -287,18 +273,25 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
         previewRepository.touch(runner.getId(), now);
         if (runner.getStatus() == PreviewStatus.RUNNING) {
             try {
-                router.refresh(runner.getHostname());
+                if (!router.refresh(runner.getHostname())) {
+                    republishRoute(runner);
+                }
             } catch (ExternalServiceException e) {
                 log.warn("Couldn't refresh the route for preview {}: {}", runner.getId(), e.getMessage());
             }
         }
     }
 
-    /**
-     * What this person's tab shows. While their session is open it follows the runner; once it has ended it shows how
-     * <em>their</em> session ended - "Stopped" stays stopped for them even while a collaborator's keeps running.
-     * {@code id} is the session's, so each start is a distinct preview to the client.
-     */
+    public void republishRoute(Preview runner) {
+        Optional<String> podIp = runnerPool.podIp(runner.getPodName());
+        if (podIp.isEmpty()) {
+            lifecycle.terminate(runner, "The preview's runner stopped unexpectedly");
+            return;
+        }
+        router.register(runner.getHostname(), podIp.get());
+        log.info("Re-registered the lost route for preview {} on {}", runner.getId(), runner.getHostname());
+    }
+
     private PreviewResponse toResponse(Preview runner, PreviewSession session, String projectName) {
         boolean open = session.getEndedAt() == null;
         PreviewStatus status = open ? runner.getStatus()
@@ -320,10 +313,6 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
                 open);
     }
 
-    /**
-     * {@code p<id>-<10 random chars>}: the id keeps it recognisable in logs, the random part keeps someone from
-     * walking project ids to find other people's previews. One DNS label, well under the 63-character limit.
-     */
     private String newHostname(Long projectId) {
         StringBuilder slug = new StringBuilder("p").append(projectId).append('-');
         for (int i = 0; i < 10; i++) {

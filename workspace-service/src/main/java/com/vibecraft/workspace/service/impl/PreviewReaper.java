@@ -23,23 +23,22 @@ import java.util.stream.Collectors;
 import static com.vibecraft.workspace.service.impl.PreviewDeploymentServiceImpl.ACTIVE;
 
 /**
- * Keeps the runner pool from filling up with previews nobody is using - a claimed pod is never returned on its own.
- * Every minute it:
- * <ul>
- *   <li>ends a person's session when their app hasn't asked about it for {@code preview.idle-timeout};</li>
- *   <li>stops a RUNNING runner nobody has a session on - unless the proxy served it recently, so one open in its own
- *       tab stays up;</li>
- *   <li>ends a RUNNING runner whose pod is gone;</li>
- *   <li>fails a CREATING runner stuck well past the boot timeout (its bootstrap thread died);</li>
- *   <li>deletes claimed pods no active runner owns - left behind when cleanup couldn't reach the cluster.</li>
- * </ul>
+ * Stops previews nobody is using and sweeps what earlier runs left behind.
+ *
+ * <p>Handles: failing any preview left mid-start by a restart, ending sessions that have gone idle, failing a start
+ * that overran its timeout, ending a preview whose pod has vanished, keeping alive a preview being visited directly
+ * through the proxy (and re-publishing its route if Redis lost it), shutting down a runner once no session is left on
+ * it, and releasing claimed pods that no active preview owns.
+ *
+ * <p>A restart kills any bootstrap that was in flight, so a still-creating row from before can never finish; failing
+ * those immediately is better than leaving the tab spinning until the timeout. The cluster or Redis being unreachable
+ * - a sleeping laptop, a stopped cluster - is logged once rather than every minute.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class PreviewReaper {
 
-    /** A pod claimed this recently may simply not have its Preview row saved yet. */
     private static final Duration ORPHAN_GRACE = Duration.ofMinutes(2);
     private static final Duration STUCK_GRACE = Duration.ofMinutes(2);
 
@@ -53,10 +52,6 @@ public class PreviewReaper {
 
     private volatile boolean lastRunFailed;
 
-    /**
-     * A restart kills any bootstrap that was in flight, so a CREATING row left from before can never finish. Fail
-     * them straight away rather than leaving the tab spinning until the reaper's timeout.
-     */
     @EventListener(ApplicationReadyEvent.class)
     public void failInterruptedStarts() {
         try {
@@ -86,7 +81,6 @@ public class PreviewReaper {
             if (lastRunFailed) log.info("Preview reaper reconnected");
             lastRunFailed = false;
         } catch (ExternalServiceException e) {
-            // The cluster or Redis being down (laptop asleep, cluster stopped) shouldn't bury the log every minute.
             if (!lastRunFailed) log.warn("Preview reaper skipped a run: {}", e.getMessage());
             lastRunFailed = true;
         }
@@ -116,7 +110,9 @@ public class PreviewReaper {
         Instant proxyVisit = router.lastVisit(preview.getHostname()).orElse(null);
         boolean visitedRecently = proxyVisit != null && proxyVisit.plus(properties.idleTimeout()).isAfter(now);
         if (visitedRecently) {
-            router.refresh(preview.getHostname()); // open in its own tab: keep the route from expiring
+            if (!router.refresh(preview.getHostname())) {
+                deploymentService.republishRoute(preview);
+            }
             return;
         }
 
