@@ -1,19 +1,38 @@
+/**
+ * The preview proxy: routes every preview hostname to the runner pod serving it.
+ *
+ * Handles: looking a hostname's route up in Redis, proxying both HTTP and websockets to that pod, recording that a
+ * preview was visited, rewriting a page load's HTML on the way out to inject the runtime-error reporter, and serving
+ * a readable page when there is no route or the runner does not answer.
+ *
+ * The backend writes the route key once a preview's dev server answers and removes it when the preview stops; this
+ * writes the last-seen key as pages load, which is how the backend's idle reaper knows a preview open in its own tab
+ * is still in use. Keep both key names in step with the backend's router - nothing else ties the two together.
+ *
+ * Redis waits are bounded on purpose: an unlimited command queue turns an outage into requests that hang forever
+ * rather than failing, and the last-seen map is swept so a long-lived process cannot accumulate one entry per
+ * hostname it has ever served.
+ *
+ * The HTML rewrite asks for an uncompressed response, since it has to read the body - the dev server does not
+ * compress, but a user's own server might. The injected reporter covers uncaught errors, unhandled rejections and the
+ * dev server's compile-error overlay, which is where a syntax error the AI wrote shows up and which never reaches the
+ * usual error handler.
+ */
 const http = require('http');
 const httpProxy = require('http-proxy');
 const Redis = require('ioredis');
-
-// Routes every preview hostname to the runner pod serving it. The backend (PreviewRouter.java) writes
-// `route:<hostname>` = "<podIp>:<port>" once a preview's dev server answers, and removes it when the preview stops.
-// This proxy writes `seen:<hostname>` = epoch millis as pages load, which is how the backend's idle reaper knows a
-// preview open in its own tab is still in use. Keep both key names in step with PreviewRouter.
 
 const redisUrl = process.env.REDIS_URL || 'redis://redis-service:6379';
 const port = Number(process.env.PORT || 80);
 const SEEN_TTL_SECONDS = 24 * 60 * 60;
 const SEEN_WRITE_EVERY_MS = 15_000;
+const REDIS_MAX_RETRIES = 2;
+const REDIS_COMMAND_TIMEOUT_MS = 2_000;
+const MAX_TRACKED_HOSTNAMES = 5_000;
 
 const redis = new Redis(redisUrl, {
-    maxRetriesPerRequest: null,
+    maxRetriesPerRequest: REDIS_MAX_RETRIES,
+    commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
     enableReadyCheck: false,
     retryStrategy(times) {
         const delay = Math.min(times * 50, 2000);
@@ -27,10 +46,8 @@ redis.on('connect', () => console.log('Connected to Redis'));
 
 const proxy = httpProxy.createProxyServer({ ws: true, xfwd: true, changeOrigin: true });
 
-// Page loads go through this one instead, so the HTML can be rewritten on the way out (see injectReporter).
 const htmlProxy = httpProxy.createProxyServer({ xfwd: true, changeOrigin: true, selfHandleResponse: true });
 
-// The rewrite needs plain text back, not gzip - Vite's dev server doesn't compress, but a user's own server might.
 htmlProxy.on('proxyReq', (proxyReq) => proxyReq.setHeader('accept-encoding', 'identity'));
 
 htmlProxy.on('proxyRes', (proxyRes, req, res) => {
@@ -67,6 +84,12 @@ const lastSeenWrite = new Map();
 function recordVisit(hostname) {
     const now = Date.now();
     if (now - (lastSeenWrite.get(hostname) || 0) < SEEN_WRITE_EVERY_MS) return;
+    if (lastSeenWrite.size >= MAX_TRACKED_HOSTNAMES) {
+        for (const [host, at] of lastSeenWrite) {
+            if (now - at > SEEN_WRITE_EVERY_MS) lastSeenWrite.delete(host);
+        }
+        if (lastSeenWrite.size >= MAX_TRACKED_HOSTNAMES) lastSeenWrite.clear();
+    }
     lastSeenWrite.set(hostname, now);
     redis.set(`seen:${hostname}`, String(now), 'EX', SEEN_TTL_SECONDS).catch(() => {});
 }
@@ -75,12 +98,6 @@ const getTargetUrl = (target) => (target.includes(':') ? `http://${target}` : `h
 
 const isPageLoad = (req) => req.method === 'GET' && String(req.headers.accept || '').includes('text/html');
 
-/**
- * Reports the previewed app's runtime errors to the VibeCraft tab embedding it, which offers "Fix this error"
- * (ProjectView listens for `PreviewError`). Covers uncaught errors, unhandled promise rejections, and Vite's compile
- * error overlay - the last is where a syntax error the AI wrote shows up, and it never reaches window.onerror.
- * Also reports the current path, so the preview's address bar can follow in-app navigation.
- */
 const REPORTER = `<script>(function () {
   if (window.parent === window) return;
   var sent = {};
@@ -165,7 +182,6 @@ const server = http.createServer(async (req, res) => {
     }
 });
 
-// Vite's hot-reload socket.
 server.on('upgrade', async (req, socket, head) => {
     const hostname = (req.headers.host || '').split(':')[0];
     const target = await getTarget(hostname);
