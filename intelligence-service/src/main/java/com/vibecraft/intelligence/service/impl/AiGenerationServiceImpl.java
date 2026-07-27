@@ -11,6 +11,7 @@ import com.vibecraft.intelligence.enums.ChatEventType;
 import com.vibecraft.intelligence.enums.UsageFeature;
 import com.vibecraft.intelligence.enums.MessageRole;
 import com.vibecraft.intelligence.feign.WorkspaceServiceClient;
+import com.vibecraft.intelligence.llm.AiUsageRecorder;
 import com.vibecraft.intelligence.llm.LlmResponseParser;
 import com.vibecraft.intelligence.llm.PromptUtils;
 import com.vibecraft.intelligence.llm.TeachingMode;
@@ -19,7 +20,7 @@ import com.vibecraft.intelligence.llm.tools.CodeGenerationTools;
 import com.vibecraft.intelligence.repository.ChatEventRepository;
 import com.vibecraft.intelligence.repository.ChatMessageRepository;
 import com.vibecraft.intelligence.repository.ChatSessionRepository;
-import com.vibecraft.intelligence.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.intelligence.service.AiGenerationService;
 import com.vibecraft.intelligence.service.ProjectFileReader;
 import com.vibecraft.intelligence.service.UsageService;
@@ -47,6 +48,28 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+/**
+ * The build pipeline: a user's message in, generated files and a saved chat turn out.
+ *
+ * <p>Handles: checking the daily budget before anything starts, opening the model stream and subscribing to it
+ * server-side, recording usage, parsing the answer into events, writing and deleting the files it asked for, and
+ * saving the turn - plus reattaching to a running generation and stopping one.
+ *
+ * <p>The budget check is raised synchronously, before the response has started, so it surfaces as a real 402 with the
+ * quota numbers on it rather than a generic error event the client could not tell from a provider failure.
+ *
+ * <p>Two failure modes are handled rather than hidden. A turn that announced an edit - through a tool log or a
+ * checklist - and produced none is retried once to completion, and flagged in the transcript if the retry also
+ * produces nothing, instead of looking like a silent success. A turn that ran out of output budget, or that wrote
+ * only some of the files it listed, gets a note saying so next to the unticked steps.
+ *
+ * <p>Individual failures degrade rather than cascade: a file that cannot be written is skipped and logged while the
+ * rest of the turn proceeds, and if saving the events as one batch is rejected they are retried one at a time,
+ * because losing the whole transcript after the files were already written looks like a broken product.
+ *
+ * <p>A model stream must be retried by rebuilding the whole call rather than by attaching a retry to the built
+ * stream: the advisor chain is single-use per subscription and throws on a second attempt otherwise.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -62,17 +85,13 @@ public class AiGenerationServiceImpl implements AiGenerationService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatEventRepository chatEventRepository;
     private final UsageService usageService;
-    private final com.vibecraft.intelligence.llm.AiUsageRecorder aiUsageRecorder;
+    private final AiUsageRecorder aiUsageRecorder;
     private final GenerationRegistry generationRegistry;
 
     @Override
     @PreAuthorize("@security.canEditProject(#projectId)")
     public Flux<StreamResponse> streamResponse(String userMessage, Long projectId, boolean teachingMode) {
 
-        // Thrown here, synchronously, rather than inside the Flux: the controller has not started writing the
-        // SSE response yet, so this surfaces as a real 402 with the quota numbers on it. Raised after the
-        // stream opens it could only ever be a generic "error" event, and the client could not tell a spent
-        // allowance from a provider failure.
         usageService.assertWithinDailyTokenBudget();
 
         Long userId = authUtil.getCurrentUserId();
@@ -89,14 +108,10 @@ public class AiGenerationServiceImpl implements AiGenerationService {
 
         AtomicReference<Long> startTime = new AtomicReference<>(System.currentTimeMillis());
         AtomicReference<Usage> usageRef = new AtomicReference<>();
-        // Why the model stopped. "length" means it ran out of output budget mid-answer - the stream still
-        // completes normally, so without reading this a truncated build is indistinguishable from a finished one.
         AtomicReference<String> finishReason = new AtomicReference<>();
 
         ActiveGeneration generation = generationRegistry.start(projectId, userId, userMessage, teachingMode);
 
-        // Subscribed here, by the server, and not by the HTTP response: the generation now belongs to nobody's
-        // connection, so a refresh, a closed tab or a dropped network can't cancel it. The response only watches it.
         Disposable subscription;
         try {
             subscription = buildGenerationFlux(userMessage, advisorParams, codeGenerationTools, teaching)
@@ -105,8 +120,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                             usageRef.set(response.getMetadata().getUsage());
                         }
 
-                        // The trailing chunk that carries usage stats (stream-usage: true) has no
-                        // choices at all, so getResult() is null here - nothing else to do with it.
                         if(response.getResult() == null) {
                             return;
                         }
@@ -128,9 +141,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                         generation.markFailed(error);
                         generationRegistry.remove(generation);
                     }, () -> {
-                        // Measured to the end of the stream, not to the first token. The browser shows its own
-                        // elapsed time while the answer is still arriving, and a saved "Thought for 2s" replacing
-                        // the 27s the user just watched on the next refresh is simply wrong.
                         long endTime = System.currentTimeMillis();
                         generation.markStreamComplete();
                         Schedulers.boundedElastic().schedule(() -> {
@@ -141,14 +151,11 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                             } catch (Exception e) {
                                 log.error("Failed to finalize chat for projectId: {}. Raw response was: {}", projectId, fullResponseBuffer, e);
                             } finally {
-                                // Only now: until the turn is saved, a refreshed page still needs to find it here rather
-                                // than in a history that doesn't have it yet.
                                 generationRegistry.remove(generation);
                             }
                         });
                     });
         } catch (RuntimeException e) {
-            // Failing before it ever started must not leave the project looking busy until a restart.
             generationRegistry.remove(generation);
             throw e;
         }
@@ -179,7 +186,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
     public boolean stopActiveGeneration(Long projectId) {
         Optional<ActiveGeneration> generation = generationRegistry.find(projectId, authUtil.getCurrentUserId());
         generation.ifPresent(active -> {
-            // A generation already saving has nothing left to stop - its model call is over.
             if (active.status() == ActiveGeneration.Status.RUNNING) {
                 active.stop(new GenerationStoppedException());
                 generationRegistry.remove(active);
@@ -189,13 +195,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         return generation.isPresent();
     }
 
-    /**
-     * Teaching mode is resolved once, on the request thread, and then reused by the abandoned-edit retry - nothing
-     * is saved between the two attempts, so the already-taught list can't go stale, and {@code finalizeChats} runs
-     * with no security context to look the user up again anyway. A failed lookup still honours the toggle, just
-     * without the history: a learner who asked for explanations shouldn't lose them over a read that only exists to
-     * avoid repeats.
-     */
     private TeachingMode resolveTeachingMode(boolean enabled, Long userId, Long projectId) {
         if (!enabled) {
             return TeachingMode.off();
@@ -229,17 +228,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                         .doBeforeRetry(signal -> log.warn("Rate limited by OpenRouter, retrying (attempt {})", signal.totalRetries() + 1)));
     }
 
-    /**
-     * Runs a full (non-streamed) generation and blocks until it completes. Only ever called from
-     * {@code finalizeChats}, which itself runs on a boundedElastic thread - never call this from a
-     * request thread.
-     */
-    /**
-     * The abandoned-edit retry, run to completion off the live stream. It is a full generation, so it is billed
-     * like one: this used to drop the trailing usage chunk entirely, and every retry spent a build's worth of
-     * tokens that neither quotas nor insights ever saw. {@code userId}/{@code projectId} are passed in because
-     * this runs after the request thread has gone.
-     */
     private String collectFullResponse(String userMessage, Map<String, Object> advisorParams, CodeGenerationTools tools,
                                        TeachingMode teaching, Long userId, Long projectId) {
         StringBuilder buffer = new StringBuilder();
@@ -260,20 +248,9 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         return buffer.toString();
     }
 
-    /**
-     * Catches the exact failure mode found in production: the model announces a change - via a {@code <tool>}
-     * tag saying it's reading files, or a {@code <todo>} checklist naming the files it will write - but the
-     * turn ends without ever emitting the {@code <file>} edit, so nothing gets saved and the chat looks like
-     * it succeeded. A turn that never announced an edit at all (a plain question, for example) is left alone.
-     *
-     * <p>The checklist is the stronger signal of the two: a turn that listed the files it would write and
-     * wrote none is unambiguously unfinished, and it catches the case where the model planned without
-     * reading anything first, which the tool-tag check alone misses.
-     */
     private boolean looksLikeAbandonedEdit(List<ChatEvent> events) {
         boolean announcedEdit = events.stream()
                 .anyMatch(e -> e.getType() == ChatEventType.TOOL_LOG || e.getType() == ChatEventType.TODO);
-        // Deleting counts as doing the change: a turn whose only step removes a file wrote nothing, and isn't unfinished.
         boolean producedFileEdit = events.stream()
                 .anyMatch(e -> e.getType() == ChatEventType.FILE_EDIT || e.getType() == ChatEventType.FILE_DELETE);
         return announcedEdit && !producedFileEdit;
@@ -303,7 +280,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
 
         ChatMessage assistantChatMessage = ChatMessage.builder()
                 .role(MessageRole.ASSISTANT)
-                .content("Assistant Message here...")
                 .chatSession(chatSession)
                 .tokensUsed(completionTokens)
                 .build();
@@ -325,7 +301,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
             CodeGenerationTools tools = new CodeGenerationTools(projectFileReader, projectId);
 
             long retryStart = System.currentTimeMillis();
-            // Same teaching mode as the first attempt: the learner asked for lessons on this turn, retried or not.
             String retryText = collectFullResponse(userMessage, advisorParams, tools, teaching,
                     chatSession.getId().getUserId(), projectId);
             duration = (System.currentTimeMillis() - retryStart) / 1000;
@@ -346,7 +321,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
             }
         }
 
-        appendUnfinishedNotice(chatEventList, projectId, finishReason);
+        appendUnfinishedNotice(chatEventList, assistantChatMessage, projectId, finishReason);
 
         chatEventList.addFirst(ChatEvent.builder()
                         .type(ChatEventType.THOUGHT)
@@ -363,7 +338,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
 
         int savedCount = 0;
         for (ChatEvent event : fileEditEvents) {
-            // Read before saving over it - after the save, storage no longer has this version anywhere.
             event.setPreviousContent(previousContentOf(projectId, event.getFilePath()));
             try {
                 workspaceServiceClient.saveFile(projectId, new FileContentDto(event.getFilePath(), event.getContent()));
@@ -377,7 +351,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
             log.warn("Saved {}/{} generated file(s) for projectId: {}", savedCount, fileEditEvents.size(), projectId);
         }
 
-        // After the writes, so a rename (new file + delete of the old one) never leaves the project with neither copy.
         for (ChatEvent event : chatEventList) {
             if (event.getType() != ChatEventType.FILE_DELETE) continue;
             try {
@@ -391,7 +364,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         saveChatEvents(chatEventList, projectId);
     }
 
-    /** The file as it is right now, "" if it doesn't exist yet, or null if it couldn't be read (no diff, but no failure). */
     private String previousContentOf(Long projectId, String path) {
         try {
             return workspaceServiceClient.getFileContent(projectId, path).content();
@@ -403,16 +375,8 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         }
     }
 
-    /**
-     * Says so, in the transcript, when a turn stopped before it finished what it set out to do.
-     *
-     * <p>Two ways that happens, neither of which produces an error: the model runs out of output budget
-     * mid-answer ({@code finishReason} of {@code length}), or it simply stops after some of the files it
-     * listed. Both used to end as a silent success - a checklist with most of its steps unticked and nothing
-     * saying why. The unticked steps stay unticked, which is the honest record; this adds the explanation
-     * next to them, and tells the reader they can carry on.
-     */
-    private void appendUnfinishedNotice(List<ChatEvent> events, Long projectId, String finishReason) {
+    private void appendUnfinishedNotice(List<ChatEvent> events, ChatMessage assistantChatMessage,
+                                        Long projectId, String finishReason) {
         List<String> planned = events.stream()
                 .filter(event -> event.getType() == ChatEventType.TODO && event.getFilePath() != null)
                 .map(ChatEvent::getFilePath)
@@ -441,16 +405,12 @@ public class AiGenerationServiceImpl implements AiGenerationService {
 
         events.add(ChatEvent.builder()
                 .type(ChatEventType.MESSAGE)
-                .chatMessage(events.getFirst().getChatMessage())
+                .chatMessage(assistantChatMessage)
                 .content(reason + remaining + " Use Retry to carry on from here.")
                 .sequenceOrder(events.size() + 1)
                 .build());
     }
 
-    /**
-     * Walkthroughs are counted only for a teaching-mode turn, where they show whether the model is following the
-     * {@code <learn>} rules: every file should get one, and the part count says how thoroughly they cover their files.
-     */
     private void logParsedEvents(String label, List<ChatEvent> events, Long projectId, TeachingMode teaching) {
         long fileEditCount = events.stream().filter(e -> e.getType() == ChatEventType.FILE_EDIT).count();
         if (!teaching.enabled()) {
@@ -463,17 +423,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 label, events.size(), fileEditCount, lessons.size(), partCount, projectId);
     }
 
-    /**
-     * Saves the turn's events, falling back to one at a time if the batch is rejected. {@code saveAll} is
-     * all-or-nothing, so a single unsaveable event used to take the whole conversation record with it - the
-     * same failure the per-file loop above already guards against, and one that bites hardest here because
-     * the generated files have already been written by this point: the project gains files while its chat
-     * looks like nothing ever happened. Losing one event is a gap in the transcript; losing all of them
-     * looks like a broken product.
-     *
-     * <p>Safe to retry individually because this class is deliberately not {@code @Transactional}: the failed
-     * batch rolls back its own transaction and each retry gets a fresh one.
-     */
     private void saveChatEvents(List<ChatEvent> events, Long projectId) {
         try {
             chatEventRepository.saveAll(events);
@@ -495,12 +444,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         }
     }
 
-    /**
-     * No Project/User lookup needed: @security.canEditProject already guarantees the project exists (a
-     * nonexistent/soft-deleted one denies access before this ever runs), and userId is the already-
-     * authenticated caller, guaranteed to exist in account-service because SessionAuthenticator just
-     * resolved it. ChatSession carries only the ids - see its own comment for why there's no association.
-     */
     private ChatSession createChatSessionIfNotExists(Long projectId, Long userId) {
         ChatSessionId chatSessionId = new ChatSessionId(projectId, userId);
         return chatSessionRepository.findById(chatSessionId)

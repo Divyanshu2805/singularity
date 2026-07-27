@@ -1,3 +1,14 @@
+/**
+ * The project build chat: the transcript, the composer and everything around them.
+ *
+ * Handles: rendering saved and streaming turns, revealing a streamed answer at a readable pace, the scroll rail down
+ * the side, the composer with its teaching-mode toggle and example prompts, the usage meter above it, retrying an
+ * unfinished turn, exporting the conversation, and the quota banner that replaces the composer once the allowance is
+ * spent.
+ *
+ * An assistant turn carries no text of its own once saved - its events are the record - so the raw text is only used
+ * while one is still streaming.
+ */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, CodeXml, Eye, Loader2, Lock, PenLine, RotateCcw, Sparkles, Square, Terminal, Zap } from "lucide-react";
 import { format } from "date-fns";
@@ -10,21 +21,17 @@ import { TeachingModeToggle } from "./TeachingModeToggle";
 import { MessageActions } from "./MessageActions";
 import { assistantTurnText } from "@/lib/chat-export";
 
-/** The backend stores this string in `ChatMessage.content` for every assistant turn; its events are the record. */
-const SAVED_ASSISTANT_PLACEHOLDER = "Assistant Message here...";
 import { ChatScrollRail } from "./ChatScrollRail";
 import { messageLabel } from "@/lib/chat-rail";
 import { ChatEvent, ProjectRole } from "@/lib/types";
 import type { CodeTarget } from "@/lib/lesson";
 import { cn, formatWorkedFor, generateGradient } from "@/lib/utils";
 
-// Module-level so the array/object references stay stable across renders.
 const EMPTY_STATE_SUGGESTIONS = [
   "build a landing page for a SaaS product",
   "create a todo app with drag and drop",
   "add a dark mode toggle to the navbar",
 ];
-// For someone opening a project that was shared with them: getting oriented comes before building.
 const SHARED_PROJECT_STARTERS = [
   {
     label: "Explain how this project is built",
@@ -37,9 +44,7 @@ const SHARED_PROJECT_STARTERS = [
 ];
 const STREAM_OPTIONS = { visibleRanges: findVisibleRanges, safeEnd: findSafeEnd };
 const MAX_INPUT_HEIGHT = 200;
-// How long a message stays lit up after jumping to it.
 const JUMP_HIGHLIGHT_MS = 1400;
-// Longest a smooth jump is expected to take; scroll events before this are ours, not the reader's.
 const JUMP_SCROLL_MS = 1200;
 
 export interface ChatMessage {
@@ -48,25 +53,16 @@ export interface ChatMessage {
   content: string;
   isStreaming?: boolean;
   createdAt?: string;
-  /** Seconds the response took, measured in the browser - stands in for the server's `THOUGHT` event until it lands. */
   thoughtSeconds?: number;
-  /** Files the answer listed as steps but never wrote - a build cut short ends cleanly, with no error. */
   unfinishedSteps?: number;
-  /** The request was refused before any response began (e.g. out of quota) - nothing ran, so it can just be sent again. */
   notSent?: boolean;
-  /** The reader pressed Stop, so this answer is deliberately incomplete rather than broken. */
   wasStopped?: boolean;
-  /**
-   * Leading characters of `content` to show at once rather than type out: what a reattached page receives in one go
-   * after a refresh, which the reader was already looking at before it. Only new text after it animates.
-   */
   instantLength?: number;
-  events?: ChatEvent[]; // Structured events from the database
+  events?: ChatEvent[];
   editedFiles?: string[];
   error?: string;
 }
 
-/** Set when the project belongs to someone else, so an empty chat welcomes the collaborator instead. */
 export interface SharedProjectInfo {
   projectName: string;
   ownerName?: string;
@@ -79,26 +75,13 @@ interface ChatPanelProps {
   isStreaming: boolean;
   isLoading?: boolean;
   readOnly?: boolean;
-  /**
-   * Set once today's AI allowance is spent. The composer is replaced rather than merely disabled: a greyed-out
-   * box with no explanation reads as the app being broken, which is exactly the wrong impression at the moment
-   * someone might otherwise pay.
-   */
   quotaBlock?: { message: string; resetsIn: string; onUpgrade: () => void } | null;
-  /** Rendered just above the composer - the page's token meter. Left out for view-only members, who can't send. */
   usageMeter?: ReactNode;
-  /**
-   * `isFromCurrentChat` is true only for files from the latest live response, which may still have a diff to show.
-   * `target` is set when a teaching-mode walkthrough points at a particular line.
-   */
   onOpenFile?: (path: string, isFromCurrentChat: boolean, target?: CodeTarget) => void;
   sharedWith?: SharedProjectInfo | null;
   onBrowseCode?: () => void;
-  /** Aborts the response in flight - the composer's send button becomes Stop while one is running. */
   onStop?: () => void;
-  /** Sends the last message again, for an answer that was stopped, failed, or ran out of room mid-plan. */
   onRetry?: () => void;
-  /** Applies from the next message sent; lessons already in the chat stay put whichever way it's set. */
   teachingMode?: boolean;
   onTeachingModeChange?: (enabled: boolean) => void;
 }
@@ -145,22 +128,16 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
-  // The token re-triggers the highlight even when jumping to the same message twice.
   const [highlight, setHighlight] = useState<{ id: string; token: number } | null>(null);
-  // 1-based position among your messages, shown in the jump control; 0 when none is current.
   const [jumpPosition, setJumpPosition] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isPinnedRef = useRef(true);
   const observerRef = useRef<ResizeObserver | null>(null);
-  // The message the last jump landed on. Jumps step from this index, not from what happens to be on screen:
-  // messages near the end can never scroll to the top of the view, so screen-based stepping got stuck on them.
   const activeJumpRef = useRef<number | null>(null);
   const isJumpScrollingRef = useRef(false);
   const jumpScrollTimerRef = useRef<number | undefined>(undefined);
 
-  // Files from the latest reply open with their diff (if one is still unseen); older replies always open full content.
-  // Diffs only exist in memory for this session, so after a refresh the latest reply opens full content too.
   const currentChatMessageId = [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null;
   const userMessageIds = useMemo(() => messages.filter((message) => message.role === "user").map((message) => message.id), [messages]);
   const railItems = useMemo(
@@ -169,7 +146,6 @@ export function ChatPanel({
   );
   const hasRail = !isLoading && railItems.length > 1;
 
-  /** Scroll offset of one of your messages within the chat, or null if it isn't rendered. */
   const userMessageTop = (index: number) => {
     const container = scrollRef.current;
     const id = userMessageIds[index];
@@ -178,7 +154,6 @@ export function ChatPanel({
     return el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
   };
 
-  /** The last of your messages that starts at or above a point a third of the way down the view; -1 if none. */
   const nearestUserMessageIndex = () => {
     const container = scrollRef.current;
     if (!container) return -1;
@@ -191,8 +166,6 @@ export function ChatPanel({
     return nearest;
   };
 
-  // Follow new content only while the reader is already at the bottom - scrolling up to
-  // re-read something shouldn't get yanked back down by the next streamed line.
   const contentRef = useCallback((node: HTMLDivElement | null) => {
     observerRef.current?.disconnect();
     observerRef.current = null;
@@ -209,17 +182,13 @@ export function ChatPanel({
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    // Only a scroll *up* unpins. Our own scroll-to-bottom can report "not at bottom" when more
-    // streamed content lands before its scroll event fires, which must not stop the follow.
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 64) isPinnedRef.current = true;
     else if (el.scrollTop < lastScrollTopRef.current) isPinnedRef.current = false;
     lastScrollTopRef.current = el.scrollTop;
     setShowJumpToLatest(!isPinnedRef.current);
 
-    // Scrolling by hand means the reader has moved on from the last jump; the next jump starts from the screen.
     if (!isJumpScrollingRef.current) {
       activeJumpRef.current = null;
-      // At the bottom the latest message is "current", even though it can never reach the top of the view.
       setJumpPosition(isPinnedRef.current ? userMessageIds.length : nearestUserMessageIndex() + 1);
     }
   };
@@ -232,7 +201,6 @@ export function ChatPanel({
     }, JUMP_SCROLL_MS);
   };
 
-  // A smooth scroll ends with `scrollend` where supported; the timer above covers browsers without it.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -251,7 +219,6 @@ export function ChatPanel({
     const el = scrollRef.current;
     if (!el) return;
     isPinnedRef.current = true;
-    // "Just past the last message": the next Alt+↑ lands on your latest message, Alt+↓ stays put.
     activeJumpRef.current = userMessageIds.length;
     markJumpScrolling();
     setJumpPosition(userMessageIds.length > 0 ? userMessageIds.length : 0);
@@ -270,20 +237,16 @@ export function ChatPanel({
     setHighlight({ id: userMessageIds[index], token: Date.now() });
   };
 
-  /** Steps one of your messages back (-1) or forward (1). Past the last one, returns to the bottom of the chat. */
   const jumpToUserMessage = (direction: -1 | 1) => {
     const count = userMessageIds.length;
     if (count === 0) return;
 
-    // Resting at the bottom of the chat (where it normally sits) counts as just past the last message,
-    // so this doesn't depend on measuring the screen at all.
     const current = activeJumpRef.current ?? (isPinnedRef.current ? count : null);
 
     let target: number;
     if (current !== null) {
       target = current + direction;
     } else {
-      // First jump after reading freely: start from whichever message is nearest the top of the view.
       const container = scrollRef.current;
       const nearest = nearestUserMessageIndex();
       if (direction === 1) {
@@ -292,7 +255,6 @@ export function ChatPanel({
         target = 0;
       } else {
         const top = userMessageTop(nearest) ?? 0;
-        // If that message already sits at the top, "previous" means the one before it.
         const isAlreadyAtTop = container ? Math.abs(top - 12 - container.scrollTop) < 24 : false;
         target = isAlreadyAtTop ? nearest - 1 : nearest;
       }
@@ -311,7 +273,6 @@ export function ChatPanel({
     return () => clearTimeout(timeout);
   }, [highlight]);
 
-  // Alt+↑ / Alt+↓ anywhere on the page (except inside the code editor, which has its own use for them).
   const jumpRef = useRef(jumpToUserMessage);
   jumpRef.current = jumpToUserMessage;
   useEffect(() => {
@@ -325,7 +286,6 @@ export function ChatPanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // New messages change the numbering, so a remembered jump position no longer means the same message.
   useEffect(() => {
     activeJumpRef.current = null;
     setJumpPosition(userMessageIds.length);
@@ -389,9 +349,6 @@ export function ChatPanel({
                     key={message.id}
                     message={message}
                     highlightToken={highlight?.id === message.id ? highlight.token : null}
-                    // Editing puts the text back in the composer to change and send again. It appends a new
-                    // turn rather than rewriting the old one: the transcript is persisted server-side and is
-                    // the record of what was actually built, so silently rewriting history would misreport it.
                     onEdit={!readOnly && !isStreaming ? applySuggestion : undefined}
                   />
                 ) : (
@@ -421,7 +378,6 @@ export function ChatPanel({
           </button>
         )}
 
-        {/* A tick per message you sent; hover for the list, click to jump. Alt+↑ / Alt+↓ still steps through them. */}
         {hasRail && <ChatScrollRail items={railItems} activeIndex={jumpPosition - 1} onSelect={scrollToUserMessage} />}
       </div>
 
@@ -453,7 +409,6 @@ export function ChatPanel({
             className="group rounded-2xl border border-border bg-card px-2 pb-2 pt-1.5 shadow-[0_10px_30px_-18px_rgb(0_0_0/0.7)] transition-[border-color,box-shadow] duration-150 hover:border-primary/35 focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_hsl(var(--primary)/0.12),0_10px_30px_-18px_rgb(0_0_0/0.7)]"
           >
             <div className="flex items-start gap-2 px-1.5">
-              {/* Terminal-style prompt that lights up while you type */}
               <span
                 aria-hidden="true"
                 className="select-none py-1 text-base font-semibold leading-6 text-muted-foreground/50 transition-colors group-focus-within:text-primary"
@@ -495,8 +450,6 @@ export function ChatPanel({
               )}
               <div className="flex shrink-0 items-center gap-1.5">
                 {onTeachingModeChange && <TeachingModeToggle enabled={!!teachingMode} onChange={onTeachingModeChange} />}
-                {/* While a response is running the same spot stops it, rather than sitting there disabled:
-                    a long build is exactly when you want a way out of it. */}
                 {isStreaming && onStop ? (
                   <Button
                     type="button"
@@ -562,7 +515,6 @@ function EmptyState({ readOnly, onPick }: { readOnly?: boolean; onPick: (text: s
 const STARTER_ROW =
   "group flex w-full items-center gap-2.5 rounded-lg border border-border/80 bg-card/60 px-3 py-2.5 text-left text-xs text-foreground/90 transition-colors hover:border-primary/50 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-/** What a collaborator sees on a shared project nobody has chatted in yet: whose it is, what they can do, where to start. */
 function SharedProjectWelcome({ info, readOnly, onPick, onBrowseCode }: {
   info: SharedProjectInfo;
   readOnly?: boolean;
@@ -636,13 +588,11 @@ function SharedProjectWelcome({ info, readOnly, onPick, onBrowseCode }: {
 function UserMessage({ message, highlightToken, onEdit }: {
   message: ChatMessage;
   highlightToken: number | null;
-  /** Puts this message back in the composer to change and send again; omitted while a response is running. */
   onEdit?: (content: string) => void;
 }) {
   return (
     <div data-user-message={message.id} className="group/message flex flex-col items-end gap-0">
       <div
-        // Keyed by the token so jumping to the same message again replays the highlight.
         key={highlightToken ?? "idle"}
         className={cn(
           "max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-primary/30 bg-primary/15 px-3.5 py-2 text-[13px] leading-6 text-foreground transition-[background-color,box-shadow] duration-500",
@@ -671,14 +621,9 @@ function AssistantMessage({
   message: ChatMessage;
   isStreaming: boolean;
   onOpenFile?: (path: string, target?: CodeTarget) => void;
-  /** Offered only on the latest answer, and only when it didn't get to the end of what it planned. */
   onRetry?: () => void;
 }) {
-  // What `ChatMessage.content` holds server-side for an assistant turn - the events are the real record. Shown
-  // as if the AI had said it whenever a turn's events failed to save, so it's stripped rather than rendered.
-  const content = message.content === SAVED_ASSISTANT_PLACEHOLDER ? "" : message.content || "";
-  // Keyed by message id so switching projects mid-response and coming back resumes the typing
-  // effect instead of restarting it - the message id is stable and globally unique for this session.
+  const content = message.content || "";
   const revealed = useSmoothStream(content, isStreaming, STREAM_OPTIONS, message.id, message.instantLength);
   const liveEvents = useStreamParser(revealed);
   const isActive = isStreaming || revealed.length < content.length;
@@ -687,9 +632,7 @@ function AssistantMessage({
   const hasSavedEvents = !!message.events?.length;
   const events = hasSavedEvents ? message.events! : liveEvents;
   const isDone = !isActive && !message.isStreaming;
-  // A saved turn whose events are gone: say so, rather than leaving an empty bubble that reads as a lost reply.
   const isUnrecorded = isDone && !hasSavedEvents && events.length === 0 && !message.error;
-  // A build that ran out of room ends cleanly, with no error - the unwritten steps are the only sign.
   const unfinished = message.unfinishedSteps ?? 0;
   const canRetry = isDone && !!onRetry && (unfinished > 0 || !!message.error || !!message.wasStopped);
 
@@ -725,7 +668,6 @@ function AssistantMessage({
           </button>
         </div>
       )}
-      {/* Only once the response has settled: copying a half-written answer would put a partial file on the clipboard. */}
       {isDone && (
         <MessageActions
           at={message.createdAt}
