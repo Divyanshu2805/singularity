@@ -1,3 +1,8 @@
+/**
+ * The command palette's list: a filter box over a keyboard-navigable list of items.
+ *
+ * Handles: the input, the groups and items, the empty state, and the dialog wrapper the palette opens in.
+ */
 import * as React from "react";
 import { type DialogProps } from "@radix-ui/react-dialog";
 import { Command as CommandPrimitive } from "cmdk";
@@ -21,7 +26,7 @@ const Command = React.forwardRef<
 ));
 Command.displayName = CommandPrimitive.displayName;
 
-interface CommandDialogProps extends DialogProps {}
+type CommandDialogProps = DialogProps;
 
 const CommandDialog = ({ children, ...props }: CommandDialogProps) => {
   return (
