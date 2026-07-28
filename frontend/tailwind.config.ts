@@ -1,8 +1,18 @@
+/**
+ * The design system as Tailwind sees it.
+ *
+ * Handles: which files are scanned for classes, the colour tokens mapped onto the CSS custom properties defined in
+ * the stylesheet, the fonts, the radii, and the keyframes and animations the UI uses.
+ *
+ * Colours are indirections onto CSS variables rather than literal values, so light and dark are one definition and
+ * the code editor's theme can read the same variables.
+ */
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
 
 export default {
   darkMode: ["class"],
-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  content: ["./index.html", "./src/**/*.{ts,tsx}"],
   prefix: "",
   theme: {
     container: {
@@ -73,14 +83,6 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: "0" },
-        },
         pulse: {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.4" },
@@ -89,12 +91,10 @@ export default {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0" },
         },
-        // Slow drift for background light, so a page feels alive without anything demanding attention.
         "aurora-drift": {
           "0%, 100%": { transform: "translate3d(0, 0, 0) scale(1)" },
           "50%": { transform: "translate3d(4%, -3%, 0) scale(1.08)" },
         },
-        // Reveals an overflowing name: rest at the start, glide to the end, rest, glide back (distance via --slide-by).
         "slide-peek": {
           "0%, 15%": { transform: "translateX(0)" },
           "45%, 60%": { transform: "translateX(var(--slide-by))" },
@@ -104,8 +104,6 @@ export default {
       animation: {
         "aurora-drift": "aurora-drift 18s ease-in-out infinite",
         "slide-peek": "slide-peek var(--slide-duration) ease-in-out 250ms infinite",
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
         pulse: "pulse 1s ease-in-out infinite",
         "cursor-blink": "cursor-blink 1s step-end infinite",
       },
@@ -115,5 +113,5 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindcssAnimate],
 } satisfies Config;

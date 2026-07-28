@@ -1,12 +1,13 @@
 /**
- * The client half of the backend's CSRF protection (Spring Security's `csrf().spa()`).
+ * The client half of the backend's CSRF protection.
  *
- * <p>The session is an httpOnly cookie, and a browser attaches cookies to any request - including one a hostile page
- * triggers. So every state-changing request must also carry the value of the readable `XSRF-TOKEN` cookie in an
- * `X-XSRF-TOKEN` header. Another site can make the browser *send* our cookies but can't *read* them, so it can't
- * produce the header.
+ * Handles: knowing which methods need a token, reading the readable token cookie, and priming it once before the
+ * first write - with concurrent callers sharing one request rather than each making their own.
+ *
+ * The session is an httpOnly cookie and a browser attaches cookies to any request, including one a hostile page
+ * triggers, so every state-changing request must also carry the cookie's value in a header. Another site can make the
+ * browser send our cookies but cannot read them, so it cannot produce the header.
  */
-
 export const CSRF_COOKIE = "XSRF-TOKEN";
 export const CSRF_HEADER = "X-XSRF-TOKEN";
 
@@ -27,7 +28,6 @@ export function readCsrfToken(cookieString = document.cookie): string | null {
 
 let priming: Promise<void> | null = null;
 
-/** Makes sure the token cookie exists before the first write. Concurrent callers share one request. */
 export function ensureCsrfToken(baseUrl: string, force = false): Promise<void> {
   if (!force && readCsrfToken()) return Promise.resolve();
   if (!priming) {
@@ -39,10 +39,4 @@ export function ensureCsrfToken(baseUrl: string, force = false): Promise<void> {
       });
   }
   return priming;
-}
-
-/** The header to attach, or none if there's no token yet. */
-export function csrfHeaders(): Record<string, string> {
-  const token = readCsrfToken();
-  return token ? { [CSRF_HEADER]: token } : {};
 }

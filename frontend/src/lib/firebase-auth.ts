@@ -1,3 +1,13 @@
+/**
+ * Everything this app asks Firebase Authentication to do.
+ *
+ * Handles: signing in with a password or Google, completing a second factor, signing up and sending verification, the
+ * password-reset round trip, re-authenticating before a sensitive change, enrolling and removing an authenticator
+ * app, changing a password, and releasing the Firebase user once our own session cookie exists.
+ *
+ * Each sign-in ends by exchanging the resulting token for this app's session cookie, which is what the rest of the
+ * app actually authenticates with.
+ */
 import {
   EmailAuthProvider,
   confirmPasswordReset,
@@ -26,28 +36,19 @@ import { api, renewSession, startSession } from "./api";
 import { getFirebaseAuth, googleProvider } from "./firebase";
 import type { AuthSecurityEventType, SessionResponse } from "./types";
 
-/**
- * Every sign-in flow, built on one rule: the Firebase user is a means to a session cookie and nothing more. It exists
- * between "Firebase accepted the credentials" and "the backend set the cookie", then it's signed out.
- */
-
 export type SignInOutcome =
   | { kind: "signed-in"; session: SessionResponse }
-  /** The account has a second factor: ask for the code, then call `completeSecondFactor`. */
   | { kind: "second-factor"; resolver: MultiFactorResolver }
-  /** A password account whose email isn't verified yet: nothing gets a session until it is. */
   | { kind: "verify-email"; email: string };
 
 const ISSUER = "VibeCraft";
 
-/** Where Firebase's emails send people back to. Only used if the console's custom action URL isn't set. */
 const continueUrl = () => ({ url: `${window.location.origin}/login` });
 
 function isSecondFactorRequired(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: string }).code === "auth/multi-factor-auth-required";
 }
 
-/** Hands a Firebase sign-in to the backend and lets go of it. */
 async function exchangeForSession(user: User): Promise<SessionResponse> {
   try {
     const session = await api.createSession(await user.getIdToken());
@@ -61,7 +62,6 @@ async function exchangeForSession(user: User): Promise<SessionResponse> {
 async function finishSignIn(credential: UserCredential): Promise<SignInOutcome> {
   const { user } = credential;
   if (!user.emailVerified) {
-    // Send a fresh link: the reason they're here is usually that the first one got lost.
     await sendEmailVerification(user, continueUrl()).catch(() => undefined);
     const email = user.email ?? "";
     await firebaseSignOut(getFirebaseAuth()).catch(() => undefined);
@@ -86,10 +86,6 @@ export const signInWithPassword = (email: string, password: string) =>
 
 export const signInWithGoogle = () => attempt(() => signInWithPopup(getFirebaseAuth(), googleProvider()));
 
-/** True if this account has an authenticator app to ask for. */
-export const hasTotpFactor = (resolver: MultiFactorResolver) =>
-  resolver.hints.some((hint) => hint.factorId === TotpMultiFactorGenerator.FACTOR_ID);
-
 export async function completeSecondFactor(resolver: MultiFactorResolver, code: string): Promise<SignInOutcome> {
   const hint = resolver.hints.find((h) => h.factorId === TotpMultiFactorGenerator.FACTOR_ID);
   if (!hint) throw new Error("This account's second factor isn't an authenticator app, which this app doesn't support yet.");
@@ -97,10 +93,6 @@ export async function completeSecondFactor(resolver: MultiFactorResolver, code: 
   return finishSignIn(await resolver.resolveSignIn(assertion));
 }
 
-/**
- * Creates the Firebase account and emails a verification link. No session yet: an unverified address could be
- * anyone's, so the account can't be used until the link is clicked.
- */
 export async function signUpWithPassword(name: string, email: string, password: string): Promise<void> {
   const auth = getFirebaseAuth();
   const { user } = await createUserWithEmailAndPassword(auth, email, password);
@@ -112,10 +104,6 @@ export async function signUpWithPassword(name: string, email: string, password: 
   }
 }
 
-/**
- * The project's password policy (Identity Platform), checked before a round trip. Returns the first unmet
- * requirement as a sentence, or null. Firebase enforces the same policy server-side regardless.
- */
 export async function passwordPolicyProblem(password: string): Promise<string | null> {
   try {
     const status = await validatePassword(getFirebaseAuth(), password);
@@ -128,33 +116,23 @@ export async function passwordPolicyProblem(password: string): Promise<string | 
     if (status.containsNonAlphanumericCharacter === false) return "Add a symbol";
     return "That password doesn't meet the requirements";
   } catch {
-    // The policy couldn't be fetched - Firebase still enforces it when the password is actually set.
     return null;
   }
 }
 
-/** Always resolves the same way, whether or not the address has an account (with email enumeration protection on). */
 export async function sendResetEmail(email: string): Promise<void> {
   try {
     await sendPasswordResetEmail(getFirebaseAuth(), email, continueUrl());
   } catch (error) {
     const code = (error as { code?: string }).code;
-    // Without enumeration protection Firebase says so outright - swallow it, so the page can't be used to probe.
     if (code !== "auth/user-not-found") throw error;
   }
 }
 
-/** For the reset page: which account a reset link is for, and whether the link still works. */
 export const checkResetCode = (oobCode: string) => verifyPasswordResetCode(getFirebaseAuth(), oobCode);
 
 export const applyResetCode = (oobCode: string, newPassword: string) =>
   confirmPasswordReset(getFirebaseAuth(), oobCode, newPassword);
-
-// ---------------------------------------------------------------------------------------------------------------
-// Security settings. Everything below changes the account, so it runs against a *just re-authenticated* Firebase
-// user - never a remembered one - and refreshes the session afterwards, because Firebase revokes existing sessions
-// when a password or second factor changes.
-// ---------------------------------------------------------------------------------------------------------------
 
 export type ReauthOutcome = { kind: "ready"; user: User } | { kind: "second-factor"; resolver: MultiFactorResolver };
 
@@ -169,7 +147,6 @@ async function reauthAttempt(run: () => Promise<UserCredential>): Promise<Reauth
   }
 }
 
-/** Confirms it's really them with their password. Signs into Firebase first - the SDK holds nobody between visits. */
 export const confirmWithPassword = (email: string, password: string) =>
   reauthAttempt(async () => {
     const auth = getFirebaseAuth();
@@ -193,7 +170,6 @@ export async function confirmSecondFactor(resolver: MultiFactorResolver, code: s
   return credential.user;
 }
 
-/** The signed-in email's sign-in methods, e.g. to hide "change password" from a Google-only account. */
 export const providerIds = (user: User) => user.providerData.map((p) => p.providerId);
 
 export const enrolledFactors = (user: User): MultiFactorInfo[] => multiFactor(user).enrolledFactors;
@@ -204,7 +180,6 @@ export async function startTotpEnrollment(user: User): Promise<{ secret: TotpSec
   return { secret, qrUrl: secret.generateQrCodeUrl(user.email ?? "account", ISSUER) };
 }
 
-/** Swaps the now-revoked session for a fresh one and records what changed. */
 async function refreshSessionAfter(user: User, event: AuthSecurityEventType): Promise<SessionResponse> {
   const idToken = await user.getIdToken(true);
   const session = await api.createSession(idToken);
@@ -229,5 +204,4 @@ export async function changePassword(user: User, newPassword: string): Promise<v
   await refreshSessionAfter(user, "PASSWORD_CHANGED");
 }
 
-/** Lets go of a re-authenticated Firebase user when the settings dialog closes. */
 export const releaseFirebaseUser = () => firebaseSignOut(getFirebaseAuth()).catch(() => undefined);
