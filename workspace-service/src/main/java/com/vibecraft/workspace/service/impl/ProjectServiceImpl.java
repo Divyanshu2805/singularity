@@ -5,7 +5,7 @@ import com.vibecraft.workspace.dto.project.CreateProjectFromPromptRequest;
 import com.vibecraft.workspace.dto.project.ForkProjectRequest;
 import com.vibecraft.common.error.FileStorageException;
 import com.vibecraft.common.error.ForbiddenException;
-import com.vibecraft.workspace.feign.AccountServiceClient;
+import com.vibecraft.common.feign.AccountServiceClient;
 import com.vibecraft.workspace.service.ProjectFileService;
 import com.vibecraft.workspace.dto.project.ProjectRequest;
 import com.vibecraft.workspace.util.ProjectNameHeuristic;
@@ -21,7 +21,7 @@ import com.vibecraft.common.error.ResourceNotFoundException;
 import com.vibecraft.workspace.mapper.ProjectMapper;
 import com.vibecraft.workspace.repository.ProjectMemberRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
-import com.vibecraft.workspace.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.workspace.service.ProjectService;
 import com.vibecraft.workspace.service.ProjectTemplateService;
 import com.vibecraft.workspace.service.TemplateInitResult;
@@ -39,6 +39,21 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * Projects: creating them, reading them, and everything that changes one.
+ *
+ * <p>Handles: the caller's project list, one project by id, creating by name or from a typed description, renaming,
+ * soft-deleting, forking, retrying starter-template initialisation, and the per-member pin and star flags.
+ *
+ * <p>The plan's project allowance is checked before anything is created, including before naming, so a user at their
+ * limit does not waste the call - and it is a 402 rather than a 400, because nothing is wrong with the request. The
+ * allowance comes from account-service; the count owned is always local, since memberships are this service's own
+ * table.
+ *
+ * <p>Forking is refused to the owner, who can already change the project however they like, and the fork is deleted
+ * again if any file failed to copy - a fork quietly missing files would look like the original and then break
+ * inexplicably. Deleting is the owner's for everyone; an editor's delete only removes their own membership.
+ */
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
@@ -54,7 +69,6 @@ public class ProjectServiceImpl implements ProjectService {
     ProjectTemplateService projectTemplateService;
     ProjectFileService projectFileService;
 
-    /** Matches the project name column and ProjectRequest's limit. */
     static final int MAX_NAME_LENGTH = 255;
 
     @Override
@@ -75,18 +89,10 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     public ProjectResponse createProjectFromPrompt(CreateProjectFromPromptRequest request) {
-        // Checked before naming, so a user at their plan limit doesn't waste the call. Naming itself is the
-        // deterministic heuristic (see ProjectNameHeuristic's javadoc) - no AI call happens in workspace-service.
         assertCanCreateProject();
         return createOwnedProject(ProjectNameHeuristic.nameFor(request.prompt()));
     }
 
-    /**
-     * Refuses a create that would take the caller past their plan's project count. A 402 rather than the 400
-     * this used to throw: nothing is wrong with the request, they simply need a bigger plan, and the client
-     * shows an upgrade prompt rather than an error toast. The allowance comes from account-service (the plan
-     * limit is always Account's); the count owned is always local - it's workspace-service's own table.
-     */
     private void assertCanCreateProject() {
         Long userId = authUtil.getCurrentUserId();
         PlanDto plan = accountServiceClient.getPlanLimits(userId);
@@ -110,12 +116,9 @@ public class ProjectServiceImpl implements ProjectService {
     public ProjectResponse forkProject(Long id, ForkProjectRequest request) {
         Long userId = authUtil.getCurrentUserId();
         Project source = getAccessibleProjectById(id, userId);
-        // Forking is for people working on someone else's project. The owner already has it to change as they like,
-        // and letting them fork would just be an unlabelled way to duplicate projects past the point of meaning.
         if (getRole(id, userId) == ProjectRole.OWNER) {
             throw new ForbiddenException("You own this project, so there's nothing to fork - you can already change it however you like.");
         }
-        // A fork is a project the caller owns, so it counts against their plan like any other.
         assertCanCreateProject();
 
         String requested = request == null || request.name() == null ? "" : request.name().strip();
@@ -125,7 +128,6 @@ public class ProjectServiceImpl implements ProjectService {
         Project fork = saveProjectWithOwner(name, userId, source.getId());
         int failed = projectFileService.copyAllFiles(source.getId(), fork.getId());
         if (failed > 0) {
-            // A fork quietly missing files would look like the original, then break in ways nobody could explain.
             fork.setDeletedAt(Instant.now());
             projectRepository.save(fork);
             throw new FileStorageException("Couldn't copy " + failed + " file(s) while forking project " + id, null);
@@ -135,10 +137,6 @@ public class ProjectServiceImpl implements ProjectService {
         return projectMapper.toProjectResponse(fork, ProjectRole.OWNER);
     }
 
-    /**
-     * The project row plus its OWNER membership - shared by a fresh project and a fork. No User lookup needed:
-     * ProjectMember carries the owner's id directly (no JPA relation to User - it lives in account-service now).
-     */
     private Project saveProjectWithOwner(String name, Long userId, Long forkedFromProjectId) {
         Project project = projectRepository.save(Project.builder()
                 .name(name)
@@ -199,7 +197,6 @@ public class ProjectServiceImpl implements ProjectService {
     @PreAuthorize("@security.canViewProject(#id)")
     public void setPinned(Long id, boolean pinned) {
         ProjectMember membership = getCurrentUserMembership(id);
-        // Re-pinning keeps the original time, so the sidebar's order doesn't shuffle.
         if (pinned == (membership.getPinnedAt() != null)) {
             return;
         }
@@ -220,7 +217,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     private ProjectMember getCurrentUserMembership(Long projectId) {
         Long userId = authUtil.getCurrentUserId();
-        getAccessibleProjectById(projectId, userId); // excludes soft-deleted projects
+        getAccessibleProjectById(projectId, userId);
         return projectMemberRepository.findById(new ProjectMemberId(projectId, userId))
                 .orElseThrow(() -> new ResourceNotFoundException("ProjectMember", projectId + "/" + userId));
     }
@@ -247,8 +244,6 @@ public class ProjectServiceImpl implements ProjectService {
         Project project = getAccessibleProjectById(id, userId);
 
         if (getRole(id, userId) != ProjectRole.OWNER) {
-            // An editor leaving: only their own access goes. Their pin/star go with the membership row; the project,
-            // its files and everyone else's access are untouched. The owner can invite them back.
             projectMemberRepository.deleteById(new ProjectMemberId(id, userId));
             log.info("User {} removed project {} from their projects (left as a non-owner)", userId, id);
             return;

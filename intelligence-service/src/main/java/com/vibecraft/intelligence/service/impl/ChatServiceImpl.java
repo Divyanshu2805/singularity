@@ -7,7 +7,7 @@ import com.vibecraft.intelligence.mapper.ChatMapper;
 import com.vibecraft.intelligence.repository.ChatEventRepository;
 import com.vibecraft.intelligence.repository.ChatMessageRepository;
 import com.vibecraft.intelligence.repository.ChatSessionRepository;
-import com.vibecraft.intelligence.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.intelligence.service.ChatService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +16,13 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * The saved build-chat history.
+ *
+ * <p>Handles: reading the caller's own chat on a project - a session that does not exist yet is an empty list, not an
+ * error - and the latest turn's changed files with their previous versions, skipping any edit saved before those
+ * versions were recorded, since there is nothing to diff it against.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -46,7 +53,6 @@ public class ChatServiceImpl implements ChatService {
     public LastTurnChangesResponse getLastTurnChanges(Long projectId) {
         Long userId = authUtil.getCurrentUserId();
         List<LastTurnChangesResponse.FileChange> files = chatEventRepository.findLastTurnFileEdits(projectId, userId).stream()
-                // A turn saved before previous versions were recorded has nothing to diff against.
                 .filter(event -> event.getFilePath() != null && event.getPreviousContent() != null)
                 .map(event -> new LastTurnChangesResponse.FileChange(event.getFilePath(), event.getPreviousContent()))
                 .toList();

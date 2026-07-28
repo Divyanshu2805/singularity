@@ -2,6 +2,8 @@ package com.vibecraft.workspace.security;
 
 import com.vibecraft.workspace.controller.FileController;
 import com.vibecraft.workspace.enums.ProjectRole;
+import com.vibecraft.common.security.AuthUtil;
+import com.vibecraft.common.security.UserPrincipal;
 import com.vibecraft.workspace.repository.ProjectMemberRepository;
 import com.vibecraft.workspace.service.impl.ProjectFileServiceImpl;
 import org.junit.jupiter.api.AfterEach;
@@ -34,14 +36,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * The gap found live after the Phase 4 cutover: {@code GET /api/projects/{id}/files} and {@code .../files/content}
- * carried no {@code @PreAuthorize}, so any signed-in user could read any project's files - while download-zip and
- * {@code GET /api/projects/{id}}, which were guarded, correctly 403'd. Inherited unchanged from the original monolith.
+ * Covers that every browser-facing file endpoint is guarded, and that the service methods the internal API also calls
+ * are deliberately not.
  *
- * <p>These evaluate the real annotations through Spring Security's own {@link PreAuthorizeAuthorizationManager}
- * against the real {@link SecurityExpressions}, so they fail on a missing annotation and also on a {@code #projectId}
- * that doesn't match the method's parameter name (which Spring evaluates to null and silently denies everyone).
- * Only the membership lookup is mocked; nothing here needs a Spring context.
+ * <p>It evaluates the real annotations through Spring Security's own authorization manager against the real
+ * permission bean, so it fails both on a missing guard and on an argument name that does not match the method's
+ * parameter - which Spring evaluates to null and silently denies everyone.
+ *
+ * <p>This exists because the gap was found live: the file tree and file content endpoints carried no guard at all, so
+ * any signed-in user could read any project's files, while the endpoints that were guarded correctly refused.
  */
 class FileReadAuthorizationTest {
 
@@ -49,7 +52,6 @@ class FileReadAuthorizationTest {
     private static final long OTHER_PROJECT_ID = 43L;
     private static final long USER_ID = 7L;
 
-    // Only inspected and evaluated against, never invoked, so their collaborators don't matter.
     private static final FileController CONTROLLER = new FileController(null);
     private static final ProjectFileServiceImpl SERVICE = new ProjectFileServiceImpl(null, null, null, null);
 
@@ -76,7 +78,6 @@ class FileReadAuthorizationTest {
         context.close();
     }
 
-    /** Every browser-facing read under /api/projects/{projectId}/files, paired with the class its guard lives on. */
     static Stream<Arguments> fileReads() {
         return Stream.of(
                 arguments(CONTROLLER, "getFileTree"),
@@ -98,7 +99,6 @@ class FileReadAuthorizationTest {
     @MethodSource("fileReads")
     @DisplayName("a signed-in user who is not a member is denied")
     void aNonMemberIsDenied(Object target, String method) {
-        // the mock's default: no membership row for this user
 
         assertThat(allowed(target, method, PROJECT_ID)).isFalse();
     }
@@ -112,11 +112,6 @@ class FileReadAuthorizationTest {
         assertThat(allowed(target, method, OTHER_PROJECT_ID)).isFalse();
     }
 
-    /**
-     * InternalWorkspaceController calls these as a trusted machine caller (intelligence-service, over Feign) whose
-     * principal is not a {@link UserPrincipal}, so {@link AuthUtil#getCurrentUserId()} throws for it: a user guard
-     * on the service would fail every AI-generation and code-insight file read. The browser guard is on the controller.
-     */
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {"getFileContent", "saveFile", "deleteFile"})
     @DisplayName("the service methods the internal API shares carry no user guard")
@@ -126,7 +121,6 @@ class FileReadAuthorizationTest {
                 .isFalse();
     }
 
-    /** Whether the caller is let through. A method with no guard at all is a failure here, not a pass. */
     private boolean allowed(Object target, String method, long projectId) {
         Method endpoint = methodNamed(target, method);
         Object[] args = Arrays.copyOf(new Object[]{projectId, "src/App.tsx"}, endpoint.getParameterCount());

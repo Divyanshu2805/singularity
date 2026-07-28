@@ -1,10 +1,12 @@
 package com.vibecraft.common.dto;
 
 /**
- * What account-service tells the other services when a session ends, so they drop it from their own in-process
- * session caches right away instead of trusting it until its cache entry expires. Exactly one field is set:
- * {@code cookieHash} for one signed-out session, {@code firebaseUid} for "sign out everywhere" (every cached
- * session of that user). Sent to {@code POST /internal/v1/sessions/evict}.
+ * What account-service tells the other services when a session ends.
+ *
+ * <p>Handles: carrying exactly one of two things to POST /internal/v1/sessions/evict - a cookieHash for one
+ * signed-out session, or a firebaseUid for "sign out everywhere" (every cached session of that user). The receiving
+ * service drops the matching entries from its own in-process session cache instead of trusting them until they
+ * expire.
  */
 public record EvictSessionRequest(String cookieHash, String firebaseUid) {
 

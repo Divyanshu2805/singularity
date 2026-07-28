@@ -18,9 +18,13 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Spring MVC's own "the request was wrong" exceptions must answer with the right 4xx. Before these handlers existed
- * they all fell into the generic handler and came out as a 500 with a stack trace in the log - found when an
- * unknown URL and a Stripe webhook without its signature header both returned 500 after the Phase 4 cutover.
+ * Covers that Spring MVC's own "the request was wrong" exceptions answer with the right 4xx rather than a 500.
+ *
+ * <p>Also covers that the two 503s stay distinguishable: an upstream failure is generic and tagged
+ * UPSTREAM_UNAVAILABLE, while exhausted capacity keeps its own message and is tagged CAPACITY_UNAVAILABLE.
+ *
+ * <p>These exist because their absence was a 500: before the handlers, an unknown URL and a Stripe webhook without
+ * its signature header both returned 500 with a stack trace in the log.
  */
 class GlobalExceptionHandlerTest {
 
@@ -73,10 +77,6 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE);
     }
 
-    /**
-     * Two different failures share the 503, and the preview panel used to call both "every runner is busy" because
-     * that was all it could see. The {@code code} is what tells them apart, so it must be there and it must differ.
-     */
     @Test
     @DisplayName("a full pool is a 503 that keeps its own message and says CAPACITY_UNAVAILABLE")
     void fullPoolIsCodedAsCapacity() {
@@ -119,8 +119,6 @@ class GlobalExceptionHandlerTest {
     @Test
     @DisplayName("an error with no code serializes exactly as before - the field is omitted, not null")
     void codeIsOmittedWhenAbsent() throws Exception {
-        // A bare mapper: the java.time module isn't on this module's test classpath, and `timestamp` isn't what's under
-        // test, so let it fall back to bean serialization rather than pulling a dependency in for it.
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper()
                 .disable(com.fasterxml.jackson.databind.MapperFeature.REQUIRE_HANDLERS_FOR_JAVA8_TIMES);
 

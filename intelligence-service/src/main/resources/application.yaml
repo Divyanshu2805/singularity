@@ -37,10 +37,6 @@ spring:
           stream-usage: true
           max-tokens: 32000
 
-internal-jwt:
-  secret-key: ${INTERNAL_JWT_SECRET}
-  expiration: 2m
-
 internal-service:
   shared-secret: ${INTERNAL_SERVICE_SHARED_SECRET}
 

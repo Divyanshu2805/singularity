@@ -5,15 +5,17 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
+/**
+ * SHA-256 as lowercase hex.
+ *
+ * <p>Handles: hashing a high-entropy secret - a session cookie - so it can be looked up by value without being
+ * stored. Never for passwords, which need a slow salted hash instead.
+ */
 public final class Hashing {
 
     private Hashing() {
     }
 
-    /**
-     * SHA-256 as lowercase hex. For high-entropy secrets (session cookies, reset tokens) that need to be looked up
-     * by value without being stored - never for passwords, which need a slow salted hash.
-     */
     public static String sha256Hex(String value) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));

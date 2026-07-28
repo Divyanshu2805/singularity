@@ -14,9 +14,9 @@
 		Project/ProjectMember/ProjectFile/Preview/PreviewSession and the K8s/MinIO/Redis live-preview pipeline.
 		Its own Postgres database, its own Flyway history. Keeps its own copy of the Firebase/session-cookie/
 		CSRF/rate-limit security chain rather than delegating it to gateway-service — see WebSecurityConfig's
-		javadoc and docs/migration/ for why. Calls account-service via Feign for anything User/Plan-shaped,
-		since it owns neither, and exposes /internal/v1/** to intelligence-service (membership, project
-		summaries, file reads and writes).
+		javadoc for why. Calls account-service via Feign for anything User/Plan-shaped, since it owns neither,
+		and exposes /internal/v1/** to intelligence-service (membership, project summaries, file reads and
+		writes).
 	</description>
 
 	<dependencies>
@@ -83,11 +83,6 @@
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
 		<!-- Firebase Authentication (Identity Platform) - session-cookie verification only, same as account-service. -->
-		<dependency>
-			<groupId>com.google.firebase</groupId>
-			<artifactId>firebase-admin</artifactId>
-			<version>9.10.0</version>
-		</dependency>
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>

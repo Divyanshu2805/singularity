@@ -5,19 +5,20 @@ import lombok.Getter;
 import java.time.Instant;
 
 /**
- * Raised when an action would take a user past what their plan allows (402 Payment Required — not a
- * {@link BadRequestException}, so a client can show an upgrade prompt instead of a generic error). The
- * limit is always Account's; the thing being counted belongs to whichever service throws this.
+ * An action would take the user past what their plan allows.
+ *
+ * <p>Handles: a 402 Payment Required carrying the quota numbers, for the three limits this platform enforces - the
+ * daily token allowance, the project count and concurrent previews. Deliberately not a BadRequestException, so a
+ * client can show an upgrade prompt rather than a generic error.
+ *
+ * <p>The limit is always account-service's; the thing being counted belongs to whichever service throws this.
  */
 @Getter
 public class QuotaExceededException extends RuntimeException {
 
     public enum Reason {
-        /** The daily token allowance is spent. Refills at local midnight. */
         DAILY_TOKENS,
-        /** They already own as many projects as the plan permits. Only upgrading or deleting one helps. */
         PROJECT_LIMIT,
-        /** As many live previews are running as the plan permits. Stopping one frees a slot straight away. */
         PREVIEW_LIMIT
     }
 

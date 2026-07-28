@@ -13,9 +13,9 @@
 	<description>
 		Users, Plans, Subscriptions, Stripe billing, and the auth audit trail. Its own Postgres database, its own
 		Flyway history. Keeps its own copy of the Firebase/session-cookie/CSRF/rate-limit security chain rather
-		than delegating it to gateway-service — see WebSecurityConfig's javadoc and docs/migration/ for
-		why. Exposes /internal/v1/** to workspace-service and intelligence-service (users, plan limits, revoked
-		sessions) and pushes session evictions to them on sign-out.
+		than delegating it to gateway-service — see WebSecurityConfig's javadoc for why. Exposes /internal/v1/**
+		to workspace-service and intelligence-service (users, plan limits, revoked sessions) and pushes session
+		evictions to them on sign-out.
 	</description>
 
 	<dependencies>
@@ -87,11 +87,6 @@
 		     Only the auth client is used, but don't exclude Firestore/Cloud Storage to slim it down:
 		     FirebaseOptions and FirebaseAuth depend on classes (JacksonFactory, gax) that only arrive through them,
 		     and the app then compiles fine and fails at startup with NoClassDefFoundError. -->
-		<dependency>
-			<groupId>com.google.firebase</groupId>
-			<artifactId>firebase-admin</artifactId>
-			<version>9.10.0</version>
-		</dependency>
 		<dependency>
 			<groupId>com.stripe</groupId>
 			<artifactId>stripe-java</artifactId>

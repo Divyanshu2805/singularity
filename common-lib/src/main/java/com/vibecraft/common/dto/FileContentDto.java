@@ -1,10 +1,11 @@
 package com.vibecraft.common.dto;
 
 /**
- * A project file's path and full text content, as served/accepted over workspace-service's internal API.
- * One shape serves both directions — the read response (backs {@code CodeGenerationTools.readFiles} and
- * {@code AiGenerationServiceImpl}'s pre-edit file snapshot) and the write request body (backs
- * {@code finalizeChats}'s {@code <file>} tag handling) — since both are just "this path has this content."
+ * A project file's path and full text, as it crosses workspace-service's internal API.
+ *
+ * <p>Handles: both directions with one shape - the read response behind CodeGenerationTools.readFiles and the
+ * pre-edit file snapshot, and the write request body behind a generated turn's file edits - since both are just "this
+ * path has this content".
  */
 public record FileContentDto(
         String path,

@@ -3,9 +3,10 @@ package com.vibecraft.common.dto;
 import java.util.List;
 
 /**
- * workspace-service's file tree for one project, as served over its internal API — what
- * {@code FileTreeContextAdvisor} and the AI generation pipeline in intelligence-service inject into a
- * prompt without ever touching MinIO or {@code ProjectFile} directly.
+ * workspace-service's file tree for one project, as it crosses its internal API.
+ *
+ * <p>Handles: the path, size and type of every file in a project, so intelligence-service can inject a project's
+ * shape into a prompt without touching MinIO or the ProjectFile entity directly.
  */
 public record FileTreeDto(
         Long projectId,

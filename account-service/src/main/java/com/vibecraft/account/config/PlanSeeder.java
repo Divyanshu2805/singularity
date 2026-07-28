@@ -11,13 +11,19 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Puts the plan catalogue in the database at startup, and keeps it there. Upsert keyed on the Stripe price
- * id (Free, which has none, on its name), so a restart never duplicates a plan. Free's limits come from the same
- * {@code SubscriptionService.FREE_TIER_*} constants that gate a user with no subscription, so the seeded row and
- * enforcement can't disagree.
+ * Puts the plan catalogue in the database at startup and keeps it in step with the code.
+ *
+ * <p>Handles: defining the Free, Pro and Business plans - their limits, price, currency, billing interval, tagline
+ * and sort order - and upserting each one on every boot, updating a row only when something about it actually
+ * changed.
+ *
+ * <p>The upsert is keyed on the Stripe price id, or on the name for Free, which has none, so a restart never
+ * duplicates a plan. Free's limits come from the same SubscriptionService constants that gate a user with no
+ * subscription, so the seeded row and what is enforced cannot disagree.
  */
 @Component
 @RequiredArgsConstructor
@@ -117,17 +123,17 @@ public class PlanSeeder implements ApplicationRunner {
     }
 
     private boolean hasChanged(Plan plan, Plan wanted) {
-        return !java.util.Objects.equals(plan.getName(), wanted.getName())
-                || !java.util.Objects.equals(plan.getTagline(), wanted.getTagline())
-                || !java.util.Objects.equals(plan.getStripePriceId(), wanted.getStripePriceId())
-                || !java.util.Objects.equals(plan.getPriceAmountMinor(), wanted.getPriceAmountMinor())
-                || !java.util.Objects.equals(plan.getCurrency(), wanted.getCurrency())
-                || !java.util.Objects.equals(plan.getBillingInterval(), wanted.getBillingInterval())
-                || !java.util.Objects.equals(plan.getMaxProjects(), wanted.getMaxProjects())
-                || !java.util.Objects.equals(plan.getMaxTokensPerDay(), wanted.getMaxTokensPerDay())
-                || !java.util.Objects.equals(plan.getMaxPreviews(), wanted.getMaxPreviews())
-                || !java.util.Objects.equals(plan.getUnlimitedAi(), wanted.getUnlimitedAi())
-                || !java.util.Objects.equals(plan.getActive(), wanted.getActive())
-                || !java.util.Objects.equals(plan.getSortOrder(), wanted.getSortOrder());
+        return !Objects.equals(plan.getName(), wanted.getName())
+                || !Objects.equals(plan.getTagline(), wanted.getTagline())
+                || !Objects.equals(plan.getStripePriceId(), wanted.getStripePriceId())
+                || !Objects.equals(plan.getPriceAmountMinor(), wanted.getPriceAmountMinor())
+                || !Objects.equals(plan.getCurrency(), wanted.getCurrency())
+                || !Objects.equals(plan.getBillingInterval(), wanted.getBillingInterval())
+                || !Objects.equals(plan.getMaxProjects(), wanted.getMaxProjects())
+                || !Objects.equals(plan.getMaxTokensPerDay(), wanted.getMaxTokensPerDay())
+                || !Objects.equals(plan.getMaxPreviews(), wanted.getMaxPreviews())
+                || !Objects.equals(plan.getUnlimitedAi(), wanted.getUnlimitedAi())
+                || !Objects.equals(plan.getActive(), wanted.getActive())
+                || !Objects.equals(plan.getSortOrder(), wanted.getSortOrder());
     }
 }

@@ -1,7 +1,6 @@
 package com.vibecraft.common.feign;
 
-import com.vibecraft.common.jwt.InternalJwtContext;
-import com.vibecraft.common.jwt.InternalServiceAuthFilter;
+import com.vibecraft.common.security.InternalServiceAuthFilter;
 import feign.Request;
 import feign.RequestTemplate;
 import org.junit.jupiter.api.AfterEach;
@@ -10,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.Collection;
@@ -17,11 +17,15 @@ import java.util.Collection;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The gap that shipped through Phases 1-3 and failed on the first signed-in request after the Phase 4 cutover:
- * the caller side (this interceptor) never sent the secret the callee side ({@link InternalServiceAuthFilter})
- * requires, so every Feign call between services was a 401. Each side had been exercised alone - the endpoints
- * with {@code curl} plus the secret - and never the two together. {@link #whatTheInterceptorSendsIsWhatTheGuardAccepts}
- * is the test that joins them.
+ * Pins the two halves of service-to-service authentication against each other.
+ *
+ * <p>Covers: that the caller side sends the shared secret on exactly the paths the callee side requires it and never
+ * anywhere else, that a wrong or missing secret leaves the request unauthenticated, and that an authenticated machine
+ * caller carries InternalServiceAuthFilter.ROLE - the authority each service's chain requires on /internal/**, and
+ * the reason an end user's session cookie cannot reach those endpoints.
+ *
+ * <p>This exists because the gap it covers once shipped: each side had only been exercised alone, with curl plus the
+ * secret, so every Feign call between services was a 401 on the first signed-in request.
  */
 class FeignClientInterceptorTest {
 
@@ -31,7 +35,6 @@ class FeignClientInterceptorTest {
 
     @AfterEach
     void clean() {
-        InternalJwtContext.clear();
         SecurityContextHolder.clearContext();
     }
 
@@ -66,20 +69,8 @@ class FeignClientInterceptorTest {
     }
 
     @Test
-    @DisplayName("still forwards the current request's internal JWT when there is one")
-    void stillForwardsTheJwt() {
-        InternalJwtContext.set("jwt-abc");
-        RequestTemplate template = get("/internal/v1/users/1");
-
-        interceptor.apply(template);
-
-        assertThat(header(template, "Authorization")).containsExactly("Bearer jwt-abc");
-        assertThat(header(template, InternalServiceAuthFilter.HEADER)).containsExactly(SECRET);
-    }
-
-    @Test
-    @DisplayName("sends no Authorization header when there is no JWT in context (the usual case today)")
-    void noJwtNoAuthorizationHeader() {
+    @DisplayName("no Authorization header is ever added - the secret is the only credential")
+    void sendsNoBearerToken() {
         RequestTemplate template = get("/internal/v1/users/1");
 
         interceptor.apply(template);
@@ -88,20 +79,19 @@ class FeignClientInterceptorTest {
     }
 
     @Test
-    @DisplayName("what the interceptor sends is what the guard accepts (the two sides, together)")
+    @DisplayName("what the interceptor sends is what the guard accepts, with the internal-service authority")
     void whatTheInterceptorSendsIsWhatTheGuardAccepts() throws Exception {
         RequestTemplate template = get("/internal/v1/sessions/revoked?cookieHash=abc");
         interceptor.apply(template);
 
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/internal/v1/sessions/revoked");
-        header(template, InternalServiceAuthFilter.HEADER).forEach(v -> request.addHeader(InternalServiceAuthFilter.HEADER, v));
+        runGuard(template, "/internal/v1/sessions/revoked");
 
-        new InternalServiceAuthFilter(SECRET).doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
-
-        assertThat(SecurityContextHolder.getContext().getAuthentication())
-                .as("the guard should have authenticated the interceptor's request")
-                .isNotNull();
-        assertThat(SecurityContextHolder.getContext().getAuthentication().isAuthenticated()).isTrue();
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        assertThat(authentication).as("the guard should have authenticated the interceptor's request").isNotNull();
+        assertThat(authentication.isAuthenticated()).isTrue();
+        assertThat(authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority))
+                .as("the authority each service's chain requires on /internal/**")
+                .containsExactly(InternalServiceAuthFilter.ROLE);
     }
 
     @Test
@@ -110,11 +100,26 @@ class FeignClientInterceptorTest {
         RequestTemplate template = get("/internal/v1/users/1");
         new FeignClientInterceptor("some-other-secret").apply(template);
 
+        runGuard(template, "/internal/v1/users/1");
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    @Test
+    @DisplayName("a request with no secret at all is left unauthenticated, so the chain denies it")
+    void noSecretIsNotAuthenticated() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/internal/v1/users/1");
-        header(template, InternalServiceAuthFilter.HEADER).forEach(v -> request.addHeader(InternalServiceAuthFilter.HEADER, v));
 
         new InternalServiceAuthFilter(SECRET).doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    private static void runGuard(RequestTemplate template, String path) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
+        header(template, InternalServiceAuthFilter.HEADER)
+                .forEach(value -> request.addHeader(InternalServiceAuthFilter.HEADER, value));
+
+        new InternalServiceAuthFilter(SECRET).doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
     }
 }

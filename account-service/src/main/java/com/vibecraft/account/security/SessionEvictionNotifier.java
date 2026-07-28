@@ -1,7 +1,7 @@
 package com.vibecraft.account.security;
 
 import com.vibecraft.common.dto.EvictSessionRequest;
-import com.vibecraft.common.jwt.InternalServiceAuthFilter;
+import com.vibecraft.common.security.InternalServiceAuthFilter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.ServiceInstance;
@@ -19,21 +19,22 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Tells every other service that keeps its own session cache to forget a session that just ended.
  *
- * <p>Each service caches a validated session for {@code auth.revocation-check-interval} (60 s) so it isn't asking
- * Firebase on every request. In the monolith a sign-out evicted that one cache on the spot. Split across services,
- * account-service evicts only its own - so without this, a signed-out cookie kept working against workspace-service
- * and intelligence-service until their entries expired, up to a minute later (sign-out-everywhere likewise).
+ * <p>Handles: broadcasting either one signed-out session or every session of one user to each instance of
+ * workspace-service and intelligence-service found through Eureka, authenticated with the shared internal-service
+ * secret.
  *
- * <p>Every instance of each service is told, found through Eureka. Best effort by design: a service that can't be
- * reached is logged and skipped, and the 60 s cache lifetime is still the backstop, so sign-out never fails or
- * hangs because a sibling is down. Calls run in parallel with short timeouts, and the caller waits for them, so
- * once the sign-out response has returned the caches are already clean.
+ * <p>It exists because each service caches a validated session for app.auth.revocation-check-interval so it is not
+ * asking Firebase on every request. account-service evicts only its own cache, so without this a signed-out cookie
+ * kept working against the other services until their entries expired.
+ *
+ * <p>Best effort by design: a service that cannot be reached is logged and skipped, and the cache lifetime is still
+ * the backstop, so sign-out never fails or hangs because a sibling is down. Calls run in parallel with short timeouts
+ * and the caller waits for them, so by the time the sign-out response returns the caches are already clean.
  */
 @Slf4j
 @Component
 public class SessionEvictionNotifier {
 
-    /** The services that keep their own {@code SessionCache}. account-service is the one doing the telling. */
     static final List<String> SERVICES = List.of("workspace-service", "intelligence-service");
 
     static final String EVICT_PATH = "/internal/v1/sessions/evict";
@@ -55,12 +56,10 @@ public class SessionEvictionNotifier {
         this.restClient = RestClient.builder().requestFactory(requestFactory).build();
     }
 
-    /** One signed-out session. */
     public void evictSession(String cookieHash) {
         broadcast(EvictSessionRequest.ofSession(cookieHash));
     }
 
-    /** Every cached session of one user ("sign out everywhere"). */
     public void evictUser(String firebaseUid) {
         broadcast(EvictSessionRequest.ofUser(firebaseUid));
     }

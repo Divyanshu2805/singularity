@@ -2,7 +2,7 @@ package com.vibecraft.intelligence.llm;
 
 import com.vibecraft.intelligence.dto.usage.UsageRecord;
 import com.vibecraft.intelligence.enums.UsageFeature;
-import com.vibecraft.intelligence.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.intelligence.service.UsageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,12 +13,12 @@ import org.springframework.stereotype.Component;
 /**
  * Bills an AI call to a user's usage - the daily counter quotas read, and the ledger insights read.
  *
- * <p><b>Two forms, and which one to use matters.</b> {@link #record(ChatResponse, UsageFeature, Long)} reads the
- * caller from the security context, so it is only correct on a request thread. Anything that records from a
- * stream's completion - a Reactor continuation with no signed-in user - must capture the user id on the request
- * thread first and call {@link #record(ChatResponse, UsageFeature, Long, Long)}. ExplainLLM streaming used the
- * context-reading form from {@code doOnComplete}; the lookup threw, this class swallowed it, and those tokens
- * were never billed.
+ * <p>Handles: pulling the token counts off a model response and writing them, in two forms.
+ *
+ * <p>Which form matters. The one that reads the caller from the security context is only correct on a request thread;
+ * anything recording from a stream's completion - a continuation with no signed-in user - must capture the user id on
+ * the request thread first and pass it in. The code lens once used the context-reading form from a stream completion:
+ * the lookup threw, this class swallowed it, and those tokens were never billed.
  *
  * <p>Never throws: failing to write a usage row must not fail the user's request.
  */
@@ -30,7 +30,6 @@ public class AiUsageRecorder {
     private final UsageService usageService;
     private final AuthUtil authUtil;
 
-    /** For request-thread callers. {@code projectId} is null for calls made before a project exists. */
     public void record(ChatResponse response, UsageFeature feature, Long projectId) {
         Long userId;
         try {
@@ -42,7 +41,6 @@ public class AiUsageRecorder {
         record(response, feature, userId, projectId);
     }
 
-    /** For anything recording after the request thread has gone - a stream's completion, a background retry. */
     public void record(ChatResponse response, UsageFeature feature, Long userId, Long projectId) {
         try {
             Usage usage = response == null || response.getMetadata() == null ? null : response.getMetadata().getUsage();

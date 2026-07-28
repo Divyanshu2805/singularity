@@ -3,12 +3,14 @@ package com.vibecraft.common.util;
 import java.util.TimeZone;
 
 /**
- * A Windows JVM reports the legacy {@code Asia/Calcutta} timezone alias; PostgreSQL's JDBC driver rejects
- * it outright ("invalid value for parameter TimeZone"), which fails Hibernate's very first connection at
- * boot. Call {@link #apply()} as the first line of {@code main()} — not in a {@code @PostConstruct} or bean
- * initializer, since the JDBC connection pool can be created before Spring gets that far, and Spring Boot
- * test infrastructure calls {@code SpringApplication.run(...)} directly, bypassing {@code main()} entirely,
- * which is why this doesn't help a bare {@code ./mvnw test} — see docs/local-development/.
+ * Makes a Windows JVM's timezone acceptable to PostgreSQL before anything connects.
+ *
+ * <p>Handles: replacing the JVM default, which Windows reports as the old Asia/Calcutta alias, with Asia/Kolkata. The
+ * PostgreSQL JDBC driver rejects the alias outright and fails Hibernate's very first connection at boot.
+ *
+ * <p>Call this as the first line of main(), not from a @PostConstruct or bean initializer: the connection pool can be
+ * created before Spring gets that far. It is a JVM default set in main(), so every service has to call it itself -
+ * one service's fix does not help another. It also does not help a bare test run, which never goes through main().
  */
 public final class WindowsTimezoneWorkaround {
 

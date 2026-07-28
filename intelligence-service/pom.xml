@@ -14,9 +14,9 @@
 		ChatSession/ChatMessage/ChatEvent/CodeNote/UsageEvent/UsageLog and the AI-generation/code-insight/idea-
 		clarifier/usage-insights pipeline. Its own Postgres database, its own Flyway history. Keeps its own copy
 		of the Firebase/session-cookie/CSRF/rate-limit security chain rather than delegating it to
-		gateway-service — see WebSecurityConfig's javadoc and docs/migration/ for why. Calls
-		account-service (plan limits, user lookups) and workspace-service (project membership, file read/write,
-		project summaries) via Feign, since it owns neither User nor Project.
+		gateway-service — see WebSecurityConfig's javadoc for why. Calls account-service (plan limits, user
+		lookups) and workspace-service (project membership, file read/write, project summaries) via Feign,
+		since it owns neither User nor Project.
 	</description>
 
 	<dependencies>
@@ -84,11 +84,6 @@
 		</dependency>
 		<!-- Firebase Authentication (Identity Platform) - session-cookie verification only, same as account-
 		     service/workspace-service. -->
-		<dependency>
-			<groupId>com.google.firebase</groupId>
-			<artifactId>firebase-admin</artifactId>
-			<version>9.10.0</version>
-		</dependency>
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>

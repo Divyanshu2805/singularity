@@ -6,7 +6,7 @@ import com.vibecraft.intelligence.feign.WorkspaceServiceClient;
 import com.vibecraft.intelligence.llm.AiUsageRecorder;
 import com.vibecraft.intelligence.mapper.CodeNoteMapper;
 import com.vibecraft.intelligence.repository.CodeNoteRepository;
-import com.vibecraft.intelligence.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.intelligence.service.ProjectFileReader;
 import com.vibecraft.intelligence.service.UsageService;
 import org.junit.jupiter.api.DisplayName;
@@ -21,10 +21,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
- * The daily token allowance has to be checked before a code-insight call spends anything. The two streamed
- * variants always did that; the non-streaming {@code explain} and {@code ask} did not (in the original monolith either),
- * so a caller already over the limit could keep spending tokens by using them instead. Over budget must throw
- * before the model is so much as touched.
+ * Covers that the daily token allowance is checked before a code-insight call spends anything, on every variant.
+ *
+ * <p>The two streamed variants always did that; the non-streaming pair once did not, so a caller already over the
+ * limit could keep spending tokens by using them instead. Over budget must throw before the model is so much as
+ * touched.
  */
 class CodeInsightServiceImplBudgetGateTest {
 

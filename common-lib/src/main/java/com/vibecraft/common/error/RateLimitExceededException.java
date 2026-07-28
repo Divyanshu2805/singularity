@@ -2,7 +2,12 @@ package com.vibecraft.common.error;
 
 import lombok.Getter;
 
-/** The caller tripped a sliding-window rate limit (429) — carries how long until the next attempt may succeed. */
+/**
+ * The caller tripped a rate limit.
+ *
+ * <p>Handles: a 429 carrying how many seconds until the next attempt could succeed, which GlobalExceptionHandler puts
+ * on the Retry-After header.
+ */
 @Getter
 public class RateLimitExceededException extends RuntimeException {
 

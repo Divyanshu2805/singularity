@@ -19,7 +19,7 @@ import com.vibecraft.intelligence.llm.NarrationFilter;
 import com.vibecraft.intelligence.llm.tools.CodeGenerationTools;
 import com.vibecraft.intelligence.mapper.CodeNoteMapper;
 import com.vibecraft.intelligence.repository.CodeNoteRepository;
-import com.vibecraft.intelligence.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.intelligence.service.CodeInsightService;
 import com.vibecraft.intelligence.service.ProjectFileReader;
 import com.vibecraft.intelligence.service.UsageService;
@@ -41,15 +41,24 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * The code lens: explaining a selection, answering follow-ups about it, and keeping the caller's own notes.
+ *
+ * <p>Handles: building the prompts, checking the daily token budget before each answer, running the model with the
+ * read-only file tool, streaming answers through the narration filter, recording usage with the caller captured on
+ * the request thread, and the note reads and writes - each scoped to the caller as well as the project.
+ *
+ * <p>Read-only by construction: the only tool given here reads files, and the prompts never mention the file-writing
+ * protocol. Do not add a write-capable tool, and do not inline whole files into the prompt instead of letting the
+ * model read on demand - that is also what keeps a large project from flooding the context.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CodeInsightServiceImpl implements CodeInsightService {
 
-    /** How much of the conversation is replayed. Older turns fall off the front, keeping the newest context. */
     private static final int MAX_REPLAYED_TURNS = 20;
 
-    /** Enough for any real Vite app; a runaway project still can't blow up the prompt. */
     private static final int MAX_LISTED_FILES = 400;
 
     private final ChatClient chatClient;
@@ -61,14 +70,6 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     private final CodeNoteMapper codeNoteMapper;
     private final AuthUtil authUtil;
 
-    /**
-     * The model's way into a file's contents. {@code CodeGenerationTools} exposes exactly one tool,
-     * {@code read_files}, and nothing that writes - which is what keeps this service unable to change a
-     * project even though it can now look inside one. Its prompts still never mention the
-     * {@code <file>}/{@code <todo>}/{@code <learn>} protocol, so the model has no way to emit an edit here.
-     * {@code ProjectFileReader} has no save/delete method at all, so this holds structurally, not just by
-     * convention - see its own javadoc.
-     */
     private CodeGenerationTools readOnlyTools(Long projectId) {
         return new CodeGenerationTools(projectFileReader, projectId);
     }
@@ -76,8 +77,6 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public CodeInsightResponse explain(Long projectId, ExplainCodeRequest request) {
-        // Same daily allowance as the streamed variant below. This one was ungated (in the original monolith too), so a
-        // caller over the limit could keep spending tokens by using the non-streaming endpoint instead.
         usageService.assertWithinDailyTokenBudget();
         String answer = callModel(
                 CodeInsightPrompts.explainSystemPrompt(),
@@ -100,7 +99,6 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public Flux<String> streamExplain(Long projectId, ExplainCodeRequest request) {
-        // Code notes spend real tokens too, so they come out of the same daily allowance as a build.
         usageService.assertWithinDailyTokenBudget();
         return streamModel(
                 CodeInsightPrompts.explainSystemPrompt(),
@@ -117,11 +115,6 @@ public class CodeInsightServiceImpl implements CodeInsightService {
         return streamModel(CodeInsightPrompts.askSystemPrompt(), askMessages(projectId, request), projectId, "code question");
     }
 
-    // --- Saved notes --------------------------------------------------------------------------------
-    //
-    // Scoped to the caller on every call. `canViewProject` says whether they may look at this project at
-    // all; the user id from the JWT is what keeps one member out of another's thread within it.
-
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public List<CodeNoteResponse> getNotes(Long projectId) {
@@ -135,9 +128,6 @@ public class CodeInsightServiceImpl implements CodeInsightService {
         Long userId = authUtil.getCurrentUserId();
         CodeNoteSelection selection = request.selection();
 
-        // Plain ids, not loads: @PreAuthorize has already established the caller is a member of this
-        // project, and CodeNote carries projectId/userId as plain columns now (Project/User live in other
-        // services' databases) - nothing left to reference.
         CodeNote note = CodeNote.builder()
                 .projectId(projectId)
                 .userId(userId)
@@ -159,7 +149,6 @@ public class CodeInsightServiceImpl implements CodeInsightService {
         CodeNote note = codeNoteRepository.findByIdAndProjectIdAndUserId(noteId, projectId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("CodeNote", String.valueOf(noteId)));
 
-        // Gone for good - these are personal notes, so there is nothing to soft-delete them for.
         codeNoteRepository.delete(note);
         log.info("Deleted code note {} on projectId: {} for userId: {}", noteId, projectId, userId);
     }
@@ -173,22 +162,11 @@ public class CodeInsightServiceImpl implements CodeInsightService {
         log.info("Cleared {} code notes on projectId: {} for userId: {}", removed, projectId, userId);
     }
 
-    /**
-     * Streams the reply, recording usage from the trailing chunk the way the chat pipeline does.
-     *
-     * <p>Wrapped in {@code Flux.defer} for the same reason the generation pipeline is: Spring AI's advisor
-     * chain is single-use per subscription, so a resubscribe (a retry, or two subscribers) must rebuild the
-     * whole call rather than walking a spent chain.
-     */
     private Flux<String> streamModel(String systemPrompt, List<Message> messages, Long projectId, String label) {
         AtomicReference<ChatResponse> lastWithUsage = new AtomicReference<>();
-        // Captured here, on the request thread. doOnComplete below runs on a Reactor thread with no signed-in
-        // user: reading the caller there threw, the recorder swallowed it, and ExplainLLM answers were never
-        // billed or counted.
         Long userId = authUtil.getCurrentUserId();
 
         return Flux.defer(() -> {
-                    // Per subscription, like the advisor chain: a retry starts with nothing held.
                     NarrationFilter narration = new NarrationFilter();
                     return chatClient.prompt()
                             .system(systemPrompt)
@@ -202,17 +180,11 @@ public class CodeInsightServiceImpl implements CodeInsightService {
                                 }
                             })
                             .concatMapIterable(response -> {
-                                // The trailing usage chunk carries no choices at all, so there's nothing to emit for it.
                                 if (response.getResult() == null) return List.<String>of();
                                 return narration.accept(response.getResult().getOutput().getText());
                             })
                             .concatWith(Flux.defer(() -> Flux.fromIterable(narration.finish())));
                 })
-                // Unlike AiGenerationServiceImpl's finalizeChats, nothing hands this off to boundedElastic on its
-                // own - doOnComplete would otherwise run recordTokenUsage's two blocking JPA writes directly on
-                // the Netty/WebClient completion thread. Found while porting this class: recordTokenUsage is a
-                // pre-existing blocking call on that thread even before this migration, worth fixing while every
-                // line around it is already being touched.
                 .doOnComplete(() -> Mono.fromRunnable(() ->
                                 aiUsageRecorder.record(lastWithUsage.get(), UsageFeature.EXPLAIN, userId, projectId))
                         .subscribeOn(Schedulers.boundedElastic())
@@ -220,14 +192,6 @@ public class CodeInsightServiceImpl implements CodeInsightService {
                 .doOnError(error -> log.error("Streaming {} failed", label, error));
     }
 
-    /**
-     * The file list leads, then the replayed conversation, then the question with its selected code quoted
-     * inside it.
-     *
-     * <p>The selection deliberately rides on the question rather than sitting in a message of its own near
-     * the top: with history replayed in between, a model asked "what is this code?" answered that it had no
-     * selection, because by the time it read the question the block was several messages back.
-     */
     private List<Message> askMessages(Long projectId, AskCodeRequest request) {
         List<Message> messages = new ArrayList<>();
         messages.add(new UserMessage(fileList(projectId)));
@@ -247,11 +211,6 @@ public class CodeInsightServiceImpl implements CodeInsightService {
         return messages;
     }
 
-    /**
-     * The project's layout, as paths straight from the database. Contents aren't inlined here - the model
-     * reads the few files a question actually needs through {@code read_files} instead, which keeps a large
-     * project from flooding the prompt. A failed lookup still answers, just without the layout.
-     */
     private String fileList(Long projectId) {
         try {
             List<String> paths = workspaceServiceClient.getFileTree(projectId).entries().stream()
@@ -275,10 +234,6 @@ public class CodeInsightServiceImpl implements CodeInsightService {
         return history.subList(from, history.size());
     }
 
-    /**
-     * Unlike the idea clarifier, a failure here has no sensible non-AI fallback - there's no useful explanation
-     * to synthesise without a model - so this surfaces the failure instead of inventing an answer.
-     */
     private String callModel(String systemPrompt, List<Message> messages, Long projectId, String label) {
         try {
             ChatResponse response = chatClient.prompt()

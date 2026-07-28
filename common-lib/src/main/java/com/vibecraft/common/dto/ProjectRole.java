@@ -4,10 +4,11 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * Wire copy of workspace-service's {@code ProjectRole} vocabulary — workspace-service's own enum stays the
- * source of truth (and the one Hibernate persists), this is only what crosses the wire on its internal
- * project-membership API so other services never need a compile-time dependency on workspace-service's
- * entities. Keep the permission mapping identical to workspace-service's copy if either ever changes.
+ * Wire copy of workspace-service's project-role vocabulary, with the permissions each role grants.
+ *
+ * <p>Handles: letting any service decide what a role may do without a compile-time dependency on workspace-service's
+ * entities. workspace-service's own enum stays the source of truth and is the one Hibernate persists; this is only
+ * what crosses its internal API. Keep the two permission mappings identical if either changes.
  */
 public enum ProjectRole {
     OWNER,

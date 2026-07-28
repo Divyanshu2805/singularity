@@ -8,11 +8,11 @@ import com.vibecraft.intelligence.dto.usage.UsageInsightsResponse;
 import com.vibecraft.intelligence.entity.UsageEvent;
 import com.vibecraft.intelligence.entity.UsageLog;
 import com.vibecraft.common.error.BadRequestException;
-import com.vibecraft.intelligence.feign.AccountServiceClient;
+import com.vibecraft.common.feign.AccountServiceClient;
 import com.vibecraft.intelligence.feign.WorkspaceServiceClient;
 import com.vibecraft.intelligence.repository.UsageEventRepository;
 import com.vibecraft.intelligence.repository.UsageLogRepository;
-import com.vibecraft.intelligence.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.intelligence.service.UsageInsightsService;
 import com.vibecraft.intelligence.util.UsageInsightsAssembler;
 import com.vibecraft.intelligence.util.UsageInsightsAssembler.ProjectInfo;
@@ -33,11 +33,21 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Where the caller's tokens went, over a range.
+ *
+ * <p>Handles: validating the range, grouping the ledger in the database, resolving project names from
+ * workspace-service in one batched call, assembling the response, paginating the activity table, and exporting a
+ * window as CSV.
+ *
+ * <p>Pagination asks for one row more than the page needs, which is how it knows there is a next page without a
+ * second count query. CSV cells are quoted and a leading formula marker is neutralised, so a project name cannot
+ * become a live formula when the export is opened in a spreadsheet.
+ */
 @Service
 @RequiredArgsConstructor
 public class UsageInsightsServiceImpl implements UsageInsightsService {
 
-    /** The widest window offered. Also the ceiling on how much history one request can make the database scan. */
     private static final Map<String, Integer> RANGE_DAYS = Map.of("7d", 7, "30d", 30, "90d", 90);
     private static final int MAX_PAGE_SIZE = 100;
     private static final DateTimeFormatter CSV_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -85,7 +95,6 @@ public class UsageInsightsServiceImpl implements UsageInsightsService {
         int safePage = Math.max(0, page);
         int safeSize = Math.min(Math.max(1, size), MAX_PAGE_SIZE);
 
-        // One extra row tells us whether there is a next page without a separate count query.
         List<UsageEvent> events = usageEventRepository.findByUserIdOrderByCreatedAtDescIdDesc(
                 userId, PageRequest.of(safePage, safeSize + 1));
         boolean hasMore = events.size() > safeSize;
@@ -123,11 +132,6 @@ public class UsageInsightsServiceImpl implements UsageInsightsService {
         return csv.toString();
     }
 
-    /**
-     * A project name is user-written, so it is quoted and its quotes doubled (RFC 4180), and a leading
-     * {@code = + - @} is neutralised - otherwise a project named {@code =HYPERLINK(...)} becomes a live formula
-     * the moment the export is opened in a spreadsheet.
-     */
     static String csvCell(String value) {
         String text = value == null ? "" : value;
         if (!text.isEmpty() && "=+-@".indexOf(text.charAt(0)) >= 0) {
@@ -147,18 +151,11 @@ public class UsageInsightsServiceImpl implements UsageInsightsService {
         return projectInfo(rows.stream().map(Row::projectId).filter(Objects::nonNull).collect(Collectors.toSet()));
     }
 
-    /**
-     * Names for the projects the caller spent tokens on. Looked up by id with no membership check: every id here
-     * came from the caller's own ledger rows, so it's a project they used - including one since deleted, or one
-     * they have since been removed from, whose tokens they still spent.
-     */
     private Map<Long, ProjectInfo> projectInfo(Set<Long> ids) {
         Set<Long> wanted = new HashSet<>(ids);
         wanted.remove(null);
         Map<Long, ProjectInfo> info = new HashMap<>();
         if (wanted.isEmpty()) return info;
-        // One batch call, not one per project - a 90-day CSV export can plausibly span dozens of distinct
-        // projects, unlike workspace-service's own small-member-list N+1 which is bounded by real headcount.
         for (ProjectSummaryDto project : workspaceServiceClient.getProjectSummaries(List.copyOf(wanted))) {
             info.put(project.id(), new ProjectInfo(project.name(), project.deleted()));
         }
@@ -176,7 +173,6 @@ public class UsageInsightsServiceImpl implements UsageInsightsService {
                 ((Number) r[6]).longValue())).toList();
     }
 
-    /** The zone the daily quota counter rolls over in - see {@code UsageServiceImpl.dailyResetInstant}. */
     private static ZoneId zone() {
         return ZoneId.systemDefault();
     }

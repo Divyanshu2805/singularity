@@ -15,8 +15,7 @@
 	<name>vibecraft-parent</name>
 	<description>
 		Reactor parent for the vibecraft backend: a Gateway and Eureka in front of three domain services
-		(account, workspace, intelligence) that share common-lib. See docs/architecture/ for the shape and
-		docs/migration/ for how it was split out of the original monolith (since removed).
+		(account, workspace, intelligence) that share common-lib. See docs/architecture/ for the shape.
 	</description>
 
 	<!--

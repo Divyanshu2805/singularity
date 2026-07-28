@@ -1,12 +1,21 @@
 package com.vibecraft.workspace.security;
 
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.workspace.enums.ProjectPermission;
 import com.vibecraft.workspace.repository.ProjectMemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.security.Permission;
-
+/**
+ * Backs every permission guard in workspace-service.
+ *
+ * <p>Handles: resolving the caller's role on a project and mapping it to the permission a given operation needs -
+ * view, edit, delete, and the two member-management permissions. A caller with no membership, or a membership on a
+ * soft-deleted project, has no permissions at all.
+ *
+ * <p>Registered under the bean name the authorization expressions refer to. The expression's argument name must match
+ * the guarded method's parameter name exactly; a mismatch evaluates to null and silently denies everyone.
+ */
 @Component("security")
 @RequiredArgsConstructor
 public class SecurityExpressions {
@@ -16,9 +25,8 @@ public class SecurityExpressions {
 
     private boolean hasPermission(Long projectId, ProjectPermission projectPermission) {
         Long userId = authUtil.getCurrentUserId();
-
-        return projectMemberRepository.findRoleByProjectIdAndUserId(projectId, userId).
-                map(role -> role.getPermissions().contains(projectPermission))
+        return projectMemberRepository.findRoleByProjectIdAndUserId(projectId, userId)
+                .map(role -> role.getPermissions().contains(projectPermission))
                 .orElse(false);
     }
 
