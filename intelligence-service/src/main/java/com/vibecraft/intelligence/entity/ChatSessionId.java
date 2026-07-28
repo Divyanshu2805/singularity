@@ -11,6 +11,12 @@ import lombok.ToString;
 
 import java.io.Serializable;
 
+/**
+ * The composite key of a chat session.
+ *
+ * <p>Handles: the project id and user id together, with equality over both - which is what makes a session findable,
+ * saveable and distinct per member.
+ */
 @Embeddable
 @Getter
 @Setter

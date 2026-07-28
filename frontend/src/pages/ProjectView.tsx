@@ -1,3 +1,12 @@
+/**
+ * A project's own page: the chat on one side, the preview and code on the other.
+ *
+ * Handles: loading the project, renaming it in place, switching between the preview and the code, opening a file at
+ * the line a chat message points at, refreshing usage when a response ends, and the share, fork and delete actions.
+ *
+ * This is the heaviest page in the app - it pulls in the editor - which is why it is loaded on demand rather than
+ * with the shell.
+ */
 import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -50,9 +59,7 @@ const VIEW_OPTIONS: { mode: ViewMode; label: string; Icon: LucideIcon }[] = [
   { mode: "code", label: "Code", Icon: CodeXml },
 ];
 
-// Chat's share of the chat/code split, in percent.
 const CHAT_PANEL_PERCENT = { sidebarCollapsed: 45, sidebarPinned: 44 };
-// With the code-notes panel open there are three columns to fit, so chat gives up most of its share.
 const CHAT_PANEL_PERCENT_WITH_NOTES = 28;
 
 function HeaderIconButton({ label, onClick, disabled, destructive, active, children }: {
@@ -60,7 +67,6 @@ function HeaderIconButton({ label, onClick, disabled, destructive, active, child
   onClick: () => void;
   disabled?: boolean;
   destructive?: boolean;
-  /** For toggles like pin and star: shown in orange while on. */
   active?: boolean;
   children: ReactNode;
 }) {
@@ -88,7 +94,6 @@ function HeaderIconButton({ label, onClick, disabled, destructive, active, child
   );
 }
 
-/** Double-click (or Enter while focused) to rename in place. Enter or blur saves, Escape cancels. */
 function EditableProjectName({ name, canRename, onRename }: {
   name: string;
   canRename: boolean;
@@ -98,7 +103,6 @@ function EditableProjectName({ name, canRename, onRename }: {
   const [draft, setDraft] = useState(name);
   const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Enter/Escape are followed by the input's blur - only the first of those should act.
   const isFinishingRef = useRef(false);
 
   useEffect(() => {
@@ -154,7 +158,6 @@ function EditableProjectName({ name, canRename, onRename }: {
             finish(false);
           }
         }}
-        // Grows with the name as it's typed, up to a cap
         style={{ width: `calc(${Math.max(draft.length, 8)}ch + 1.25rem)` }}
         className="h-7 min-w-0 max-w-[24rem] rounded-md border border-primary/50 bg-background px-2 text-sm font-medium text-foreground outline-none ring-[3px] ring-primary/15 disabled:opacity-70"
       />
@@ -180,8 +183,6 @@ function EditableProjectName({ name, canRename, onRename }: {
   );
 }
 
-// Keyed by project, so switching projects from the sidebar starts clean instead of
-// carrying the previous project's streamed files and chat state across.
 export function ProjectView() {
   const { projectId } = useParams<{ projectId: string }>();
   return <ProjectWorkspace key={projectId} />;
@@ -197,11 +198,9 @@ function ProjectWorkspace() {
   const preferences = useProjectPreferences();
   const [teachingMode, setTeachingMode] = useTeachingMode();
 
-  // The shared project list carries pin/star state and reflects renames made anywhere (e.g. the sidebar).
   const { data: projectList } = useQuery({ queryKey: ["projects"], queryFn: () => api.getProjects() });
   const projectSummary = projectList?.find((summary) => String(summary.id) === projectId);
 
-  // The chat lives in a store outside this page, so a response keeps streaming (and stays visible) across project switches.
   const chat = useProjectChat(projectId ?? "");
   const [viewMode, setViewMode] = useState<ViewMode>("code");
   const [runtimeError, setRuntimeError] = useState<RuntimeError | null>(null);
@@ -212,7 +211,6 @@ function ProjectWorkspace() {
   const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // The dashboard hands over the description a project was created from, to send as its first message.
   const initialPromptRef = useRef<string | null>(
     (location.state as { initialPrompt?: string } | null)?.initialPrompt ?? null
   );
@@ -221,7 +219,6 @@ function ProjectWorkspace() {
   const canEdit = role === "OWNER" || role === "EDITOR";
   const isViewer = role === "VIEWER";
 
-  // On someone else's project, an empty chat welcomes you by the owner's name instead of "What should we build?".
   const isSharedWithMe = !!role && role !== "OWNER";
   const { data: members } = useQuery({
     queryKey: ["project-members", projectId],
@@ -230,13 +227,9 @@ function ProjectWorkspace() {
   });
   const owner = members?.find((member) => member.role === "OWNER");
 
-  // Pinning the sidebar narrows the page, so chat gives up a little of its share.
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const lensThread = useCodeLens(projectId ?? "");
   const isNotesOpen = !!lensThread?.isOpen;
-  // With code notes open there are three columns to fit, so chat gives up most of its share. Driving this
-  // through the same value that feeds `defaultSize` matters: collapsing the sidebar changes that value, which
-  // re-applies it, so an imperative resize() alongside it would just be overwritten.
   const chatPanelPercent = isNotesOpen
     ? CHAT_PANEL_PERCENT_WITH_NOTES
     : sidebar.isPinned
@@ -256,7 +249,6 @@ function ProjectWorkspace() {
     if (!projectId) return;
     let isCancelled = false;
 
-    // Coming back to a project shows the chat already in memory at once; history refreshes behind it.
     projectChat.loadHistory(projectId);
     api.getProject(projectId)
       .then((projectData) => {
@@ -281,14 +273,11 @@ function ProjectWorkspace() {
     toast({ title: "Couldn't load the chat", description: chat.historyError, variant: "destructive" });
   }, [chat.historyError, toast]);
 
-  // Only files from the present chat open with their diff; older mentions always show the full file.
-  // A walkthrough's code reference also says which line to show.
   const handleOpenFile = useCallback((path: string, isFromCurrentChat: boolean, target?: CodeTarget) => {
     setViewMode("code");
     setOpenFileRequest({ path, id: Date.now(), showDiff: isFromCurrentChat, target });
   }, []);
 
-  // Every way a message gets sent (typed, the dashboard's first brief, "fix this error") honours teaching mode.
   const handleSendMessage = useCallback((content: string) => {
     if (projectId) projectChat.sendMessage(projectId, content, { teachingMode });
   }, [projectId, teachingMode]);
@@ -297,7 +286,6 @@ function ProjectWorkspace() {
     if (projectId) projectChat.stopStreaming(projectId);
   }, [projectId]);
 
-  // Teaching mode follows the toggle as it is now, the same as any other send.
   const handleRetry = useCallback(() => {
     if (projectId) projectChat.retryLastMessage(projectId, { teachingMode });
   }, [projectId, teachingMode]);
@@ -306,8 +294,6 @@ function ProjectWorkspace() {
     if (projectId) projectChat.markDiffViewed(projectId, path);
   }, [projectId]);
 
-  // Send the dashboard's description once history has loaded (so it isn't overwritten by the load),
-  // and clear it from navigation state so a refresh doesn't send it again.
   useEffect(() => {
     if (!chat.isHistoryLoaded || !initialPromptRef.current) return;
     const prompt = initialPromptRef.current;
@@ -316,11 +302,8 @@ function ProjectWorkspace() {
     handleSendMessage(prompt);
   }, [chat.isHistoryLoaded, handleSendMessage, navigate, location.pathname]);
 
-  // A new project starts with no error showing - the last one belonged to a different app.
   useEffect(() => setRuntimeError(null), [projectId]);
 
-  // A turn that changed package.json may have added a dependency the running dev server hasn't installed. File sync
-  // brings the manifest across, but only a restart runs npm install again.
   const { preview: currentPreview, restart: restartPreview } = livePreview;
   const wasStreamingForPreviewRef = useRef(chat.isStreaming);
   useEffect(() => {
@@ -328,7 +311,6 @@ function ProjectWorkspace() {
     wasStreamingForPreviewRef.current = chat.isStreaming;
     if (finished && currentPreview?.status === "RUNNING" && changedDependencies(chat.lastTurnFiles)) {
       restartPreview().catch(() => {
-        // The panel shows a failed restart; nothing to add here.
       });
     }
   }, [chat.isStreaming, chat.lastTurnFiles, currentPreview?.status, restartPreview]);
@@ -354,7 +336,6 @@ Please analyze this error and fix the code to resolve it.`;
     try {
       const updated = await api.updateProject(projectId, name);
       setProject((prev) => (prev ? { ...prev, name: updated.name } : prev));
-      // Updated in the shared list right away too, since the header reads its name from there.
       queryClient.setQueryData<ProjectSummaryResponse[]>(["projects"], (list) =>
         list?.map((summary) => (String(summary.id) === projectId ? { ...summary, name: updated.name } : summary))
       );
@@ -370,7 +351,6 @@ Please analyze this error and fix the code to resolve it.`;
     }
   };
 
-  // The owner deletes it for everyone; an editor only removes it from their own projects.
   const deleteText = deleteCopy(role, projectSummary?.name ?? project?.name);
 
   const handleDeleteProject = async () => {
@@ -394,8 +374,6 @@ Please analyze this error and fix the code to resolve it.`;
 
   const [copiedChat, copyChat] = useCopyFeedback();
 
-  // Today's allowance, so the composer can say why it won't send rather than failing on submit. The server
-  // refuses it either way (402); this is so the user finds out before typing a message, not after.
   const { quota, refresh: refreshBilling } = useBilling();
   const quotaBlock = quota?.isExhausted
     ? {
@@ -405,20 +383,13 @@ Please analyze this error and fix the code to resolve it.`;
       }
     : null;
 
-  // Every finished response has spent tokens, so re-read usage when one ends - that is what switches the
-  // composer to the upgrade banner at the moment the allowance actually runs out, and what keeps the sidebar
-  // meter honest. It also covers a send the server refused with 402 because the cached figure was stale.
   const wasStreamingRef = useRef(chat.isStreaming);
   useEffect(() => {
     if (wasStreamingRef.current && !chat.isStreaming) void refreshBilling();
     wasStreamingRef.current = chat.isStreaming;
   }, [chat.isStreaming, refreshBilling]);
-  // Nothing to take away until the transcript has actually loaded and has something in it.
   const hasChatToExport = chat.isHistoryLoaded && chat.messages.length > 0;
 
-  // The build transcript, as markdown, two ways out: onto the clipboard or into a file. Both render the same
-  // document through `buildChatMarkdown` - an assistant turn rebuilt from its events, never the raw XML - and
-  // the code notes panel offers the same pair, so the two chats behave alike.
   const chatMarkdown = () => buildChatMarkdown(chat.messages, projectName);
 
   const handleExportChat = () => {
@@ -427,10 +398,6 @@ Please analyze this error and fix the code to resolve it.`;
 
   const handleCopyChat = () => copyChat(chatMarkdown());
 
-  // Opening code notes puts three panels on screen at once, so the app sidebar gives its space back and the
-  // code view comes forward. Chat's own width follows from `chatPanelPercent` above. The project's file
-  // column is deliberately left alone - it's part of working on the code, so it stays where it was; only
-  // this sidebar, which isn't, gets out of the way. Every divider stays draggable regardless.
   const wasNotesOpenRef = useRef(isNotesOpen);
   useEffect(() => {
     if (isNotesOpen && !wasNotesOpenRef.current) {
@@ -513,14 +480,12 @@ Please analyze this error and fix the code to resolve it.`;
 
       <div className="relative flex min-w-0 flex-1 flex-col">
         <header className="grid h-12 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b border-border/60 bg-panel px-2">
-          {/* Left: sidebar toggle + project name (double-click to rename) */}
           <div className="flex min-w-0 items-center">
             <SidebarToggleSpace sidebar={sidebar} />
             {project ? (
               <div className="flex min-w-0 items-center gap-1 pl-1">
                 <span className="h-5 w-5 shrink-0 rounded ring-1 ring-inset ring-white/10" style={generateGradient(projectSummary?.name ?? project.name)} />
                 <EditableProjectName name={projectSummary?.name ?? project.name} canRename={canEdit} onRename={handleRename} />
-                {/* Personal to you (not the project's other members), so they sit with the name rather than the actions. */}
                 <div className="ml-1 flex shrink-0 items-center">
                   <HeaderIconButton
                     label={projectSummary?.pinnedAt ? "Unpin project" : "Pin project"}
@@ -546,7 +511,6 @@ Please analyze this error and fix the code to resolve it.`;
             )}
           </div>
 
-          {/* Center: view switch */}
           <div role="tablist" aria-label="View" className="relative grid grid-cols-2 rounded-lg border border-border/60 bg-background/60 p-0.5">
             <span
               aria-hidden="true"
@@ -576,7 +540,6 @@ Please analyze this error and fix the code to resolve it.`;
             ))}
           </div>
 
-          {/* Right: project actions + share */}
           <div className="flex min-w-0 items-center justify-end gap-1">
             {isViewer && (
               <span className="mr-1 hidden items-center gap-1 rounded-md border border-border/70 px-2 py-1 text-[11px] text-muted-foreground sm:flex">
@@ -585,8 +548,6 @@ Please analyze this error and fix the code to resolve it.`;
               </span>
             )}
 
-
-            {/* The chat is for the people building the project; a viewer only ever sees the code. */}
             {!isViewer && (
               <>
                 <HeaderIconButton
@@ -631,7 +592,6 @@ Please analyze this error and fix the code to resolve it.`;
 
         <div className="min-h-0 flex-1">
           {isViewer ? (
-            // Viewers get the code and preview only: no chat panel, and no chat history to read.
             workArea
           ) : (
             <ResizablePanelGroup direction="horizontal" className="h-full">

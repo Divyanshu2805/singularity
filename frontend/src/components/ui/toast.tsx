@@ -1,3 +1,8 @@
+/**
+ * One toast and the region it appears in.
+ *
+ * Handles: the viewport, the toast frame in its variants, and the title, description, action and close parts.
+ */
 import * as React from "react";
 import * as ToastPrimitives from "@radix-ui/react-toast";
 import { cva, type VariantProps } from "class-variance-authority";

@@ -27,12 +27,25 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * The pool of warm runner pods from {@code k8s/runner-pods.yml}, and the commands run inside them.
+ * The pool of warm runner pods, and the commands run inside them.
  *
- * <p>How the pool works: the {@code runner-pool} Deployment selects pods labelled {@code status=idle}. Claiming a
- * pod relabels it {@code status=busy}, which takes it <em>out</em> of the ReplicaSet - so Kubernetes immediately
- * starts a fresh idle pod to replace it, and the claimed one belongs to its preview alone. Releasing it is simply
- * deleting it; nothing ever returns a used pod to the pool, so no project's files or processes leak into another.
+ * <p>Handles: claiming a ready idle pod for a project, releasing one, checking a pod is still alive, reading its
+ * address, listing claimed pods for the orphan sweep, and running a shell script in one of a pod's containers with a
+ * timeout.
+ *
+ * <p>How the pool works: a Deployment selects pods labelled idle. Claiming relabels a pod busy, which takes it out of
+ * the ReplicaSet, so Kubernetes immediately starts a fresh idle pod to replace it and the claimed one belongs to its
+ * preview alone. Releasing is simply deleting it; nothing ever returns a used pod to the pool, so no project's files
+ * or processes can leak into another.
+ *
+ * <p>The claim is a merge patch carrying the resourceVersion the pod was listed with, which the API server enforces
+ * as a precondition: two requests that picked the same pod cannot both win - the loser gets a conflict and moves on.
+ * It patches rather than updating the listed pod because this client version cannot serialize a fetched pod back
+ * under this Jackson version: anything a real API server returns that the model does not know lands in an
+ * additional-properties map, and a non-empty one is what breaks it. Every listed pod has some, so trimming one field
+ * is not enough.
+ *
+ * <p>A script that starts something long-running must detach it itself, because exec returns when the shell does.
  */
 @Component
 @RequiredArgsConstructor
@@ -45,7 +58,6 @@ public class PreviewRunnerPool {
     static final String IDLE = "idle";
     static final String BUSY = "busy";
     static final String PROJECT_LABEL = "project-id";
-    /** When a pod was claimed. Its creation time is when it joined the pool, which says nothing about its preview. */
     static final String CLAIMED_AT_ANNOTATION = "vibecraft.dev/claimed-at";
 
     static final String SYNCER_CONTAINER = "syncer";
@@ -54,27 +66,12 @@ public class PreviewRunnerPool {
     private final KubernetesClient client;
     private final PreviewProperties properties;
 
-    /** What a finished command printed (stdout and stderr interleaved) and how it exited. */
     public record ExecResult(int exitCode, String output) {
         public boolean succeeded() {
             return exitCode == 0;
         }
     }
 
-    /**
-     * Claims a ready idle pod for the project, or empty when the pool has none free right now.
-     *
-     * <p>The relabel is a JSON merge patch that carries the resourceVersion the pod was listed with, which the API
-     * server enforces as a precondition: two requests that picked the same pod can't both win, the second is
-     * rejected with 409 and moves on to the next pod. A patch without it would let both succeed and put two
-     * projects in one pod.
-     *
-     * <p>It patches rather than {@code update}s the listed Pod because kubernetes-client 6.13.4 can't serialize
-     * one back under Boot 4.1's Jackson 2.21.4 ({@code NullPointerException: "keySerializer" is null}). Anything a
-     * real API server returns that the 6.13.4 model doesn't know lands in an {@code additionalProperties} map, and
-     * a non-empty one is what trips it - every listed pod has some ({@code managedFields}, and on a current server
-     * {@code status.observedGeneration}), so trimming one field off isn't enough. See {@link #claimPatch}.
-     */
     public Optional<Pod> claim(Long projectId) {
         try {
             List<Pod> idle = pods().withLabel(APP_LABEL, RUNNER_APP).withLabel(POOL_LABEL, IDLE)
@@ -101,10 +98,6 @@ public class PreviewRunnerPool {
         }
     }
 
-    /**
-     * The body of the claim: the two labels and the annotation, plus the resourceVersion {@code idle} was listed
-     * with as the precondition. Deliberately nothing else from the listed pod goes back to the server.
-     */
     static Pod claimPatch(Pod idle, Long projectId, Instant claimedAt) {
         return new PodBuilder().withNewMetadata()
                 .withResourceVersion(idle.getMetadata().getResourceVersion())
@@ -114,7 +107,6 @@ public class PreviewRunnerPool {
                 .endMetadata().build();
     }
 
-    /** Deletes a claimed pod outright. Idempotent - releasing a pod that's already gone is fine. */
     public void release(String podName) {
         if (podName == null) return;
         try {
@@ -126,7 +118,6 @@ public class PreviewRunnerPool {
         }
     }
 
-    /** Whether the pod still exists and is running. False after an eviction, a node restart, or a manual delete. */
     public boolean isAlive(String podName) {
         if (podName == null) return false;
         try {
@@ -147,7 +138,6 @@ public class PreviewRunnerPool {
         }
     }
 
-    /** Claimed pods, with when they were claimed (null for one relabelled by hand). */
     public List<ClaimedPod> claimedPods() {
         try {
             return pods().withLabel(APP_LABEL, RUNNER_APP).withLabel(POOL_LABEL, BUSY)
@@ -162,10 +152,6 @@ public class PreviewRunnerPool {
     public record ClaimedPod(String name, Instant claimedAt) {
     }
 
-    /**
-     * Runs a shell script in one of the pod's containers and waits for it to exit. A script that starts something
-     * long-running must detach it itself ({@code setsid ... &}) - this returns when the shell does.
-     */
     public ExecResult exec(String podName, String container, Duration timeout, String script) {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         try (ExecWatch watch = pods().withName(podName).inContainer(container)

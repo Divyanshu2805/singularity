@@ -1,3 +1,9 @@
+/**
+ * The app's toast queue.
+ *
+ * Handles: adding, updating and dismissing toasts, and the subscription components read them through. One toast is
+ * shown at a time, so a burst of results does not stack up over the page.
+ */
 import * as React from "react";
 
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
@@ -85,8 +91,6 @@ export const reducer = (state: State, action: Action): State => {
     case "DISMISS_TOAST": {
       const { toastId } = action;
 
-      // ! Side effects ! - This could be extracted into a dismissToast() action,
-      // but I'll keep it here for simplicity
       if (toastId) {
         addToRemoveQueue(toastId);
       } else {

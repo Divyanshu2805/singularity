@@ -1,3 +1,13 @@
+/**
+ * Confirms a change to a live subscription, then makes it.
+ *
+ * Handles: every paid-subscriber move - upgrade, downgrade, cancel and resume - for both the pricing page and billing
+ * settings, so the same change reads the same way wherever it is started from.
+ *
+ * The confirm button is a plain button rather than the dialog library's action, because that closes the dialog the
+ * moment it is clicked: this one has to stay open while the request runs and show an error in place if the payment
+ * provider refuses, a declined card on an upgrade most likely.
+ */
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
@@ -17,15 +27,6 @@ import { describePlanChange, subscriptionStatusLabel } from "@/lib/billing";
 import type { Plan, Subscription } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/**
- * Confirms a change to a live subscription, then makes it.
- *
- * <p>Used for every paid-subscriber move - upgrade, downgrade, cancel and resume - by both the pricing page and
- * billing settings, so the same change reads the same way wherever it's started from. The confirm button is a
- * plain `Button` rather than `AlertDialogAction`, because Radix closes the dialog the moment an action is
- * clicked; this one has to stay open while the request runs and show an error in place if Stripe refuses
- * (a declined card on an upgrade, most likely).
- */
 export function PlanChangeDialog({ current, target, onClose }: {
   current: Subscription | undefined;
   target: Plan | null;
@@ -47,8 +48,6 @@ export function PlanChangeDialog({ current, target, onClose }: {
       toast({ title: "Plan updated", description: `${updated.plan.name} - ${subscriptionStatusLabel(updated)}.` });
       onClose();
     } catch (error) {
-      // Kept open: whatever went wrong (usually a declined card) the plan hasn't changed, and the person should
-      // be able to read why and decide what to do without starting over.
       toast({
         title: "Your plan hasn't changed",
         description: error instanceof Error ? error.message : "Please try again.",

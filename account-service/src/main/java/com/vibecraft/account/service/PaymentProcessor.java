@@ -10,6 +10,13 @@ import com.stripe.model.StripeObject;
 
 import java.util.Map;
 
+/**
+ * Everything this platform does with a payment provider, behind one interface.
+ *
+ * <p>Handles: starting a checkout session, opening the billing portal, settling a subscription straight from the
+ * session the browser returned with, changing an existing subscriber's plan in place, and consuming the provider's
+ * webhook events.
+ */
 public interface PaymentProcessor {
 
     CheckoutResponse createCheckoutSessionUrl(CheckoutRequest request);
@@ -18,9 +25,7 @@ public interface PaymentProcessor {
 
     void handleWebhookEvent(String type, StripeObject stripeObject, Map<String, String> metadata);
 
-    /** Settles a subscription straight from the checkout session the browser returned with. See docs/architecture/. */
     SubscriptionResponse confirmCheckoutSession(ConfirmCheckoutRequest request);
 
-    /** Changes what an existing subscriber pays for, in place, on the subscription they already have. */
     SubscriptionResponse changePlan(ChangePlanRequest request);
 }

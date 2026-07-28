@@ -1,3 +1,8 @@
+/**
+ * The text input, styled for this app.
+ *
+ * Handles: the base styling, the focus ring and the disabled state.
+ */
 import * as React from "react";
 
 import { cn } from "@/lib/utils";

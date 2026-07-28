@@ -1,3 +1,10 @@
+/**
+ * Covers the teaching-mode toggle: off until someone turns it on, one setting everywhere so the dashboard's switch
+ * and the chat's stay in step, and never remembered across sessions.
+ *
+ * That last one matters because walkthroughs roughly double every build's output, so a setting left on days later is
+ * a slow, expensive surprise.
+ */
 import { describe, it, expect, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { setTeachingMode, useTeachingMode } from "./use-teaching-mode";
@@ -20,7 +27,6 @@ describe("useTeachingMode", () => {
     act(() => dashboard.result.current[1](true));
 
     expect(chat.result.current[0]).toBe(true);
-    // A page opened later in the same session (the new project's first build) reads the same choice.
     expect(renderHook(() => useTeachingMode()).result.current[0]).toBe(true);
   });
 
@@ -28,8 +34,6 @@ describe("useTeachingMode", () => {
     const { result } = renderHook(() => useTeachingMode());
     act(() => result.current[1](true));
 
-    // Nothing about the choice is written to storage, so a reload starts with it off rather than silently
-    // making every future build slower and more expensive.
     expect(Object.keys(localStorage)).not.toContain("teaching_mode");
     expect(localStorage.getItem("teaching_mode")).toBeNull();
   });

@@ -4,8 +4,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * The block a saved question was about. Optional on a note - a question can be about the project as a whole -
- * but when it is there the file it came from is too, matching {@link AskCodeRequest}'s own rule.
+ * The block a saved question was about.
+ *
+ * <p>Handles: the file, the quoted code and the line range. Optional on a note - a question can be about the project
+ * as a whole - but when it is present the file it came from is too.
  */
 public record CodeNoteSelection(
 

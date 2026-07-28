@@ -1,12 +1,15 @@
 package com.vibecraft.workspace.service;
 
+/**
+ * Puts the starter template's files into a new project.
+ *
+ * <p>Handles: copying them, retrying automatically when some fail, and reporting what is still missing rather than
+ * throwing on a partial failure.
+ *
+ * <p>Idempotent: files the project already has are skipped, so this is safe to call again later to finish an
+ * incomplete initialisation.
+ */
 public interface ProjectTemplateService {
 
-    /**
-     * Copies the starter template's files into the project, retrying automatically if some
-     * files fail. Idempotent: files the project already has are skipped, so this is safe to
-     * call again later to finish an incomplete initialization. Never throws for a partial
-     * failure - the result reports what's still missing so the caller can decide what to do.
-     */
     TemplateInitResult initializeProjectFromTemplate(Long projectId);
 }

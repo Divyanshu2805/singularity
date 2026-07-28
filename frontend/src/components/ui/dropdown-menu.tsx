@@ -1,3 +1,8 @@
+/**
+ * The dropdown menu, styled for this app.
+ *
+ * Handles: the trigger and content, plus items, checkbox and radio items, labels, separators, shortcuts and submenus.
+ */
 import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight, Circle } from "lucide-react";

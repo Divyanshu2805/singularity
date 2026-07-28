@@ -8,25 +8,24 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Finds a plain-text query inside one file's content. Pure and storage-free on purpose: the service around it
- * deals with MinIO and skipping binaries, while the line-by-line matching - the part with all the off-by-one
- * risk - stays directly testable.
+ * Finds a plain-text query inside one file's content.
  *
- * <p>The query is matched literally, not as a regex: people searching code type things like {@code useState(}
- * and {@code [0]}, and having those silently mean something else is worse than not supporting patterns at all.
+ * <p>Handles: case-insensitive line-by-line matching, trimming each hit's indentation for display and shifting the
+ * match column with it, windowing a very long line around the match so the hit stays visible, and stopping at a cap
+ * while reporting that it did.
+ *
+ * <p>Pure and storage-free on purpose: the service around it deals with object storage and skipping binaries, while
+ * the part with all the off-by-one risk stays directly testable. The query is matched literally rather than as a
+ * regex, because people searching code type things like useState( and [0], and having those silently mean something
+ * else is worse than not supporting patterns at all.
  */
 public final class CodeSearchScanner {
 
-    /** Long enough to show the match in context, short enough that a minified line can't flood the results. */
     public static final int MAX_LINE_CHARS = 240;
 
     private CodeSearchScanner() {
     }
 
-    /**
-     * @param maxMatches most matches to collect from this file; the result is flagged truncated if there were more
-     * @return null when nothing matched, so callers can skip the file entirely rather than filter empties later
-     */
     public static CodeSearchFileResult scan(String path, String content, String query, int maxMatches) {
         if (content == null || content.isEmpty() || query == null || query.isEmpty()) {
             return null;
@@ -48,12 +47,10 @@ public final class CodeSearchScanner {
                 break;
             }
 
-            // Leading indentation is dropped for display, so the match column has to shift with it.
             int indent = indentWidth(raw);
             String text = raw.substring(indent);
             int column = hit - indent;
 
-            // A very long line is windowed around the match so the hit stays visible.
             if (text.length() > MAX_LINE_CHARS) {
                 int from = Math.max(0, Math.min(column - MAX_LINE_CHARS / 3, text.length() - MAX_LINE_CHARS));
                 text = text.substring(from, Math.min(text.length(), from + MAX_LINE_CHARS));
@@ -75,7 +72,6 @@ public final class CodeSearchScanner {
         while (index < line.length() && Character.isWhitespace(line.charAt(index))) {
             index++;
         }
-        // An all-whitespace line has nothing to trim to - keep it as-is so the column stays meaningful.
         return index == line.length() ? 0 : index;
     }
 }

@@ -7,12 +7,18 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The generations currently running, at most one per project per user - the same scope as a {@code ChatSession},
- * so it's also exactly what a refreshed page needs to find its own response and nobody else's.
+ * The generations currently running, at most one per project per user.
  *
- * <p>In memory, per server instance. A server restart loses a response mid-generation (nothing was saved yet, as
- * before), and with several instances a page must reach the instance running its generation - sticky sessions, or a
- * shared broker such as Redis pub/sub, once there is more than one.
+ * <p>Handles: registering a new generation and refusing a second one for the same project and user, finding the
+ * caller's own, and removing one when it is finished.
+ *
+ * <p>A second concurrent generation is refused because two responses rewriting the same files at once would each save
+ * over the other, and a refreshed page could not tell which to show. Removal targets the exact generation, so a late
+ * cleanup can never remove a newer one that replaced it.
+ *
+ * <p>In memory, per instance. A restart loses a response mid-generation - nothing had been saved yet - and with
+ * several instances a page must reach the instance running its generation, which needs sticky routing or a shared
+ * broker.
  */
 @Component
 public class GenerationRegistry {
@@ -23,10 +29,6 @@ public class GenerationRegistry {
         return projectId + ":" + userId;
     }
 
-    /**
-     * Registers a new generation, refusing a second one for the same project and user: two responses rewriting the
-     * same files at once would each save over the other, and a refreshed page couldn't tell which to show.
-     */
     ActiveGeneration start(Long projectId, Long userId, String userMessage, boolean teachingMode) {
         ActiveGeneration generation = new ActiveGeneration(projectId, userId, userMessage, teachingMode);
         ActiveGeneration existing = active.putIfAbsent(key(projectId, userId), generation);
@@ -40,7 +42,6 @@ public class GenerationRegistry {
         return Optional.ofNullable(active.get(key(projectId, userId)));
     }
 
-    /** Removes only this exact generation, so a late cleanup can never remove a newer one that replaced it. */
     void remove(ActiveGeneration generation) {
         active.remove(key(generation.projectId(), generation.userId()), generation);
     }

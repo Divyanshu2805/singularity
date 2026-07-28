@@ -7,6 +7,12 @@ import org.mapstruct.Mapping;
 
 import java.util.List;
 
+/**
+ * Turns file rows into the tree the editor reads.
+ *
+ * <p>Handles: one file or a list. modifiedAt needs an explicit mapping because the entity calls it updatedAt -
+ * without it MapStruct matches nothing, compiles clean, and leaves the field null.
+ */
 @Mapper(componentModel = "spring")
 public interface ProjectFileMapper {
 

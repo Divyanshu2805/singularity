@@ -7,6 +7,11 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
+/**
+ * An idea plus the interview answers, to be turned into a brief.
+ *
+ * <p>Handles: both, each bounded in size.
+ */
 public record CompileIdeaRequest(
 
         @NotBlank(message = "Describe what you want to build")

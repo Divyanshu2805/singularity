@@ -2,12 +2,16 @@ package com.vibecraft.intelligence.llm;
 
 import java.time.LocalDateTime;
 
+/**
+ * The system prompt for the build pipeline: what the model may write, and the protocol it writes it in.
+ *
+ * <p>Handles: the stack and conventions a generated project follows, the tagged protocol for writing and deleting
+ * files and for announcing a checklist, and the teaching-mode rules and already-taught concept list when that is on.
+ *
+ * <p>This is the prompt that carries the file-writing protocol. The code lens deliberately never sees it.
+ */
 public class PromptUtils {
 
-    /**
-     * With teaching mode off, the prompt never mentions {@code <learn>} at all - not even "don't use it" - so a
-     * learner-facing feature costs everyone else zero tokens and can't leak lessons into their chats.
-     */
     public static String getSystemPrompt(TeachingMode teachingMode) {
         String prompt = basePrompt();
         return teachingMode.enabled() ? prompt + teachingSection(teachingMode) : prompt;
@@ -153,22 +157,6 @@ public class PromptUtils {
             """;
     }
 
-    /**
-     * Amends step 4 of the protocol rather than adding a new phase: a walkthrough is written right after its file
-     * closes, so it describes the code that was actually written, not a plan for it.
-     *
-     * <p>The client folds each walkthrough under the build step that wrote its file, so the prompt asks for the work
-     * done in this turn rather than a tour of the whole file - a step's explanation has to match what that step did.
-     *
-     * <p>Depth is set by the example far more than by the prose: an earlier revision capped a part at "one or two
-     * sentences" and showed one-line parts, and live output matched it exactly - four one-liners for a sixty-line
-     * file with three components in it. The example below is therefore written at the depth wanted, and
-     * {@code PromptUtilsTest} asserts it stays that way.
-     *
-     * <p>Each part points at its code by quoting a line rather than by line number. A model writing a file token by
-     * token doesn't know what line it's on, and the numbers it guesses drift; a line it just wrote it can copy exactly,
-     * and the client finds that line in the file to show the number and jump to it.
-     */
     private static String teachingSection(TeachingMode teachingMode) {
         String section = """
 
@@ -251,7 +239,6 @@ public class PromptUtils {
         if (teachingMode.conceptsAlreadyTaught().isEmpty()) {
             return section;
         }
-        // Plain concatenation, not a text block: a text block strips the trailing space after the colon.
         return section
                 + "\nAlready taught to this learner in earlier chats - use these names freely, without explaining what "
                 + "they mean or tagging them as a `concept` again: "

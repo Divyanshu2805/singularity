@@ -1,25 +1,19 @@
+/**
+ * Turning a conversation into a markdown file someone can keep.
+ *
+ * Handles: a filename that is filesystem-safe, sorts by date and is unique enough that two exports do not collide;
+ * rendering both the project chat and a code lens thread; and triggering the download.
+ *
+ * Both conversations are stored server-side, but neither in a form anyone can read outside the app - this download is
+ * the readable copy. The lens turn type here is deliberately narrower than the store's: the bookkeeping the panel
+ * needs has nothing to do with what the file says.
+ */
 import type { ChatMessage } from "@/components/ChatPanel";
 import type { LensTurn } from "./code-lens-store";
 import { ChatEventType, type ChatEvent } from "./types";
 
-/**
- * Turning a conversation into a markdown file someone can keep.
- *
- * <p>Two conversations can be exported: the project chat and a code lens thread. Both are stored server-side,
- * but neither in a form anyone can read outside the app - this download is the readable copy.
- */
-
-/**
- * Only the parts of a lens turn an export actually reads. Deliberately narrower than {@code LensTurn}: the
- * bookkeeping the panel needs (ids, streaming state, which saved note a turn belongs to) has nothing to do
- * with what the file says, and pinning the export to the full type made every test build one.
- */
 export type ExportableLensTurn = Pick<LensTurn, "role" | "content" | "selection">;
 
-/**
- * `projectname_kind_date_time.md`, e.g. `Notes-app_notes_2026-09-16_1745.md`. Filesystem-safe, sorts by date, and
- * unique enough that two exports don't overwrite each other. Local time, since that's the clock the reader knows.
- */
 export function exportFilename(projectName: string, suffix: string, now = new Date()) {
   const safeName = projectName.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "project";
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -34,20 +28,14 @@ function header(title: string, subtitle?: string) {
   return lines.join("\n");
 }
 
-/** Fenced with a language hint when the path suggests one, so the snippet highlights in a markdown viewer. */
 function fencedCode(code: string, path?: string) {
   const extension = path?.split(".").pop()?.toLowerCase() ?? "";
   const language = ["ts", "tsx", "js", "jsx", "json", "css", "html"].includes(extension) ? extension : "";
-  // A fence has to be longer than the longest run of backticks inside it, or the code breaks out of it.
   const longestRun = Math.max(0, ...[...code.matchAll(/`+/g)].map((match) => match[0].length));
   const fence = "`".repeat(Math.max(3, longestRun + 1));
   return `${fence}${language}\n${code}\n${fence}`;
 }
 
-/**
- * The project chat. An assistant turn's readable content lives in its events, not in `content` (which the
- * backend still fills with a placeholder), so messages are rebuilt from the events when there are any.
- */
 export function buildChatMarkdown(messages: ChatMessage[], projectName: string): string {
   const parts: string[] = [header(`${projectName} - chat`)];
 
@@ -69,13 +57,6 @@ function assistantBody(message: ChatMessage): string {
   return assistantTurnText(message.events ?? [], message.content, message.error);
 }
 
-/**
- * One assistant turn as plain markdown, rebuilt from its events - the export's own shape, shared with the
- * copy button under a message so what lands on the clipboard matches what an exported chat says.
- *
- * <p>`fallback` is the raw text to use when there are no events at all (a turn that only spoke, or one whose
- * events were never saved).
- */
 export function assistantTurnText(events: ChatEvent[], fallback = "", error?: string): string {
   if (events.length === 0) {
     return error ? `> Failed: ${error}` : fallback.trim();
@@ -100,13 +81,12 @@ export function assistantTurnText(events: ChatEvent[], fallback = "", error?: st
         if (event.filePath) editedFiles.push(`- \`${event.filePath}\` (deleted)`);
         break;
       case ChatEventType.LEARN:
-        // The walkthrough body is the model's own markdown, kept verbatim rather than re-laid-out here.
         if (event.content?.trim()) {
           sections.push(`**How \`${event.filePath ?? "this"}\` works**\n\n${event.content.trim()}`);
         }
         break;
       default:
-        break; // THOUGHT and TOOL_LOG are progress chatter, not part of the record.
+        break;
     }
   }
 
@@ -117,11 +97,6 @@ export function assistantTurnText(events: ChatEvent[], fallback = "", error?: st
   return sections.join("\n\n");
 }
 
-/**
- * A code lens thread: the running conversation, with each snippet quoted where it was first asked about -
- * the same shape the panel shows, so an exported file reads as the history of the whole project rather than
- * of one selection.
- */
 export function buildLensMarkdown(turns: ExportableLensTurn[], projectName: string): string {
   const parts = [header(`${projectName} - ExplainLLM notes`)];
 
@@ -138,7 +113,6 @@ export function buildLensMarkdown(turns: ExportableLensTurn[], projectName: stri
   return parts.join("\n\n") + "\n";
 }
 
-/** Browser-side download of generated text - nothing is uploaded anywhere to produce it. */
 export function downloadMarkdown(filename: string, markdown: string) {
   const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
   const link = document.createElement("a");

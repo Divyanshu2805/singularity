@@ -1,3 +1,7 @@
+/**
+ * Covers the chat's scroll rail: a tick per message sent, the current one marked, the list opening on hover or focus,
+ * and picking one scrolling to it.
+ */
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ChatScrollRail } from "./ChatScrollRail";
@@ -13,7 +17,6 @@ describe("messageLabel", () => {
   });
 
   it("keeps a label short and never empty", () => {
-    // Capped with an ellipsis - the row glides the rest into view, but a whole paragraph would glide forever.
     expect(messageLabel("x".repeat(300))).toHaveLength(121);
     expect(messageLabel("   \n  ")).toBe("Message");
   });
@@ -37,8 +40,6 @@ describe("ChatScrollRail", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Jump to one of your messages" }));
 
-    // The whole label is in the DOM - it's masked at the row's edge and slid into view on hover, not truncated
-    // to a shorter string, which is what lets a long brief still be read from the list.
     expect(screen.getByRole("menuitem", { name: long })).toBeInTheDocument();
   });
 

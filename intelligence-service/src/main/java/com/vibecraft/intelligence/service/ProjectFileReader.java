@@ -4,11 +4,14 @@ import com.vibecraft.common.dto.FileContentDto;
 import com.vibecraft.common.dto.FileTreeDto;
 
 /**
- * The read-only half of workspace-service's file API - deliberately has no save/delete method. Anything that
- * must never write a file (the code-insight pipeline's model-facing {@code read_files} tool) is given this
- * type, not the full {@code WorkspaceServiceClient}, so a future edit that tried to add a write call inside it
- * fails to compile instead of just failing a review - see CLAUDE.md's "CodeInsightController must stay
- * read-only structurally" guardrail.
+ * The read-only half of workspace-service's file API.
+ *
+ * <p>Handles: the file tree and one file's content, and deliberately nothing else - there is no save or delete
+ * method.
+ *
+ * <p>Anything that must never write a file, above all the model-facing read tool, is given this type rather than the
+ * full workspace client, so an edit that tried to add a write call inside it fails to compile instead of merely
+ * failing a review.
  */
 public interface ProjectFileReader {
 

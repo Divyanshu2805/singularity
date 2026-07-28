@@ -7,6 +7,15 @@ import lombok.experimental.FieldDefaults;
 
 import java.time.Instant;
 
+/**
+ * One person's membership of one project.
+ *
+ * <p>Handles: the composite project-and-user key, the role, when they were invited and accepted, and their own pin
+ * and star markers.
+ *
+ * <p>There is no user relation: users live in account-service's own database, so the user id is carried entirely by
+ * the key and the human-readable parts are resolved over the internal API, never by a local join.
+ */
 @Getter
 @Setter
 @FieldDefaults(level = AccessLevel.PRIVATE)
@@ -25,10 +34,6 @@ public class ProjectMember {
     @JoinColumn(name = "project_id")
     Project project;
 
-    // No `user` relation: User lives in account-service's own database now, not this one, so it can never be a
-    // JPA association here. The user id is carried entirely by `id.userId` - resolve the human-readable bits
-    // (username/name) via AccountServiceClient when needed, never by joining locally.
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     ProjectRole projectRole;
@@ -36,7 +41,6 @@ public class ProjectMember {
     Instant invitedAt;
     Instant acceptedAt;
 
-    // Per-member preferences: null when not pinned/starred, otherwise when it was.
     Instant pinnedAt;
     Instant starredAt;
 

@@ -8,9 +8,14 @@ import org.mapstruct.Mapper;
 import java.util.List;
 
 /**
- * Hand-written rather than generated: two of the fields are decisions, not field-name matches - {@code price}
- * is formatted from the amount and currency together, and {@code isFree} means "has no Stripe price" rather
- * than "costs zero", so a free plan stays free even if someone puts an amount on it by mistake.
+ * Turns a plan row into the shape the pricing page reads.
+ *
+ * <p>Handles: copying the limits across, formatting the price from the amount and currency together, and deciding
+ * isFree.
+ *
+ * <p>Hand-written rather than generated because two of the fields are decisions, not field-name matches: the
+ * formatted price, and isFree meaning "has no Stripe price" rather than "costs zero", so a free plan stays free even
+ * if someone puts an amount on it by mistake.
  */
 @Mapper(componentModel = "spring")
 public interface PlanMapper {

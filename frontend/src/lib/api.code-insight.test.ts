@@ -1,8 +1,10 @@
+/**
+ * Covers that a named error event arriving mid-stream on a code-insight call becomes a failure the caller can handle,
+ * rather than being appended to the answer as if the model had said it.
+ */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "./api";
 
-// Byte for byte what Spring MVC wrote for the chunks "returns:\n1. A", "\n\n", "### Head\n- item" and " lead"
-// (captured from a real SseEmitter): a newline inside a chunk becomes a new data: line of the same event.
 const SPRING_FRAMES = "data:returns:\ndata:1. A\n\ndata:\ndata:\ndata:\n\ndata:### Head\ndata:- item\n\ndata: lead\n\n";
 
 function streamOf(text: string, pieceSize: number) {

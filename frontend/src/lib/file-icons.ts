@@ -1,3 +1,8 @@
+/**
+ * Which icon and colour a file gets in the tree and the tabs.
+ *
+ * Handles: mapping an extension to an icon and a colour, and splitting a path into its directory and filename.
+ */
 import { File, FileCode, FileJson, FileText, Image, type LucideIcon } from "lucide-react";
 
 const extensionOf = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";

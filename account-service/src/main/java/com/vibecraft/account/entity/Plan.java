@@ -4,6 +4,19 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+/**
+ * One row of the plan catalogue: what a tier costs and what it allows.
+ *
+ * <p>Handles: the limits every quota check reads (projects, daily tokens, concurrent previews, and the unlimited-AI
+ * flag), the Stripe price this plan checks out against, and the pricing-page presentation - amount in minor units,
+ * currency, billing interval, tagline and sort order.
+ *
+ * <p>The price is stored rather than read back from Stripe per request, so a pricing page does not fail because
+ * Stripe is slow; PlanSeeder is where the two are kept in step. stripePriceId is null on the free plan, which never
+ * goes near Stripe - Postgres allows any number of nulls under a unique index, so the constraint still holds for the
+ * paid ones - and it is also the key the seeder upserts on. Sort order is explicit because plan ids are insertion
+ * order and say nothing about price.
+ */
 @Getter
 @Setter
 @FieldDefaults(level = AccessLevel.PRIVATE)
@@ -21,11 +34,6 @@ public class Plan {
     @Column(nullable = false)
     String name;
 
-    /**
-     * The Stripe recurring price this plan checks out against. Null on the free plan, which never goes near
-     * Stripe - Postgres allows any number of nulls under a unique index, so the constraint still holds for
-     * the paid ones. Also the key {@code PlanSeeder} upserts on, so re-seeding can't duplicate a plan.
-     */
     @Column(unique = true)
     String stripePriceId;
 
@@ -33,31 +41,17 @@ public class Plan {
     Integer maxTokensPerDay;
     Integer maxPreviews;
 
-    /**
-     * Kept on the entity and the API, but <b>enforced nowhere</b>: {@code maxTokensPerDay} is the real limit
-     * on every plan, so nothing claims unlimited AI in the UI. It stays so a plan can be flipped to genuinely
-     * uncapped later without a migration.
-     */
     Boolean unlimitedAi;
 
     Boolean active;
 
-    /**
-     * What the plan costs, in the currency's smallest unit, exactly as Stripe quotes it - 49900 for ₹499.
-     * Stored rather than read back from Stripe on every request: a pricing page shouldn't fail because
-     * Stripe is slow, and {@code PlanSeeder} is where the two are kept in step.
-     */
     Integer priceAmountMinor;
 
-    /** ISO currency code, lowercase, matching Stripe's own ("inr", "usd"). */
     String currency;
 
-    /** Stripe's billing interval for the price above - "month" or "year". */
     String billingInterval;
 
-    /** One line under the plan name on the pricing card. */
     String tagline;
 
-    /** Cheapest first. Explicit, because plan ids are insertion order and say nothing about price. */
     Integer sortOrder;
 }

@@ -10,6 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 
+/**
+ * Reads and writes the revoked-session list.
+ *
+ * <p>Handles: recording a signed-out cookie hash, answering whether one is revoked, and pruning rows whose cookie
+ * would have expired anyway.
+ */
 @Repository
 public interface RevokedSessionRepository extends JpaRepository<RevokedSession, String> {
 

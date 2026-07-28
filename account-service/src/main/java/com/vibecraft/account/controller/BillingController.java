@@ -22,6 +22,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Plans, subscriptions and Stripe billing.
+ *
+ * <p>Handles: the public plan catalogue, the caller's current subscription, starting a Stripe Checkout session,
+ * opening the billing portal, changing plan in place (upgrade, downgrade, cancel to free or resume), confirming a
+ * checkout the browser just returned from, and receiving Stripe's webhook.
+ *
+ * <p>The webhook is verified by Stripe's own signature rather than by a session or CSRF token - it is the one caller
+ * that structurally cannot carry either. An event whose payload will not deserialize is acknowledged rather than
+ * retried forever; a bad signature is rejected with a 400.
+ */
 @RestController
 @RequiredArgsConstructor
 @Slf4j
@@ -56,20 +67,11 @@ public class BillingController {
         return ResponseEntity.ok(paymentProcessor.openCustomerPortal());
     }
 
-    /**
-     * Upgrade, downgrade, cancel (move to the free plan) or resume - on the subscription the caller already has.
-     * Only someone with no subscription goes through checkout.
-     */
     @PostMapping("/api/payments/change-plan")
     public ResponseEntity<SubscriptionResponse> changePlan(@RequestBody @Valid ChangePlanRequest request) {
         return ResponseEntity.ok(paymentProcessor.changePlan(request));
     }
 
-    /**
-     * Called by the app when the browser returns from Stripe, so a subscription is live the moment the user
-     * is looking at it rather than whenever the webhook happens to arrive - and at all in local development,
-     * where Stripe cannot reach localhost. Idempotent, and safe to race with the webhook.
-     */
     @PostMapping("/api/payments/confirm")
     public ResponseEntity<SubscriptionResponse> confirmCheckout(
             @RequestBody @Valid ConfirmCheckoutRequest request

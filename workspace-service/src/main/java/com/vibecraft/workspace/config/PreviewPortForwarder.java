@@ -20,16 +20,16 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * What {@code k8s/dev-port-forward.ps1} used to do by hand, for as long as the backend runs: forwards the local kind
- * cluster's Redis (6379, where preview routes are written) and preview proxy (8090, what the browser loads) to
- * localhost. kind has no load balancer or host port mappings, so without these previews can't be routed or reached.
+ * Keeps the local port-forwards into the kind cluster open for as long as the backend runs.
  *
- * <p>The first pass runs synchronously at startup, before anything talks to Redis. After that a watchdog re-checks
- * every few seconds and re-opens a forward whose pod was replaced (a rollout, a crash) - a forward is pinned to one
- * pod and silently dies with it, which is why the script needed a restart loop too.
+ * <p>Handles: opening each configured forward synchronously at startup, before anything talks to Redis, then
+ * re-checking every few seconds and re-opening one whose pod was replaced by a rollout or a crash. A local port
+ * something else already holds is left alone and logged once, and a cluster that is down is warned about once rather
+ * than every few seconds.
  *
- * <p>A local port something else already holds is left alone (logged once): that's the script still running, or a
- * second backend instance that got there first. Enabled only by {@code preview.port-forward.enabled}.
+ * <p>It exists because kind has no load balancer or host port mappings, so without these forwards previews cannot be
+ * routed or reached. A forward is pinned to one pod and dies silently with it, which is why the watchdog is needed
+ * rather than a one-off setup step.
  */
 @Component
 @ConditionalOnProperty(prefix = "preview.port-forward", name = "enabled", havingValue = "true")
@@ -75,7 +75,6 @@ public class PreviewPortForwarder implements SmartLifecycle {
         return running;
     }
 
-    /** Early, so the forwards are open before other beans start and still open until the web server has stopped. */
     @Override
     public int getPhase() {
         return Integer.MIN_VALUE + 1000;
@@ -125,7 +124,6 @@ public class PreviewPortForwarder implements SmartLifecycle {
         }
     }
 
-    /** The cluster being down would otherwise log the same warning every five seconds. */
     private void warnOnce(ForwardState state, String message) {
         if (state.warnedFailure) {
             log.debug(message);
@@ -178,7 +176,6 @@ public class PreviewPortForwarder implements SmartLifecycle {
             try {
                 current.close();
             } catch (IOException | RuntimeException e) {
-                // Already dead; nothing to release.
             }
             current = null;
             podName = null;

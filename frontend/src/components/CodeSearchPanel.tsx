@@ -1,3 +1,12 @@
+/**
+ * Find-in-files for a project.
+ *
+ * Handles: the query box, debouncing it, running the search and listing each file's matches, and opening a hit at its
+ * line - passing the matched text along so it can be re-found if lines have moved since.
+ *
+ * The minimum query length keeps single letters from fanning out across every file, and the debounce exists because
+ * the search reads every file from storage, so it is not free per keystroke.
+ */
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
@@ -5,26 +14,17 @@ import { getFileColor, getFileIcon, splitPath } from "@/lib/file-icons";
 import type { CodeSearchResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// Long enough that single letters don't fan out across every file, short enough for things like `id`.
 const MIN_QUERY_LENGTH = 2;
-// Typing pause before searching. The search reads every file from storage, so it isn't free per keystroke.
 const DEBOUNCE_MS = 300;
 
 interface CodeSearchPanelProps {
   projectId: string;
-  /** Controlled by the panel around it, which shows the file tree instead while this is empty. */
   query: string;
   onQueryChange: (query: string) => void;
-  /** Opens the file and scrolls to the hit. `text` is the matched line, used to re-find it if lines moved. */
   onOpenMatch: (path: string, line: number, text: string) => void;
   activePath: string | null;
 }
 
-/**
- * Find-in-files, as a form that lives at the top of the expanded files column rather than a mode the column
- * switches into. The input is always there when the column is open, and results replace the tree only once
- * something has actually been typed.
- */
 export function CodeSearchPanel({ projectId, query, onQueryChange, onOpenMatch, activePath }: CodeSearchPanelProps) {
   const [results, setResults] = useState<CodeSearchResponse | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -40,7 +40,6 @@ export function CodeSearchPanel({ projectId, query, onQueryChange, onOpenMatch, 
       return;
     }
 
-    // Each keystroke cancels the request in flight, so results can't arrive out of order.
     const controller = new AbortController();
     setIsSearching(true);
     const timer = window.setTimeout(() => {

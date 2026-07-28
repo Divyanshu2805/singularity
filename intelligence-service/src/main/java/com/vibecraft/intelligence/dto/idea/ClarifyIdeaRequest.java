@@ -3,6 +3,11 @@ package com.vibecraft.intelligence.dto.idea;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+/**
+ * An idea to ask clarifying questions about.
+ *
+ * <p>Handles: the description the user typed, length-bounded.
+ */
 public record ClarifyIdeaRequest(
 
         @NotBlank(message = "Describe what you want to build")

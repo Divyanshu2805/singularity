@@ -1,3 +1,14 @@
+/**
+ * The code editor: a read-only CodeMirror view of one project file.
+ *
+ * Handles: the language for the file, the app's own syntax theme, the unified diff against a turn's previous version
+ * when the diff toggle is on, and briefly highlighting and scrolling to the line a chat message, a walkthrough or a
+ * note points at.
+ *
+ * The highlight is applied through an editor state field defined outside this component, so that logic can be tested
+ * against a real editor state - the dispatch here is scheduled inside an animation frame, which never runs in a
+ * hidden tab.
+ */
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
@@ -20,7 +31,6 @@ const BASIC_SETUP = {
   indentOnInput: true,
 };
 
-// How long a referenced line stays highlighted - long enough to spot after the scroll, short enough not to linger.
 const REFERENCE_HIGHLIGHT_MS = 2600;
 
 function languageExtensionsFor(path: string) {
@@ -48,29 +58,21 @@ interface CodeEditorProps {
   content: string;
   filePath: string | null;
   isLoading?: boolean;
-  /** When set, renders `content` as a diff against this baseline instead of plain code. */
   diffOriginal?: string | null;
-  /** A line to scroll to and briefly highlight - each new `id` reveals once. */
   reveal?: (CodeTarget & { id: number }) | null;
-  /** Selecting code offers "Explain"/"Ask"; omit to turn the code lens off for this editor. */
   onSelectionAction?: (selection: CodeSelection, action: "explain" | "ask") => void;
 }
 
-/** Where the selection toolbar sits, in pixels relative to the editor's own box. */
 interface ToolbarAnchor {
   top: number;
   left: number;
-  /** True when the selection starts near the top, so the toolbar hangs below it instead of off-screen. */
   below: boolean;
 }
 
-// Too small a selection is usually a stray drag or a double-clicked word, and a toolbar for it is just noise.
 const MIN_SELECTION_CHARS = 2;
 const TOOLBAR_OFFSET_PX = 8;
 const TOOLBAR_HEIGHT_PX = 34;
 
-// Memoized, with stable extension/setup objects: @uiw/react-codemirror reconfigures and re-highlights
-// the editor whenever those change identity, which made it jitter on every streamed chat chunk.
 export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoading, diffOriginal, reveal, onSelectionAction }: CodeEditorProps) {
   const [view, setView] = useState<EditorView | null>(null);
   const [selection, setSelection] = useState<CodeSelection | null>(null);
@@ -86,22 +88,18 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
           unifiedMergeView({
             original: diffOriginal,
             gutter: false,
-            mergeControls: false, // passive preview, not an interactive merge tool
+            mergeControls: false,
             allowInlineDiffs: true,
           }),
           diffViewTheme,
         ]
       : [];
-    // Long lines wrap onto the next line instead of scrolling sideways.
     return [EditorView.lineWrapping, referencedLineField, referencedLineTheme, ...languageExtensionsFor(filePath), ...diffExtensions];
   }, [filePath, diffOriginal]);
 
-  // A ref, not a dependency: rebuilding `extensions` on every render would reconfigure and re-highlight the
-  // whole editor (the reason this component is memoized with stable extensions in the first place).
   const selectionHandlerRef = useRef(onSelectionAction);
   selectionHandlerRef.current = onSelectionAction;
 
-  // Clear a stale toolbar when the file changes - the old selection's coordinates mean nothing in a new file.
   useEffect(() => {
     setSelection(null);
     setAnchor(null);
@@ -125,7 +123,6 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
       const box = wrapper?.getBoundingClientRect();
       if (!start || !box) return;
 
-      // Anchored to where the selection starts, so the toolbar never lands under the reader's cursor.
       const top = start.top - box.top;
       const below = top < TOOLBAR_HEIGHT_PX + TOOLBAR_OFFSET_PX;
 
@@ -142,7 +139,6 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
       });
     };
 
-    // Selection changes arrive as transactions; scrolling moves the anchor without one.
     const onScroll = () => readSelection();
     const listener = EditorView.updateListener.of((update) => {
       if (update.selectionSet || update.docChanged || update.geometryChanged) readSelection();
@@ -156,20 +152,15 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
 
   useEffect(() => {
     if (!view || !reveal || isLoading || revealedIdRef.current === reveal.id) return;
-    // Searched for again in what's on screen now: the chat quoted the file as that response wrote it, and a later one
-    // may have moved the line. The number from back then is only the fallback.
     const line = findCodeLine(content, reveal.code, reveal.line ?? 1) ?? reveal.line;
     if (!line) {
       revealedIdRef.current = reveal.id;
       return;
     }
 
-    // A frame later, so the editor has taken the new content in before we measure and scroll it.
     const frame = requestAnimationFrame(() => {
-      // Right after a remount the previous, destroyed view can still be in state - wait for the new one.
       if (!view.dom.isConnected || line > view.state.doc.lines) return;
       revealedIdRef.current = reveal.id;
-      // A range highlights end to end; a single reference is just a one-line range.
       const lastLine = Math.min(view.state.doc.lines, Math.max(reveal.endLine ?? line, line));
       view.dispatch({
         effects: [
@@ -223,7 +214,6 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
 
       {selection && anchor && onSelectionAction && (
         <div
-          // Keeps the browser from collapsing the selection before the click lands.
           onMouseDown={(e) => e.preventDefault()}
           style={{ top: anchor.top, left: anchor.left, transform: anchor.below ? undefined : "translateY(-100%)" }}
           className="absolute z-20 flex items-center gap-0.5 rounded-lg border border-border/80 bg-popover/95 p-1 shadow-xl shadow-black/40 backdrop-blur animate-in fade-in-0 zoom-in-95 duration-100"

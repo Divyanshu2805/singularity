@@ -6,6 +6,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * The MinIO client every project file is read and written through.
+ *
+ * <p>Handles: binding the endpoint and credentials from the minio properties and building the client.
+ */
 @Configuration
 @ConfigurationProperties(prefix = "minio")
 @Data

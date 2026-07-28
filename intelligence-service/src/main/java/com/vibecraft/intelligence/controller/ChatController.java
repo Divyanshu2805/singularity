@@ -20,6 +20,17 @@ import reactor.core.publisher.Flux;
 
 import java.util.List;
 
+/**
+ * The project build chat, for the browser.
+ *
+ * <p>Handles: starting a generation and streaming it, reading the saved history, the last turn's changed files for
+ * the editor's diffs, asking whether a generation is already running, reattaching to one, and stopping one.
+ *
+ * <p>Closing the response no longer stops a generation - it only stops watching it; stopping is its own endpoint. A
+ * failure mid-stream cannot become an HTTP status, because the response has already started, so it arrives as a named
+ * error event the client renders in place, with rate limiting and a user-requested stop distinguished from a genuine
+ * failure.
+ */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/chat")
@@ -29,10 +40,6 @@ public class ChatController {
     private final AiGenerationService aiGenerationService;
     private final ChatService chatService;
 
-    /**
-     * Starts a response and streams it. Closing this connection no longer stops the response - it only stops
-     * watching it. {@code POST .../active/stop} is what stops it.
-     */
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<StreamResponse>> streamChat(
             @RequestBody @Valid ChatRequest request) {
@@ -48,13 +55,11 @@ public class ChatController {
         return ResponseEntity.ok(chatService.getProjectChatHistory(projectId));
     }
 
-    /** The latest turn's changed files with their previous versions, so the editor can show that turn's diffs. */
     @GetMapping("/projects/{projectId}/last-turn-changes")
     public ResponseEntity<LastTurnChangesResponse> getLastTurnChanges(@PathVariable Long projectId) {
         return ResponseEntity.ok(chatService.getLastTurnChanges(projectId));
     }
 
-    /** The caller's response still being generated in this project - 204 if there isn't one. */
     @GetMapping("/projects/{projectId}/active")
     public ResponseEntity<ActiveGenerationResponse> getActiveGeneration(@PathVariable Long projectId) {
         return aiGenerationService.findActiveGeneration(projectId)
@@ -62,7 +67,6 @@ public class ChatController {
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
-    /** Reattaches to that response: what's been written so far, then the rest live. 204 if it has already finished. */
     @GetMapping(value = "/projects/{projectId}/active/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public ResponseEntity<Flux<ServerSentEvent<StreamResponse>>> watchActiveGeneration(@PathVariable Long projectId) {
         return aiGenerationService.watchActiveGeneration(projectId)

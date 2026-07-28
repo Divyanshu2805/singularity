@@ -17,34 +17,28 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Turns grouped ledger rows into the insights response. Pure - no repositories, no clock - so the parts that are
- * easy to get quietly wrong are unit-tested directly: empty days that must still be bars, shares that must add
- * up, and the remainder the daily counter holds beyond the ledger.
+ * Turns grouped ledger rows into the insights response.
  *
- * <p>The grouping itself happens in the database; this only arranges the result, which for one user over at most
- * 90 days is a few hundred rows.
+ * <p>Handles: filling in empty buckets so a quiet day is still a bar, summing per feature and per project, working
+ * out each share, finding the peak day, and adding the remainder the daily counter holds beyond the ledger as an
+ * unattributed bucket so the totals match what the quota counted.
+ *
+ * <p>Pure - no repositories, no clock - so the parts that are easy to get quietly wrong are unit-tested directly. The
+ * grouping itself happens in the database; this only arranges the result.
  */
 public final class UsageInsightsAssembler {
 
-    /** The name used for daily-counter usage the ledger can't attribute to a feature. */
     public static final String UNATTRIBUTED = "UNATTRIBUTED";
 
     private UsageInsightsAssembler() {
     }
 
-    /** One grouped row: a bucket (day or hour key), a feature, a project, and the sums for that combination. */
     public record Row(String bucket, String feature, Long projectId, long input, long output, long total, long requests) {
     }
 
-    /** A project's display name and whether it has been deleted. */
     public record ProjectInfo(String name, boolean deleted) {
     }
 
-    /**
-     * Daily view. {@code dailyTotals} is the quota counter per day ({@code usage_logs}); where it exceeds what the
-     * ledger holds for that day, the difference becomes that day's {@code unattributed} slice, so a bar's height
-     * always equals what the quota actually counted.
-     */
     public static UsageInsightsResponse days(String range, LocalDate from, LocalDate to, List<Row> rows,
                                              Map<LocalDate, Long> dailyTotals, int dailyLimit, String planName,
                                              Map<Long, ProjectInfo> projects) {
@@ -57,7 +51,6 @@ public final class UsageInsightsAssembler {
         int daysAtLimit = 0;
         DayUsage peak = null;
 
-        // Every day in the window gets a bar, used or not: a gap in the axis reads as missing data, not as a quiet day.
         for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
             String key = day.toString();
             Map<String, Long> features = ordered(byBucket.getOrDefault(key, Map.of()));
@@ -82,10 +75,6 @@ public final class UsageInsightsAssembler {
                 byProject(rows, projects, totals.totalTokens()));
     }
 
-    /**
-     * Hourly view for today. There is no hourly counter to reconcile against, so anything the day's counter holds
-     * beyond the ledger is reported in the totals and breakdown but can't be placed in an hour.
-     */
     public static UsageInsightsResponse hours(LocalDate today, List<Row> rows, long countedToday, int dailyLimit,
                                               String planName, Map<Long, ProjectInfo> projects) {
         Map<String, Map<String, Long>> byBucket = new HashMap<>();
@@ -138,8 +127,6 @@ public final class UsageInsightsAssembler {
 
     private static List<ProjectUsage> byProject(List<Row> rows, Map<Long, ProjectInfo> projects, long grandTotal) {
         Map<Long, Long> sums = new HashMap<>();
-        // Calls with no project (the idea interview, naming) have no project to attribute to, so they are left out
-        // of this breakdown rather than grouped under a fake "no project" row.
         rows.stream().filter(row -> row.projectId() != null)
                 .forEach(row -> sums.merge(row.projectId(), row.total(), Long::sum));
 
@@ -153,7 +140,6 @@ public final class UsageInsightsAssembler {
                 .toList();
     }
 
-    /** Features in a stable order, so a stacked bar's segments don't shuffle between days. */
     private static Map<String, Long> ordered(Map<String, Long> features) {
         return new LinkedHashMap<>(new TreeMap<>(features));
     }

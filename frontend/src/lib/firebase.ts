@@ -1,3 +1,14 @@
+/**
+ * The Firebase app and Auth instance, created on first use.
+ *
+ * Handles: the web config - none of it secret, since it only identifies the project and access is governed by
+ * authorized domains and the backend's token checks - the Google provider, and turning a Firebase error code into a
+ * readable sentence.
+ *
+ * Persistence is in-memory on purpose: Firebase's default keeps a refresh token in browser storage, where any script
+ * on the page could read it. This app's own session is an httpOnly cookie instead, so the Firebase user is needed
+ * only long enough to mint it.
+ */
 import { initializeApp, type FirebaseApp } from "firebase/app";
 import {
   browserPopupRedirectResolver,
@@ -8,10 +19,6 @@ import {
   type Auth,
 } from "firebase/auth";
 
-/**
- * Firebase's web config. None of it is secret - it identifies the project to the browser SDK, and access is governed
- * by the project's authorized domains and the backend's token checks - so it lives in `VITE_*` variables.
- */
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined,
@@ -22,14 +29,6 @@ const config = {
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 
-/**
- * The Auth instance, created on first use.
- *
- * <p>**In-memory persistence, on purpose.** Firebase's default keeps the user's refresh token in IndexedDB, where any
- * script on the page - including an injected one - can read it. Here the Firebase user exists only for the moment of
- * signing in: its ID token is exchanged for the backend's httpOnly session cookie and the user is signed out of the
- * SDK straight away. A reload forgets it, which is exactly the point.
- */
 export function getFirebaseAuth(): Auth {
   if (!config.apiKey || !config.authDomain || !config.projectId) {
     throw new Error("Firebase sign-in isn't configured. Set VITE_FIREBASE_* in frontend/.env.local.");
@@ -40,8 +39,6 @@ export function getFirebaseAuth(): Auth {
       persistence: inMemoryPersistence,
       popupRedirectResolver: browserPopupRedirectResolver,
     });
-    // Identity Platform's reCAPTCHA protection for email/password flows. A no-op (and a harmless rejection) until
-    // it's switched on in the console.
     initializeRecaptchaConfig(auth).catch(() => undefined);
   }
   return auth;
@@ -49,12 +46,10 @@ export function getFirebaseAuth(): Auth {
 
 export function googleProvider() {
   const provider = new GoogleAuthProvider();
-  // Always show the account chooser, so someone with several Google accounts picks one deliberately.
   provider.setCustomParameters({ prompt: "select_account" });
   return provider;
 }
 
-/** Firebase error codes as sentences a person can act on. Deliberately vague where precision would leak account existence. */
 export function friendlyFirebaseError(error: unknown, fallback: string): string {
   const code = typeof error === "object" && error && "code" in error ? String((error as { code: unknown }).code) : "";
   switch (code) {

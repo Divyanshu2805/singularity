@@ -1,3 +1,9 @@
+/**
+ * The actions a project row offers, with the dialogs they need.
+ *
+ * Handles: pinning and starring, forking, and deleting - including the confirmation whose wording depends on whether
+ * the caller owns the project, since for anyone else it only removes their own access.
+ */
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -18,7 +24,6 @@ import type { ProjectSummaryResponse } from "@/lib/types";
 import { deleteCopy } from "@/lib/project-delete";
 import { ForkProjectDialog } from "@/components/ForkProjectDialog";
 
-/** Download, pin, star, and confirm-then-delete for project lists. Render `deleteDialog` once in the page. */
 export function useProjectActions({ onDeleted }: { onDeleted?: (project: ProjectSummaryResponse) => void } = {}) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
@@ -66,7 +71,6 @@ export function useProjectActions({ onDeleted }: { onDeleted?: (project: Project
         }
     };
 
-    /** Renames at once in every project list, and puts the old name back if the server refuses. */
     const renameProject = async (project: ProjectSummaryResponse, name: string) => {
         const previous = queryClient.getQueryData<ProjectSummaryResponse[]>(["projects"]);
         queryClient.setQueryData<ProjectSummaryResponse[]>(["projects"], (projects) =>
@@ -88,10 +92,8 @@ export function useProjectActions({ onDeleted }: { onDeleted?: (project: Project
         }
     };
 
-    /** Turns one card/row into its inline rename field - only one project renames at a time. */
     const startRename = (project: ProjectSummaryResponse) => setRenamingId(project.id);
 
-    /** `null` means the rename was cancelled (blank, unchanged, or Escape) - nothing is sent either way. */
     const finishRename = (project: ProjectSummaryResponse, name: string | null) => {
         setRenamingId(null);
         if (name) renameProject(project, name);

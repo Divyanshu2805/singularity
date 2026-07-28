@@ -1,3 +1,7 @@
+/**
+ * Covers that the delete wording matches who is asking: the owner is told the project goes for everyone, anyone else
+ * that it only leaves their own projects.
+ */
 import { describe, expect, it } from "vitest";
 import { deleteCopy } from "./project-delete";
 

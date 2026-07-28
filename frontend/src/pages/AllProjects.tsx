@@ -1,3 +1,9 @@
+/**
+ * The full project list, as rows rather than cards.
+ *
+ * Handles: filtering, searching, sorting by last edited, renaming in place, and the per-project actions - with the
+ * same filter tabs and counts the dashboard uses.
+ */
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -37,7 +43,6 @@ const compareProjects: Record<SortKey, (a: ProjectSummaryResponse, b: ProjectSum
     name: (a, b) => a.name.localeCompare(b.name),
 };
 
-// A soft copper tint at the top of the page.
 const PAGE_GLOW: CSSProperties = {
     backgroundImage: [
         "radial-gradient(70% 45% at 50% -8%, hsl(22 90% 55% / 0.22) 0%, transparent 70%)",
@@ -100,7 +105,6 @@ export function AllProjects() {
         try {
             localStorage.setItem(VIEW_MODE_KEY, viewMode);
         } catch {
-            // Remembering the view is a convenience only
         }
     }, [viewMode]);
 
@@ -141,7 +145,6 @@ export function AllProjects() {
                     <SidebarToggleSpace sidebar={sidebar} />
                 </header>
 
-                {/* A reserved scrollbar gutter keeps the layout from shifting sideways as results change */}
                 <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
                     <div className="mx-auto w-full max-w-6xl px-4 pb-10 pt-4 sm:px-6">
                         <div className="mb-6">
@@ -210,7 +213,6 @@ export function AllProjects() {
                             </div>
                         </div>
 
-                        {/* Fixed minimum height so switching to a tab with fewer (or no) projects doesn't collapse the page */}
                         <div className="min-h-[60vh]">
                             {isLoading ? (
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

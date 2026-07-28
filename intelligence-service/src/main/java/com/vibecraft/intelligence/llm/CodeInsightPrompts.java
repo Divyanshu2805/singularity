@@ -3,12 +3,15 @@ package com.vibecraft.intelligence.llm;
 import java.util.List;
 
 /**
- * Prompts for the code lens - the "Explain"/"Ask" pair on a selection in the editor.
+ * Prompts for the code lens - the explain and ask pair on a selection in the editor.
  *
- * <p>Kept apart from {@link PromptUtils} on purpose. That prompt teaches the model the {@code <file>} /
- * {@code <todo>} / {@code <learn>} protocol so it can build things; this one must produce prose and nothing
- * else, so it never sees that protocol and is told explicitly not to emit tags. Keeping them in separate
- * methods is what makes "this endpoint cannot edit files" true of the prompt as well as of the code.
+ * <p>Handles: the shared rules that keep answers in plain language and free of narration, and the two prompts built
+ * on them.
+ *
+ * <p>Kept apart from the generation prompt on purpose. That one teaches the model the file, checklist and lesson
+ * protocol so it can build things; this one must produce prose and nothing else, so it never sees that protocol and
+ * is told explicitly not to emit tags. Keeping them in separate files is what makes "this endpoint cannot edit files"
+ * true of the prompt as well as of the code.
  */
 public final class CodeInsightPrompts {
 
@@ -46,11 +49,6 @@ public final class CodeInsightPrompts {
                 never a whole file.
             """;
 
-    /**
-     * The one-shot "Explain" button: a self-contained read of the selection, no conversation attached. The
-     * shape is deliberately loose (no fixed section list) - a two-line selection and a forty-line component
-     * need very different answers, and a template would pad the short one out.
-     */
     public static String explainSystemPrompt() {
         return """
             You explain a block of code that someone selected in their editor.
@@ -71,10 +69,6 @@ public final class CodeInsightPrompts {
             """ + SHARED_RULES;
     }
 
-    /**
-     * The "Ask" conversation: same voice, but answering the question actually asked. A question may come with
-     * a selected block or without one - general questions about the project are just as welcome.
-     */
     public static String askSystemPrompt() {
         return """
             You are answering questions about someone's project code. The first message lists the project's
@@ -102,10 +96,6 @@ public final class CodeInsightPrompts {
             """ + SHARED_RULES;
     }
 
-    /**
-     * The project's file paths, as the first user message of a question. Paths only - no contents - so the
-     * model can talk about how the project is laid out without anything being read from storage.
-     */
     public static String fileListBlock(List<String> paths, int totalCount) {
         if (paths.isEmpty()) {
             return "This project has no files yet.";
@@ -118,24 +108,12 @@ public final class CodeInsightPrompts {
         return block.toString().strip();
     }
 
-    /**
-     * The question as the final message, with the selected code quoted directly above it.
-     *
-     * <p>The selection used to be its own message ahead of the replayed conversation. A model reading
-     * "what is this code?" then answered that it had no selection at all - by the time it reached the
-     * question the block was several messages back, behind the whole history. Asking the way a person
-     * would, code then question, removes the ambiguity.
-     */
     public static String questionBlock(String selectionBlock, String question) {
         return selectionBlock == null || selectionBlock.isBlank()
                 ? question
                 : selectionBlock + "\n\n" + question;
     }
 
-    /**
-     * The selection itself. Line numbers are included so the model can refer to them, and the fence keeps the
-     * code from reading as instructions.
-     */
     public static String selectionBlock(String path, Integer startLine, Integer endLine, String code) {
         String where = startLine == null
                 ? path

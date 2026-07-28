@@ -1,7 +1,11 @@
+/**
+ * Covers finding where a file's changes start: a change in the middle rather than the top, the first inserted line, a
+ * brand-new file, an appended line, the last remaining line when the end was cut off, a clamp when everything was
+ * removed, nothing when the versions match, and a change that is only trailing whitespace.
+ */
 import { describe, it, expect } from "vitest";
 import { firstChangedLine } from "./diff-lines";
 
-/** The line the diff toggle scrolls to: where the file stops matching the version the last turn started from. */
 describe("firstChangedLine", () => {
   it("finds a change in the middle rather than the top of the file", () => {
     const before = "one\ntwo\nthree\nfour";
@@ -24,8 +28,6 @@ describe("firstChangedLine", () => {
   });
 
   it("points at the last remaining line when the end was cut off", () => {
-    // Nothing in the new file differs, so there is no changed line to scroll to - but the merge view draws
-    // what was removed just after the last line, which is where the reader needs to be looking.
     expect(firstChangedLine("a\nb\nc\nd", "a\nb")).toBe(2);
   });
 
@@ -39,7 +41,6 @@ describe("firstChangedLine", () => {
   });
 
   it("notices a change that is only trailing whitespace", () => {
-    // Whitespace is a real edit here - the merge view paints it, so the scroll has to agree with it.
     expect(firstChangedLine("a\nb", "a\nb  ")).toBe(2);
   });
 

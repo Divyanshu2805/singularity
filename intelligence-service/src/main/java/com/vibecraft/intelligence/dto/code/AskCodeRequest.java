@@ -12,9 +12,10 @@ import java.util.List;
 /**
  * A question for the code notes, with the conversation so far replayed by the client.
  *
- * <p>The selection ({@code path}/{@code code}/lines) is optional: a question can be about a block picked in the
- * editor, or about the project in general ("where is routing set up?"). When code is sent, the file it came
- * from must be too, so the answer can name where it lives.
+ * <p>Handles: the question, the optional selected block and the file it came from, and the earlier turns.
+ *
+ * <p>The selection is optional - a question can be about a block picked in the editor or about the project in general
+ * - but when code is sent the file it came from must be too, so the answer can name where it lives.
  */
 public record AskCodeRequest(
 
@@ -37,7 +38,6 @@ public record AskCodeRequest(
         List<@Valid CodeChatTurn> history
 ) {
 
-    /** True when the question is about a specific block rather than the project as a whole. */
     @JsonIgnore
     public boolean hasSelection() {
         return code != null && !code.isBlank();

@@ -1,10 +1,19 @@
+/**
+ * The build and dev-server configuration.
+ *
+ * Handles: the React plugin, the path alias, injecting the Content Security Policy into production builds, and
+ * proxying API calls in development.
+ *
+ * The proxy is what keeps API calls same-origin in development, so the app works on any port without depending on
+ * backend CORS and the SameSite session cookie is always sent. It points at the Gateway, which is the browser's
+ * single origin.
+ */
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { buildContentSecurityPolicy } from "./csp";
 
-/** Adds the Content Security Policy to index.html in production builds only - see csp.ts for why not in dev. */
 const contentSecurityPolicy = (env: Record<string, string>): Plugin => ({
   name: "content-security-policy",
   apply: "build",
@@ -14,12 +23,10 @@ const contentSecurityPolicy = (env: Record<string, string>): Plugin => ({
       attrs: { "http-equiv": "Content-Security-Policy", content: buildContentSecurityPolicy(env) },
       injectTo: "head-prepend",
     },
-    // Cross-origin requests get the origin only - a reset link's token must never leak through the Referer.
     { tag: "meta", attrs: { name: "referrer", content: "strict-origin-when-cross-origin" }, injectTo: "head-prepend" },
   ],
 });
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
   return {
@@ -29,13 +36,8 @@ export default defineConfig(({ mode }) => {
       hmr: {
         overlay: false,
       },
-      // API calls stay same-origin in dev, so the app works on any port without depending on backend CORS - and the
-      // session cookie (SameSite=Strict) is sent, since the browser only ever talks to this one origin.
       proxy: {
         "/api": {
-          // Points at gateway-service (see docs/local-development/): the browser's single origin is the
-          // Gateway's, which itself proxies to whichever service owns a given path. API_PROXY_TARGET overrides
-          // this for e.g. pointing at a branch build on another port.
           target: process.env.API_PROXY_TARGET || "http://localhost:8000",
           configure: (proxy) => {
             proxy.on("proxyReq", (proxyReq) => proxyReq.removeHeader("origin"));

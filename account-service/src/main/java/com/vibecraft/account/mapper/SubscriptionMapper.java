@@ -6,9 +6,12 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 /**
- * {@code periodStart}/{@code periodEnd} need explicit mappings because the entity calls them
- * {@code currentPeriodStart}/{@code currentPeriodEnd}. Without them MapStruct matches nothing and compiles
- * clean with a null field - see docs/schema/'s mapper gotcha.
+ * Turns a subscription row into the shape the billing page reads.
+ *
+ * <p>Handles: the plan, the status, the period and the cancel-at-period-end flag.
+ *
+ * <p>periodStart and periodEnd need explicit mappings because the entity calls them currentPeriodStart and
+ * currentPeriodEnd. Without them MapStruct matches nothing, compiles clean, and leaves the field null.
  */
 @Mapper(componentModel = "spring", uses = PlanMapper.class)
 public interface SubscriptionMapper {

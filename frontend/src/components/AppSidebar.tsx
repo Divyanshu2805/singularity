@@ -1,3 +1,13 @@
+/**
+ * The app sidebar, and the spacer that reserves its width.
+ *
+ * Handles: all three states in one panel - hidden and slid off to the left, peeking as a floating card below the top
+ * bar, and pinned and docked full height - so hover-open, close and pin all animate the same element.
+ *
+ * The spacer is what makes docking slide the page over rather than jump it. One shared motion constant keeps the
+ * panel, the spacer and the toggle in lockstep, and a short hold after a slide stops the position animation from
+ * fighting it.
+ */
 import { useRef } from "react";
 import { PanelLeft, PanelLeftClose } from "lucide-react";
 import { SidebarPanel } from "@/components/ProjectSidebar";
@@ -5,14 +15,11 @@ import { Logo } from "@/components/VibeCraftLogo";
 import type { SidebarController, SidebarState } from "@/hooks/use-sidebar";
 import { cn } from "@/lib/utils";
 
-// Shared by every moving part of the sidebar so open, close, and dock stay in lockstep.
 const SIDEBAR_MOTION = "duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none";
-// A little longer than the 300ms transition, so a slide finishes before position animation is allowed again.
 const SHOW_HIDE_HOLD_MS = 400;
 
 type VisibleState = Exclude<SidebarState, "hidden">;
 
-/** Reserves the docked sidebar's width - animating it slides the page over instead of jumping. */
 export function SidebarSpacer({ sidebar }: { sidebar: SidebarController }) {
   return (
     <div
@@ -22,10 +29,6 @@ export function SidebarSpacer({ sidebar }: { sidebar: SidebarController }) {
   );
 }
 
-/**
- * Room in a page's top bar for the sidebar toggle while the sidebar isn't pinned. The toggle itself is
- * drawn once by `AppSidebar` at a fixed spot, so it never slides around with the page.
- */
 export function SidebarToggleSpace({ sidebar }: { sidebar: SidebarController }) {
   return (
     <div
@@ -35,20 +38,10 @@ export function SidebarToggleSpace({ sidebar }: { sidebar: SidebarController }) 
   );
 }
 
-/**
- * One panel for every state, so hover-open, close, and pin all animate the same element:
- * hidden (slid off left) -> peek (floating card below the top bar) -> pinned (docked, full height).
- * Render it as the last child of a `relative` full-height container.
- */
 export function AppSidebar({ sidebar, currentProjectId }: { sidebar: SidebarController; currentProjectId?: string }) {
   const { state, isPinned } = sidebar;
   const toggleLabel = isPinned ? "Collapse sidebar" : "Open sidebar";
 
-  // While hidden, the panel keeps the shape it was last shown in, so showing and hiding are a pure
-  // left/right slide. Only docking a floating panel (peek <-> pinned) animates its position and shape.
-  // Tracked during render (not in an effect) and held for the whole transition: the page can re-render
-  // mid-slide (e.g. the dashboard's rotating placeholder), and flipping back to animating position then
-  // would let the panel drift vertically while it slides in.
   const motionRef = useRef<{ state: SidebarState; lastVisible: VisibleState; showHideAt: number }>({
     state,
     lastVisible: state === "pinned" ? "pinned" : "peek",
@@ -88,7 +81,6 @@ export function AppSidebar({ sidebar, currentProjectId }: { sidebar: SidebarCont
             )
         )}
       >
-        {/* Brand row next to the fixed toggle - only in the docked shape; the floating panel starts below the toggle */}
         <div
           className={cn(
             "shrink-0 overflow-hidden",
@@ -96,8 +88,6 @@ export function AppSidebar({ sidebar, currentProjectId }: { sidebar: SidebarCont
             layout === "pinned" ? "h-12" : "h-0"
           )}
         >
-          {/* Fixed height: the row opening only uncovers the logo, so it never travels vertically.
-              The logo builds itself when the sidebar docks, and takes itself apart when it closes. */}
           <div className="flex h-12 items-center pl-12 pr-3">
             <Logo drawn={state === "pinned"} />
           </div>
@@ -111,7 +101,6 @@ export function AppSidebar({ sidebar, currentProjectId }: { sidebar: SidebarCont
         </div>
       </aside>
 
-      {/* Drawn once, above both the page and the sidebar, in the same spot in every state */}
       <button
         type="button"
         aria-label={toggleLabel}

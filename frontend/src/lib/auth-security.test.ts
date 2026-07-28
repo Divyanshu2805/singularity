@@ -1,3 +1,11 @@
+/**
+ * Covers the browser half of session security: reading the CSRF token cookie among others, sending it on writes only,
+ * sending same-origin credentials and never a bearer token for a cookie session, and re-fetching the token and
+ * retrying once when the server rejects it as stale.
+ *
+ * Also covers the sign-in hint: counted as signed in until the cookie's expiry with no token in storage, and an
+ * expired hint reading as signed out.
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildContentSecurityPolicy } from "../../csp";
 import { CSRF_HEADER, needsCsrf, readCsrfToken } from "./csrf";
@@ -46,7 +54,7 @@ describe("api writes", () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(rejected())
-      .mockResolvedValueOnce(new Response(null, { status: 204 })) // GET /api/auth/csrf
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     await api.signOutEverywhere();
@@ -63,7 +71,7 @@ describe("session hint", () => {
     startSession({ user: { id: 1, username: "a@b.co", name: "A" }, expiresAt: new Date(Date.now() + 60_000).toISOString(), newAccount: false, secondFactorUsed: false });
 
     expect(isAuthenticated()).toBe(true);
-    expect(JSON.stringify(localStorage)).not.toMatch(/eyJ/); // no JWT-looking value anywhere
+    expect(JSON.stringify(localStorage)).not.toMatch(/eyJ/);
   });
 
   it("an expired hint is signed out, and says the session lapsed", () => {

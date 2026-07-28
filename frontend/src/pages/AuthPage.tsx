@@ -1,3 +1,12 @@
+/**
+ * Sign-in and sign-up as one card.
+ *
+ * Handles: both modes, validating before anything is sent, password and Google sign-in, the second-factor step,
+ * sending a verification email, and exchanging the result for this app's session before moving on.
+ *
+ * Both routes render this same component, so switching keeps what has been typed and animates the difference - the
+ * name field - instead of swapping pages.
+ */
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { MailCheck, ShieldCheck } from "lucide-react";
 import type { MultiFactorResolver } from "firebase/auth";
@@ -55,13 +64,8 @@ const COPY: Record<AuthMode, { title: string; subtitle: string; submit: string; 
     },
 };
 
-// PasswordStrength's fixed 20px row plus its 6px top gap.
 const STRENGTH_ROW_HEIGHT = 26;
 
-/**
- * Sign-in and sign-up as one card. Both routes render this same component, so switching keeps what's
- * been typed and animates the difference (the name field) instead of swapping pages.
- */
 export default function AuthPage() {
     const navigate = useNavigate();
     const location = useLocation();
@@ -84,14 +88,11 @@ export default function AuthPage() {
     const [isGoogleLoading, setIsGoogleLoading] = useState(false);
     const isBusy = isLoading || isGoogleLoading;
 
-    // Firebase sign-ins can stop short of a session: a second factor to enter, or an email to verify first.
     const [step, setStep] = useState<"form" | "second-factor" | "check-inbox">("form");
     const [resolver, setResolver] = useState<MultiFactorResolver | null>(null);
     const [code, setCode] = useState("");
     const [inbox, setInbox] = useState<{ email: string; reason: "signup" | "unverified" } | null>(null);
 
-    // The name field's natural height, so it opens to exactly that size - and on wide screens the card rises
-    // by the same amount at the same pace, keeping the email field still so the name grows out of it.
     const nameContentRef = useRef<HTMLDivElement>(null);
     const [nameHeight, setNameHeight] = useState(0);
     const [canAnimate, setCanAnimate] = useState(false);
@@ -102,7 +103,6 @@ export default function AuthPage() {
         measure();
         const observer = new ResizeObserver(measure);
         observer.observe(el);
-        // Only animate once measured, so opening /signup directly doesn't play the opening animation.
         const timer = window.setTimeout(() => setCanAnimate(true), 50);
         return () => {
             observer.disconnect();
@@ -110,17 +110,14 @@ export default function AuthPage() {
         };
     }, []);
 
-    // Someone already signed in has nothing to do here.
     useEffect(() => {
         if (isAuthenticated()) navigate("/projects", { replace: true });
     }, [navigate]);
 
-    // After switching, put the cursor where the new form starts. The first render uses autoFocus instead.
     const previousModeRef = useRef(mode);
     useEffect(() => {
         if (previousModeRef.current === mode) return;
         previousModeRef.current = mode;
-        // preventScroll: focusing inside the still-opening name field would otherwise scroll its clipped content.
         document.getElementById(isSignup ? "name" : email ? "password" : "email")?.focus({ preventScroll: true });
     }, [mode, isSignup, email]);
 
@@ -148,7 +145,6 @@ export default function AuthPage() {
                       description: "Picking up right where you left off.",
                   }
         );
-        // Optional, but worth a nudge: a password alone is one leaked database away from someone else's hands.
         if (!secondFactorUsed) {
             toast({
                 title: "Protect your account",
@@ -180,7 +176,6 @@ export default function AuthPage() {
         setIsGoogleLoading(false);
     };
 
-    // A popup, not a redirect: the page keeps its state, and nothing about the attempt has to survive a reload.
     const handleGoogle = async () => {
         setFormError(null);
         setIsGoogleLoading(true);
@@ -328,7 +323,6 @@ export default function AuthPage() {
             extendBelow={isSignup ? STRENGTH_ROW_HEIGHT : 0}
             animateRaise={canAnimate}
         >
-            {/* Keyed so the heading fades in again when switching */}
             <div key={mode} className="mb-6 text-center animate-fade-in">
                 <h2 className="text-lg font-semibold tracking-tight text-foreground">{copy.title}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
@@ -380,8 +374,6 @@ export default function AuthPage() {
                 </GoogleButton>
                 <AuthDivider label="or use email" />
 
-                {/* Name opens to its measured height. Anchored to the bottom, it grows out of the email field when
-                    opening and sinks back into it when closing. */}
                 <div
                     aria-hidden={!isSignup}
                     style={{ height: isSignup ? nameHeight : 0 }}
@@ -454,8 +446,6 @@ export default function AuthPage() {
                                 clearErrorFor("password");
                             }}
                         />
-                        {/* The strength meter's space opens and closes with the name field, so switching never jumps.
-                            On sign-up it stays reserved (empty until typing), so the meter appearing doesn't push anything. */}
                         <div
                             aria-hidden={!isSignup}
                             style={{ height: isSignup ? STRENGTH_ROW_HEIGHT : 0 }}

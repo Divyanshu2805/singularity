@@ -1,3 +1,12 @@
+/**
+ * What every test file gets before it runs.
+ *
+ * Handles: the DOM matchers, a stub for the media-query API jsdom does not implement, and a no-op resize observer.
+ *
+ * The resize observer matters: anything rendering the sliding overflow text - the sidebar's project names, the chat
+ * rail's labels - observes its own width with one, and without a stub those components cannot mount. Treating "never
+ * measured" as "text fits" is the right default when there is no layout anyway.
+ */
 import "@testing-library/jest-dom";
 
 Object.defineProperty(window, "matchMedia", {
@@ -14,9 +23,6 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
-// jsdom has no ResizeObserver, and anything rendering OverflowSlideText (the sidebar's project names, the
-// chat scroll rail's message labels) observes its own width with one. A no-op keeps those components
-// mountable; they treat "never measured" as "text fits", which is the right default without layout anyway.
 class NoopResizeObserver {
   observe() {}
   unobserve() {}

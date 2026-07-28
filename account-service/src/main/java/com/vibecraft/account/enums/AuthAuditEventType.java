@@ -1,5 +1,12 @@
 package com.vibecraft.account.enums;
 
+/**
+ * The kinds of entry the account security trail records.
+ *
+ * <p>Handles: naming each event, and deciding which of them a signed-in client is allowed to report about changes it
+ * made directly with Firebase - a second factor added or removed, or a password changed. Everything else is recorded
+ * by the server only.
+ */
 public enum AuthAuditEventType {
     ACCOUNT_CREATED,
     ACCOUNT_LINKED,
@@ -11,7 +18,6 @@ public enum AuthAuditEventType {
     MFA_REMOVED,
     PASSWORD_CHANGED;
 
-    /** The events a signed-in client may report about changes it made directly with Firebase. */
     public boolean isClientReportable() {
         return this == MFA_ENROLLED || this == MFA_REMOVED || this == PASSWORD_CHANGED;
     }

@@ -1,20 +1,19 @@
+/**
+ * An incremental Server-Sent Events parser: feed it decoded text as it arrives, get whole events back.
+ *
+ * Handles: buffering partial lines, joining an event's several data lines into one payload, and dispatching at the
+ * blank line that ends an event.
+ *
+ * The join is the whole reason this exists: the server writes a chunk containing line breaks as several data lines,
+ * and reading each line as its own chunk silently deleted every newline the model wrote. It is deliberately not
+ * spec-exact in one way - the single space after the field name is kept, because the server writes values with no
+ * padding and stripping it runs words together.
+ */
 export interface SseEvent {
-  /** The `event:` name, or "message" when the event didn't set one. */
   event: string;
   data: string;
 }
 
-/**
- * An incremental Server-Sent Events parser: feed it decoded text as it arrives, get whole events back.
- *
- * <p>An event ends at a blank line, and every `data:` line inside it is part of one payload - joined with
- * `"\n"`, as the SSE spec says. That join is the whole reason this exists: Spring writes a chunk containing
- * line breaks as several `data:` lines, and the code-notes client used to emit each line as its own chunk,
- * which silently deleted every newline the model wrote ("returns:1. A layout...2. A header...").
- *
- * <p>Deliberately *not* spec-exact in one way: the single space after `data:` is kept. Spring writes values
- * with no padding, so a leading space is the payload's own - stripping it runs words together.
- */
 export function createSseParser(onEvent: (event: SseEvent) => void) {
   let buffer = "";
   let eventName = "message";
@@ -32,7 +31,7 @@ export function createSseParser(onEvent: (event: SseEvent) => void) {
       dispatch();
       return;
     }
-    if (line.startsWith(":")) return; // a comment / keep-alive
+    if (line.startsWith(":")) return;
 
     const colon = line.indexOf(":");
     const field = colon === -1 ? line : line.slice(0, colon);
@@ -42,14 +41,12 @@ export function createSseParser(onEvent: (event: SseEvent) => void) {
   };
 
   return {
-    /** Adds newly arrived text; complete events are delivered, a partial trailing line waits for more. */
     push(text: string) {
       buffer += text;
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
       lines.forEach(processLine);
     },
-    /** The stream closed: whatever is left is the last event, even without its terminating blank line. */
     end() {
       if (buffer !== "") processLine(buffer);
       buffer = "";

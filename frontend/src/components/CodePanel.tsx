@@ -1,3 +1,13 @@
+/**
+ * The code side of a project: the file tree, the open tabs and the editor.
+ *
+ * Handles: opening files and remembering the open tabs, showing which files the last turn changed, the diff toggle
+ * and scrolling to the first change, find-in-files, copying and downloading, and docking the code lens beside the
+ * editor.
+ *
+ * Whether the files column is open is a preference about the editor layout rather than anything to do with one
+ * project, so it is remembered per browser.
+ */
 import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { Check, ChevronsDownUp, ChevronsUpDown, Copy, Download, GitCompare, MessagesSquare, PanelLeft, PanelLeftClose } from "lucide-react";
@@ -16,36 +26,26 @@ import type { CodeTarget } from "@/lib/lesson";
 import { firstChangedLine } from "@/lib/diff-lines";
 import type { CodeSelection } from "@/lib/types";
 
-// A user preference about the editor layout, not tied to any one project.
 const FILE_TREE_VISIBLE_KEY = "code_panel_files_visible";
-// How long the copy button shows its "Copied" checkmark before reverting.
 const COPY_FEEDBACK_MS = 1500;
 
 export interface OpenFileRequest {
   path: string;
   id: number;
-  /** False for files referenced by older chats - those always open as full content. */
   showDiff: boolean;
-  /** A line to scroll to and highlight, from a teaching-mode walkthrough's code reference. */
   target?: CodeTarget;
 }
 
 interface CodePanelProps {
   projectId: string;
-  /** Only used to name exported files - the panel never displays it. */
   projectName: string;
-  /** Final content of files the AI finished writing - shown in the tree the moment each one completes. */
   completedFiles: ReadonlyMap<string, string>;
-  /** Files the AI deleted - hidden from the tree and closed straight away, before the server has caught up. */
   deletedFiles?: ReadonlySet<string>;
-  /** Content of files still being written, as far as it has arrived. Shown instead of fetching a file the server doesn't have yet. */
   streamingFiles: ReadonlyMap<string, string>;
-  /** Pre-edit content for files the most recent chat turn changed - available until an even newer turn replaces it. */
   diffBaselines: ReadonlyMap<string, string>;
   isStreaming: boolean;
   streamingFilePath: string | null;
   lastTurnFiles: readonly string[];
-  /** Set with a fresh id to open a file from elsewhere, e.g. a file mentioned in chat. */
   openFileRequest: OpenFileRequest | null;
   onDiffViewed: (path: string) => void;
 }
@@ -64,7 +64,6 @@ function readSavedTabs(projectId: string): { tabs: string[]; active: string | nu
       return { tabs, active: active && tabs.includes(active) ? active : tabs[0] };
     }
   } catch {
-    // Unreadable saved tabs just start fresh
   }
   return { tabs: [], active: null };
 }
@@ -90,37 +89,21 @@ export const CodePanel = memo(function CodePanel({
   const [activeTab, setActiveTab] = useState<string | null>(savedTabs.active);
   const [serverPaths, setServerPaths] = useState<string[]>([]);
   const [isLoadingTree, setIsLoadingTree] = useState(true);
-  // Last content fetched per file, so returning to a tab shows it instantly while it refreshes quietly.
   const [fetchedContents, setFetchedContents] = useState<ReadonlyMap<string, string>>(EMPTY_CONTENTS);
   const [treeExpansion, setTreeExpansion] = useState<TreeExpansionCommand | null>(null);
   const [showFileTree, setShowFileTree] = useState(() => localStorage.getItem(FILE_TREE_VISIBLE_KEY) !== "false");
-  // Find-in-files lives in the files column, so results stay next to the code they point at. An empty
-  // query means the tree is showing; typing swaps in results without the column changing mode.
   const [searchQuery, setSearchQuery] = useState("");
   const lensThread = useCodeLens(projectId);
   const isLensOpen = !!lensThread?.isOpen;
 
-  // The notes themselves come back from the server; this only reopens the panel on the block it was left
-  // pointed at, so a refresh doesn't quietly close what someone was reading.
   useEffect(() => {
     codeLens.restore(projectId);
   }, [projectId]);
 
   const [isDraggingSplit, setIsDraggingSplit] = useState(false);
-  // Deliberately no CSS transition on the panels' `flex`: react-resizable-panels writes the flex shorthand
-  // inline and measures the *computed* value back on the next layout pass, so animating it feeds a
-  // mid-animation number into its own maths and the layout settles wrong (a "collapsed" column stuck at
-  // 397px while the editor next to it got 22px). Smoothness comes from animating the panel contents, which
-  // the library never measures.
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const copyResetRef = useRef<number>();
-  // Which files the diff toggle is currently switched on for. Per-file, and never cleared just from
-  // navigating away - the whole point is that the button keeps working the next time you want it, not
-  // just once. It resets to "off" on its own once a newer turn changes the file again, since that turn
-  // starts with a fresh (empty) `diffBaselines` and the toggle only has any effect where a baseline exists.
   const [openDiffPaths, setOpenDiffPaths] = useState<ReadonlySet<string>>(new Set());
-  // Changed files the reader has opened since the latest turn. Their dot goes away on that first open -
-  // separately from `diffBaselines`, which stays so the diff toggle keeps working after the dot is gone.
   const [viewedPaths, setViewedPaths] = useState<ReadonlySet<string>>(new Set());
 
   const onDiffViewedRef = useRef(onDiffViewed);
@@ -168,7 +151,6 @@ export const CodePanel = memo(function CodePanel({
     });
   }, [loadTree, savedTabs]);
 
-  // Files the AI finished are merged in straight away; the server's list catches up once the response is saved.
   const files = useMemo(() => {
     const paths = new Set(serverPaths);
     deletedFiles?.forEach((path) => paths.delete(path));
@@ -176,19 +158,14 @@ export const CodePanel = memo(function CodePanel({
     return buildFileTree([...paths]);
   }, [serverPaths, completedFiles, deletedFiles]);
 
-  // A deleted file's tab has nothing behind it any more.
   useEffect(() => {
     if (!deletedFiles || deletedFiles.size === 0) return;
     setOpenTabs((prev) => (prev.some((path) => deletedFiles.has(path)) ? prev.filter((path) => !deletedFiles.has(path)) : prev));
     setActiveTab((active) => (active && deletedFiles.has(active) ? null : active));
   }, [deletedFiles]);
 
-  // When a response finishes: add tabs for whatever it changed (so they're one click away) and sync the
-  // tree with the server. Deliberately doesn't touch `activeTab` - which file is open is the user's call,
-  // not something a finished generation gets to decide by jumping to whichever file it wrote last.
   const wasStreamingRef = useRef(isStreaming);
   useEffect(() => {
-    // A new turn can change a file again, so what was already looked at earns its dot back.
     if (!wasStreamingRef.current && isStreaming) setViewedPaths(new Set());
     if (wasStreamingRef.current && !isStreaming) {
       const changed = lastTurnFilesRef.current;
@@ -198,11 +175,8 @@ export const CodePanel = memo(function CodePanel({
     wasStreamingRef.current = isStreaming;
   }, [isStreaming, loadTree]);
 
-  // The line a walkthrough pointed at, kept with its file and request id so revealing the same line twice still scrolls.
   const [reveal, setReveal] = useState<(CodeTarget & { path: string; id: number }) | null>(null);
 
-  // A request that already existed when this panel mounted was handled by an earlier mount - replaying it
-  // would jump the editor to some file the reader opened long ago.
   const handledRequestIdRef = useRef(openFileRequest?.id ?? null);
   useEffect(() => {
     if (!openFileRequest || openFileRequest.id === handledRequestIdRef.current) return;
@@ -214,13 +188,7 @@ export const CodePanel = memo(function CodePanel({
     setReveal(target ? { ...target, path, id } : null);
   }, [openFileRequest]);
 
-  // Content the AI finished wins over the server's copy: it's newer, and until the response finishes the
-  // server doesn't have it at all (files are only persisted once the whole response completes). Asking for
-  // one mid-response used to 404 for the ~30s a generation takes.
   const completedContent = activeTab ? completedFiles.get(activeTab) : undefined;
-  // A file the AI is rewriting right now is never typed out in the editor: the open file keeps showing its
-  // last known version and swaps to the new one in a single step when it's done. `streamingFiles` is still
-  // what says it's mid-write - and why it isn't fetched, since a brand-new file doesn't exist server-side yet.
   const isBeingWritten = !!activeTab && streamingFiles.has(activeTab);
   const skipFetch = completedContent !== undefined || isBeingWritten;
 
@@ -246,29 +214,14 @@ export const CodePanel = memo(function CodePanel({
   const fetchedContent = activeTab ? fetchedContents.get(activeTab) : undefined;
   const knownContent = completedContent ?? fetchedContent;
   const content = knownContent ?? "";
-  // Mid-write with nothing to show yet (a new file, or one never opened before) - a still note, not a spinner.
   const isAwaitingNewFile = isBeingWritten && knownContent === undefined;
   const isLoadingFile = !!activeTab && !isBeingWritten && knownContent === undefined;
 
-  // Whether the last chat turn left a diff available for this file at all - independent of whether the
-  // toggle below is currently switched on. A file the last turn never touched has nothing to show.
   const hasDiffAvailable = activeTab ? diffBaselines.has(activeTab) : false;
   const isDiffToggledOn = activeTab ? openDiffPaths.has(activeTab) : false;
-  // Shown against its pre-edit baseline while toggled on - including while the file is still being
-  // rewritten, so it reflects what's arriving live, not just the finished result. Off by default: the
-  // reader chooses to see it rather than having it forced on them the moment a file finishes.
   const diffOriginal = hasDiffAvailable && isDiffToggledOn && activeTab ? diffBaselines.get(activeTab) ?? null : null;
   const isShowingDiff = diffOriginal !== null;
 
-  /**
-   * Switching the diff on also takes the reader to it: the first line the file stops matching its pre-edit
-   * baseline, scrolled to centre and briefly highlighted, the same reveal a walkthrough's quoted line uses.
-   * Painting the diff and leaving them to hunt for it is fine in a short file and useless in a long one.
-   *
-   * <p>`setReveal` directly rather than `revealInFile`, since the file being diffed is already the active
-   * tab - there is nothing to open or switch to. Switching the diff *off* reveals nothing: the reader is
-   * looking at the finished file, not at a change.
-   */
   const toggleDiff = useCallback(() => {
     if (!activeTab) return;
     const turningOn = !openDiffPaths.has(activeTab);
@@ -282,13 +235,9 @@ export const CodePanel = memo(function CodePanel({
 
     const baseline = diffBaselines.get(activeTab);
     const line = baseline === undefined ? null : firstChangedLine(baseline, content);
-    // `Date.now()` so switching it off and back on scrolls there again rather than being deduped as the
-    // same reveal. No `code`: the line number is measured against the content on screen right now, so
-    // there's nothing for `findCodeLine` to re-locate.
     if (line) setReveal({ path: activeTab, line, id: Date.now() });
   }, [activeTab, openDiffPaths, diffBaselines, content]);
 
-  // Opening a changed file counts as seeing it - including already sitting on it when its change lands.
   useEffect(() => {
     if (!activeTab || !diffBaselines.has(activeTab)) return;
     setViewedPaths((prev) => (prev.has(activeTab) ? prev : new Set(prev).add(activeTab)));
@@ -316,7 +265,6 @@ export const CodePanel = memo(function CodePanel({
     });
   }, []);
 
-  // A local reveal, mirroring what `openFileRequest` does for the chat - `Date.now()` so the same hit twice re-scrolls.
   const revealInFile = useCallback((path: string, line: number, code?: string, endLine?: number) => {
     setOpenTabs((prev) => addTab(prev, path));
     setActiveTab(path);
@@ -324,16 +272,12 @@ export const CodePanel = memo(function CodePanel({
   }, []);
 
   const handleOpenMatch = useCallback((path: string, line: number, text: string) => {
-    // The matched line is passed as `code` so `findCodeLine` can re-locate it if the file has shifted since.
     revealInFile(path, line, text);
   }, [revealInFile]);
 
   const handleSelectionAction = useCallback((selection: CodeSelection, action: "explain" | "ask") => {
     codeLens.open(projectId, selection, { explain: action === "explain" });
   }, [projectId]);
-
-  // Opening the notes panel deliberately leaves the file column alone - the app sidebar gives up its space
-  // instead (see ProjectView). The file list is part of working on the code, so it stays where it was.
 
   const handleCopyFile = async () => {
     if (!activeTab) return;
@@ -347,7 +291,6 @@ export const CodePanel = memo(function CodePanel({
     }
   };
 
-  // Downloads just this one file, named by its own filename - not the whole-project ZIP the header offers.
   const handleDownloadFile = () => {
     if (!activeTab) return;
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -363,11 +306,6 @@ export const CodePanel = memo(function CodePanel({
 
   return (
     <div className="flex h-full bg-background">
-      {/*
-        Fixed width on purpose: this column is not part of the resizable group, so dragging the chat/code
-        divider changes the space the editor gets and never the width of the file list. Because nothing
-        measures it, its width can be animated - which is what makes opening and closing it smooth.
-      */}
       <div
         className={cn(
           "shrink-0 overflow-hidden border-r border-border/60 bg-panel transition-[width] duration-200 ease-out",
@@ -421,7 +359,6 @@ export const CodePanel = memo(function CodePanel({
             activePath={activeTab}
           />
 
-          {/* The tree is what the column shows whenever nothing is being searched for. */}
           {searchQuery.trim().length === 0 && (
             <div className="min-h-0 flex-1 overflow-auto [scrollbar-gutter:stable]">
               <FileTree
@@ -516,11 +453,6 @@ export const CodePanel = memo(function CodePanel({
             />
 
             <div className="relative min-h-0 flex-1 overflow-hidden">
-              {/*
-                Lives over the code itself, not the tab bar, and stays put whether or not it's switched on:
-                the last turn's diff for this file is always one click away, rather than a one-shot control
-                that vanishes once shown. Off by default - a finished edit reads as plain code until asked.
-              */}
               {hasDiffAvailable && (
                 <div className="absolute right-3 top-3 z-10">
                   <Tooltip>

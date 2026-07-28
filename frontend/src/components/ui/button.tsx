@@ -1,3 +1,9 @@
+/**
+ * The button, in this app's variants and sizes.
+ *
+ * Handles: the visual variants, the sizes, and rendering as a different element when a link or another component
+ * needs to look like a button.
+ */
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";

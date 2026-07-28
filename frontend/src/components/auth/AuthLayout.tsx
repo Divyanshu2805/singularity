@@ -1,3 +1,11 @@
+/**
+ * The frame every auth page is drawn in.
+ *
+ * Handles: the drifting ember background, the wordmark and the card the form sits in.
+ *
+ * The background is plain gradients on a single layer that only moves by transform - no blur filters and no backdrop
+ * blur on top, which is what made an earlier version stutter.
+ */
 import { useEffect, useState, type CSSProperties, type InputHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowRight, CircleAlert, Eye, EyeOff, Info } from "lucide-react";
 import { AnimatedLogo } from "@/components/VibeCraftLogo";
@@ -5,10 +13,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { MIN_PASSWORD_LENGTH, passwordStrength } from "@/lib/auth-form";
 import { cn } from "@/lib/utils";
 
-/**
- * Soft ember light that drifts slowly. Plain gradients on a single layer that only moves via `transform`:
- * no blur filters and no backdrop blur on top, which is what made an earlier version stutter.
- */
 function AuthBackground() {
     return (
         <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -27,7 +31,6 @@ function AuthBackground() {
     );
 }
 
-/** Cycles through spark glyphs, echoing the spark in the logo. */
 const SPINNER_FRAMES = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
 
 function SparkSpinner() {
@@ -43,15 +46,9 @@ function SparkSpinner() {
     );
 }
 
-/**
- * Shared frame for sign-in and sign-up: the pitch on the left and the form in a window on the right,
- * stacked on small screens. The form column is sized to take sign-in-with buttons later.
- */
 export function AuthLayout({ windowTitle, raiseBy = 0, extendBelow = 0, animateRaise = false, children }: {
     windowTitle: string;
-    /** Pixels the card extends upward on wide screens, e.g. the sign-up name field's height. */
     raiseBy?: number;
-    /** Pixels of extra content below that shouldn't re-centre the card either, e.g. the strength meter row. */
     extendBelow?: number;
     animateRaise?: boolean;
     children: ReactNode;
@@ -64,9 +61,6 @@ export function AuthLayout({ windowTitle, raiseBy = 0, extendBelow = 0, animateR
                     <AnimatedLogo markClassName="h-16 w-16 sm:h-20 sm:w-20" nameClassName="text-[36px] sm:text-[46px]" />
                     <h1 className="mt-8 font-display text-[40px] font-semibold leading-tight tracking-tight sm:text-[52px]">
                         Turn ideas into{" "}
-                        {/* Its own line beside the form; w-fit keeps the gradient spanning just the words. The gradient
-                            only paints inside the box, so the bottom padding makes room for descenders like the "g"
-                            and the negative margin gives that space back to the layout. */}
                         <span className="bg-gradient-to-r from-[hsl(36_90%_62%)] to-[hsl(12_78%_55%)] bg-clip-text pb-[0.16em] text-transparent lg:mx-auto lg:-mb-[0.16em] lg:block lg:w-fit">
                             working apps.
                         </span>
@@ -77,10 +71,6 @@ export function AuthLayout({ windowTitle, raiseBy = 0, extendBelow = 0, animateR
                 </header>
 
                 <main className="mx-auto w-full max-w-[440px]">
-                    {/* On wide screens extra sign-up content never changes the card's layout height: `top` lifts it by
-                        `raiseBy` and a matching negative margin cancels both that and `extendBelow`. So the sign-in
-                        layout stays centred, and switching grows the card up from the email field (and a little
-                        downward for the strength row) without re-centring - the email field never moves. */}
                     <div
                         style={{ "--raise": `${raiseBy}px`, "--extend": `${extendBelow}px` } as CSSProperties}
                         className={cn(
@@ -88,7 +78,6 @@ export function AuthLayout({ windowTitle, raiseBy = 0, extendBelow = 0, animateR
                             animateRaise && "transition-[top,margin-bottom] duration-300 ease-out motion-reduce:transition-none"
                         )}
                     >
-                        {/* Window title bar */}
                         <div className="flex h-11 items-center border-b border-border/60 bg-panel/80 px-4">
                             <div aria-hidden="true" className="flex w-14 gap-1.5">
                                 <span className="h-3 w-3 rounded-full bg-[#ff5f57]/85" />
@@ -113,9 +102,7 @@ interface AuthFieldProps extends InputHTMLAttributes<HTMLInputElement> {
     label: string;
     error?: string;
     hint?: ReactNode;
-    /** Controls inside the right edge of the input, e.g. a show-password button. */
     trailing?: ReactNode;
-    /** Sits at the right end of the label row, e.g. a "Forgot password?" link. */
     labelAction?: ReactNode;
 }
 
@@ -139,7 +126,6 @@ export function AuthField({ id, label, error, hint, trailing, labelAction, class
                         : "border-border/80 hover:border-primary/35 focus-within:border-primary/60 focus-within:ring-primary/15"
                 )}
             >
-                {/* A terminal-style prompt that lights up while the field is active */}
                 <span
                     aria-hidden="true"
                     className={cn(
@@ -163,7 +149,6 @@ export function AuthField({ id, label, error, hint, trailing, labelAction, class
             </div>
             {note && (
                 <div id={noteId} className={cn("text-xs leading-5", error ? "flex gap-2 pl-0.5 text-destructive animate-fade-in" : "text-muted-foreground")}>
-                    {/* Errors read like a command's result line */}
                     {error && <span aria-hidden="true" className="select-none text-muted-foreground/60">⎿</span>}
                     {error ? <span className="min-w-0">{error}</span> : note}
                 </div>
@@ -172,7 +157,6 @@ export function AuthField({ id, label, error, hint, trailing, labelAction, class
     );
 }
 
-/** Password input with a show/hide toggle and a Caps Lock warning. */
 export function PasswordField({ onKeyUp, onKeyDown, onBlur, hint, ...props }: Omit<AuthFieldProps, "type" | "trailing">) {
     const [isVisible, setIsVisible] = useState(false);
     const [isCapsLockOn, setIsCapsLockOn] = useState(false);
@@ -223,11 +207,6 @@ const STRENGTH_LABELS = ["Too short", "Weak", "Okay", "Good", "Strong"];
 const STRENGTH_BARS = ["", "bg-destructive/80", "bg-amber-500/80", "bg-primary/85", "bg-emerald-500/80"];
 const STRENGTH_TEXT = ["text-muted-foreground", "text-destructive", "text-amber-500", "text-primary", "text-emerald-500"];
 
-/**
- * One fixed-height row under the signup password: four bars, a one-word rating, and the advice tucked
- * into a tooltip. Its space is always reserved but it stays invisible until typing starts, so it
- * appearing (or changing) never shifts or resizes the form.
- */
 export function PasswordStrength({ password }: { password: string }) {
     const score = passwordStrength(password);
     const isShown = password.length > 0;
@@ -313,7 +292,6 @@ export function AuthSubmitButton({ isLoading, loadingText, children }: { isLoadi
     );
 }
 
-/** Google's multicolour "G", drawn inline so the button needs nothing loaded from Google before it's clicked. */
 function GoogleMark() {
     return (
         <svg aria-hidden="true" viewBox="0 0 48 48" className="h-[18px] w-[18px] shrink-0">
@@ -355,7 +333,6 @@ export function AuthDivider({ label = "or" }: { label?: string }) {
     );
 }
 
-/** A quiet in-form link, e.g. "Forgot password?" or "Back to sign in". */
 export function AuthTextLink({ onClick, children, disabled }: { onClick: () => void; children: ReactNode; disabled?: boolean }) {
     return (
         <button

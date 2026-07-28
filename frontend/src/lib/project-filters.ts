@@ -1,3 +1,9 @@
+/**
+ * How the project list is filtered, counted, sorted and grouped.
+ *
+ * Handles: the filter set and parsing one out of a URL, deciding whether a project matches, counting each filter for
+ * the tab badges, ordering by last edited, and grouping the sidebar into pinned, starred and the rest.
+ */
 import type { ProjectSummaryResponse } from "./types";
 
 export const PROJECT_FILTERS = [
@@ -51,14 +57,6 @@ export interface SidebarSections {
     recent: ProjectSummaryResponse[];
 }
 
-/**
- * Splits projects into the sidebar's three sections so each project appears in exactly one - unlike
- * `matchesProjectFilter`, whose "pinned"/"starred" cases are deliberately non-exclusive (switching between
- * the All Projects filter tabs, one at a time, is meant to show a project under both if it qualifies for
- * both). The sidebar shows every section at once, so the same overlap there means the same project renders
- * twice in a row with no way to tell why - pinning something that's already starred now moves it out of
- * Starred instead of appending it there too.
- */
 export function groupSidebarSections(projects: ProjectSummaryResponse[]): SidebarSections {
     const pinned = projects.filter((project) => project.pinnedAt).sort(byNewest("pinnedAt"));
     const starred = projects.filter((project) => project.starredAt && !project.pinnedAt).sort(byNewest("starredAt"));

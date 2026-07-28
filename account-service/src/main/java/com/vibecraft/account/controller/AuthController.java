@@ -20,8 +20,15 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * Sessions for Firebase sign-ins. Signing in, signing up, Google, second factors and password resets all happen
- * between the browser and Firebase; this controller only turns the result into a session and ends it again.
+ * Sessions for Firebase sign-ins.
+ *
+ * <p>Handles: handing the browser its CSRF token before its first write, exchanging a Firebase ID token for this
+ * app's session cookie, ending this device's session and every session of the user, the signed-in profile read, and
+ * the account security trail - both listing it and accepting a client's report of a change it made directly with
+ * Firebase.
+ *
+ * <p>Signing in, signing up, Google, second factors and password resets all happen between the browser and Firebase;
+ * this controller only turns the result into a session and ends it again.
  */
 @RestController
 @RequiredArgsConstructor
@@ -32,10 +39,6 @@ public class AuthController {
     SessionService sessionService;
     UserService userService;
 
-    /**
-     * Makes sure the browser holds a CSRF token (the readable {@code XSRF-TOKEN} cookie) before its first write.
-     * Resolving the token is what makes Spring write the cookie.
-     */
     @GetMapping("/csrf")
     public ResponseEntity<Void> csrf(CsrfToken csrfToken) {
         csrfToken.getToken();

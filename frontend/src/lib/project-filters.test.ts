@@ -1,3 +1,9 @@
+/**
+ * Covers grouping the sidebar: a pinned project appears only in Pinned, a starred one only in Starred, one that is
+ * both appears in Pinned alone, one with neither in Recent - and no project ever appears in two sections.
+ *
+ * Also covers that Pinned and Starred are each ordered by when they were marked, independently of one another.
+ */
 import { describe, it, expect } from "vitest";
 import { groupSidebarSections } from "./project-filters";
 import type { ProjectSummaryResponse } from "./types";
@@ -30,7 +36,6 @@ describe("groupSidebarSections", () => {
   });
 
   it("shows a project that is both pinned and starred in Pinned only - never in both", () => {
-    // This is the exact bug reported: the same project rendering under Pinned AND Starred at once.
     const both = project(1, "Both", { pinnedAt: "2026-02-01T00:00:00Z", starredAt: "2026-02-02T00:00:00Z" });
     const sections = groupSidebarSections([both]);
 
@@ -38,7 +43,6 @@ describe("groupSidebarSections", () => {
     expect(sections.starred).toEqual([]);
     expect(sections.recent).toEqual([]);
 
-    // Every project appears in exactly one section - the real invariant a "no duplicates" list requires.
     const totalAppearances = sections.pinned.length + sections.starred.length + sections.recent.length;
     expect(totalAppearances).toBe(1);
   });
@@ -62,7 +66,7 @@ describe("groupSidebarSections", () => {
     const seen = [...sections.pinned, ...sections.starred, ...sections.recent].map((p) => p.id);
 
     expect(seen.sort()).toEqual([1, 2, 3, 4]);
-    expect(new Set(seen).size).toBe(seen.length); // no id appears twice
+    expect(new Set(seen).size).toBe(seen.length);
   });
 
   it("orders Pinned and Starred by most recently pinned/starred, independently", () => {

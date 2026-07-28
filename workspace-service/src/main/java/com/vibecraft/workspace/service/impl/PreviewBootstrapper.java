@@ -17,15 +17,21 @@ import static com.vibecraft.workspace.service.impl.PreviewRunnerPool.RUNNER_CONT
 import static com.vibecraft.workspace.service.impl.PreviewRunnerPool.SYNCER_CONTAINER;
 
 /**
- * Takes a claimed pod from nothing to a serving dev server, off the request thread: sync the files, install, start
- * Vite, wait until it answers, then publish the route. Progress is written to {@code Preview.detail} for the
- * Preview tab to poll.
+ * Takes a claimed pod from nothing to a serving dev server, off the request thread.
  *
- * <p>Two containers share {@code /app}: {@code syncer} (the MinIO client) mirrors the project's objects into it and
- * keeps watching, so every file the AI saves lands in the pod and Vite hot-reloads it; {@code runner} (Node) runs
- * npm. Everything long-running is started detached ({@code setsid}/{@code nohup ... &}) because an exec session
- * ends when its shell does, and the process tree has to outlive it. Measured on the dev cluster: a cold start of
- * the starter template is ready in about 30 seconds, most of it {@code npm install}.
+ * <p>Handles: mirroring the project's files into the pod and leaving a watch running so later edits land there too,
+ * starting npm install and then Vite as one detached process group, polling until the dev server answers, and
+ * publishing the route only once it does. Progress is written to the preview row for the Preview tab to poll, and
+ * each failure mode - the sync, the install, the dev server, the timeout - is reported with the runner's own output
+ * attached.
+ *
+ * <p>Two containers share the app directory: the syncer mirrors the project's objects into it and keeps watching, so
+ * every file the AI saves hot-reloads; the runner runs npm. Everything long-running is started detached, because an
+ * exec session ends when its shell does and the process tree has to outlive it. The mirror excludes node_modules,
+ * which exists only in the pod and would otherwise be wiped as extraneous.
+ *
+ * <p>The route is published before the status flips to running, because the tab loads the URL the moment it sees that
+ * status and must not get a 404.
  */
 @Component
 @RequiredArgsConstructor
@@ -36,10 +42,6 @@ public class PreviewBootstrapper {
     private static final Duration QUICK_COMMAND_TIMEOUT = Duration.ofSeconds(30);
     private static final Duration POLL_INTERVAL = Duration.ofSeconds(2);
 
-    /**
-     * {@code --remove} so a file the AI deleted disappears from the preview too; {@code node_modules} is excluded
-     * from it, since it exists only in the pod and would otherwise be wiped as "extraneous".
-     */
     private static final String MIRROR_FLAGS = "--overwrite --remove --quiet --exclude 'node_modules/*'";
 
     private final PreviewRepository previewRepository;
@@ -48,10 +50,6 @@ public class PreviewBootstrapper {
     private final PreviewLifecycle lifecycle;
     private final PreviewProperties properties;
 
-    /**
-     * Brings the preview up. {@code syncFiles} is false for a restart, where the pod already has the files and the
-     * watch is still running - only npm is started again.
-     */
     @Async
     public void start(Long previewId, Long projectId, boolean syncFiles) {
         Preview preview = previewRepository.findById(previewId).orElse(null);
@@ -94,7 +92,6 @@ public class PreviewBootstrapper {
         while (true) {
             sleep(POLL_INTERVAL);
 
-            // Stopped (or failed by the reaper) while we waited: whoever did that already cleaned up.
             PreviewStatus status = previewRepository.findById(preview.getId())
                     .map(Preview::getStatus).orElse(PreviewStatus.TERMINATED);
             if (status != PreviewStatus.CREATING) return;
@@ -127,22 +124,19 @@ public class PreviewBootstrapper {
             lifecycle.fail(preview, "The preview runner went away while starting", null);
             return;
         }
-        // Route first, then RUNNING: the tab loads the URL the moment it sees RUNNING, and must not get a 404.
         router.register(preview.getHostname(), podIp);
         if (previewRepository.markRunning(preview.getId(), Instant.now()) == 0) {
-            router.remove(preview.getHostname()); // stopped in the last instant
+            router.remove(preview.getHostname());
             return;
         }
         log.info("Preview {} for project {} is live at {}", preview.getId(), projectId, preview.getPreviewUrl());
     }
 
-    /** Stops npm and Vite in the pod (the whole process group started by {@link #bootScript()}). */
     public void stopDevServer(String podName) {
         runnerPool.exec(podName, RUNNER_CONTAINER, QUICK_COMMAND_TIMEOUT,
                 "if [ -f /tmp/boot.pid ]; then kill -TERM -$(cat /tmp/boot.pid) 2>/dev/null; fi; sleep 1; true");
     }
 
-    /** The install and dev-server output, newest last. */
     public String readLogs(String podName) {
         return runnerPool.exec(podName, RUNNER_CONTAINER, QUICK_COMMAND_TIMEOUT, """
                 if [ -f /tmp/install.log ]; then echo '$ npm install'; tail -n 120 /tmp/install.log; fi
@@ -168,11 +162,6 @@ public class PreviewBootstrapper {
                 + " /app/ > /tmp/sync.log 2>&1 < /dev/null & echo started";
     }
 
-    /**
-     * Install, then the dev server, as one detached process group whose id is kept in {@code /tmp/boot.pid} (so
-     * {@link #stopDevServer} can end all of it, esbuild included). Each step's exit code is written to a file,
-     * which is how the poll tells "still installing" from "install failed" without a process table.
-     */
     private String bootScript() {
         int port = properties.runnerPort();
         return "cd /app && rm -f /tmp/install.exit /tmp/dev.exit /tmp/install.log /tmp/dev.log && "
@@ -183,7 +172,6 @@ public class PreviewBootstrapper {
                 + "echo $? > /tmp/dev.exit' > /dev/null 2>&1 < /dev/null & echo started";
     }
 
-    /** {@code /@vite/client} rather than {@code /}: it exists in every Vite dev server, even if index.html doesn't. */
     private String probeScript() {
         return "i=$(cat /tmp/install.exit 2>/dev/null); d=$(cat /tmp/dev.exit 2>/dev/null); u=down; "
                 + "wget -q -T 3 -O /dev/null http://127.0.0.1:" + properties.runnerPort() + "/@vite/client "

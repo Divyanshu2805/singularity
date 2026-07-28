@@ -14,6 +14,16 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * Projects, for the browser.
+ *
+ * <p>Handles: listing the caller's projects, reading one, creating a project by name or from a typed description,
+ * renaming, deleting, forking, retrying a failed starter-template initialisation, and the per-member pin and star
+ * flags.
+ *
+ * <p>Deleting means different things to different people: the owner deletes the project for everyone, an editor only
+ * removes it from their own list.
+ */
 @RestController
 @RequestMapping("/api/projects")
 @RequiredArgsConstructor
@@ -46,14 +56,12 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.updateProject(id, request));
     }
 
-    /** For the owner, deletes the project for everyone; for an editor, removes it from their own projects only. */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteProject(@PathVariable Long id) {
         projectService.softDelete(id);
         return ResponseEntity.noContent().build();
     }
 
-    /** Copies a project the caller can edit into a new one they own. The body (a name) is optional. */
     @PostMapping("/{id}/fork")
     public ResponseEntity<ProjectResponse> forkProject(@PathVariable Long id,
                                                        @RequestBody(required = false) @Valid ForkProjectRequest request) {
@@ -90,20 +98,4 @@ public class ProjectController {
     }
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

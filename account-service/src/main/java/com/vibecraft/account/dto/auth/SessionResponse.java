@@ -3,10 +3,11 @@ package com.vibecraft.account.dto.auth;
 import java.time.Instant;
 
 /**
- * @param expiresAt        when the session cookie expires - the client keeps it only as a hint for routing, since it
- *                         can't read the httpOnly cookie itself
- * @param newAccount       true when this sign-in created the account
- * @param secondFactorUsed false means the account signed in with one factor, so the client can suggest adding one
+ * What the browser learns when a session starts.
+ *
+ * <p>Handles: the signed-in profile, when the cookie expires (a hint for routing only, since the client cannot read
+ * the httpOnly cookie itself), whether this sign-in created the account, and whether a second factor was used - so
+ * the client can suggest adding one.
  */
 public record SessionResponse(
         UserProfileResponse user,

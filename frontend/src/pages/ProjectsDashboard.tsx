@@ -1,3 +1,11 @@
+/**
+ * The home page once signed in: start something new, or pick up where you left off.
+ *
+ * Handles: the prompt box that creates a project from a description (through the idea interview), the recent projects
+ * as cards, filtering and searching, and the per-project actions.
+ *
+ * Placeholders keep a row's exact height while loading, so the page does not jump as projects arrive.
+ */
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,7 +29,6 @@ import { api, getUserInfo, isAuthenticated, loginRedirectPath, isQuotaError } fr
 import { byLastEdited, countByFilter, matchesProjectFilter, type ProjectFilter } from "@/lib/project-filters";
 import { cn } from "@/lib/utils";
 
-// Module-level so the array reference stays stable for the typewriter hook.
 const IDEA_SUGGESTIONS = [
     "a habit tracker with daily streaks",
     "a landing page for my coffee shop",
@@ -36,9 +43,6 @@ const QUICK_STARTS = [
     "A pricing page with three tiers",
 ];
 
-// Mirrors the backend's real order of work (AI naming, then copying the starter template).
-// The server doesn't report progress, so steps advance on typical timings - but the last step
-// only starts once the server has actually answered, so it never claims to be done early.
 const CREATION_STEPS = [
     { label: "Reading your idea", startsAtMs: 0 },
     { label: "Picking a project name", startsAtMs: 1200 },
@@ -47,10 +51,7 @@ const CREATION_STEPS = [
 ];
 const OPEN_DELAY_MS = 700;
 
-// One row of the most recently edited projects. The cards use ProjectCard's own 16:9, same as the All
-// projects page, rather than being squashed to fit more in.
 const RECENT_PROJECT_LIMIT = 4;
-// Enough slots to hold the panel's height while it's empty or loading, before the real count is known.
 const PLACEHOLDER_CARDS = 4;
 
 const MAX_PROMPT_HEIGHT = 160;
@@ -63,7 +64,6 @@ const EMPTY_MESSAGES: Record<NonNullable<ProjectFilter> | "all", { title: string
     starred: { title: "No starred projects", hint: "Star the projects you love to find them here." },
 };
 
-// Lovable-style glow rising from the bottom of the hero, in the app's own copper/ember palette.
 const HERO_GLOW: CSSProperties = {
     backgroundImage: [
         "radial-gradient(60% 55% at 50% 100%, hsl(22 90% 55% / 0.75) 0%, transparent 70%)",
@@ -148,7 +148,6 @@ function CreationProgress({ creation, now }: { creation: Creation; now: number }
     );
 }
 
-/** Same outer shape as a ProjectCard, so loading and empty states keep the row's height. */
 function CardPlaceholder({ className }: { className?: string }) {
     return (
         <div aria-hidden="true" className={cn("overflow-hidden rounded-xl border border-border/60 bg-card/60", className)}>
@@ -170,7 +169,6 @@ export function ProjectsDashboard() {
     const queryClient = useQueryClient();
     const sidebar = useSidebar();
     const projectActions = useProjectActions();
-    // Set here, it covers the new project's first build - usually the biggest one, and the one most worth explaining.
     const [teachingMode, setTeachingMode] = useTeachingMode();
     const [searchParams, setSearchParams] = useSearchParams();
 
@@ -178,7 +176,6 @@ export function ProjectsDashboard() {
     const [creation, setCreation] = useState<Creation | null>(null);
     const [now, setNow] = useState(() => Date.now());
     const [filter, setFilter] = useState<ProjectFilter>(null);
-    // The idea currently going through the pre-project interview, if any.
     const [clarifyingIdea, setClarifyingIdea] = useState<string | null>(null);
     const promptRef = useRef<HTMLTextAreaElement>(null);
 
@@ -193,7 +190,6 @@ export function ProjectsDashboard() {
         enabled: isSignedIn,
     });
 
-    // Without a usable session the backend returns an error, which used to look like "no projects"
     useEffect(() => {
         if (!isSignedIn) navigate(loginRedirectPath());
     }, [isSignedIn, navigate]);
@@ -207,14 +203,12 @@ export function ProjectsDashboard() {
         });
     }, [error, toast]);
 
-    // Ticks the creation progress card forward while a project is being set up.
     useEffect(() => {
         if (!creation) return;
         const interval = window.setInterval(() => setNow(Date.now()), 200);
         return () => window.clearInterval(interval);
     }, [creation]);
 
-    // "New project" in the sidebar links here with ?new=1; older ?filter links now live on the All projects page.
     useEffect(() => {
         const filterParam = searchParams.get("filter");
         if (filterParam) {
@@ -228,19 +222,13 @@ export function ProjectsDashboard() {
         setSearchParams(next, { replace: true });
     }, [searchParams, setSearchParams, navigate]);
 
-    // A 402 from any of the create/interview calls: shown as an offer rather than an error, since the request
-    // was fine and paying is what makes it work.
     const [blockedBy, setBlockedBy] = useState<QuotaDetails | null>(null);
     const { refresh: refreshBilling, quota, projects: projectAllowance, subscription } = useBilling();
 
-    // Enter on an idea starts the short interview; the project itself is created once that's done or skipped.
     const handleCreate = () => {
         const description = prompt.trim();
         if (!description || isCreating || clarifyingIdea) return;
 
-        // Checked before the interview, not after: it's a minute of answering questions, and being refused at the
-        // end of it for a limit we already knew about is the worst way to find out. The server still enforces
-        // both - this only spares the wasted effort.
         const planName = subscription?.plan?.name ?? "Free";
         if (projectAllowance?.isExhausted) {
             setBlockedBy({ reason: "PROJECT_LIMIT", limit: projectAllowance.limit, used: projectAllowance.used, planName });
@@ -259,7 +247,6 @@ export function ProjectsDashboard() {
         setClarifyingIdea(description);
     };
 
-    /** Creates the project named from the idea, then opens it with `firstMessage` (the brief) as its first chat message. */
     const createProject = async (description: string, firstMessage: string) => {
         setClarifyingIdea(null);
         const startedAt = Date.now();
@@ -269,15 +256,12 @@ export function ProjectsDashboard() {
             const project = await api.createProjectFromPrompt(description);
             queryClient.invalidateQueries({ queryKey: ["projects"] });
             setCreation((prev) => (prev ? { ...prev, projectName: project.name } : prev));
-            // A short beat on the final step, so it's clear what was created before the page changes.
-            // The project page sends the brief as the first chat message once it has loaded.
             window.setTimeout(() => {
                 navigate(`/projects/${project.id}`, { state: { initialPrompt: firstMessage } });
             }, OPEN_DELAY_MS);
         } catch (err) {
             setCreation(null);
             if (isQuotaError(err) && err.quota) {
-                // Out of projects or out of tokens - an upgrade prompt, not a red toast.
                 setBlockedBy(err.quota);
                 void refreshBilling();
                 return;
@@ -307,11 +291,6 @@ export function ProjectsDashboard() {
         [projects, filter]
     );
     const emptyMessage = EMPTY_MESSAGES[filter ?? "all"];
-    /**
-     * The grid always renders this many slots, real cards first and invisible ones after, so switching tabs
-     * never changes the panel's height and nothing above it moves. It's sized by the fullest tab ("All" is a
-     * superset of the rest), so an account with three projects gets three slots rather than a blank one.
-     */
     const slotCount = Math.min(RECENT_PROJECT_LIMIT, Math.max(counts.all, 1));
 
     return (
@@ -319,19 +298,14 @@ export function ProjectsDashboard() {
             <SidebarSpacer sidebar={sidebar} />
 
             <div className="relative flex min-w-0 flex-1 flex-col">
-                {/* Everything fits one screen; only very short windows fall back to scrolling. The sidebar is a
-                    sibling of this scroller inside the h-screen shell, so it stays put if they do. */}
                 <main className="min-h-0 flex-1 overflow-y-auto">
                     <div className="flex min-h-full flex-col">
-                        {/* Hero: describe a project to create it */}
                         <section className="relative flex min-h-[420px] flex-1 flex-col items-center justify-center overflow-hidden px-6 pb-20 pt-12">
                             <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={HERO_GLOW} />
 
                             <div className="relative flex w-full max-w-2xl flex-col items-center text-center">
-                                {/* The interview card is taller than the prompt box, so the logo steps aside to keep the page on one screen */}
                                 {!clarifyingIdea && <AnimatedLogoMark glow className="mb-6 h-16 w-16" />}
                                 <h1 className="font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
-                                    {/* Asking for an idea while one is already being built reads as if nothing happened. */}
                                     {creation
                                         ? creation.projectName
                                             ? `Setting up ${creation.projectName}`
@@ -367,7 +341,6 @@ export function ProjectsDashboard() {
                                             className="group mt-7 w-full rounded-3xl border border-border/80 bg-card/90 p-3 text-left shadow-2xl shadow-black/40 backdrop-blur transition-[border-color,box-shadow] duration-150 hover:border-primary/40 focus-within:border-primary/60 focus-within:shadow-[0_0_0_4px_hsl(var(--primary)/0.12),0_25px_50px_-12px_rgb(0_0_0/0.5)]"
                                         >
                                             <div className="flex items-start">
-                                                {/* Terminal-style prompt that lights up while typing */}
                                                 <span
                                                     aria-hidden="true"
                                                     className="select-none pl-2 pt-1 text-[17px] font-semibold leading-6 text-muted-foreground/50 transition-colors group-focus-within:text-primary"
@@ -427,7 +400,6 @@ export function ProjectsDashboard() {
                             </div>
                         </section>
 
-                        {/* Recent projects: a raised panel overlapping the bottom of the hero, one steady height */}
                         <section className="relative z-10 mx-auto -mt-14 w-full max-w-6xl shrink-0 px-4 pb-5 sm:px-6">
                             <div className="rounded-2xl border border-border/70 bg-panel/90 p-4 shadow-2xl shadow-black/40 backdrop-blur-xl">
                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -464,8 +436,6 @@ export function ProjectsDashboard() {
                                             />
                                         ))}
 
-                                    {/* Invisible cards fill the rest of the grid, so a tab with fewer projects is
-                                        exactly as tall as the fullest one and the hero above never shifts. */}
                                     {!isLoading &&
                                         Array.from({ length: Math.max(slotCount - recentProjects.length, 0) }, (_, i) => (
                                             <CardPlaceholder key={`slot-${i}`} className="invisible" />

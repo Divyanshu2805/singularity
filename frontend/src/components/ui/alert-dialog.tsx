@@ -1,3 +1,9 @@
+/**
+ * A modal that interrupts to confirm something, styled for this app.
+ *
+ * Handles: the overlay, the content frame and the title, description, action and cancel parts. Focus is trapped and
+ * the dialog cannot be dismissed by clicking away, because the choice has to be made deliberately.
+ */
 import * as React from "react";
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 

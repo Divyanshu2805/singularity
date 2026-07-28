@@ -1,3 +1,11 @@
+/**
+ * Covers how the preview's state reads: the server's step names in order, a restart landing at the install step and
+ * anything unknown at the start, and which dependency changes call for a restart rather than a reload.
+ *
+ * Also covers auto-start, which is deliberately narrow: never for someone who has not started a preview here, never
+ * after a failure, never over the user pressing Stop, and not until the tab is showing and the current state is
+ * known.
+ */
 import { describe, expect, it } from "vitest";
 import {
   autoStartKey,
@@ -55,7 +63,6 @@ describe("shouldAutoStartPreview", () => {
   it("never retries a failure, or overrides the user pressing Stop", () => {
     expect(shouldAutoStartPreview({ ...base, preview: preview({ status: "FAILED" }) })).toBe(false);
     expect(shouldAutoStartPreview({ ...base, preview: null, stoppedByUser: true })).toBe(false);
-    // ...including a Stop from before this page loaded, e.g. then a refresh.
     expect(shouldAutoStartPreview({ ...base, preview: preview({ status: "TERMINATED", detail: "Stopped" }) })).toBe(false);
   });
 
@@ -93,7 +100,6 @@ describe("formatStopsIn", () => {
 });
 
 describe("describePreviewStartFailure", () => {
-  // What the API client throws: an Error carrying the response's status and the ApiError `code`.
   const apiError = (message: string, status: number, code?: string) => Object.assign(new Error(message), { status, code });
 
   it("says the runners are busy only for the capacity code, and keeps the server's own words", () => {

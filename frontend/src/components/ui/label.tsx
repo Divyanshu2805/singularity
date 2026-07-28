@@ -1,3 +1,8 @@
+/**
+ * The form label, styled for this app.
+ *
+ * Handles: the styling, and the association with the control it labels.
+ */
 import * as React from "react";
 import * as LabelPrimitive from "@radix-ui/react-label";
 import { cva, type VariantProps } from "class-variance-authority";

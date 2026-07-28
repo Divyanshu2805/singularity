@@ -1,3 +1,8 @@
+/**
+ * A button that stays pressed.
+ *
+ * Handles: the pressed and unpressed styling in this app's variants and sizes.
+ */
 import * as React from "react";
 import * as TogglePrimitive from "@radix-ui/react-toggle";
 import { cva, type VariantProps } from "class-variance-authority";

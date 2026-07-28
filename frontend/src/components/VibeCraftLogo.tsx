@@ -1,14 +1,15 @@
+/**
+ * The animated wordmark in the sidebar.
+ *
+ * Handles: the build-up - tile, then mark, then spark, then name - played forwards on open and backwards and quicker
+ * on close, so it finishes before the sidebar has slid away. It respects a reduced-motion preference.
+ */
 import { useEffect, useId, useState, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
 const EASE_OUT = "cubic-bezier(0.32, 0.72, 0, 1)";
-// Overshoots slightly, so the tile and spark "pop" into place.
 const EASE_POP = "cubic-bezier(0.34, 1.56, 0.64, 1)";
 
-/**
- * Timing for one part of the build-up. Opening plays tile -> V -> spark -> name; closing plays it
- * backwards and quicker, so it's done before the sidebar finishes sliding away.
- */
 function timing(drawn: boolean, open: { delay: number; duration: number }, close: { delay: number; duration: number }) {
   return drawn ? open : close;
 }
@@ -18,19 +19,10 @@ const centered: CSSProperties = { transformBox: "fill-box", transformOrigin: "ce
 interface LogoMarkProps {
   className?: string;
   title?: string;
-  /**
-   * Leave undefined for a static mark. When set, the mark animates between built (true) and
-   * taken apart (false): the tile pops in, the V draws itself, then the spark bursts in.
-   */
   drawn?: boolean;
 }
 
-/**
- * The VibeCraft mark: a copper tile holding a bold "V" whose right arm finishes in a spark -
- * an idea being crafted into something. Built to stay legible down to 16px.
- */
 export function LogoMark({ className, title, drawn }: LogoMarkProps) {
-  // useId returns ":r0:"-style ids; colons break url(#...) references in some browsers.
   const gradientId = `vc-logo-${useId().replace(/:/g, "")}`;
   const isAnimated = drawn !== undefined;
   const isDrawn = drawn ?? true;
@@ -50,7 +42,6 @@ export function LogoMark({ className, title, drawn }: LogoMarkProps) {
 
   const strokeStyle: CSSProperties | undefined = isAnimated
     ? {
-        // pathLength=1 lets the dash math work in fractions of the V's length.
         strokeDasharray: "1 2",
         strokeDashoffset: isDrawn ? 0 : 1.02,
         opacity: isDrawn ? 1 : 0,
@@ -103,7 +94,6 @@ export function LogoMark({ className, title, drawn }: LogoMarkProps) {
   );
 }
 
-/** "VibeCraft" in type. With `drawn` set it wipes in from the left as the mark finishes building. */
 function Wordmark({ drawn, className }: { drawn?: boolean; className?: string }) {
   const isAnimated = drawn !== undefined;
   const isDrawn = drawn ?? true;
@@ -127,7 +117,6 @@ function Wordmark({ drawn, className }: { drawn?: boolean; className?: string })
   );
 }
 
-/** Mark plus wordmark, for brand spots like the sidebar header. `drawn` animates both, as on `LogoMark`. */
 export function Logo({ className, drawn }: { className?: string; drawn?: boolean }) {
   return (
     <span className={cn("flex items-center gap-2 text-sm font-semibold tracking-tight", className)}>
@@ -137,11 +126,9 @@ export function Logo({ className, drawn }: { className?: string; drawn?: boolean
   );
 }
 
-// How long the looping logo stays built (including its ~0.85s build-up) and taken apart.
 const LOOP_BUILT_MS = 4200;
 const LOOP_APART_MS = 700;
 
-/** Flips between built and taken apart forever. With reduced motion it simply stays built. */
 function useBuildLoop() {
   const [drawn, setDrawn] = useState(false);
 
@@ -155,7 +142,6 @@ function useBuildLoop() {
       setDrawn(next);
       timer = window.setTimeout(() => show(!next), next ? LOOP_BUILT_MS : LOOP_APART_MS);
     };
-    // Starts taken apart and waits a beat, so the first build is actually seen rather than skipped.
     timer = window.setTimeout(() => show(true), 150);
     return () => window.clearTimeout(timer);
   }, []);
@@ -163,7 +149,6 @@ function useBuildLoop() {
   return drawn;
 }
 
-/** A soft copper halo that brightens as the mark comes together. A gradient, not a blur filter, so it's cheap to animate. */
 function LogoGlow({ drawn }: { drawn: boolean }) {
   return (
     <span
@@ -178,7 +163,6 @@ function LogoGlow({ drawn }: { drawn: boolean }) {
   );
 }
 
-/** A mark that keeps building itself: builds, holds, takes itself apart, and builds again. */
 export function AnimatedLogoMark({ className, glow, title = "VibeCraft" }: { className?: string; glow?: boolean; title?: string }) {
   const drawn = useBuildLoop();
 
@@ -190,7 +174,6 @@ export function AnimatedLogoMark({ className, glow, title = "VibeCraft" }: { cla
   );
 }
 
-/** The looping mark with "VibeCraft" written out beside it, both building together. */
 export function AnimatedLogo({ className, markClassName = "h-12 w-12", nameClassName = "text-3xl" }: {
   className?: string;
   markClassName?: string;

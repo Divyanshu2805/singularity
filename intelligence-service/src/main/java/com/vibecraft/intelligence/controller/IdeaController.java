@@ -13,6 +13,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * The pre-project idea interview, for the browser.
+ *
+ * <p>Handles: asking for a few tailored clarifying questions about an idea, and compiling the answers into the brief
+ * that becomes the project's first chat message.
+ *
+ * <p>Both run before any project exists, so neither is project-scoped - but both require a session, since each one
+ * spends the caller's token budget.
+ */
 @RestController
 @RequestMapping("/api/ideas")
 @RequiredArgsConstructor

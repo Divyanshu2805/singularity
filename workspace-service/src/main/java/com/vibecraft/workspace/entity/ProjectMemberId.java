@@ -9,6 +9,12 @@ import lombok.Setter;
 
 import java.io.Serializable;
 
+/**
+ * The composite key of a project membership.
+ *
+ * <p>Handles: the project id and user id together, with equality over both - which is what lets a membership be
+ * looked up, saved and deleted by identity.
+ */
 @Embeddable
 @Getter
 @Setter

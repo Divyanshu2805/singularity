@@ -1,3 +1,13 @@
+/**
+ * The validation and wording behind the sign-in, sign-up and password-reset forms.
+ *
+ * Handles: checking a name, email and password before anything is sent, naming the first field to focus when
+ * something is wrong, rating password strength, and turning a provider error code into a sentence a person can act
+ * on.
+ *
+ * The rules mirror Firebase's own, so most mistakes are caught before a round trip rather than coming back as a raw
+ * error code.
+ */
 export type AuthMode = "login" | "signup";
 
 export interface AuthFieldErrors {
@@ -6,7 +16,6 @@ export interface AuthFieldErrors {
     password?: string;
 }
 
-// Mirror Firebase's own password/name rules, so most mistakes are caught before a round trip to Firebase.
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_NAME_LENGTH = 30;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -35,17 +44,14 @@ export function validateAuthForm(
     return errors;
 }
 
-/** The first field with an error, in the order the fields appear, so it can be focused. */
 export const firstInvalidField = (errors: AuthFieldErrors) =>
     (["name", "email", "password"] as const).find((field) => errors[field]);
 
 export interface FriendlyAuthError {
     message: string;
-    /** Set when the fix is on the other auth page, e.g. the account already exists. */
     suggestSignIn?: boolean;
 }
 
-/** Turns backend/network errors into something a person can act on. */
 export function friendlyAuthError(error: unknown, mode: AuthMode): FriendlyAuthError {
     const raw = error instanceof Error ? error.message : "";
 
@@ -56,7 +62,6 @@ export function friendlyAuthError(error: unknown, mode: AuthMode): FriendlyAuthE
         return { message: "An account with this email already exists.", suggestSignIn: true };
     }
     if (mode === "login" && /bad credentials|invalid|unauthori[sz]ed|login failed|validation failed|not found/i.test(raw)) {
-        // Deliberately vague about which one is wrong, like the backend.
         return { message: "That email and password don't match. Double-check them and try again." };
     }
     if (/validation failed/i.test(raw)) {
@@ -69,7 +74,6 @@ export function friendlyAuthError(error: unknown, mode: AuthMode): FriendlyAuthE
     };
 }
 
-/** 0-4, for the signup strength meter. Below the minimum length always scores 0. */
 export function passwordStrength(password: string): number {
     if (password.length < MIN_PASSWORD_LENGTH) return 0;
     return [
@@ -80,7 +84,6 @@ export function passwordStrength(password: string): number {
     ].filter(Boolean).length;
 }
 
-/** The email step of "forgot password" - the same rules as the sign-in form's email field. */
 export function validateEmail(value: string): string | undefined {
     const email = value.trim();
     if (!email) return "Enter your email address";
@@ -93,7 +96,6 @@ export interface ResetPasswordErrors {
     confirm?: string;
 }
 
-/** Mirrors the password rule above, plus the confirmation only the browser can check. */
 export function validateNewPassword(password: string, confirm: string): ResetPasswordErrors {
     const errors: ResetPasswordErrors = {};
     if (!password) errors.password = "Choose a new password";

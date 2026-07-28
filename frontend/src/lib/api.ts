@@ -1,15 +1,28 @@
+/**
+ * Every call this app makes to the backend.
+ *
+ * Handles: the one fetch wrapper all of them go through, the session cookie and CSRF token that ride along with it,
+ * turning a failed response into a typed error the UI can react to, the SSE streams behind the build chat and the
+ * code lens, and the typed methods for projects, files, previews, chat, code notes, ideas, billing, usage and auth.
+ *
+ * The session is an httpOnly cookie, so a write must also carry the readable CSRF token in a header - fetched first
+ * if this browser has none, and re-fetched once if the server rejects it, which is what a stale token looks like. A
+ * network failure is rewritten into a clear sentence rather than the browser's vague default, and a 401 takes the app
+ * through a full sign-out so no stale state survives.
+ *
+ * Requests are relative by default: in development Vite proxies them to the Gateway, so the browser only ever talks
+ * to one origin and the SameSite cookie is always sent.
+ */
 import { Preview, PreviewLogs, ActiveGeneration, AuthSecurityEvent, AuthSecurityEventType, SessionResponse, ChatMessage, ClarifyingQuestion, CodeNote, CodeSearchResponse, CodeSelection, FileNode, Plan, QuotaDetails, Subscription, UsageEventPage, UsageInsights, UsageRange, UsageToday, IdeaAnswer, ProjectSummaryResponse, ProjectResponse, ProjectMember, ProjectRole } from "./types";
 import { createSseParser } from "./sse";
 import { CSRF_HEADER, ensureCsrfToken, needsCsrf, readCsrfToken } from "./csrf";
 import { clearSignedInState, signOutRedirect } from "./session";
 
-// Relative by default: in dev, Vite proxies /api to the backend (see vite.config.ts).
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 const SERVER_UNREACHABLE = "Can't reach the VibeCraft server. Make sure the backend is running (the Gateway listens on port 8000).";
 
 const rawFetch = (input: string, init?: RequestInit) =>
-  // A network failure (backend or dev server down) would otherwise surface as a vague "Failed to fetch".
   fetch(input, { credentials: "same-origin", ...init }).catch((error: unknown) => {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new Error(SERVER_UNREACHABLE);
@@ -22,11 +35,6 @@ const withCsrfHeader = (init: RequestInit | undefined): RequestInit => {
   return { ...init, headers };
 };
 
-/**
- * Every API call goes through here. The session travels as an httpOnly cookie, so a write also has to carry the
- * CSRF token (see `csrf.ts`) - fetched first if this browser doesn't have one yet, and re-fetched once if the
- * server rejects it, which is what a token that went stale looks like.
- */
 async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
   if (!needsCsrf(init?.method)) return rawFetch(input, init);
 
@@ -45,11 +53,6 @@ async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
   return rawFetch(input, withCsrfHeader(init));
 }
 
-/**
- * The session cookie is httpOnly, so this page can't see it. What it keeps instead is when that session ends - a
- * routing hint only ("show the dashboard, or go straight to sign-in?"), never a credential. If the server has
- * revoked the session sooner, the first request answers 401 and `endSession` takes over.
- */
 const SESSION_HINT_KEY = "session_expires_at";
 
 const hasSessionHint = () => {
@@ -57,16 +60,11 @@ const hasSessionHint = () => {
   return Number.isFinite(expiresAt) && expiresAt > Date.now();
 };
 
-/**
- * The same person got a fresh session cookie (after changing their password or second factor): update the hint, keep
- * everything else - unlike `startSession`, there's no previous account's state to throw away.
- */
 export const renewSession = (session: SessionResponse) => {
   localStorage.setItem(SESSION_HINT_KEY, session.expiresAt);
   setUserInfo(session.user);
 };
 
-/** Starts a Firebase-backed session on this page, once the backend has set the cookie. */
 export const startSession = (session: SessionResponse) => {
   clearSignedInState();
   localStorage.setItem(SESSION_HINT_KEY, session.expiresAt);
@@ -75,12 +73,9 @@ export const startSession = (session: SessionResponse) => {
 
 export const isAuthenticated = () => hasSessionHint() && !!getUserInfo();
 
-/** Where to send someone who isn't signed in - flags the case where they were, but it lapsed. */
 export const loginRedirectPath = () =>
   localStorage.getItem(SESSION_HINT_KEY) ? "/login?expired=1" : "/login";
 
-
-// User info storage
 export const setUserInfo = (user: { id: number; username: string; name: string }) => {
   localStorage.setItem("user_info", JSON.stringify(user));
 };
@@ -92,21 +87,10 @@ export const getUserInfo = (): { id: number; username: string; name: string } | 
 
 export const removeUserInfo = () => localStorage.removeItem("user_info");
 
-// LocalStorage keys
 export const OPEN_TABS_KEY = "open_tabs";
 export const ACTIVE_TAB_KEY = "active_tab";
 
-/**
- * Ends the signed-in session: forgets the token, and forgets everything this page was holding on that
- * person's behalf (see `session.ts` - the stores' own caches, `sessionStorage`, the open-tabs keys).
- *
- * <p>The redirect is a **full document load, never a router navigation**. Module-level state outlives a route
- * change, so signing out with `navigate("/login")` used to carry the previous account's code notes and chat
- * transcript straight into whoever signed in next on the same browser.
- */
 export const signOut = (to = "/login") => {
-  // Tells the server to revoke this session cookie - this page can't delete it, it's httpOnly. keepalive lets the
-  // request finish although the page is about to unload, which is also why the CSRF header is read synchronously.
   const csrfToken = readCsrfToken();
   fetch(`${BASE_URL}/api/auth/logout`, {
     method: "POST",
@@ -123,24 +107,11 @@ export const signOut = (to = "/login") => {
   }
 };
 
-/** A token the backend rejected - same teardown, but says the session lapsed rather than that they left. */
 const endSession = () => signOut("/login?expired=1");
 
-/**
- * A failed request, carrying enough of the response to act on rather than only to print.
- *
- * <p>Every error used to collapse to a bare `Error(message)`, which is fine for a toast and useless for
- * anything that has to *behave* differently: a 402 means "you're out of quota, offer an upgrade", and telling
- * it apart from a network failure by matching on English prose would break the first time the wording changed.
- */
 export class ApiRequestError extends Error {
   readonly status: number;
-  /** Present on a 402 only - the limit, what's been used, and when it refills. */
   readonly quota?: QuotaDetails;
-  /**
-   * Present on a 503 the client has to tell apart from another 503 (`CAPACITY_UNAVAILABLE`, `UPSTREAM_UNAVAILABLE` -
-   * see `ApiError` in docs/api/). The same reasoning as `quota`: branch on this, never on the wording.
-   */
   readonly code?: string;
 
   constructor(message: string, status: number, quota?: QuotaDetails, code?: string) {
@@ -152,11 +123,9 @@ export class ApiRequestError extends Error {
   }
 }
 
-/** True when a request failed because the caller is out of quota, whatever the wording says. */
 export const isQuotaError = (error: unknown): error is ApiRequestError =>
   error instanceof ApiRequestError && error.status === 402;
 
-/** Throws with the backend's ApiError message (not a generic string), and signs out on a rejected token. */
 async function ensureOk(response: Response, fallbackMessage: string): Promise<Response> {
   if (response.ok) return response;
   if (response.status === 401 && isAuthenticated()) endSession();
@@ -170,23 +139,19 @@ async function ensureOk(response: Response, fallbackMessage: string): Promise<Re
     if (body?.quota && typeof body.quota?.reason === "string") quota = body.quota as QuotaDetails;
     if (typeof body?.code === "string" && body.code) code = body.code;
   } catch {
-    // Not an ApiError body - a bare 5xx here means the dev proxy couldn't reach the backend.
     if (response.status >= 500) message = SERVER_UNREACHABLE;
   }
   throw new ApiRequestError(message, response.status, quota, code);
 }
 
-// API response format for files endpoint
 interface FilesApiResponse {
   files: { path: string }[];
 }
 
-// Convert flat file paths to nested tree structure
 export function buildFileTree(paths: string[]): FileNode[] {
   const root: FileNode[] = [];
   const nodeMap = new Map<string, FileNode>();
 
-  // Sort paths to ensure directories come before their children
   const sortedPaths = [...paths].sort((a, b) => a.localeCompare(b));
 
   for (const path of sortedPaths) {
@@ -198,7 +163,6 @@ export function buildFileTree(paths: string[]): FileNode[] {
       const parentPath = currentPath;
       currentPath = currentPath ? `${currentPath}/${part}` : part;
 
-      // Skip if node already exists
       if (nodeMap.has(currentPath)) continue;
 
       const isFile = i === parts.length - 1;
@@ -222,7 +186,6 @@ export function buildFileTree(paths: string[]): FileNode[] {
     }
   }
 
-  // Sort each level: directories first, then alphabetically
   const sortNodes = (nodes: FileNode[]) => {
     nodes.sort((a, b) => {
       if (a.type === "directory" && b.type === "file") return -1;
@@ -243,18 +206,11 @@ interface ChatStreamHandlers {
   onFile: (path: string, content: string, isComplete: boolean) => void;
   onComplete: () => void;
   onError: (error: Error) => void;
-  /** A 204 instead of a stream: there was nothing (any more) to attach to. */
   onGone?: () => void;
 }
 
-/** Reads a generation's SSE stream - shared by starting a response and reattaching to one. */
 function consumeChatStream(request: Promise<Response>, { onChunk, onFile, onComplete, onError, onGone }: ChatStreamHandlers) {
-  // Matches only fully-closed <file path="...">...</file> tags for the "final,
-  // definitely complete" content - deliberately not lenient about a missing closing
-  // tag here, since a half-streamed file body would otherwise get reported as final.
   const FILE_TAG_REGEX = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g;
-  // Finds a still-open <file path="..."> tag (the model's protocol only ever has one
-  // file open at a time), so its growing content can be tracked while it's written.
   const OPEN_FILE_TAG_REGEX = /<file\s+path="([^"]+)">/g;
   const emittedFilePaths = new Set<string>();
 
@@ -295,8 +251,8 @@ function consumeChatStream(request: Promise<Response>, { onChunk, onFile, onComp
       if (!reader) throw new Error("No reader available");
 
       const decoder = new TextDecoder();
-      let sseBuffer = ""; // To handle split SSE lines
-      let fullContentBuffer = ""; // To accumulate clean text for file regex
+      let sseBuffer = "";
+      let fullContentBuffer = "";
       let eventName = "message";
 
       while (true) {
@@ -310,7 +266,7 @@ function consumeChatStream(request: Promise<Response>, { onChunk, onFile, onComp
         for (const line of lines) {
           const trimmedLine = line.trim();
           if (!trimmedLine) {
-            eventName = "message"; // blank line ends an SSE event
+            eventName = "message";
             continue;
           }
           if (trimmedLine.startsWith("event:")) {
@@ -330,7 +286,6 @@ function consumeChatStream(request: Promise<Response>, { onChunk, onFile, onComp
             continue;
           }
 
-          // A failed generation arrives as an `event: error` frame on a 200 response, not as an HTTP error.
           if (eventName === "error") {
             await reader.cancel();
             throw new Error(text || "Something went wrong while generating a response.");
@@ -353,10 +308,6 @@ function consumeChatStream(request: Promise<Response>, { onChunk, onFile, onComp
 }
 
 export const api = {
-  /**
-   * Exchanges a fresh Firebase ID token for the httpOnly session cookie. The only moment an ID token leaves the
-   * Firebase SDK - and nothing keeps it afterwards.
-   */
   async createSession(idToken: string): Promise<SessionResponse> {
     const response = await apiFetch(`${BASE_URL}/api/auth/session`, {
       method: "POST",
@@ -367,7 +318,6 @@ export const api = {
     return response.json();
   },
 
-  /** Ends every session of this account on every device, this one included. */
   async signOutEverywhere(): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/auth/logout-all`, { method: "POST" });
     await ensureOk(response, "Couldn't sign out of your other devices");
@@ -379,7 +329,6 @@ export const api = {
     return response.json();
   },
 
-  /** Records a change made directly with Firebase (a second factor, a password) in the account's audit trail. */
   async reportSecurityEvent(type: AuthSecurityEventType, idToken: string): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/auth/security-events`, {
       method: "POST",
@@ -389,7 +338,6 @@ export const api = {
     await ensureOk(response, "Couldn't record the change");
   },
 
-  /** Flat file paths - build the tree with `buildFileTree`, merged with any files that have only been streamed so far. */
   async getFilePaths(projectId: string): Promise<string[]> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/files`, {
     });
@@ -414,7 +362,6 @@ export const api = {
     return response.json();
   },
 
-  /** A few questions tailored to a new project idea, asked before anything is built. */
   async clarifyIdea(idea: string): Promise<ClarifyingQuestion[]> {
     const response = await apiFetch(`${BASE_URL}/api/ideas/clarify`, {
       method: "POST",
@@ -426,7 +373,6 @@ export const api = {
     return data.questions ?? [];
   },
 
-  /** Turns an idea and its interview answers into the brief sent as the new project's first chat message. */
   async compileIdea(idea: string, answers: IdeaAnswer[]): Promise<string> {
     const response = await apiFetch(`${BASE_URL}/api/ideas/compile`, {
       method: "POST",
@@ -438,7 +384,6 @@ export const api = {
     return data.spec;
   },
 
-  /** Creates a project named by the backend from the user's description of what they want to build. */
   async createProjectFromPrompt(prompt: string): Promise<ProjectResponse> {
     const response = await apiFetch(`${BASE_URL}/api/projects/from-prompt`, {
       method: "POST",
@@ -466,7 +411,6 @@ export const api = {
     return response.json();
   },
 
-  /** Pinning is per user - it only changes the caller's own sidebar. */
   async setProjectPinned(id: string, pinned: boolean): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${id}/pin`, {
       method: pinned ? "PUT" : "DELETE",
@@ -474,7 +418,6 @@ export const api = {
     await ensureOk(response, pinned ? "Failed to pin project" : "Failed to unpin project");
   },
 
-  /** Starring is per user, like pinning. */
   async setProjectStarred(id: string, starred: boolean): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${id}/star`, {
       method: starred ? "PUT" : "DELETE",
@@ -482,7 +425,6 @@ export const api = {
     await ensureOk(response, starred ? "Failed to star project" : "Failed to unstar project");
   },
 
-  /** Copies a project the caller can edit into a new one they own. A blank name means "<name> (fork)". */
   async forkProject(id: string, name?: string): Promise<ProjectResponse> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${id}/fork`, {
       method: "POST",
@@ -500,14 +442,12 @@ export const api = {
     await ensureOk(response, "Failed to delete project");
   },
 
-  /** The project's latest preview in any state, or null if it has never had one (204). */
   async getPreview(projectId: string): Promise<Preview | null> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/preview`);
     await ensureOk(response, "Couldn't check the preview");
     return response.status === 204 ? null : response.json();
   },
 
-  /** Starts the preview, or returns the one already running. Resolves while it is still starting - poll getPreview. */
   async startPreview(projectId: string): Promise<Preview> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/preview`, {
       method: "POST",
@@ -516,7 +456,6 @@ export const api = {
     return response.json();
   },
 
-  /** Reinstalls dependencies and restarts the dev server in the same runner. */
   async restartPreview(projectId: string): Promise<Preview> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/preview/restart`, {
       method: "POST",
@@ -538,7 +477,6 @@ export const api = {
     return response.json();
   },
 
-  /** The caller's own starting or running previews across all projects - what their plan's allowance is spent on. */
   async getMyPreviews(): Promise<Preview[]> {
     const response = await apiFetch(`${BASE_URL}/api/previews`);
     await ensureOk(response, "Couldn't load your running previews");
@@ -552,11 +490,6 @@ export const api = {
     return response.blob();
   },
 
-  /**
-   * Streams an explanation or an answer about selected code. The server sends plain text per SSE frame (not
-   * JSON, unlike `/api/chat/stream`), with a failure arriving as a named `error` event on an already-200
-   * response rather than an HTTP status.
-   */
   streamCodeInsight(
     projectId: string,
     kind: "explain" | "ask",
@@ -580,8 +513,6 @@ export const api = {
 
         const decoder = new TextDecoder();
         const stream = { failure: null as string | null };
-        // Whole events, not raw lines: a chunk containing line breaks arrives as several `data:` lines of one
-        // event, and emitting those separately used to delete every newline the model wrote (see lib/sse.ts).
         const parser = createSseParser(({ event, data }) => {
           if (stream.failure !== null) return;
           if (event === "error") stream.failure = data || "Couldn't get an answer from the AI right now.";
@@ -610,23 +541,18 @@ export const api = {
     return () => controller.abort();
   },
 
-  // --- Billing ---
-
-  /** The plan catalogue, cheapest first. Public: the pricing page works signed out. */
   async getPlans(): Promise<Plan[]> {
     const response = await apiFetch(`${BASE_URL}/api/plans`);
     await ensureOk(response, "Couldn't load the plans");
     return response.json();
   },
 
-  /** What this account is on. Always returns a plan - free users get the free one. */
   async getMySubscription(): Promise<Subscription> {
     const response = await apiFetch(`${BASE_URL}/api/me/subscription`);
     await ensureOk(response, "Couldn't load your subscription");
     return response.json();
   },
 
-  /** `projectId` adds that project's share of today, for the chat meter. */
   async getUsageToday(projectId?: string | number): Promise<UsageToday> {
     const query = projectId != null ? `?projectId=${encodeURIComponent(String(projectId))}` : "";
     const response = await apiFetch(`${BASE_URL}/api/usage/today${query}`);
@@ -646,14 +572,12 @@ export const api = {
     return response.json();
   },
 
-  /** The range's AI calls as CSV - a Blob, downloaded the same way a project ZIP is. */
   async exportUsageCsv(range: UsageRange): Promise<Blob> {
     const response = await apiFetch(`${BASE_URL}/api/usage/events/export?range=${range}`);
     await ensureOk(response, "Couldn't export your usage");
     return response.blob();
   },
 
-  /** Returns the Stripe Checkout URL to send the browser to. */
   async createCheckout(planId: number): Promise<string> {
     const response = await apiFetch(`${BASE_URL}/api/payments/checkout`, {
       method: "POST",
@@ -664,7 +588,6 @@ export const api = {
     return (await response.json()).checkoutUrl;
   },
 
-  /** Returns the Stripe billing-portal URL, where a subscription is changed or cancelled. */
   async openBillingPortal(): Promise<string> {
     const response = await apiFetch(`${BASE_URL}/api/payments/portal`, {
       method: "POST",
@@ -673,10 +596,6 @@ export const api = {
     return (await response.json()).portalUrl;
   },
 
-  /**
-   * Changes an existing subscription in place - upgrade, downgrade, cancel (the free plan) or resume (the plan
-   * already held). Never a new checkout: that would start a second subscription billed alongside the first.
-   */
   async changePlan(planId: number): Promise<Subscription> {
     const response = await apiFetch(`${BASE_URL}/api/payments/change-plan`, {
       method: "POST",
@@ -687,10 +606,6 @@ export const api = {
     return response.json();
   },
 
-  /**
-   * Settles the subscription from the session Stripe just sent the browser back with, rather than waiting on
-   * the webhook - which in local development never arrives at all.
-   */
   async confirmCheckout(sessionId: string): Promise<Subscription> {
     const response = await apiFetch(`${BASE_URL}/api/payments/confirm`, {
       method: "POST",
@@ -701,13 +616,6 @@ export const api = {
     return response.json();
   },
 
-  // --- Saved code notes ---
-  //
-  // The thread is the backend's, not the browser's: it belongs to one project *and* one signed-in user, and
-  // lasts until they clear it. Nothing about it is kept in local or session storage, which is what stops one
-  // member of a shared project seeing another's notes.
-
-  /** The caller's saved thread for this project, oldest first. */
   async getCodeNotes(projectId: string): Promise<CodeNote[]> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/notes`, {
     });
@@ -715,7 +623,6 @@ export const api = {
     return response.json();
   },
 
-  /** Keeps one finished exchange. Called when an answer completes - a half-read reply isn't worth saving. */
   async saveCodeNote(
     projectId: string,
     note: { question: string; answer: string; selection?: CodeSelection | null }
@@ -729,7 +636,6 @@ export const api = {
     return response.json();
   },
 
-  /** Wipes one exchange - the question, its answer and the snippet it quoted. */
   async deleteCodeNote(projectId: string, noteId: number): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/notes/${noteId}`, {
       method: "DELETE",
@@ -737,7 +643,6 @@ export const api = {
     await ensureOk(response, "Couldn't delete this note");
   },
 
-  /** Wipes the caller's whole thread for this project. */
   async clearCodeNotes(projectId: string): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/notes`, {
       method: "DELETE",
@@ -745,7 +650,6 @@ export const api = {
     await ensureOk(response, "Couldn't clear these notes");
   },
 
-  /** Plain-text (not regex) search across the project's text files. `signal` lets a newer query cancel this one. */
   async searchCode(projectId: string, query: string, signal?: AbortSignal): Promise<CodeSearchResponse> {
     const response = await apiFetch(
       `${BASE_URL}/api/projects/${projectId}/files/search?q=${encodeURIComponent(query)}`,
@@ -755,7 +659,6 @@ export const api = {
     return response.json();
   },
 
-  /** One-shot plain-language explanation of a selected block. Read-only - it can never change a file. */
   async explainCode(projectId: string, selection: CodeSelection): Promise<string> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/explain`, {
       method: "POST",
@@ -767,10 +670,6 @@ export const api = {
     return data.answer;
   },
 
-  /**
-   * A follow-up question about a selected block. The thread isn't stored server-side, so the whole
-   * conversation so far is replayed on every request.
-   */
   async askAboutCode(
     projectId: string,
     selection: CodeSelection,
@@ -826,10 +725,6 @@ export const api = {
     return response.json();
   },
 
-  /**
-   * The latest saved turn's changed files, each with its version from before that turn - what the diff toggle compares
-   * against. Stored server-side, so the diff survives a refresh and signing out and back in.
-   */
   async getLastTurnChanges(projectId: string): Promise<{ files: { path: string; previousContent: string }[] }> {
     const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/last-turn-changes`, {
     });
@@ -837,7 +732,6 @@ export const api = {
     return response.json();
   },
 
-  /** The caller's response still being generated for this project, or null. Survives a page refresh - it runs server-side. */
   async getActiveGeneration(projectId: string): Promise<ActiveGeneration | null> {
     const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/active`, {
     });
@@ -845,7 +739,6 @@ export const api = {
     return response.status === 204 ? null : response.json();
   },
 
-  /** Stops the response in flight on the server. Closing the stream alone no longer does. */
   async stopGeneration(projectId: string): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/active/stop`, {
       method: "POST",
@@ -853,16 +746,13 @@ export const api = {
     await ensureOk(response, "Couldn't stop the response");
   },
 
-  /** Starts a response and streams it. Aborting only stops watching - the response keeps going server-side. */
   streamChat(
     projectId: string,
     message: string,
     onChunk: (chunk: string) => void,
-    /** Fires repeatedly with growing content while a file is written (`isComplete` false), then once with its final content. */
     onFile: (path: string, content: string, isComplete: boolean) => void,
     onComplete: () => void,
     onError: (error: Error) => void,
-    /** `teachingMode` asks the AI to explain the concept behind each file it writes, as `<learn>` tags. */
     options: { teachingMode?: boolean } = {}
   ) {
     const controller = new AbortController();
@@ -876,11 +766,6 @@ export const api = {
     return () => controller.abort();
   },
 
-  /**
-   * Reattaches to a response already being generated - after a refresh, or from a second tab. The first chunk is
-   * everything written so far, so the same parser rebuilds the files and messages exactly as a live stream would.
-   * `onGone` fires instead if the response finished in the moment between checking and attaching.
-   */
   resumeChat(
     projectId: string,
     onChunk: (chunk: string) => void,

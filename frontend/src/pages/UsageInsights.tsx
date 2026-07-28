@@ -1,3 +1,12 @@
+/**
+ * Where the caller's tokens went.
+ *
+ * Handles: the range picker, the stacked usage chart, the totals, the per-feature and per-project breakdowns, the
+ * recent activity table and the CSV export.
+ *
+ * Ranked bars are scaled to the largest entry rather than to 100%, so a short list still reads. This page pulls in
+ * the charting library, which is why it is loaded on demand.
+ */
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -62,7 +71,6 @@ function Section({ title, description, action, children }: { title: string; desc
   );
 }
 
-/** A ranked row: name, share, and a bar scaled to the largest entry rather than to 100%, so small lists still read. */
 function RankedBar({ label, sublabel, value, share, max, color, onClick }: {
   label: string;
   sublabel?: string;
@@ -94,14 +102,6 @@ function RankedBar({ label, sublabel, value, share, max, color, onClick }: {
   );
 }
 
-/**
- * Where your tokens went, laid out the way the model-platform dashboards do it: a range switch, headline figures,
- * a daily chart stacked by what the tokens were spent on with the plan limit drawn across it, then the breakdowns
- * and the raw calls underneath.
- *
- * <p>Everything here is the signed-in user's own usage - including on projects shared with them, since those are
- * tokens they spent - and nobody else's.
- */
 export function UsageInsights() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -129,7 +129,6 @@ export function UsageInsights() {
     try {
       localStorage.setItem(RANGE_KEY, range);
     } catch {
-      // Remembering the range is a convenience only.
     }
   }, [range]);
 
@@ -144,7 +143,6 @@ export function UsageInsights() {
     enabled: signedIn,
   });
 
-  // Pages accumulate into one list; page 0 replaces it, so a refetch after new usage doesn't duplicate rows.
   useEffect(() => {
     const data = eventsQuery.data;
     if (!data) return;
@@ -172,7 +170,6 @@ export function UsageInsights() {
   const showLimitLine = !!insights && insights.range !== "today" && insights.dailyLimit > 0;
   const yMax = useMemo(() => {
     const top = Math.max(0, ...rows.map((row) => row.total));
-    // Leave room above the limit line so it's visible even on a quiet week, instead of pinned to the top edge.
     return Math.ceil(Math.max(top, showLimitLine ? insights!.dailyLimit : 0) * 1.1) || 1;
   }, [rows, showLimitLine, insights]);
 
@@ -249,7 +246,6 @@ export function UsageInsights() {
               </div>
             </div>
 
-            {/* Headline figures */}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <Tile
                 label="Today"
@@ -369,7 +365,6 @@ export function UsageInsights() {
                           dataKey={feature}
                           stackId="usage"
                           fill={`var(--color-${feature})`}
-                          // Only the top segment of the stack gets rounded corners.
                           radius={index === inUse.length - 1 ? [3, 3, 0, 0] : 0}
                           maxBarSize={range === "90d" ? 12 : 40}
                         />

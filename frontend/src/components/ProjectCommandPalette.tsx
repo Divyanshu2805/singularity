@@ -1,3 +1,6 @@
+/**
+ * The keyboard search: find a project by name, or jump straight to a page.
+ */
 import { useMemo, type ReactNode } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { LayoutDashboard, LayoutGrid, Pin, Plus, Star, type LucideIcon } from "lucide-react";
@@ -7,7 +10,6 @@ import { byLastEdited } from "@/lib/project-filters";
 import type { ProjectSummaryResponse } from "@/lib/types";
 import { cn, generateGradient } from "@/lib/utils";
 
-// Both spellings of the selected attribute, so these win over the base CommandItem's accent colours.
 const ITEM_CLASS =
     "gap-3 rounded-md px-2.5 py-2 text-[13px] text-foreground data-[selected='true']:bg-primary/15 data-[selected=true]:text-primary";
 
@@ -27,7 +29,6 @@ function Kbd({ children }: { children: ReactNode }) {
     );
 }
 
-/** Ctrl/⌘ K search: find a project by name, or jump straight to a page. */
 export function ProjectCommandPalette({ open, onOpenChange, projects, onNavigate }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -56,7 +57,6 @@ export function ProjectCommandPalette({ open, onOpenChange, projects, onNavigate
                                 {sortedProjects.map((project) => (
                                     <CommandItem
                                         key={project.id}
-                                        // The id keeps projects with the same name distinct; cmdk filters on this value
                                         value={`${project.name} #${project.id}`}
                                         onSelect={() => select(`/projects/${project.id}`)}
                                         className={ITEM_CLASS}

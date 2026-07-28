@@ -1,3 +1,9 @@
+/**
+ * The pin and star toggles.
+ *
+ * Handles: updating the project lists immediately and rolling the change back if the server refuses, so the list
+ * never sits showing something that did not happen.
+ */
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
@@ -5,7 +11,6 @@ import type { ProjectSummaryResponse } from "@/lib/types";
 
 type PreferenceField = "pinnedAt" | "starredAt";
 
-/** Pin and star toggles. The project lists update instantly and roll back if the server refuses. */
 export function useProjectPreferences() {
     const queryClient = useQueryClient();
     const { toast } = useToast();

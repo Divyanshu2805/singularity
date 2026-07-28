@@ -9,10 +9,18 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+/**
+ * Reads and writes the steps that make up a chat turn.
+ *
+ * <p>Handles: saving a turn's events, fetching the file edits of a user's most recent assistant turn - the turn whose
+ * diffs the editor shows - and reading back the concepts from their latest teaching-mode lessons.
+ *
+ * <p>The lesson query spans all of the user's projects, soft-deleted ones included: what someone has learned does not
+ * go away with the project.
+ */
 @Repository
 public interface ChatEventRepository extends JpaRepository<ChatEvent, Long> {
 
-    /** The file edits of the user's most recent assistant turn in a project - the turn whose diffs the editor shows. */
     @Query("""
             SELECT e FROM ChatEvent e
             WHERE e.type = com.vibecraft.intelligence.enums.ChatEventType.FILE_EDIT
@@ -26,11 +34,6 @@ public interface ChatEventRepository extends JpaRepository<ChatEvent, Long> {
             """)
     List<ChatEvent> findLastTurnFileEdits(@Param("projectId") Long projectId, @Param("userId") Long userId);
 
-    /**
-     * The concepts from a user's latest teaching-mode lessons, newest lesson first - one comma-separated entry per
-     * lesson, so deduplicating the names happens in {@code TeachingMode}. Spans all of the user's projects,
-     * soft-deleted ones included: what someone has learned doesn't go away with the project.
-     */
     @Query("""
             SELECT e.metadata FROM ChatEvent e
             WHERE e.type = 'LEARN' AND e.metadata IS NOT NULL

@@ -6,11 +6,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Port-forwards the backend opens into the preview cluster while it runs - see {@code PreviewPortForwarder}.
- * Local development only: on a real cluster Redis and the proxy are reachable directly, so leave this disabled.
+ * Which port-forwards the backend opens into the preview cluster while it runs.
  *
- * @param forwards each one binds {@code 127.0.0.1:<localPort>} to {@code podPort} on a ready pod carrying
- *                 {@code podLabels}, in {@code preview.namespace}
+ * <p>Handles: the enable flag and a list of forwards, each binding a local port to a port on a ready pod matching the
+ * given labels in the preview namespace.
+ *
+ * <p>Local development only. On a real cluster Redis and the proxy are reachable directly, so this stays disabled.
  */
 @ConfigurationProperties(prefix = "preview.port-forward")
 public record PreviewPortForwardProperties(boolean enabled, List<Forward> forwards) {

@@ -10,11 +10,13 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 /**
- * Makes sure the project-files bucket exists before anything writes to it, so a brand-new MinIO (an empty data
- * volume) works without a manual "create the bucket" step. Idempotent: an existing bucket is left alone.
+ * Makes sure the project-files bucket exists before anything writes to it.
  *
- * <p>Best effort on purpose. If MinIO can't be reached at startup the service still boots - as it always has, with
- * live previews or file storage simply failing until it is - and the first file operation reports the problem.
+ * <p>Handles: creating the configured bucket at startup if it is missing, so a brand-new MinIO with an empty data
+ * volume works without a manual step. Idempotent - an existing bucket is left alone.
+ *
+ * <p>Best effort on purpose: if MinIO cannot be reached at startup the service still boots, and the first file
+ * operation reports the problem rather than the boot failing.
  */
 @Slf4j
 @Component

@@ -1,3 +1,9 @@
+/**
+ * Covers how an assistant turn's raw events become the blocks the chat draws.
+ *
+ * In particular the checklist: which steps read as done, which as still running, and how a teaching-mode walkthrough
+ * is folded underneath the step that wrote its file.
+ */
 import { describe, it, expect } from "vitest";
 import { buildBlocks } from "./ChatEventRenderer";
 import { ChatEvent, ChatEventType } from "@/lib/types";
@@ -15,11 +21,9 @@ const learn = (content: string, filePath?: string, isComplete = true, concept?: 
 
 const fileWith = (filePath: string, content: string): ChatEvent => ({ type: ChatEventType.FILE_EDIT, content, filePath });
 
-/** A walkthrough body in the shape the model writes it. */
 const walkthrough = (summary: string, parts: [code: string, text: string][] = []) =>
   `<summary>${summary}</summary>\n${parts.map(([code, text]) => `<part><code>${code}</code>${text}</part>`).join("\n")}`;
 
-/** The checklist block's items, which is all these tests care about. */
 function checklist(events: ChatEvent[], isStreaming: boolean) {
   const block = buildBlocks(events, isStreaming).find((b) => b.kind === "checklist");
   return block?.kind === "checklist" ? block.items : [];
@@ -65,7 +69,6 @@ describe("build checklist", () => {
   });
 
   it("carries a step with no file of its own once a later step lands", () => {
-    // You can't be writing App.tsx if the planning step before it hasn't happened.
     expect(statuses([
       todo("Sketching the layout"),
       todo("Wiring up the routes", "src/App.tsx"),
@@ -74,7 +77,6 @@ describe("build checklist", () => {
   });
 
   it("leaves a step whose file never arrived unticked once the response is over", () => {
-    // The honest record of a plan the model announced and didn't finish.
     expect(statuses([
       todo("Creating the navigation bar", "src/Navbar.tsx"),
       todo("Wiring up the routes", "src/App.tsx"),
@@ -157,8 +159,6 @@ describe("teaching mode walkthroughs", () => {
   });
 
   it("leaves the edits card a plain list of files, in one card", () => {
-    // A walkthrough arrives between every pair of files - it must not split "Edited 2 files" into two cards,
-    // and the explaining now happens up in the build steps rather than on these rows.
     const cards = editsBlocks([
       todo("Building the timer logic", "src/hooks/useTimer.ts"),
       todo("Wiring up the routes", "src/App.tsx"),
@@ -207,7 +207,6 @@ describe("teaching mode walkthroughs", () => {
     ]);
 
     expect(step.lessons[0]?.lesson.summary).toBe("Main screen.");
-    // And its lines come from the file it landed under.
     expect(step.lessons[0]?.lesson.parts[0].line).toBe(4);
   });
 
@@ -230,7 +229,6 @@ describe("teaching mode walkthroughs", () => {
       learn(walkthrough("Starts the app."), "src/main.tsx"),
     ], false);
 
-    // One edits card, then one card holding both walkthroughs - the second file must not open a second card.
     expect(blocks.map((block) => block.kind)).toEqual(["edits", "lessons"]);
     expect(lessonBlocks([
       edit("src/App.tsx"),
@@ -250,8 +248,6 @@ describe("teaching mode walkthroughs", () => {
   });
 
   it("marks a walkthrough still being written, tidying its prose but never its quoted code", () => {
-    // The quoted line opens a template string, so it holds the body's only backtick - tidying the whole body as
-    // prose would strip it and the line would no longer match the file.
     const [step] = steps([
       todo("Adding the page styles", "src/theme.ts"),
       fileWith("src/theme.ts", "const styles = `\n  color: red;\n`;"),
@@ -270,7 +266,6 @@ describe("teaching mode walkthroughs", () => {
       learn("Composition means building a screen from smaller pieces.", "src/App.tsx", true, "Composition"),
     ]);
 
-    // The concept is shown as its label, so it isn't repeated at the start of the sentence.
     expect(step.lessons[0]?.lesson).toMatchObject({
       summary: "means building a screen from smaller pieces.",
       parts: [],

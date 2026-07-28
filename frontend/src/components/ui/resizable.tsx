@@ -1,3 +1,9 @@
+/**
+ * Panels a person can resize by dragging the divider between them.
+ *
+ * Handles: the panel group, each panel, and the drag handle. Used for the chat-against-workspace split on a project's
+ * page.
+ */
 import { GripVertical } from "lucide-react";
 import * as ResizablePrimitive from "react-resizable-panels";
 

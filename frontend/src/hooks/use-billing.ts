@@ -1,3 +1,12 @@
+/**
+ * The caller's subscription, today's usage and what their plan allows, as one thing components can read.
+ *
+ * Handles: fetching both, deriving the token quota and the project allowance from them, refreshing after a plan
+ * change, and listing the plan catalogue for the pricing page.
+ *
+ * Usage is given a short staleness window because it changes on every streamed response, so a cached figure goes
+ * stale fast.
+ */
 import { useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, isAuthenticated } from "@/lib/api";
@@ -7,31 +16,17 @@ import type { Subscription, UsageToday } from "@/lib/types";
 export const SUBSCRIPTION_QUERY_KEY = ["subscription"] as const;
 export const USAGE_QUERY_KEY = ["usage", "today"] as const;
 
-/** Usage changes every time a response streams, so a cached figure goes stale fast. */
 const USAGE_STALE_MS = 15_000;
 
 export interface Billing {
   subscription: Subscription | undefined;
   usage: UsageToday | undefined;
-  /** Derived token allowance - null until usage has loaded. */
   quota: Quota | null;
   isLoading: boolean;
-  /** How many projects they own against their plan's ceiling. */
   projects: { used: number; limit: number; isExhausted: boolean } | null;
-  /** Re-reads both after something that could have changed them (a checkout, a new project). */
   refresh: () => Promise<void>;
 }
 
-/**
- * What the signed-in account is allowed to do, and how much of it they've used.
- *
- * <p>Two queries rather than one endpoint returning both: a subscription changes when someone pays, maybe
- * monthly, while usage moves on every single response. Folding them together would mean either re-fetching
- * the plan constantly or showing a stale meter.
- *
- * <p>Safe to call on a signed-out page - both queries are simply disabled, so the pricing page can use the
- * same hook to decide whether to say "Upgrade" or "Sign in".
- */
 export function useBilling(): Billing {
   const queryClient = useQueryClient();
   const signedIn = isAuthenticated();
@@ -76,7 +71,6 @@ export function useBilling(): Billing {
   };
 }
 
-/** The catalogue. Separate from {@link useBilling} because it is public and rarely changes. */
 export function usePlans() {
   return useQuery({
     queryKey: ["plans"],

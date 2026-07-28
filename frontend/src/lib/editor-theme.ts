@@ -1,9 +1,16 @@
+/**
+ * The code editor's colours.
+ *
+ * Handles: the syntax theme, the highlight applied to lines a chat message points at, and the recolouring of the
+ * merge view's diff decorations.
+ *
+ * It reads straight from the app's own CSS custom properties, so the editor always matches the surrounding UI instead
+ * of carrying a separate palette that would drift.
+ */
 import { createTheme } from '@uiw/codemirror-themes';
 import { tags as t } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
 
-// Reads straight from the app's own CSS custom properties, so the editor always
-// matches the surrounding UI instead of carrying its own separate palette.
 export const vibecraftTheme = createTheme({
   theme: 'dark',
   settings: {
@@ -38,8 +45,6 @@ export const vibecraftTheme = createTheme({
   ],
 });
 
-// The line a teaching-mode walkthrough pointed at: a bar in the gutter edge and a wash of the accent, strong enough
-// to find at a glance even over a diff's green inserted-line background.
 export const referencedLineTheme = EditorView.theme({
   '.cm-referencedLine': {
     backgroundColor: 'hsl(var(--primary) / 0.2)',
@@ -47,9 +52,6 @@ export const referencedLineTheme = EditorView.theme({
   },
 });
 
-// Recolors @codemirror/merge's unified diff decorations to the same warm palette -
-// otherwise the library ships its own default red/green that clashes with the rest
-// of the editor. Kept as a separate extension, only added when a diff is showing.
 export const diffViewTheme = EditorView.theme({
   '.cm-deletedLine, .cm-deletedLine .cm-changedText': {
     backgroundColor: 'hsl(6 62% 50% / 0.14)',

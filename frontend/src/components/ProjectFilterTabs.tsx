@@ -1,3 +1,9 @@
+/**
+ * The segmented filter switch above the project list.
+ *
+ * Handles: the filters and their counts, and the selection pill that slides to whichever tab is active - measured
+ * rather than assumed, since tabs size to their labels.
+ */
 import { useLayoutEffect, useRef, useState } from "react";
 import { Pin, Star, type LucideIcon } from "lucide-react";
 import { PROJECT_FILTERS, type ProjectFilter, type ProjectFilterCounts } from "@/lib/project-filters";
@@ -13,10 +19,6 @@ interface ProjectFilterTabsProps {
 
 const ICONS: Partial<Record<NonNullable<ProjectFilter>, LucideIcon>> = { pinned: Pin, starred: Star };
 
-/**
- * Segmented switch styled like the project page's Preview/Code toggle. Tabs size to their labels, so the
- * selection pill is measured and slides to whichever tab is active.
- */
 export function ProjectFilterTabs({ value, onChange, counts, isLoading, className }: ProjectFilterTabsProps) {
     const listRef = useRef<HTMLDivElement>(null);
     const [pill, setPill] = useState<{ left: number; width: number } | null>(null);
@@ -30,7 +32,6 @@ export function ProjectFilterTabs({ value, onChange, counts, isLoading, classNam
             if (tab) setPill({ left: tab.offsetLeft, width: tab.offsetWidth });
         };
         place();
-        // Counts load in after the first render and change tab widths, so re-measure on any resize.
         const observer = new ResizeObserver(place);
         list.querySelectorAll("[role=tab]").forEach((tab) => observer.observe(tab));
         return () => observer.disconnect();

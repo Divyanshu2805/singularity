@@ -1,9 +1,12 @@
+/**
+ * What "delete" means depends on who is asking, so the words do too.
+ *
+ * Handles: the menu label, confirmation title, explanation and result wording for both cases - the owner deleting the
+ * project for everyone, and anyone else only removing it from their own projects while the owner and other members
+ * keep it.
+ */
 import type { ProjectRole } from "./types";
 
-/**
- * What "delete" does depends on who you are, so the words do too. The owner deletes the project for everyone who has
- * it; anyone else only removes it from their own projects, and the owner and other members keep it.
- */
 export function deleteCopy(role: ProjectRole | undefined, projectName: string | undefined) {
   const name = projectName ? `\u201c${projectName}\u201d` : "This project";
   if (role === "OWNER" || role === undefined) {

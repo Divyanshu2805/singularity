@@ -9,11 +9,15 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.Instant;
 
 /**
- * One security-relevant thing that happened to an account: a sign-in, a rejected one, a sign-out, a second factor
- * added. Append-only - nothing updates or deletes these rows.
+ * One security-relevant thing that happened to an account - a sign-in, a rejected one, a sign-out, a second factor
+ * added.
  *
- * <p>{@code userId} is a plain column rather than a relation on purpose: a rejected sign-in often has no user, and
- * the trail must outlive whatever happens to the account it describes.
+ * <p>Handles: the event type, who it concerned, where it came from and any short detail. Append-only: nothing updates
+ * or deletes these rows.
+ *
+ * <p>userId is a plain column rather than a relation on purpose - a rejected sign-in often has no user, and the trail
+ * must outlive whatever happens to the account it describes. The enum column carries no CHECK constraint, so a new
+ * event type needs no migration.
  */
 @Getter
 @Setter
@@ -33,8 +37,6 @@ public class AuthAuditEvent {
     @Column(length = 128)
     String firebaseUid;
 
-    // No CHECK constraint on an enum column: an unmanaged schema-evolution tool never widens one, so a new
-    // value would fail every insert. See docs/schema/'s "Persisted enums" trap.
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "varchar(64)")
     AuthAuditEventType type;

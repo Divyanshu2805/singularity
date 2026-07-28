@@ -20,6 +20,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Puts the project's shape in front of the model before every build turn.
+ *
+ * <p>Handles: fetching the file tree and the project summary from workspace-service and inserting them as a system
+ * message after the main prompt, so the model knows which files exist without being handed their contents - it reads
+ * what it needs with the read tool instead.
+ *
+ * <p>It also passes on any unfinished starter-template problem, telling the model to create the missing scaffolding
+ * itself rather than assuming it is there.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -52,7 +62,6 @@ public class FileTreeContextAdvisor implements StreamAdvisor {
 
         List<Message> allMessages = new ArrayList<>();
 
-        // Add original system message
         if (systemMessage != null) {
             allMessages.add(systemMessage);
         }
@@ -80,7 +89,6 @@ public class FileTreeContextAdvisor implements StreamAdvisor {
                 .build();
     }
 
-
     @Override
     public String getName() {
         return "FileTreeContextAdvisor";
@@ -91,13 +99,4 @@ public class FileTreeContextAdvisor implements StreamAdvisor {
         return 0;
     }
 }
-
-
-
-
-
-
-
-
-
 

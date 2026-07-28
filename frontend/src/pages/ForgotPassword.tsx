@@ -1,3 +1,11 @@
+/**
+ * Asks for a reset link.
+ *
+ * Handles: validating the address, sending the request, and confirming.
+ *
+ * The confirmation reads the same whether or not the address has an account, because the backend deliberately does
+ * not say - so the wording is conditional rather than promising an email that may never come.
+ */
 import { useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { MailCheck } from "lucide-react";
@@ -6,10 +14,6 @@ import { validateEmail } from "@/lib/auth-form";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import { sendResetEmail } from "@/lib/firebase-auth";
 
-/**
- * Asks for a reset link. The confirmation reads the same whether or not the address has an account, because the
- * backend deliberately doesn't say - so the copy says "if", rather than promising an email that may never come.
- */
 export default function ForgotPassword() {
     const navigate = useNavigate();
     const location = useLocation();

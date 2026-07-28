@@ -14,6 +14,17 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Reads and writes preview runners.
+ *
+ * <p>Handles: finding a project's latest preview in any or a given state, listing previews by state, remembering the
+ * hostname a project was last served on so its next preview keeps the same URL, counting a user's previews, and the
+ * status transitions.
+ *
+ * <p>Every transition is a conditional update that applies only from the state it expects and returns how many rows
+ * changed, so the caller learns whether it won a race - the bootstrap finishing against someone pressing Stop -
+ * instead of overwriting the other side.
+ */
 @Repository
 public interface PreviewRepository extends JpaRepository<Preview, Long> {
 
@@ -25,7 +36,6 @@ public interface PreviewRepository extends JpaRepository<Preview, Long> {
 
     List<Preview> findByStatusIn(Collection<PreviewStatus> statuses);
 
-    /** The hostname a project was last served on, so its next preview keeps the same URL. */
     @Query("SELECT p.hostname FROM Preview p WHERE p.project.id = :projectId AND p.hostname IS NOT NULL ORDER BY p.id DESC LIMIT 1")
     Optional<String> findLatestHostname(@Param("projectId") Long projectId);
 
@@ -38,10 +48,6 @@ public interface PreviewRepository extends JpaRepository<Preview, Long> {
             """)
     List<Preview> findStartedByWithProject(@Param("userId") Long userId,
                                            @Param("statuses") Collection<PreviewStatus> statuses);
-
-    // Status transitions. Each applies only from the state it expects and returns how many rows changed, so the
-    // caller learns whether it won a race (the bootstrap finishing vs. someone pressing Stop) instead of
-    // overwriting the other side.
 
     @Modifying(clearAutomatically = true)
     @Transactional

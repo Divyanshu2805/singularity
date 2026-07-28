@@ -1,3 +1,12 @@
+/**
+ * A short interview before a project is created - who it is for, the core action, must-have screens and a style -
+ * with options tailored to the idea.
+ *
+ * Handles: asking for the questions, collecting or skipping each answer, compiling them into a brief, and handing a
+ * spent allowance to the quota dialog rather than showing an error.
+ *
+ * The answers are compiled so the first prompt the AI sees is a clear spec instead of a one-liner.
+ */
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowRight, ArrowUp, Check, Loader2, PenLine, Plus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,10 +16,6 @@ import { cn } from "@/lib/utils";
 
 type Phase = "loading" | "asking" | "review" | "compiling";
 
-// Used only when the backend can't be reached, so the interview still works - untailored, and without the
-// backend's judgement about how many questions this particular idea actually needs. The full beginner set is
-// the right default here: if the server is unreachable the compiled brief will be the local one too, so the
-// answers are all the spec there is.
 const LOCAL_QUESTIONS: ClarifyingQuestion[] = [
   {
     id: "audience",
@@ -42,14 +47,8 @@ const LOCAL_QUESTIONS: ClarifyingQuestion[] = [
   },
 ];
 
-// A beat after picking a single answer before moving on, so the choice registers visually.
 const AUTO_ADVANCE_MS = 260;
 
-/**
- * Mirrors the backend's template brief, for when compiling can't reach the server. Keyed off nothing: the
- * questions are invented per idea, so there are no known ids to map onto named sections - it just restates
- * what was asked and answered.
- */
 function localBrief(idea: string, answers: IdeaAnswer[]) {
   const answered = answers.filter((answer) => answer.answers.length > 0);
   const details = answered
@@ -60,23 +59,11 @@ function localBrief(idea: string, answers: IdeaAnswer[]) {
 
 interface IdeaClarifierProps {
   idea: string;
-  /** Back to editing the idea itself. */
   onEditIdea: () => void;
-  /** Done. `firstMessage` is what the new project's first chat message should be: the compiled brief, or the raw idea if skipped. */
   onComplete: (firstMessage: string) => void;
-  /**
-   * The interview spends tokens, so it can hit a 402. That must stop the flow rather than fall into the
-   * generic-questions fallback below: otherwise someone with no allowance left answers a whole interview and
-   * is only refused once the project tries to build.
-   */
   onQuotaExceeded?: (quota: QuotaDetails) => void;
 }
 
-/**
- * A short interview before a project is created - who it's for, the core action, must-have screens, and a
- * style - with options tailored to the idea. The answers are compiled into a brief, so the first prompt the
- * AI sees is a clear spec instead of a one-liner.
- */
 export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }: IdeaClarifierProps) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [questions, setQuestions] = useState<ClarifyingQuestion[]>([]);
@@ -86,11 +73,8 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
   const [isWritingOwn, setIsWritingOwn] = useState(false);
   const [ownAnswer, setOwnAnswer] = useState("");
   const advanceTimerRef = useRef<number | undefined>(undefined);
-  // When an answer is edited from the review screen, continuing goes straight back there.
   const returnToReviewRef = useRef(false);
 
-  // A ref, not an effect dependency: the dashboard passes a fresh arrow each render, and listing it would re-run
-  // the interview request - spending tokens - every time the parent re-rendered.
   const onQuotaExceededRef = useRef(onQuotaExceeded);
   onQuotaExceededRef.current = onQuotaExceeded;
 
@@ -168,7 +152,6 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
         : [option];
     setSelections((prev) => ({ ...prev, [question.id]: nextSelection }));
 
-    // Single-answer questions move on by themselves; multi-select waits for Continue.
     window.clearTimeout(advanceTimerRef.current);
     if (!question.multiSelect && !isSelected) {
       advanceTimerRef.current = window.setTimeout(next, AUTO_ADVANCE_MS);
@@ -201,7 +184,6 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
     }
   };
 
-  // Number keys pick an option and Enter continues, while nothing editable has focus.
   const keyboardRef = useRef({ phase, options, choose, next });
   keyboardRef.current = { phase, options, choose, next };
   useEffect(() => {
@@ -230,7 +212,6 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
 
   return (
     <div className="mt-7 w-full overflow-hidden rounded-3xl border border-border/80 bg-card/90 text-left shadow-2xl shadow-black/40 backdrop-blur animate-in fade-in-0 zoom-in-95 duration-200">
-      {/* The idea being shaped, with a way back to rewrite it */}
       <div className="flex items-center gap-3 border-b border-border/60 px-5 py-3">
         <Sparkles className="h-4 w-4 shrink-0 text-primary" />
         <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={idea}>
@@ -252,12 +233,10 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
           <div role="status" className="flex flex-col items-center gap-2 py-10 text-center">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
             <p className="text-shimmer mt-1 text-sm">Tailoring a few questions to your idea…</p>
-            {/* The count depends on how much the idea already says, so it isn't known until they come back. */}
             <p className="text-xs text-muted-foreground">Only what's needed, and you can skip any of them.</p>
           </div>
         ) : (
           <>
-            {/* Progress, plus a way out for people who'd rather just start building */}
             <div className="flex items-center justify-between gap-3">
               <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                 {phase === "asking" ? `Question ${index + 1} of ${questions.length}` : "Review"}

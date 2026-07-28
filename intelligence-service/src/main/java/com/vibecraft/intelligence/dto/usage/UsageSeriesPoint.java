@@ -3,19 +3,19 @@ package com.vibecraft.intelligence.dto.usage;
 import java.util.Map;
 
 /**
- * One bar of the usage chart - a day, or an hour on the Today view.
+ * One bar of the usage chart - a day, or an hour on the today view.
  *
- * <p>{@code byFeature} holds only features that were used in that bucket. {@code unattributed} is what the daily
- * counter recorded beyond the ledger - usage from before per-call tracking existed, which can't honestly be
- * assigned to a feature - so {@code total} always matches what the quota counted.
+ * <p>Handles: the bucket's total and its split by feature, which holds only features actually used in that bucket.
+ *
+ * <p>The unattributed figure is what the daily counter recorded beyond the ledger - usage from before per-call
+ * tracking existed, which cannot honestly be assigned to a feature - so the total always matches what the quota
+ * counted.
  */
 public record UsageSeriesPoint(
-        /** ISO date for a day, or "HH:00" for an hour. */
         String key,
         Map<String, Long> byFeature,
         long unattributed,
         long total,
-        /** True when the bucket's total reached the current plan's daily limit (days only). */
         boolean limitReached
 ) {
 }

@@ -9,6 +9,14 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * One turn of the build chat - a user's message, or the assistant's reply to it.
+ *
+ * <p>Handles: which session it belongs to, the role, the tokens it cost, when it happened, and the ordered events
+ * that make up an assistant turn.
+ *
+ * <p>An assistant row carries no text content of its own: its events are the record of what it did.
+ */
 @Entity
 @Table(name = "chat_messages")
 @Getter

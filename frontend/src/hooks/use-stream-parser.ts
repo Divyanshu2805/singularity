@@ -1,10 +1,19 @@
+/**
+ * Parses the model's tagged output into chat events while it is still arriving.
+ *
+ * Handles: recognising each tagged section and its attributes, treating everything outside the tags as message text,
+ * telling the smooth reveal which ranges are readable text, and where it must stop so a half-arrived tag is never
+ * shown.
+ *
+ * It is deliberately lenient about a missing closing tag on the last element, because the stream may still be
+ * mid-tag.
+ */
 import { useMemo } from 'react';
 import { ChatEvent, ChatEventType } from '@/lib/types';
 import type { TextRange } from './use-smooth-stream';
 
 const TAG_NAMES = ["message", "file", "delete", "tool", "todo", "learn"];
 
-// Lenient about a missing closing tag on the last element, since the stream may still be mid-tag.
 const PARSE_REGEX = /<(tool|message|file|delete|todo|learn)\b([^>]*)>([\s\S]*?)(<\/\1>|$)/gi;
 const TAG_REGEX = /<(message|file|delete|tool|todo|learn)\b[^>]*>|<\/(message|file|delete|tool|todo|learn)>/gi;
 
@@ -31,12 +40,9 @@ export function parseStreamEvents(buffer: string): ChatEvent[] {
         events.push({ ...base, type: ChatEventType.TOOL_LOG, metadata: readAttr(attrs, "args") });
         break;
       case "todo":
-        // filePath is how the step gets ticked off once that file's <file> tag completes.
         events.push({ ...base, type: ChatEventType.TODO, filePath: readAttr(attrs, "path") });
         break;
       case "learn":
-        // The file the walkthrough explains; its body is laid out by parseLesson. `concept` on the tag itself only
-        // exists on one-sentence lessons from before walkthroughs.
         events.push({
           ...base,
           type: ChatEventType.LEARN,
@@ -52,10 +58,6 @@ export function parseStreamEvents(buffer: string): ChatEvent[] {
   return events;
 }
 
-/**
- * Only `<message>` bodies are ever shown as text - tags, file/tool bodies and gaps never are. That includes `<learn>`:
- * a walkthrough sits folded until it's opened, so typing it out would only hold back the files after it.
- */
 export function findVisibleRanges(raw: string): TextRange[] {
   const ranges: TextRange[] = [];
   let open: { name: string; bodyStart: number } | null = null;
@@ -76,7 +78,6 @@ export function findVisibleRanges(raw: string): TextRange[] {
   return ranges;
 }
 
-/** Stops short of a half-arrived tag (e.g. a trailing `</mess`) so it never flashes as text. */
 export function findSafeEnd(raw: string): number {
   const lt = raw.lastIndexOf("<");
   if (lt === -1) return raw.length;

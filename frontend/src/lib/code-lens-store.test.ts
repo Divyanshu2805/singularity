@@ -1,3 +1,12 @@
+/**
+ * Covers the code-lens thread: no thread until a selection opens one, the answer building up as it arrives, a stream
+ * that produces nothing dropping its placeholder, every turn stamped with a time, and earlier turns surviving a new
+ * selection so the thread is the project's history.
+ *
+ * Also covers the selection rules - the snippet attaches to the turn that introduced it and not to follow-ups about
+ * the same block - and that a failed or partial stream keeps what arrived rather than losing the conversation around
+ * it.
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 
@@ -31,7 +40,6 @@ const otherSelection: CodeSelection = {
   endLine: 12,
 };
 
-/** The callbacks the store handed to the last `streamCodeInsight` call, for driving the stream by hand. */
 type Stream = {
   kind: "explain" | "ask";
   body: Record<string, unknown>;
@@ -49,14 +57,12 @@ function lastStream(): Stream {
   return { kind, body, chunk: onChunk, done: onComplete, fail: onError };
 }
 
-/** Runs a whole answer through in one go, the way a completed stream would arrive. */
 function answer(text: string) {
   const stream = lastStream();
   act(() => stream.chunk(text));
   act(() => stream.done());
 }
 
-/** Lets the queued `getCodeNotes`/`saveCodeNote` promises settle before the next assertion. */
 const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve(); }); };
 
 let savedNoteId = 0;
@@ -68,12 +74,10 @@ describe("codeLens thread", () => {
     vi.clearAllMocks();
     sessionStorage.clear();
     vi.mocked(api.streamCodeInsight).mockImplementation((() => () => {}) as typeof api.streamCodeInsight);
-    // No saved notes unless a test says otherwise; the writes all succeed quietly.
     vi.mocked(api.getCodeNotes).mockResolvedValue([]);
     vi.mocked(api.saveCodeNote).mockImplementation(async (_projectId, note) => ({ id: ++savedNoteId, ...note }));
     vi.mocked(api.deleteCodeNote).mockResolvedValue(undefined);
     vi.mocked(api.clearCodeNotes).mockResolvedValue(undefined);
-    // Threads are keyed by project in a module-level map, so each test gets its own.
     projectId = `project-${Math.random()}`;
   });
 
@@ -86,8 +90,6 @@ describe("codeLens thread", () => {
     expect(result.current?.selection).toEqual(selection);
   });
 
-  // --- Streaming ---
-
   it("builds the answer up as it arrives rather than showing it all at once", () => {
     const { result } = renderHook(() => useCodeLens(projectId));
     act(() => codeLens.open(projectId, selection, { explain: true }));
@@ -95,7 +97,6 @@ describe("codeLens thread", () => {
     const stream = lastStream();
     expect(stream.kind).toBe("explain");
 
-    // The placeholder is there, empty and marked streaming, before any text lands.
     expect(result.current?.turns.at(-1)).toMatchObject({ role: "assistant", content: "", isStreaming: true });
 
     act(() => stream.chunk("It stores "));
@@ -115,7 +116,6 @@ describe("codeLens thread", () => {
 
     act(() => lastStream().done());
 
-    // Just the "Explain this" turn - no empty reply bubble left behind.
     expect(result.current?.turns.map((t) => t.role)).toEqual(["user"]);
   });
 
@@ -130,8 +130,6 @@ describe("codeLens thread", () => {
     }
   });
 
-  // --- One thread per project, not per selection ---
-
   it("keeps earlier turns when a different block is selected, so the thread is the project's history", () => {
     const { result } = renderHook(() => useCodeLens(projectId));
     act(() => codeLens.open(projectId, selection, { explain: true }));
@@ -142,7 +140,6 @@ describe("codeLens thread", () => {
     answer("That's the catch-all route.");
 
     expect(result.current?.turns).toHaveLength(4);
-    // Both blocks are in the transcript, quoted on the turns that asked about them; neither is still pending.
     expect(result.current?.turns.map((turn) => turn.selection)).toEqual([
       selection, undefined, otherSelection, undefined,
     ]);
@@ -168,10 +165,8 @@ describe("codeLens thread", () => {
 
     act(() => codeLens.ask(projectId, "What does this do?"));
 
-    // The block rode on the question it was asked with...
     expect(lastStream().body).toMatchObject({ code: selection.code, path: selection.path });
     expect(result.current?.turns[0].selection).toEqual(selection);
-    // ...and is no longer attached to whatever gets typed next - the "Asking about" chip goes away.
     expect(result.current?.selection).toBeNull();
   });
 
@@ -220,7 +215,6 @@ describe("codeLens thread", () => {
     act(() => codeLens.close(projectId));
     expect(result.current?.isOpen).toBe(false);
 
-    // Reopened from the toolbar: the block that was never asked about is still the pending subject.
     act(() => codeLens.reopen(projectId));
     expect(result.current?.isOpen).toBe(true);
     expect(result.current?.selection).toEqual(selection);
@@ -260,7 +254,6 @@ describe("codeLens thread", () => {
     const stream = lastStream();
     expect(stream.kind).toBe("ask");
     expect(stream.body.question).toBe("What does the 0 do?");
-    // The question just asked isn't part of the history it's sent with.
     expect(stream.body.history).toEqual([
       { role: "user", content: "Explain this" },
       { role: "assistant", content: "It stores the count across renders." },
@@ -278,7 +271,6 @@ describe("codeLens thread", () => {
 
     expect(result.current?.error).toBe("Rate limited");
     expect(result.current?.isBusy).toBe(false);
-    // Explain + answer + the question that failed; the empty reply placeholder is dropped.
     expect(result.current?.turns.map((t) => t.role)).toEqual(["user", "assistant", "user"]);
 
     act(() => codeLens.dismissError(projectId));
@@ -294,7 +286,6 @@ describe("codeLens thread", () => {
     act(() => stream.chunk("It stores the co"));
     act(() => stream.fail(new Error("Connection lost")));
 
-    // Half an answer is more use than none, so what arrived stays on screen with the error beside it.
     expect(result.current?.turns.at(-1)?.content).toBe("It stores the co");
     expect(result.current?.error).toBe("Connection lost");
   });
@@ -309,8 +300,6 @@ describe("codeLens thread", () => {
     expect(result.current?.turns).toEqual([]);
   });
 
-  // --- A selection is optional ---
-
   it("answers a question about the project with nothing selected", () => {
     const { result } = renderHook(() => useCodeLens(projectId));
     act(() => codeLens.reopen(projectId));
@@ -319,7 +308,6 @@ describe("codeLens thread", () => {
 
     const stream = lastStream();
     expect(stream.kind).toBe("ask");
-    // No selection fields at all - the backend treats that as a question about the whole project.
     expect(stream.body).toEqual({ question: "Where is routing set up?", history: [] });
     expect(result.current?.turns.at(-2)).toMatchObject({ role: "user", content: "Where is routing set up?" });
     expect(result.current?.turns.at(-2)?.selection).toBeUndefined();
@@ -348,8 +336,6 @@ describe("codeLens thread", () => {
     expect(history[1].content).toHaveLength(4000);
   });
 
-  // --- Kept on the server, per user ---
-
   it("loads the saved thread from the server when the panel opens", async () => {
     vi.mocked(api.getCodeNotes).mockResolvedValue([
       { id: 11, question: "Explain this", answer: "It stores the count.", selection, createdAt: "2026-09-16T04:00:00Z" },
@@ -369,7 +355,6 @@ describe("codeLens thread", () => {
       ["user", "What does the 0 do?"],
       ["assistant", "The starting value."],
     ]);
-    // The block a question was about comes back with it, quoted on the question.
     expect(result.current?.turns[0].selection).toEqual(selection);
     expect(result.current?.turns[2].selection).toBeUndefined();
   });
@@ -383,7 +368,6 @@ describe("codeLens thread", () => {
     expect(result.current?.turns).toHaveLength(2);
     const stored = Object.keys(sessionStorage).map((key) => sessionStorage.getItem(key) ?? "");
     expect(stored.join("")).not.toContain("It stores the count.");
-    // What is kept is the panel's own state, and even that is keyed by the signed-in user.
     expect(Object.keys(sessionStorage)).toEqual([`code_notes_view_7_${projectId}`]);
   });
 
@@ -417,7 +401,7 @@ describe("codeLens thread", () => {
     act(() => codeLens.open(projectId, selection, { explain: false }));
     first.unmount();
 
-    forgetLoadedThreadsForTests(); // what a reload does to module state
+    forgetLoadedThreadsForTests();
     vi.mocked(api.getCodeNotes).mockResolvedValue([
       { id: 21, question: "Explain this", answer: "It stores the count.", selection },
     ]);
@@ -443,11 +427,8 @@ describe("codeLens thread", () => {
     const { result } = renderHook(() => useCodeLens(projectId));
     act(() => codeLens.restore(projectId));
     expect(result.current).toBeNull();
-    // Nothing is fetched either: a closed panel shouldn't cost a request on every project you open.
     expect(api.getCodeNotes).not.toHaveBeenCalled();
   });
-
-  // --- Deleting ---
 
   it("wipes one exchange - the question and its answer together - and leaves the rest", async () => {
     vi.mocked(api.getCodeNotes).mockResolvedValue([
@@ -491,7 +472,6 @@ describe("codeLens thread", () => {
     act(() => codeLens.deleteExchange(projectId, "note-41"));
     await flush();
 
-    // The note is still on the server, so it's still shown - with the failure said out loud.
     expect(result.current?.error).toBe("Couldn't delete this note");
     expect(result.current?.turns).toHaveLength(2);
   });
@@ -510,8 +490,6 @@ describe("codeLens thread", () => {
     expect(api.streamCodeInsight).toHaveBeenCalled();
   });
 
-  // --- Signing out ---
-
   it("drops the thread when the account signs out, so the next one can't read it", async () => {
     const { result } = renderHook(() => useCodeLens(projectId));
     act(() => codeLens.open(projectId, selection, { explain: true }));
@@ -519,8 +497,6 @@ describe("codeLens thread", () => {
     await flush();
     expect(result.current?.turns).toHaveLength(2);
 
-    // What signing out does. The page reloads too, but this must hold without that: the map lives for the
-    // life of the page, and signing out used to be a route change that never ended one.
     act(() => clearSignedInState());
 
     expect(result.current).toBeNull();
@@ -538,7 +514,6 @@ describe("codeLens thread", () => {
     act(() => clearSignedInState());
     vi.mocked(api.getCodeNotes).mockResolvedValue([]);
 
-    // The next account opens the same project: the fetch runs again, under their own token.
     const { result } = renderHook(() => useCodeLens(projectId));
     act(() => codeLens.reopen(projectId));
     await flush();

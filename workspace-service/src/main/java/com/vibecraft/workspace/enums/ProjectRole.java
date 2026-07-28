@@ -7,6 +7,15 @@ import java.util.Set;
 
 import static com.vibecraft.workspace.enums.ProjectPermission.*;
 
+/**
+ * What a collaborator may do on a project.
+ *
+ * <p>Handles: the three roles and the permissions each one grants - owner everything, editor everything but member
+ * management, viewer read-only.
+ *
+ * <p>This is the source of truth and the enum Hibernate persists; common-lib carries a wire copy for services that
+ * have no membership table of their own, and the two mappings must stay identical.
+ */
 @RequiredArgsConstructor
 @Getter
 public enum ProjectRole {

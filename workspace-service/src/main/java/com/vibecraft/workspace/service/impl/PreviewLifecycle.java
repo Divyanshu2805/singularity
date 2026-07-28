@@ -11,19 +11,21 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 
 /**
- * Ending a preview's runner, the one way: flip its status first, and only if that flip actually happened, take down its route
- * and release its pod. Shared by the service (Stop), the bootstrapper (a start that failed) and the reaper (idle).
+ * Ending a preview's runner, the one way.
  *
- * <p>Cleanup failures are logged, not thrown. The row already says the preview is over, a leftover route expires on
- * its own ({@code preview.route-ttl}), and a leftover pod is deleted by the reaper's orphan sweep - so an unreachable
- * cluster at this moment can't strand anything for good.
+ * <p>Handles: flipping the status first and, only if that flip actually happened, ending every session on it, taking
+ * down its route and releasing its pod. Shared by Stop, by a start that failed, and by the reaper.
+ *
+ * <p>Cleanup failures are logged rather than thrown: the row already says the preview is over, a leftover route
+ * expires on its own, and a leftover pod is deleted by the reaper's orphan sweep - so an unreachable cluster at this
+ * moment cannot strand anything for good. A failure keeps the tail of the runner's output on the row, because the pod
+ * is gone by the time anyone reads it.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class PreviewLifecycle {
 
-    /** Kept on the row so a failure is readable after the pod is gone; long enough for a useful npm error. */
     static final int MAX_FAILURE_LOG_CHARS = 8_000;
 
     private final PreviewRepository previewRepository;
@@ -31,19 +33,16 @@ public class PreviewLifecycle {
     private final PreviewRouter router;
     private final PreviewRunnerPool runnerPool;
 
-    /** Stops a CREATING or RUNNING preview. Returns false if it had already ended. */
     public boolean terminate(Preview preview, String reason) {
         if (previewRepository.markTerminated(preview.getId(), reason, Instant.now()) == 0) {
             return false;
         }
         log.info("Preview {} on {} stopped: {}", preview.getId(), preview.getHostname(), reason);
-        // A runner that has ended leaves nobody with a preview open on it.
         sessionRepository.endAllForPreview(preview.getId(), reason, false, Instant.now());
         cleanUp(preview);
         return true;
     }
 
-    /** Fails a preview that was still starting. A no-op if it was stopped in the meantime - Stop already cleaned up. */
     public void fail(Preview preview, String detail, String failureLog) {
         if (previewRepository.markFailed(preview.getId(), detail, tail(failureLog), Instant.now()) == 0) {
             return;

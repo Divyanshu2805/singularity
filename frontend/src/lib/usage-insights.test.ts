@@ -1,3 +1,8 @@
+/**
+ * Covers how usage is arranged for the chart: every bucket present so a quiet day is still a bar, each bar's segments
+ * summing to that bucket's total, shares that do not read wrong after rounding, and date labels that do not shift a
+ * day in another timezone.
+ */
 import { describe, it, expect } from "vitest";
 import {
   bucketLabel,
@@ -59,7 +64,6 @@ describe("featuresInUse", () => {
 
 describe("bucketLabel", () => {
   it("does not shift a calendar day into the previous one", () => {
-    // new Date("2026-09-16") would be UTC midnight - the 15th for anyone west of Greenwich.
     expect(bucketLabel({ key: "2026-09-16" }, "30d")).toContain("16");
   });
 
@@ -87,7 +91,6 @@ describe("formatShare", () => {
 
 describe("per-request and output figures", () => {
   it("averages attributed tokens only, so earlier activity doesn't inflate it", () => {
-    // 3,000 + 7,000 attributed over 5 requests - not the 12,000 total, which includes 2,000 of earlier activity.
     expect(tokensPerRequest(insights().totals)).toBe(2_000);
     expect(tokensPerRequest({ inputTokens: 0, outputTokens: 0, totalTokens: 500, requests: 0 })).toBe(0);
   });

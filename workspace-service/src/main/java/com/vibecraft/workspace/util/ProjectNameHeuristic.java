@@ -7,12 +7,14 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Turns the description a user types on the dashboard into a short plain name (e.g. "Habit tracker with daily
- * streaks"), without an AI call. This is exactly the deterministic fallback the original monolith's
- * {@code llm.ProjectNameGenerator} fell back to when its AI call failed - here it is workspace-service's *only*
- * naming strategy: an AI-quality name is intelligence-service's concern ({@code POST /internal/v1/project-names},
- * which nothing calls yet), and this service deliberately carries no Spring AI/OpenRouter dependency. See
- * docs/migration/'s Phase 2 entry.
+ * Turns the description a user types on the dashboard into a short plain project name.
+ *
+ * <p>Handles: stripping the leading filler people write ("can you build me a..."), cutting at the first clause
+ * boundary, capping the word count, dropping a dangling connector word so the name does not end mid-phrase,
+ * capitalising it and capping its length - falling back to a generic name if nothing usable is left.
+ *
+ * <p>This is workspace-service's only naming strategy and makes no AI call: an AI-quality name is
+ * intelligence-service's concern, and this service deliberately carries no model dependency.
  */
 public final class ProjectNameHeuristic {
 
@@ -26,7 +28,6 @@ public final class ProjectNameHeuristic {
             Pattern.CASE_INSENSITIVE);
     private static final Pattern DESCRIPTION_BOUNDARY = Pattern.compile(
             "\\s+(?:that|which|where|so that)\\s+|[,.;:!?\\n]", Pattern.CASE_INSENSITIVE);
-    // A name shouldn't end mid-phrase, e.g. "Todo app with drag and".
     private static final Set<String> TRAILING_STOPWORDS = Set.of(
             "and", "or", "with", "for", "to", "of", "in", "on", "the", "a", "an", "my", "our", "using", "by");
 
@@ -41,7 +42,6 @@ public final class ProjectNameHeuristic {
         return name.isBlank() ? FALLBACK_NAME : name;
     }
 
-    /** Caps the word count, drops dangling connector words, capitalizes the first letter, and caps the length. */
     private static String finish(List<String> words) {
         List<String> kept = new ArrayList<>(words.subList(0, Math.min(words.size(), MAX_WORDS)));
         while (!kept.isEmpty() && TRAILING_STOPWORDS.contains(kept.getLast().toLowerCase())) {

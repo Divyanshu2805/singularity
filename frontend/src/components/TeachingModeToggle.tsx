@@ -1,3 +1,9 @@
+/**
+ * The teaching-mode switch.
+ *
+ * Handles: the pressed state and its explanation - lit while on, when each file the AI writes comes with a
+ * plain-English note on the idea it uses.
+ */
 import { GraduationCap } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -9,7 +15,6 @@ interface TeachingModeToggleProps {
   className?: string;
 }
 
-/** Lit while on: each file the AI writes then comes with a one-sentence, plain-English note on the idea it uses. */
 export function TeachingModeToggle({ enabled, onChange, size = "sm", className }: TeachingModeToggleProps) {
   return (
     <Tooltip>

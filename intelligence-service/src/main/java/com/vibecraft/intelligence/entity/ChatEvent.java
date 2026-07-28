@@ -5,6 +5,22 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+/**
+ * One step of an assistant turn: a thought, a message, a checklist item, a file written or deleted, a lesson, or a
+ * tool log.
+ *
+ * <p>Handles: its type and order within the turn, its content, the file it concerns, any metadata (a lesson's concept
+ * name, a tool's arguments), and for a file edit the version that file had immediately before this turn saved over
+ * it.
+ *
+ * <p>The previous version is stored because object storage keeps only a file's current version: without it, the last
+ * turn's diff lived only in the browser and was gone after signing out.
+ *
+ * <p>The type column is declared with an explicit column definition so Hibernate does not generate a check constraint
+ * listing today's enum values. Such a constraint is created once and never widened, so adding an event type left
+ * every insert of the new value failing - and because a turn's events are saved as one batch, a single rejected row
+ * took the whole conversation with it while the generated files had already been written.
+ */
 @Entity
 @Table(name = "chat_events")
 @Getter
@@ -23,14 +39,6 @@ public class ChatEvent {
     @JoinColumn(nullable = false)
     ChatMessage chatMessage;
 
-    /**
-     * An explicit {@code columnDefinition} stops Hibernate generating a {@code CHECK type IN (...)} constraint
-     * listing today's enum values. Under {@code ddl-auto: update} Hibernate creates such a constraint once and
-     * then never alters it, so adding a value to {@link ChatEventType} left every insert of the new value
-     * failing against the old constraint - and because events are saved as one batch, a single new-value row
-     * rejected the whole conversation, losing the entire chat history for that turn while the generated files
-     * had already been written. Found 2026-09-15 when {@code TODO} was added for the build checklist.
-     */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "varchar(255)")
     ChatEventType type;
@@ -46,12 +54,6 @@ public class ChatEvent {
     @Column(columnDefinition = "text")
     String metadata;
 
-    /**
-     * {@code FILE_EDIT} only: the file as it was just before this turn saved over it - empty for a file the turn
-     * created. It's what the editor's diff toggle compares against, and storage keeps only a file's current version,
-     * so without this the last turn's diff lived only in the browser and was gone after signing out. Null for events
-     * saved before this existed, or when the old version couldn't be read.
-     */
     @Column(columnDefinition = "text")
     String previousContent;
 

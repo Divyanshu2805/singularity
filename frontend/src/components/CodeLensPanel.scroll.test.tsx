@@ -1,11 +1,15 @@
+/**
+ * Covers that the notes transcript follows an answer as it streams.
+ *
+ * jsdom has no layout, so the scroll container is given real numbers by hand: its height grows as the reply does, and
+ * the scroll call records where it was sent.
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render } from "@testing-library/react";
 
 vi.mock("@/lib/api", () => ({
   api: {
     streamCodeInsight: vi.fn(),
-    // The panel loads the caller's saved notes when it opens; this test is about what scrolling does to a
-    // live answer, so it starts from an empty thread and saves nothing.
     getCodeNotes: vi.fn(async () => []),
     saveCodeNote: vi.fn(async () => ({ id: 1, question: "", answer: "" })),
     deleteCodeNote: vi.fn(async () => {}),
@@ -19,13 +23,8 @@ import { CodeLensPanel } from "./CodeLensPanel";
 import { codeLens, forgetLoadedThreadsForTests } from "@/lib/code-lens-store";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-/**
- * The notes transcript follows an answer as it streams. jsdom has no layout, so the scroll container is given
- * real numbers by hand: `scrollHeight` grows as the reply does, and `scrollTo` records where it was sent.
- */
 const SELECTION = { path: "src/App.tsx", code: "const a = 1;", startLine: 1, endLine: 1 };
 
-/** The panel's header buttons use Tooltip, which needs its provider above them. */
 const renderPanel = (projectId: string) =>
   render(
     <TooltipProvider>
@@ -36,7 +35,6 @@ const renderPanel = (projectId: string) =>
 let scrolledTo: number[] = [];
 let scrollHeight = 0;
 
-/** The chunk callback the store handed to the last `streamCodeInsight` call. */
 const lastChunkCallback = () => {
   const calls = vi.mocked(api.streamCodeInsight).mock.calls;
   return calls[calls.length - 1][3] as (text: string) => void;
@@ -48,7 +46,6 @@ function trackScrolling(container: HTMLElement) {
   Object.defineProperty(el, "clientHeight", { configurable: true, value: 400 });
   el.scrollTo = ((options: ScrollToOptions) => {
     scrolledTo.push(options.top ?? 0);
-    // A real container ends up at the bottom, which is what keeps it following.
     Object.defineProperty(el, "scrollTop", { configurable: true, value: (options.top ?? 0) - 400 });
   }) as HTMLElement["scrollTo"];
   return el;
@@ -68,8 +65,6 @@ describe("code notes following a streaming answer", () => {
 
   const startAnswer = async (container: HTMLElement) => {
     act(() => codeLens.open(projectId, SELECTION, { explain: true }));
-    // Opening also fetches the saved notes; letting that settle first keeps the scrolling assertions about
-    // the streamed answer alone.
     await act(async () => { await Promise.resolve(); });
     const el = trackScrolling(container);
     scrolledTo = [];
@@ -80,7 +75,6 @@ describe("code notes following a streaming answer", () => {
     const { container } = renderPanel(projectId);
     const { chunk } = await startAnswer(container);
 
-    // Three chunks of one answer: the turn count never changes, which is all the old effect watched.
     act(() => {
       scrollHeight = 900;
       chunk("It renders ");
@@ -97,7 +91,6 @@ describe("code notes following a streaming answer", () => {
     const { container } = renderPanel(projectId);
     const { el, chunk } = await startAnswer(container);
 
-    // The reader scrolls back up to re-read something.
     Object.defineProperty(el, "scrollTop", { configurable: true, value: 0 });
     act(() => el.dispatchEvent(new Event("scroll", { bubbles: true })));
 
@@ -108,7 +101,6 @@ describe("code notes following a streaming answer", () => {
     });
     expect(scrolledTo).toEqual([]);
 
-    // Back at the bottom, and it follows again.
     Object.defineProperty(el, "scrollTop", { configurable: true, value: 1600 });
     act(() => el.dispatchEvent(new Event("scroll", { bubbles: true })));
     act(() => {

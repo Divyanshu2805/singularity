@@ -3,18 +3,17 @@ package com.vibecraft.intelligence.enums;
 /**
  * What an AI call was for, so usage can be broken down by where the tokens went.
  *
- * <p>Persisted on {@code UsageEvent.feature} as a plain String of its name - see that field for why an enum column
- * mapping would make adding a value here break inserts, the way adding {@code ChatEventType.TODO} once did.
+ * <p>Handles: naming each one - a build turn, the automatic retry after a turn announced an edit and delivered none,
+ * the code lens, and the pre-project idea interview. Project naming is part of the recorded vocabulary but nothing
+ * writes it today: project names come from a local heuristic with no model call.
+ *
+ * <p>Persisted as a plain string of the name - see the usage-event entity for why an enum column mapping would make
+ * adding a value here break every insert of it.
  */
 public enum UsageFeature {
-    /** A build turn in the project chat. */
     BUILD,
-    /** The automatic second attempt after a turn announced an edit and delivered none. */
     BUILD_RETRY,
-    /** ExplainLLM - explaining or answering questions about code. */
     EXPLAIN,
-    /** The pre-project idea interview: its questions and the compiled brief. */
     IDEA_INTERVIEW,
-    /** Naming a new project from its idea. */
     PROJECT_NAMING
 }

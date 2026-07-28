@@ -9,6 +9,12 @@ import org.mapstruct.Mapping;
 
 import java.time.Instant;
 
+/**
+ * Turns project rows into the shapes the app reads.
+ *
+ * <p>Handles: the full project response and the dashboard summary, each taking the caller's role - and the summary
+ * their pin and star markers - alongside the row, since those are per-member rather than per-project.
+ */
 @Mapper(componentModel = "spring")
 public interface ProjectMapper {
 

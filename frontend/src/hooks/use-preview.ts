@@ -1,3 +1,12 @@
+/**
+ * A project's live preview: its state, and the actions that change it.
+ *
+ * Handles: polling the preview, starting, restarting and stopping it, and keeping the usage meter and the
+ * cross-project preview list in step afterwards.
+ *
+ * Polling is fast while starting, so the checklist ticks along, and slow once running, where each poll is just "still
+ * here". The slow poll is also the heartbeat: the server stops a preview nobody has asked about for long enough.
+ */
 import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -7,9 +16,7 @@ import type { Preview } from "@/lib/types";
 export const previewQueryKey = (projectId: string) => ["preview", projectId] as const;
 export const MY_PREVIEWS_QUERY_KEY = ["previews", "mine"] as const;
 
-/** Fast while starting, so the checklist ticks along; slow once running, where each poll is just "still here". */
 const STARTING_POLL_MS = 2_000;
-/** Also the heartbeat: the server stops a preview nobody has asked about for 30 minutes. */
 const RUNNING_POLL_MS = 60_000;
 
 export interface ProjectPreview {
@@ -20,15 +27,10 @@ export interface ProjectPreview {
   stop: () => Promise<void>;
   isStarting: boolean;
   isStopping: boolean;
-  /** The last start/restart failure (a 402 plan limit, a 503 with no free runner) until the next attempt. */
   startError: unknown;
   resetStartError: () => void;
 }
 
-/**
- * A project's live preview. Polls only while the Preview tab is showing (`isActive`) - that polling doubles as the
- * heartbeat, so a preview left unviewed is stopped by the server after its idle timeout and frees the runner.
- */
 export function useProjectPreview(projectId: string, isActive: boolean): ProjectPreview {
   const queryClient = useQueryClient();
   const query = useQuery({
@@ -48,7 +50,6 @@ export function useProjectPreview(projectId: string, isActive: boolean): Project
     (preview?: Preview) => {
       if (preview) queryClient.setQueryData(previewQueryKey(projectId), preview);
       else void queryClient.invalidateQueries({ queryKey: previewQueryKey(projectId) });
-      // The running count is part of today's usage and of the plan-limit list.
       void queryClient.invalidateQueries({ queryKey: USAGE_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: MY_PREVIEWS_QUERY_KEY });
     },

@@ -1,3 +1,9 @@
+/**
+ * The Share button, with collaborator avatars, plus its panel.
+ *
+ * Handles: listing members and their roles, inviting someone by email, changing a role and removing a member - with
+ * the controls hidden for a caller who cannot manage members.
+ */
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, Link2, Loader2, Lock, Mail, ShieldCheck, UserPlus, UserX } from "lucide-react";
@@ -11,13 +17,11 @@ import { cn, generateGradient } from "@/lib/utils";
 
 interface ShareDialogProps {
     projectId: string;
-    /** Only owners can invite or change roles; everyone else gets a read-only member list. */
     canManageMembers?: boolean;
 }
 
 const ROLE_LABELS: Record<ProjectRole, string> = { OWNER: "Owner", EDITOR: "Can edit", VIEWER: "Can view" };
 
-// Owner isn't offered: the backend doesn't enforce a single owner per project.
 const ROLE_OPTIONS: { value: Exclude<ProjectRole, "OWNER">; description: string }[] = [
     { value: "EDITOR", description: "Build with AI, edit, and delete the project" },
     { value: "VIEWER", description: "See the code only" },
@@ -28,7 +32,6 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const initialOf = (member: ProjectMember) => (member.name || member.username).charAt(0).toUpperCase();
 
-/** A role choice with a one-line explanation. Only the label is shown in the closed picker. */
 function RoleOption({ value, description }: { value: Exclude<ProjectRole, "OWNER">; description: string }) {
     return (
         <SelectPrimitive.Item
@@ -46,7 +49,6 @@ function RoleOption({ value, description }: { value: Exclude<ProjectRole, "OWNER
     );
 }
 
-/** The Share button (with collaborator avatars) plus its panel, anchored under the button. */
 export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogProps) {
     const { toast } = useToast();
     const [isOpen, setIsOpen] = useState(false);
@@ -67,7 +69,6 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
             .then(setMembers)
             .catch((error) => console.error("Failed to load members", error));
 
-    // Loaded up front (not just on open) so the button can show who has access; refreshed on each open.
     useEffect(() => {
         let isCancelled = false;
         if (members.length === 0) setIsLoadingMembers(true);
@@ -86,7 +87,6 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [projectId, isOpen]);
 
-    // Owner first, then you, then everyone else by name.
     const sortedMembers = useMemo(
         () =>
             [...members].sort((a, b) => {
@@ -196,7 +196,6 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
             <PopoverContent
                 align="end"
                 sideOffset={8}
-                // Radix focuses the first button ("Copy link") by default, which reads as a stray highlight.
                 onOpenAutoFocus={(e) => {
                     e.preventDefault();
                     inviteInputRef.current?.focus();
@@ -231,7 +230,6 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
                         className="px-4 pb-4"
                     >
                         <div className="flex gap-2">
-                            {/* Email and the access it gets live in one field, so the pairing is obvious */}
                             <div
                                 className={cn(
                                     "flex h-9 min-w-0 flex-1 items-center rounded-lg border bg-background/60 pl-2.5 pr-0.5 transition-[border-color,box-shadow] duration-150 focus-within:ring-[3px]",
@@ -393,7 +391,6 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
                     </div>
                 </div>
 
-                {/* General access: projects are private to their members */}
                 <div className="flex items-center gap-2.5 border-t border-border/60 bg-panel/60 px-4 py-2.5">
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted/60">
                         <Lock className="h-3.5 w-3.5 text-muted-foreground" />

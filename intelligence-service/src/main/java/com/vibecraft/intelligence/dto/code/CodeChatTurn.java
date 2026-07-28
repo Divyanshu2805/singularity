@@ -4,11 +4,14 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * One earlier turn of a code conversation, replayed by the client on each request. The thread is deliberately
- * never stored server-side (see {@code CodeInsightService}), so the client is the only place it lives.
+ * One earlier turn of a code conversation, replayed by the client on each request.
  *
- * <p>{@code role} is validated rather than trusted: it goes straight into the model's message list, and a
- * client sending "system" could otherwise smuggle in instructions.
+ * <p>Handles: the role and the text. The thread is deliberately never stored server-side, so the client is the only
+ * place it lives.
+ *
+ * <p>The role is validated by value rather than trusted: it goes straight into the model's message list, and a client
+ * sending "system" could otherwise smuggle in instructions. Any new endpoint that replays client-supplied history
+ * needs the same by-value check, not just a length cap.
  */
 public record CodeChatTurn(
 

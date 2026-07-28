@@ -15,11 +15,12 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Claiming a runner pod once failed with HTTP 503 because kubernetes-client 6.13.4 can't serialize a Pod a real API
- * server returned under Boot 4.1's Jackson 2.21.4: any non-empty {@code additionalProperties} map (a pod's
- * {@code managedFields}, or status fields the 6.13.4 model predates) throws {@code "keySerializer" is null}.
- * Clearing {@code managedFields} alone isn't enough - the fixture below is a real pod from a v1.34 kind cluster,
- * and still fails to serialize with them removed - so the claim sends a minimal patch instead.
+ * Covers that claiming a runner pod sends a minimal patch rather than writing back a pod fetched from the API server.
+ *
+ * <p>The fixture is a real pod from a current kind cluster. Writing it back fails to serialize under this client and
+ * Jackson version - any non-empty additional-properties map throws - and clearing the obvious offending field is not
+ * enough, which is why the claim patches instead. The patch must also carry the resource version as a precondition,
+ * so two claims cannot land on the same pod.
  */
 class PreviewRunnerPoolTest {
 
@@ -54,10 +55,8 @@ class PreviewRunnerPoolTest {
         Map<String, Object> body = asMap(SERIALIZATION.unmarshal(json, Map.class));
         Map<String, Object> metadata = asMap(body.get("metadata"));
 
-        // No spec, no status, no managedFields/ownerReferences - just the three things that change.
         assertThat(body).containsOnlyKeys("apiVersion", "kind", "metadata");
         assertThat(metadata).containsOnlyKeys("resourceVersion", "labels", "annotations");
-        // Without this the API server applies the patch unconditionally, and two projects can share a pod.
         assertThat(metadata.get("resourceVersion")).isEqualTo(listedResourceVersion).isNotNull();
         assertThat(asMap(metadata.get("labels"))).isEqualTo(Map.of("status", "busy", "project-id", "131"));
         assertThat(asMap(metadata.get("annotations")))

@@ -7,9 +7,14 @@ import lombok.experimental.FieldDefaults;
 import java.time.Instant;
 
 /**
- * A session cookie someone signed out of. Firebase can only revoke <em>all</em> of a user's sessions, so signing out
- * of one device is enforced here instead: the cookie stays cryptographically valid until it expires, and this row
- * is what makes it useless before then. Only the SHA-256 of the cookie is stored.
+ * A session cookie someone signed out of.
+ *
+ * <p>Handles: the SHA-256 of that cookie and when it would have expired anyway, after which the row is dead weight
+ * and gets pruned.
+ *
+ * <p>This table exists because Firebase can only revoke all of a user's sessions at once. Signing out of one device
+ * is enforced here instead: the cookie stays cryptographically valid until it expires, and this row is what makes it
+ * useless before then. Only the hash is stored, never the cookie.
  */
 @Getter
 @Setter
@@ -25,7 +30,6 @@ public class RevokedSession {
     @Column(length = 64)
     String cookieHash;
 
-    /** When the cookie would have expired anyway - after that the row is dead weight and gets pruned. */
     @Column(nullable = false)
     Instant expiresAt;
 }

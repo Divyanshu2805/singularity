@@ -12,6 +12,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * A project's collaborators, for the browser.
+ *
+ * <p>Handles: listing members, inviting one by email, accepting an invitation, changing a member's role and removing
+ * them.
+ */
 @RestController
 @RequestMapping("/api/projects/{projectId}/members")
 @RequiredArgsConstructor

@@ -24,11 +24,14 @@ import reactor.core.publisher.Flux;
 import java.util.List;
 
 /**
- * The code lens: explain a selection, then talk about it, and keep the thread.
+ * The code lens: explain a selection, then ask follow-up questions about it, and keep the thread.
  *
- * <p>The answering endpoints are read-only - they can produce text and nothing else. The {@code /notes}
- * endpoints below are the thread itself: one per project <em>per user</em>, kept until its author clears it
- * or deletes an exchange. See {@link CodeInsightService} for why both halves of that key matter.
+ * <p>Handles: the explain and ask answers both whole and streamed, and the caller's saved notes - listing them,
+ * saving one finished exchange, deleting one and clearing them all.
+ *
+ * <p>The answering endpoints are read-only and can produce text and nothing else. The notes are the thread itself:
+ * one per project per user, kept until its author clears it. A failure mid-stream arrives as a named error event, the
+ * same shape the build chat uses.
  */
 @RestController
 @RequiredArgsConstructor
@@ -59,10 +62,6 @@ public class CodeInsightController {
         return asEvents(codeInsightService.streamAsk(projectId, request), projectId);
     }
 
-    /**
-     * A failure mid-stream can't become an HTTP status - the response has already started - so it arrives as a
-     * named "error" event the client renders in place, the same shape {@code ChatController} uses.
-     */
     private Flux<ServerSentEvent<String>> asEvents(Flux<String> answer, Long projectId) {
         return answer
                 .map(text -> ServerSentEvent.builder(text).build())
@@ -85,7 +84,6 @@ public class CodeInsightController {
         return ResponseEntity.ok(codeInsightService.getNotes(projectId));
     }
 
-    /** Called once an answer has finished streaming - the stream itself saves nothing. */
     @PostMapping("/notes")
     public ResponseEntity<CodeNoteResponse> saveNote(
             @PathVariable Long projectId,
@@ -93,7 +91,6 @@ public class CodeInsightController {
         return ResponseEntity.ok(codeInsightService.saveNote(projectId, request));
     }
 
-    /** Wipes one exchange. Someone else's note id is a 404 here, not a 403 - it isn't theirs to know about. */
     @DeleteMapping("/notes/{noteId}")
     public ResponseEntity<Void> deleteNote(@PathVariable Long projectId, @PathVariable Long noteId) {
         codeInsightService.deleteNote(projectId, noteId);

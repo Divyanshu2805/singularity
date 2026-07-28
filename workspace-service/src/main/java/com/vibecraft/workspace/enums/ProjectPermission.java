@@ -3,6 +3,11 @@ package com.vibecraft.workspace.enums;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
+/**
+ * The individual capabilities a project role grants.
+ *
+ * <p>Handles: naming each one, and carrying the string form used in authorization expressions.
+ */
 @RequiredArgsConstructor
 @Getter
 public enum ProjectPermission {
@@ -13,7 +18,6 @@ public enum ProjectPermission {
 
     MANAGE_MEMBERS("project_members:manage"),
     VIEW_MEMBERS("project_members:view");
-
 
     private final String value;
 }

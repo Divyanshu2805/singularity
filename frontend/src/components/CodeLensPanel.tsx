@@ -1,3 +1,12 @@
+/**
+ * The code lens: a running conversation about this project's code.
+ *
+ * Handles: asking about a selected block or the project as a whole, streaming the answer, keeping the thread, opening
+ * the block a saved question was about, deleting one exchange or clearing the thread, and exporting it.
+ *
+ * Docked beside the editor rather than floating over it - the point is reading an explanation while looking at the
+ * code, and a popover anchored to the selection would cover exactly what is being discussed.
+ */
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Check, ClipboardCopy, Eraser, FileDown, Loader2, MessagesSquare, Sparkles, X } from "lucide-react";
 import {
@@ -29,7 +38,6 @@ interface CodeLensPanelProps {
   projectId: string;
   projectName: string;
   onClose: () => void;
-  /** Opens the file a snippet came from, scrolled to its first line. */
   onOpenSelection: (path: string, line: number, code?: string, endLine?: number) => void;
 }
 
@@ -38,12 +46,6 @@ const rangeLabel = (selection: CodeSelection) =>
     ? `line ${selection.startLine}`
     : `lines ${selection.startLine}-${selection.endLine}`;
 
-/**
- * The snippet a turn is about, quoted inline in the transcript.
- *
- * <p>Code is shown in a horizontally scrolling block rather than wrapped: wrapped code re-indents itself and
- * stops looking like code, which in a narrow panel is exactly when it's hardest to read.
- */
 function SnippetQuote({ selection, onOpen }: { selection: CodeSelection; onOpen: () => void }) {
   const Icon = getFileIcon(selection.path);
   const { base } = splitPath(selection.path);
@@ -62,7 +64,6 @@ function SnippetQuote({ selection, onOpen }: { selection: CodeSelection; onOpen:
         <span className="shrink-0 text-muted-foreground">{rangeLabel(selection)}</span>
       </button>
       <pre className="max-h-52 overflow-y-auto px-2 py-1.5 text-[11px] leading-[1.6]">
-        {/* Wraps rather than scrolling sideways: reading a reply shouldn't mean scrolling two directions. */}
         <code className="block whitespace-pre-wrap break-words font-mono text-foreground/80">
           {highlightCode(selection.code, selection.path).map((token, index) =>
             token.cls ? <span key={index} className={token.cls}>{token.text}</span> : token.text
@@ -81,7 +82,6 @@ function SnippetQuote({ selection, onOpen }: { selection: CodeSelection; onOpen:
 function Turn({ turn, onOpenSelection, onDelete }: {
   turn: LensTurn;
   onOpenSelection: (path: string, line: number, code?: string, endLine?: number) => void;
-  /** Wipes this exchange - the question and its answer together, since half of one is no use. */
   onDelete: () => void;
 }) {
   const quote = turn.selection && (
@@ -117,7 +117,6 @@ function Turn({ turn, onOpenSelection, onDelete }: {
       <div className="flex gap-2">
         <LogoMark className="mt-0.5 h-4 w-4 shrink-0" title="VibeCraft" />
         <div className="min-w-0 flex-1">
-          {/* Until the first token lands there's nothing to render, so say what's happening instead. */}
           {turn.isStreaming && !turn.content ? (
             <span className="text-shimmer text-xs font-medium">Reading the code&hellip;</span>
           ) : (
@@ -125,7 +124,6 @@ function Turn({ turn, onOpenSelection, onDelete }: {
           )}
         </div>
       </div>
-      {/* Not while it's still arriving: copying or deleting half an answer isn't what either button means. */}
       {!turn.isStreaming && (
         <MessageActions
           at={turn.at}
@@ -139,12 +137,6 @@ function Turn({ turn, onOpenSelection, onDelete }: {
   );
 }
 
-/**
- * The code lens: a running conversation about this project's code.
- *
- * <p>Docked beside the editor rather than floating over it - the point is reading an explanation *while*
- * looking at the code, and a popover anchored to the selection covers exactly what's being discussed.
- */
 export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection }: CodeLensPanelProps) {
   const thread = useCodeLens(projectId);
   const [question, setQuestion] = useState("");
@@ -158,13 +150,10 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
   const isLoading = thread?.isLoading ?? false;
   const selection = thread?.selection ?? null;
 
-  // How far from the bottom still counts as "following along" - about a line and a half of prose.
   const stickToBottom = useRef(true);
   const lastTurn = turns[turns.length - 1];
-  // Grows with every chunk of a streaming answer, which is what makes the effect below run as it arrives.
   const streamedLength = lastTurn?.isStreaming ? lastTurn.content.length : 0;
 
-  // A new turn always scrolls into view - asking a question should show it.
   useEffect(() => {
     stickToBottom.current = true;
   }, [turns.length]);
@@ -172,13 +161,9 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !stickToBottom.current) return;
-    // Jump rather than glide while the answer is streaming: a smooth scroll per chunk fights the next one.
-    // Optional-called because jsdom has no `scrollTo`, the same way the chat rail handles `scrollIntoView`.
     el.scrollTo?.({ top: el.scrollHeight, behavior: streamedLength > 0 ? "auto" : "smooth" });
   }, [turns.length, streamedLength, isBusy]);
 
-  // Scrolling up to re-read something must not be undone by the next chunk, so following stops until the
-  // reader comes back to the bottom.
   const handleScroll = () => {
     const el = scrollRef.current;
     if (el) stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -201,10 +186,6 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
   const handleExport = () =>
     downloadMarkdown(exportFilename(projectName, "notes"), buildLensMarkdown(turns, projectName));
 
-  /**
-   * The same markdown the export writes to a file, put on the clipboard instead - for pasting the thread
-   * straight into notes or an issue, without a download to find and open first.
-   */
   const handleCopyAll = () => copyAll(buildLensMarkdown(turns, projectName));
 
   return (
@@ -278,11 +259,9 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
         onScroll={handleScroll}
         className={cn(
           "min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3.5",
-          // Nothing to scroll yet, so the prompt centres itself instead of hanging off the top edge.
           turns.length === 0 && !isBusy && !isLoading && "flex flex-col justify-center"
         )}
       >
-        {/* Saved notes are still on their way - an empty panel here would read as "you've never asked anything". */}
         {turns.length === 0 && isLoading && (
           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -341,8 +320,6 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
       </div>
 
       <div className="shrink-0 border-t border-border/60 p-2">
-        {/* What the next question is about, so it's clear the subject follows the editor selection. */}
-        {/* Dismissable, since a selection is optional: clearing it makes the next question about the whole project. */}
         {selection && (
           <div className="mb-1.5 flex items-center gap-0.5 rounded-md bg-muted/40 text-[10px] text-muted-foreground">
             <button
@@ -401,13 +378,11 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
             <ArrowUp className="h-3.5 w-3.5" />
           </button>
         </div>
-        {/* Stated plainly, because both halves matter: they're kept, and nobody else on the project sees them. */}
         <p className="px-1 pt-1.5 text-[10px] text-muted-foreground/70">
           Private to you and saved until you delete them.
         </p>
       </div>
 
-      {/* Clearing deletes the saved thread outright, so it asks first - a single note's bin icon doesn't. */}
       <AlertDialog open={isClearing} onOpenChange={setIsClearing}>
         <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>

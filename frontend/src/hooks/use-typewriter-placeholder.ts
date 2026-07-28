@@ -1,3 +1,12 @@
+/**
+ * The rotating example prompts typed into the empty prompt box.
+ *
+ * Handles: typing a phrase out, holding it, deleting it and moving to the next, as a plain string meant to be fed
+ * straight into a native placeholder attribute.
+ *
+ * Progress lives in refs rather than state, so pausing - once the user has typed something - and resuming later picks
+ * back up mid-phrase instead of restarting.
+ */
 import { useEffect, useRef, useState } from "react";
 
 const TYPE_MS = 38;
@@ -7,16 +16,6 @@ const GAP_MS = 400;
 
 type Mode = "typing" | "holding" | "deleting" | "gap";
 
-/**
- * Types out each phrase into a returned string, holds it briefly, deletes it,
- * then moves to the next - the rotating example-prompt effect Lovable shows
- * in its empty prompt box. Meant to be fed straight into a native `placeholder`
- * prop (which re-renders fine on every keystroke-sized update).
- *
- * Progress (phrase index / char index / mode) lives in refs, not state, so
- * pausing (`enabled: false`, e.g. once the user has typed something) and
- * resuming later picks back up mid-phrase instead of restarting.
- */
 export function useTypewriterPlaceholder(phrases: string[], enabled: boolean): string {
   const [text, setText] = useState("");
   const phraseIndexRef = useRef(0);

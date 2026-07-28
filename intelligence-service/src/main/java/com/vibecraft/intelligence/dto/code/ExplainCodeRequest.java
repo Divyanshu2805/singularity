@@ -3,7 +3,11 @@ package com.vibecraft.intelligence.dto.code;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-/** A selected block of code to explain in plain language. Read-only: nothing here can change a file. */
+/**
+ * A selected block of code to explain in plain language.
+ *
+ * <p>Handles: the file, the code and its line range, each length-bounded. Read-only: nothing here can change a file.
+ */
 public record ExplainCodeRequest(
 
         @NotBlank(message = "File path is required")

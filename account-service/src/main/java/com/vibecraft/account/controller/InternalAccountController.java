@@ -16,15 +16,17 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * account-service's API for the other services, not the browser — never routed through gateway-service (see
- * WebSecurityConfig's CSRF exemption and the migration plan's internal-API design decision), and guarded by
- * common-lib's {@code InternalServiceAuthFilter} (a shared secret, not a user's session) rather than by
- * {@code @PreAuthorize} — the caller here is another service acting on a request it already authenticated
- * itself, not an end user.
+ * account-service's API for the other services, not the browser.
  *
- * <p>Called by workspace-service and intelligence-service through their {@code feign/AccountServiceClient}: every
- * signed-in request to either one makes the session lookups below on a session-cache miss, and every quota check
- * asks for the plan limits. The full internal-API table is in docs/architecture/service-communication.md §3.
+ * <p>Handles: resolving a user by id, username or Firebase uid; answering whether a session cookie hash has been
+ * revoked; and serving a user's effective plan limits with the free-tier fallback already folded in, so no caller has
+ * to know what "no subscription" means.
+ *
+ * <p>Called by workspace-service and intelligence-service, whose SessionAuthenticator makes the uid and revocation
+ * lookups on every cache miss and whose quota checks ask for the limits. Never routed through the Gateway, and
+ * guarded by the shared internal-service secret rather than a session - the caller is another service acting on a
+ * request it has already authenticated itself, so these endpoints answer for an arbitrary user id with no ownership
+ * check of their own.
  */
 @RestController
 @RequiredArgsConstructor
@@ -41,34 +43,23 @@ public class InternalAccountController {
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString())));
     }
 
-    /** Used by workspace-service's invite-by-email flow (ProjectMemberService). */
     @GetMapping("/users/by-username")
     public UserDto getUserByUsername(@RequestParam String username) {
         return toDto(userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User", username)));
     }
 
-    /**
-     * Used by workspace-service's and intelligence-service's SessionAuthenticator to resolve a Firebase-verified
-     * session cookie's uid into a local userId, without owning User itself.
-     */
     @GetMapping("/users/by-firebase-uid")
     public UserDto getUserByFirebaseUid(@RequestParam String uid) {
         return toDto(userRepository.findByFirebaseUid(uid)
                 .orElseThrow(() -> new ResourceNotFoundException("User", uid)));
     }
 
-    /**
-     * Backs every other service's own SessionAuthenticator: REVOKED_SESSION lives only here, since sign-out/
-     * sign-out-everywhere is enforced by account-service alone. Added alongside workspace-service for the same
-     * reason as {@link #getUserByFirebaseUid} - a service with no local User table can't do this check locally.
-     */
     @GetMapping("/sessions/revoked")
     public boolean isSessionRevoked(@RequestParam String cookieHash) {
         return revokedSessionRepository.existsById(cookieHash);
     }
 
-    /** The effective plan's limits — free-tier fallback included — for a quota check made from another service. */
     @GetMapping("/users/{userId}/plan-limits")
     public PlanDto getPlanLimits(@PathVariable Long userId) {
         Plan plan = subscriptionService.getActivePlan(userId);

@@ -12,11 +12,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * One AI response being generated, owned by the server rather than by whichever browser asked for it.
  *
+ * <p>Handles: accumulating the model's output, fanning each chunk out to every attached viewer, replaying everything
+ * written so far to a viewer that attaches late, ending every viewer's stream on completion or failure, and stopping
+ * the underlying model call.
+ *
  * <p>It used to be the other way round: the model call was the HTTP response's own stream, so a refresh closed the
- * connection, Spring cancelled the stream, the model call went with it, and {@code finalizeChats} - which only runs
- * on completion - never saved the message, the reply or the files. Now the generation runs to the end regardless,
- * and a connection is just a viewer: {@link #watch()} replays everything written so far and then follows it live,
- * so a refreshed page (or a second tab) picks up exactly where the response is.
+ * connection, the stream was cancelled, the model call went with it, and the turn - which is only saved on completion
+ * - was never stored at all. Now the generation runs to the end regardless and a connection is just a viewer, so a
+ * refreshed page or a second tab picks up exactly where the response is.
  *
  * <p>Every mutation and every new viewer goes through this object's monitor, which is what guarantees a viewer sees
  * each chunk exactly once - replayed if it arrived before they attached, live if after, never both or neither.
@@ -24,9 +27,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public final class ActiveGeneration {
 
     public enum Status {
-        /** The model is still writing. */
         RUNNING,
-        /** The model finished; the reply and files are being saved. History will have it shortly. */
         SAVING
     }
 
@@ -57,7 +58,6 @@ public final class ActiveGeneration {
         viewers.forEach(viewer -> viewer.next(response));
     }
 
-    /** The model is done. Viewers' streams end here; saving carries on without them. */
     synchronized void markStreamComplete() {
         if (streamEnded) return;
         streamEnded = true;
@@ -74,10 +74,6 @@ public final class ActiveGeneration {
         viewers.clear();
     }
 
-    /**
-     * Everything generated so far as one chunk, then each new chunk as it arrives, then completion (or the failure).
-     * Cancelling the returned stream - a closed tab - only detaches this viewer; the generation doesn't notice.
-     */
     Flux<StreamResponse> watch() {
         return Flux.create(sink -> {
             synchronized (this) {
@@ -97,7 +93,6 @@ public final class ActiveGeneration {
         this.subscription = subscription;
     }
 
-    /** Stops the model call itself. Nothing is saved - the same as a stopped answer always was. */
     void stop(Throwable reason) {
         Disposable current = subscription;
         if (current != null) current.dispose();

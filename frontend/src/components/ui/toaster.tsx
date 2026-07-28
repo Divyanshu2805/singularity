@@ -1,3 +1,8 @@
+/**
+ * Renders whatever is currently in the toast queue.
+ *
+ * Handles: subscribing to the queue and drawing each toast with its title, description and action.
+ */
 import { useToast } from "@/hooks/use-toast";
 import { Toast, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastViewport } from "@/components/ui/toast";
 

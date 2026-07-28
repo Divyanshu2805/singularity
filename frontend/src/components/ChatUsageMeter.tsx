@@ -1,3 +1,13 @@
+/**
+ * Today's AI allowance, always in view right above the composer, with the time until it refills beside it.
+ *
+ * Handles: the bar, the remaining figure and a countdown that re-reads the clock every so often - so you know how
+ * much building is left before starting a long request rather than after.
+ *
+ * Honest while a reply streams: token counts only exist once a response has finished, since they arrive on its last
+ * chunk, so mid-stream it shows a moving shimmer and says it will update rather than guessing a number. Once the
+ * allowance is fully spent it steps aside, because the chat's quota banner already says everything this would.
+ */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -9,26 +19,13 @@ import { formatResetIn, formatTokens, toQuota } from "@/lib/billing";
 import { compactTokens, featureLabel } from "@/lib/usage-insights";
 import { cn } from "@/lib/utils";
 
-/** How often the reset countdown re-reads the clock. Minutes are its finest unit, so this is plenty. */
 const COUNTDOWN_TICK_MS = 30_000;
 
-/**
- * Today's AI allowance, always in view right above the composer - the Lovable/v0 credit bar, with the Claude-style
- * "resets in" beside it so you know how much building is left before you start a long request, not after.
- *
- * <p><b>Honest while a reply streams.</b> Token counts only exist once a response has finished (they arrive on its
- * last chunk), so mid-stream the bar shows a moving shimmer and says it will update, rather than guessing a number.
- * `ProjectView` re-reads usage when the response ends, which is when the figures move.
- *
- * <p>Once the allowance is fully spent this steps aside: `ChatPanel`'s quota banner replaces the composer and
- * already says everything this would.
- */
 export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; isStreaming: boolean }) {
   const navigate = useNavigate();
   const signedIn = isAuthenticated();
   const { subscription } = useBilling();
 
-  // Keyed under the shared usage key, so the refresh that runs after every reply refetches this one too.
   const { data: usage } = useQuery({
     queryKey: [...USAGE_QUERY_KEY, projectId],
     queryFn: () => api.getUsageToday(projectId),
@@ -71,7 +68,6 @@ export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; 
               style={{ width: `${Math.max(quota.percent, quota.used > 0 ? 1.5 : 0)}%` }}
             />
             {isStreaming && (
-              // A travelling highlight rather than a number: this reply's cost isn't known until it finishes.
               <div className="absolute inset-y-0 w-1/4 animate-[usage-sweep_1.6s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-transparent via-foreground/40 to-transparent motion-reduce:hidden" />
             )}
           </div>

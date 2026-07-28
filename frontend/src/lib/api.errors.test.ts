@@ -1,8 +1,14 @@
+/**
+ * Covers the error code carried alongside the status - the only thing that distinguishes a full runner pool from a
+ * failed dependency, since both are a 503.
+ *
+ * Also covers the absent cases: no code sent, a code that is not a string, and a non-JSON 5xx from the dev proxy with
+ * nobody behind it, which must read as "server unreachable" rather than "busy".
+ */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, ApiRequestError } from "./api";
 import { describePreviewStartFailure } from "./preview";
 
-/** Answers the CSRF priming call with a 204 and everything else with the given response. */
 function respondWith(status: number, body?: unknown) {
   const payload = body === undefined ? null : typeof body === "string" ? body : JSON.stringify(body);
   vi.stubGlobal(
@@ -57,7 +63,6 @@ describe("ApiRequestError.code", () => {
   });
 });
 
-// The join between the two halves: what the API client makes of a real response body is what the panel classifies.
 describe("a start that fails, end to end", () => {
   it("a full pool comes out as 'busy' and a failed dependency as 'failed' - the same 503 status", async () => {
     respondWith(503, { message: "Every preview runner is busy right now. Try again in a minute.", code: "CAPACITY_UNAVAILABLE" });

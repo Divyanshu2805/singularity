@@ -1,3 +1,13 @@
+/**
+ * Small helpers shared across the UI.
+ *
+ * Handles: merging Tailwind class names without conflicts, deriving a project's gradient deterministically from its
+ * name, and formatting how long a turn took.
+ *
+ * The gradient stays within the warm palette the rest of the UI is built from, so the dashboard reads as one designed
+ * thing rather than a random rainbow. The duration format mirrors the backend's, which writes the same figure into
+ * the saved turn; keep the two in step.
+ */
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -5,17 +15,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// Helper for deterministic gradient generation - each project gets a unique but
-// palette-coherent abstract wash (like hand-poured resin), not a random rainbow hue.
-// Hues stay within the warm copper/forge family (roughly amber through rust to ember-rose)
-// that the rest of the UI is built from, so the dashboard reads as one designed thing.
 export const generateGradient = (name: string) => {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
 
-  const warmHue = (offset: number) => 8 + (Math.abs(hash >> offset) % 55); // ~8deg (rose) .. ~63deg (amber)
+  const warmHue = (offset: number) => 8 + (Math.abs(hash >> offset) % 55);
 
   const h1 = warmHue(0);
   const h2 = warmHue(8);
@@ -32,17 +38,10 @@ export const generateGradient = (name: string) => {
       radial-gradient(at center, ${c3}, transparent 50%),
       hsl(30, 15%, 9%)
     `,
-    backgroundSize: '150% 150%', // To allow for some blurry overlap
+    backgroundSize: '150% 150%',
   };
 };
 
-/**
- * How long a turn took, written the way a person reads a clock: `45s`, `3m 40s`, `1h 2m`. A real multi-file
- * build runs for minutes, and `220s` makes the reader do the division themselves.
- *
- * <p>Mirrors `DurationFormat.worked` on the backend, which writes the same string into the saved `THOUGHT`
- * event - this is what the browser shows for the same turn until that event arrives. Keep the two in step.
- */
 export function formatWorkedFor(seconds: number): string {
   const total = Math.max(1, Math.round(seconds));
   if (total < 60) return `${total}s`;

@@ -1,3 +1,8 @@
+/**
+ * A hairline rule between sections.
+ *
+ * Handles: both orientations, and hiding itself from assistive technology since it carries no meaning of its own.
+ */
 import * as React from "react";
 import * as SeparatorPrimitive from "@radix-ui/react-separator";
 

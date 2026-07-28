@@ -1,3 +1,9 @@
+/**
+ * Covers the two ways of getting a code-lens thread out - copying it and downloading it - producing the same
+ * markdown.
+ *
+ * The difference between them is only where the text lands, so a change to one that skips the other is a bug.
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 
@@ -17,10 +23,6 @@ import { CodeLensPanel } from "./CodeLensPanel";
 import { codeLens, forgetLoadedThreadsForTests } from "@/lib/code-lens-store";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-/**
- * The header's two ways of getting a thread out: copy it to the clipboard, or download it. Both produce the
- * same markdown - the difference is only where it lands - so a change to one that skips the other is a bug.
- */
 const SELECTION = { path: "src/App.tsx", code: "const a = 1;", startLine: 1, endLine: 1 };
 
 const renderPanel = (projectId: string) =>
@@ -30,11 +32,6 @@ const renderPanel = (projectId: string) =>
     </TooltipProvider>
   );
 
-/**
- * Puts one finished exchange in the thread, the way asking and being answered would. Opening also fetches the
- * saved notes, so the queued promises are flushed before the test looks - otherwise that resolution lands
- * outside `act` and React says so.
- */
 async function haveAnswer(projectId: string, text: string) {
   act(() => codeLens.open(projectId, SELECTION, { explain: true }));
   const call = vi.mocked(api.streamCodeInsight).mock.calls.at(-1)!;
@@ -82,7 +79,6 @@ describe("code notes header", () => {
     await act(async () => { copy.click(); });
 
     expect(written).toHaveLength(1);
-    // The same document the export writes: a heading, both turns, and the block that was asked about.
     expect(written[0]).toContain("# Demo - ExplainLLM notes");
     expect(written[0]).toContain("## You");
     expect(written[0]).toContain("Explain this");
@@ -119,7 +115,6 @@ describe("code notes header", () => {
     const copy = container.querySelector<HTMLButtonElement>('[aria-label="Copy as markdown"]')!;
     await act(async () => { copy.click(); });
 
-    // No tick (nothing was copied), and the chat is still on screen.
     expect(container.querySelector('[aria-label="Copied"]')).toBeNull();
     expect(container.textContent).toContain("It stores the count.");
   });

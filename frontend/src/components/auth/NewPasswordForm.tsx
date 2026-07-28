@@ -1,14 +1,16 @@
+/**
+ * The "new password" and "confirm" pair with its strength meter.
+ *
+ * Handles: validating the two fields against each other, checking the provider's password policy before the round
+ * trip where that is available, submitting, and showing a refusal in place.
+ *
+ * Shared by every place a password gets set - a reset link, and changing it from security settings - so the rules and
+ * the wording cannot drift between them.
+ */
 import { useState, type FormEvent, type ReactNode } from "react";
 import { AuthSubmitButton, FormAlert, PasswordField, PasswordStrength } from "@/components/auth/AuthLayout";
 import { validateNewPassword, type ResetPasswordErrors } from "@/lib/auth-form";
 
-/**
- * "New password" + "confirm" with the strength meter - shared by every place a password gets set: the legacy reset
- * link, Firebase's reset link, and changing it from security settings.
- *
- * <p>`onSubmit` does the actual change and throws a user-readable Error on failure; `checkPolicy` can reject a
- * password before that round trip (Firebase's password policy).
- */
 export function NewPasswordForm({
     onSubmit,
     checkPolicy,
@@ -22,7 +24,6 @@ export function NewPasswordForm({
     submitLabel?: string;
     loadingLabel?: string;
     errorTitle?: string;
-    /** Rendered after the error message, e.g. a "request a new link" action. */
     errorExtra?: (message: string) => ReactNode;
 }) {
     const [password, setPassword] = useState("");

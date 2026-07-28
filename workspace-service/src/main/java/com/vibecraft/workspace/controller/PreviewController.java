@@ -10,13 +10,22 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * A project's live preview, for the browser.
+ *
+ * <p>Handles: reading the caller's preview (204 when they have never had one, and polling it counts as a visit that
+ * keeps the preview alive), starting one, restarting the dev server in place, stopping it, reading the runner's
+ * output, and listing every preview the caller has open across projects.
+ *
+ * <p>Starting and restarting answer 202: the runner comes up asynchronously, and the client polls until it is
+ * running.
+ */
 @RestController
 @RequiredArgsConstructor
 public class PreviewController {
 
     private final PreviewDeploymentService deploymentService;
 
-    /** The project's latest preview in any state; 204 when it has never had one. Polling it keeps a preview alive. */
     @GetMapping("/api/projects/{projectId}/preview")
     public ResponseEntity<PreviewResponse> getPreview(@PathVariable Long projectId) {
         return deploymentService.getPreview(projectId)
@@ -24,10 +33,6 @@ public class PreviewController {
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
-    /**
-     * Starts the preview (202 - it comes up asynchronously), or returns the one already running. {@code /deploy} is
-     * the original name of this endpoint, kept as an alias.
-     */
     @PostMapping({"/api/projects/{projectId}/preview", "/api/projects/{projectId}/deploy"})
     public ResponseEntity<PreviewResponse> startPreview(@PathVariable Long projectId) {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(deploymentService.startPreview(projectId));
@@ -49,7 +54,6 @@ public class PreviewController {
         return ResponseEntity.ok(deploymentService.getPreviewLogs(projectId));
     }
 
-    /** The caller's own starting or running previews, across all projects. */
     @GetMapping("/api/previews")
     public ResponseEntity<List<PreviewResponse>> getMyActivePreviews() {
         return ResponseEntity.ok(deploymentService.getMyActivePreviews());

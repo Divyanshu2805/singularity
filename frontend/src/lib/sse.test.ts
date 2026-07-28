@@ -1,3 +1,9 @@
+/**
+ * Covers the incremental Server-Sent Events parser: events split across chunks, an event's several data lines joined
+ * into one payload with the newlines intact, named events, and comment lines ignored.
+ *
+ * The join is the point: reading each data line as its own chunk silently deleted every newline the model wrote.
+ */
 import { describe, expect, it } from "vitest";
 import { createSseParser, type SseEvent } from "./sse";
 
@@ -11,21 +17,18 @@ function parse(...pieces: string[]) {
 
 describe("createSseParser", () => {
   it("joins the data lines of one event with newlines, which is how Spring sends a chunk containing line breaks", () => {
-    // The model's chunk was "returns:\n1. A layout" - Spring writes each line as its own data: line.
     const events = parse("data:returns:\ndata:1. A layout\n\n");
 
     expect(events).toEqual([{ event: "message", data: "returns:\n1. A layout" }]);
   });
 
   it("keeps a chunk that is only line breaks", () => {
-    // "\n\n" (a paragraph break on its own) arrives as three empty data lines.
     expect(parse("data:\ndata:\ndata:\n\n")).toEqual([{ event: "message", data: "\n\n" }]);
   });
 
   it("reassembles the original text across many events", () => {
     const text = parse(
       "data:That snippet is the app shell:\n\n",
-      // A paragraph break on its own ("\n\n") is three empty data lines.
       "data:\ndata:\ndata:\n\n",
       "data:1. **A column layout**\ndata:2. A sticky header\n\n"
     ).map((event) => event.data).join("");

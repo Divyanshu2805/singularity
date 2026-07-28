@@ -1,3 +1,17 @@
+/**
+ * The live preview: the project's files running in a dev server on a runner pod, loaded in an iframe from its own
+ * origin.
+ *
+ * Handles: starting and stopping it, the start-up checklist while the runner installs, the idle countdown, the
+ * runner's logs when something fails, reporting runtime errors from the page inside, and hot-reloading as the AI
+ * saves files - the runner syncs them from storage, so nothing here has to push changes.
+ *
+ * Per person: it starts when you press Start, a collaborator running theirs does not start yours, and it comes back
+ * by itself only if yours stopped for inactivity.
+ *
+ * The page inside is the user's own code on another origin, so the only channel back is a posted message - accepted
+ * only from that exact origin and that exact frame.
+ */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -41,14 +55,12 @@ import { cn } from "@/lib/utils";
 
 interface PreviewPanelProps {
   projectId: string;
-  /** Whether the Preview tab is the one showing - nothing starts, polls or loads while it isn't. */
   isVisible: boolean;
   preview: ProjectPreview;
   runtimeError: RuntimeError | null;
   onRuntimeError: (error: RuntimeError) => void;
   onDismiss: () => void;
   onFix: (error: RuntimeError) => void;
-  /** Sends a message to the build chat. Absent for viewers, who have no chat. */
   onAskToFix?: (message: string) => void;
   onViewCode: () => void;
   onDownload: () => void;
@@ -58,17 +70,6 @@ type Device = "desktop" | "mobile";
 
 const LOG_POLL_MS = 3_000;
 
-/**
- * The live preview: the project's files running in a Vite dev server on a runner pod, loaded in an iframe from its
- * own origin (`p<id>-<random>.localhost:8090` locally). Per person: it starts when *you* press Start (a collaborator
- * running theirs doesn't start yours), comes back by itself only if yours stopped for inactivity, shows the
- * start-up steps while the runner installs, and hot-reloads as the AI saves files - the runner syncs them from
- * storage, so nothing here has to push changes.
- *
- * <p>The page inside is the user's own code on another origin, so the only channel back is `postMessage`, which the
- * preview proxy's injected reporter uses for runtime errors and navigation. Messages are accepted only from that
- * exact origin and that exact frame.
- */
 export function PreviewPanel({
   projectId,
   isVisible,
@@ -93,7 +94,6 @@ export function PreviewPanel({
   const [path, setPath] = useState("/");
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // A new project is a new preview: forget this one's Stop and auto-start history.
   useEffect(() => {
     setStoppedByUser(false);
     lastAutoStartRef.current = null;
@@ -101,8 +101,6 @@ export function PreviewPanel({
     setPath("/");
   }, [projectId]);
 
-  // Each time a preview (re)becomes ready the frame is loaded afresh - including after a restart this panel didn't
-  // start itself, like the automatic one when package.json changes.
   useEffect(() => {
     setIsFrameLoading(true);
     setPath("/");
@@ -111,7 +109,6 @@ export function PreviewPanel({
   const runStart = useCallback(
     (action: () => Promise<unknown>) => {
       action().catch(() => {
-        // Shown in the panel from `startError` - a plan limit or a busy pool is a state, not a toast.
       });
     },
     []
@@ -156,7 +153,6 @@ export function PreviewPanel({
     setReloadKey((key) => key + 1);
   };
 
-  // Runtime errors and in-app navigation, from the preview's own frame only.
   const origin = previewOrigin(preview?.previewUrl);
   useEffect(() => {
     if (!origin) return;
@@ -260,7 +256,6 @@ export function PreviewPanel({
 
       <RuntimeErrorAlert error={runtimeError} onDismiss={onDismiss} onFix={onFix} />
 
-      {/* Kept for projects that can't run here: the code and the ZIP still work without a runner. */}
       {status === "TERMINATED" || (!preview && isLoaded && !isStarting) ? (
         <div className="flex shrink-0 justify-center gap-2 pb-4">
           <Button variant="ghost" size="sm" onClick={onViewCode} className="h-7 gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">

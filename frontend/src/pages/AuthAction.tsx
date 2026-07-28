@@ -1,3 +1,12 @@
+/**
+ * The links in the identity provider's emails - password reset, email verification, email-change recovery - handled
+ * inside this app's own UI rather than the provider's hosted page.
+ *
+ * Handles: reading the mode and the one-time code, verifying it, and running the matching flow.
+ *
+ * The one-time code is lifted out of the address bar on load: a single-use credential should not sit in the URL where
+ * it can be shared or logged. Wired up by pointing the email templates' custom action URL at this route.
+ */
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MailCheck } from "lucide-react";
@@ -14,13 +23,6 @@ type View =
     | { kind: "verified" }
     | { kind: "recovered"; email: string };
 
-/**
- * Handles the links in Firebase's emails - password reset, email verification, email-change recovery - inside this
- * app's own UI instead of Firebase's hosted page. Wired up by setting the email templates' custom action URL to
- * `<app origin>/auth/action` in the Firebase console.
- *
- * <p>The one-time `oobCode` is lifted out of the address bar on load, for the same reason as a legacy reset token.
- */
 export default function AuthAction() {
     const navigate = useNavigate();
     const [params] = useState(() => new URLSearchParams(window.location.search));
@@ -29,7 +31,6 @@ export default function AuthAction() {
     const [view, setView] = useState<View>({ kind: "loading" });
     const [isResending, setIsResending] = useState(false);
     const [resent, setResent] = useState(false);
-    // Action codes are single-use, so a second run (React's dev double-effect) must not apply it again.
     const hasRun = useRef(false);
 
     useEffect(() => {
@@ -50,7 +51,6 @@ export default function AuthAction() {
                 await applyActionCode(auth, oobCode);
                 setView({ kind: "verified" });
             } else if (mode === "recoverEmail") {
-                // Someone changed this account's email and the owner is undoing it: restore the old address.
                 const info = await checkActionCode(auth, oobCode);
                 await applyActionCode(auth, oobCode);
                 setView({ kind: "recovered", email: info.data.email ?? "" });

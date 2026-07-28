@@ -7,8 +7,12 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Every method here takes the user as well as the project. A code note is private to whoever asked it, so
- * there is deliberately no "find by project" - that query would hand one member another's notes.
+ * Reads and writes code notes.
+ *
+ * <p>Handles: a user's notes on a project, one note of theirs by id, and clearing their thread.
+ *
+ * <p>Every method takes the user as well as the project. A note is private to whoever asked it, so there is
+ * deliberately no find-by-project query - that one would hand one member another's notes.
  */
 public interface CodeNoteRepository extends JpaRepository<CodeNote, Long> {
 

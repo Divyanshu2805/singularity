@@ -1,3 +1,10 @@
+/**
+ * Covers the usage meter: the figures it shows, and that it says nothing numeric while a reply is still streaming -
+ * token counts only exist once a response has finished.
+ *
+ * Rendering waits for the usage query to actually settle rather than flushing a fixed number of microtasks, because
+ * the query resolves on its own schedule.
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -28,11 +35,6 @@ const usage = (over: Partial<UsageToday> = {}): UsageToday => ({
   ...over,
 });
 
-/**
- * Renders and waits for the usage query to settle. A fixed number of microtask flushes isn't enough - React Query
- * resolves on its own schedule - so this waits for the query to have been answered, then for the meter itself
- * when one is expected to show.
- */
 async function renderMeter(data: UsageToday, isStreaming = false, { expectMeter = true } = {}) {
   vi.mocked(api.getUsageToday).mockResolvedValue(data);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -55,7 +57,6 @@ describe("ChatUsageMeter", () => {
     await renderMeter(usage());
     expect(screen.getByText("50k")).toBeTruthy();
     expect(screen.getByText(/Resets in 6h 12m/)).toBeTruthy();
-    // Asked for this project's share, not just the account total.
     expect(api.getUsageToday).toHaveBeenCalledWith("7");
   });
 
@@ -90,7 +91,6 @@ describe("ChatUsageMeter", () => {
 
     expect(screen.getByText("This project today")).toBeTruthy();
     expect(screen.getByText("12,345")).toBeTruthy();
-    // The latest call was a build in this very chat, so it reads as "Last reply" with its split.
     expect(screen.getByText("Last reply")).toBeTruthy();
     expect(screen.getByText(/2,000 in · 1,210 out/)).toBeTruthy();
     expect(screen.getByText("2 / 3")).toBeTruthy();

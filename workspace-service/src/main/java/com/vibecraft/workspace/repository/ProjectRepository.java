@@ -9,6 +9,14 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Reads and writes projects.
+ *
+ * <p>Handles: the caller's accessible projects most-recently-updated first, and one accessible project by id.
+ *
+ * <p>Both queries fold the membership check and the soft-delete check into the lookup itself, so a project the caller
+ * cannot see is indistinguishable from one that does not exist.
+ */
 @Repository
 public interface ProjectRepository extends JpaRepository<Project, Long> {
 

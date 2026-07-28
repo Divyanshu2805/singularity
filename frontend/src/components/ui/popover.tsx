@@ -1,3 +1,8 @@
+/**
+ * A panel anchored to whatever opened it.
+ *
+ * Handles: the trigger, the positioned content and its entry animation.
+ */
 import * as React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 

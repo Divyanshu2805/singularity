@@ -8,6 +8,12 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+/**
+ * Reads and writes chat turns.
+ *
+ * <p>Handles: saving a turn, and fetching a session's whole history with each turn's events already joined, in order
+ * - so rendering a chat is one query rather than one per turn.
+ */
 @Repository
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
@@ -19,7 +25,4 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             """)
     List<ChatMessage> findByChatSession(ChatSession chatSession);
 }
-
-
-
 

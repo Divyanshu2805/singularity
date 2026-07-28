@@ -1,3 +1,11 @@
+/**
+ * The billing page: what the caller is on, what they have used, and how to change it.
+ *
+ * Handles: the current plan and its renewal or cancellation state, the token and project meters, opening the payment
+ * provider's portal, changing plan, and settling a checkout the browser has just returned from.
+ *
+ * Both meters are drawn by the same component, so tokens and projects read as the same kind of thing.
+ */
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowUpRight, CreditCard, Loader2 } from "lucide-react";
@@ -25,7 +33,6 @@ const PAGE_GLOW: CSSProperties = {
     ].join(", "),
 };
 
-/** A labelled bar. Used for both meters so tokens and projects read as the same kind of thing. */
 function Meter({ label, used, limit, detail, tone = "default" }: {
     label: string;
     used: number;
@@ -57,14 +64,6 @@ function Meter({ label, used, limit, detail, tone = "default" }: {
     );
 }
 
-/**
- * Everything about what this account is paying for: the plan, its state, what's been used today, and the two
- * ways out - change plan, or manage the subscription in Stripe's own portal.
- *
- * <p>Cancelling and changing cards deliberately happen in the Stripe portal rather than here. Rebuilding that
- * means handling proration, tax and payment-method updates ourselves, and getting any of it subtly wrong is a
- * billing dispute rather than a bug.
- */
 export function BillingSettings() {
     const navigate = useNavigate();
     const { toast } = useToast();
@@ -74,8 +73,6 @@ export function BillingSettings() {
     const { subscription, usage, quota, projects, isLoading, refresh } = useBilling();
     const [isOpeningPortal, setOpeningPortal] = useState(false);
     const { data: plans = [] } = usePlans();
-    // Cancelling is "change to the free plan"; keeping is "change to the plan you're on". Both go through the
-    // same confirmation the pricing page uses, so the same move reads the same way from either place.
     const [changingTo, setChangingTo] = useState<Plan | null>(null);
     const freePlan = plans.find((candidate) => candidate.isFree) ?? null;
     const [isConfirming, setConfirming] = useState(searchParams.get("checkout") === "success");
@@ -85,8 +82,6 @@ export function BillingSettings() {
         if (!signedIn) navigate(loginRedirectPath());
     }, [signedIn, navigate]);
 
-    // Settling a checkout runs once per session id. A ref rather than state because the effect must not
-    // re-run when React re-renders mid-confirmation - that would post the same session twice.
     const confirmedRef = useRef<string | null>(null);
 
     useEffect(() => {
@@ -97,13 +92,10 @@ export function BillingSettings() {
 
         void (async () => {
             try {
-                // Told directly rather than waiting for Stripe's webhook: in local development it never
-                // arrives at all, and in production it can land after the user has already looked and left.
                 await api.confirmCheckout(sessionId);
                 await refresh();
                 toast({ title: "You're all set", description: "Your new plan is active." });
             } catch (error) {
-                // The webhook may still settle it, so this is "not yet", not "it failed".
                 toast({
                     title: "Payment received, finishing up",
                     description: error instanceof Error ? error.message : "Refresh in a moment to see your new plan.",
@@ -177,7 +169,6 @@ export function BillingSettings() {
                                     </div>
                                 )}
 
-                                {/* Current plan */}
                                 <section className="rounded-2xl border border-border/60 bg-panel/70 p-5 backdrop-blur">
                                     <div className="flex flex-wrap items-start justify-between gap-4">
                                         <div className="min-w-0">
@@ -209,9 +200,6 @@ export function BillingSettings() {
                                             {subscription?.isFree ? "See plans" : "Change plan"}
                                             <ArrowUpRight className="h-3.5 w-3.5" />
                                         </Button>
-                                        {/* Only ever offered once there is a Stripe customer behind it - the portal
-                                            has nothing to show someone who has never paid, and the API says so with
-                                            a 400 rather than a page. */}
                                         {!subscription?.isFree && (
                                             <Button
                                                 variant="outline"
@@ -244,7 +232,6 @@ export function BillingSettings() {
                                     </div>
                                 </section>
 
-                                {/* Usage */}
                                 <section className="rounded-2xl border border-border/60 bg-panel/70 p-5 backdrop-blur">
                                     <div className="flex items-center justify-between gap-2">
                                         <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Usage</p>

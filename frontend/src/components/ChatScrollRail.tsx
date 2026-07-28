@@ -1,3 +1,11 @@
+/**
+ * The way through a long chat: a short tick for every message you sent, pinned to the side.
+ *
+ * Handles: drawing the ticks with the current one longer and brighter, opening the list of those messages on hover or
+ * focus, and scrolling to the one picked.
+ *
+ * Crossing the small gap between the ticks and the list must not close it, hence the short close delay.
+ */
 import { useEffect, useRef, useState } from "react";
 import { MAX_RAIL_TICKS } from "@/lib/chat-rail";
 import { OverflowSlideText } from "@/components/OverflowSlideText";
@@ -8,17 +16,10 @@ export interface ScrollRailItem {
   label: string;
 }
 
-// Crossing the small gap between the ticks and the list shouldn't close it.
 const CLOSE_DELAY_MS = 150;
 
-/**
- * The Claude-style way through a long chat: a short tick for every message you sent, pinned to the top left.
- * The current one is longer and brighter. Hovering (or focusing) opens the list of those messages, with the
- * current one highlighted; picking one scrolls to it.
- */
 export function ChatScrollRail({ items, activeIndex, onSelect }: {
   items: readonly ScrollRailItem[];
-  /** Index into `items` of the message being read, or -1 for none. */
   activeIndex: number;
   onSelect: (index: number) => void;
 }) {
@@ -37,10 +38,8 @@ export function ChatScrollRail({ items, activeIndex, onSelect }: {
 
   useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
 
-  // A long list opens scrolled to where you are, not to the top.
   useEffect(() => {
     if (!isOpen) return;
-    // Optional-called: jsdom (the test environment) doesn't implement scrollIntoView.
     listRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView?.({ block: "nearest" });
   }, [isOpen]);
 
@@ -104,7 +103,6 @@ export function ChatScrollRail({ items, activeIndex, onSelect }: {
                   onSelect(index);
                   setIsOpen(false);
                 }}
-                // `group/row` is what OverflowSlideText watches to start gliding a label that doesn't fit.
                 className={cn(
                   "group/row flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50",
                   isActive ? "bg-muted/70 text-foreground" : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
@@ -114,8 +112,6 @@ export function ChatScrollRail({ items, activeIndex, onSelect }: {
                   aria-hidden="true"
                   className={cn("h-[2px] w-2.5 shrink-0 rounded-full", isActive ? "bg-foreground" : "bg-muted-foreground/50")}
                 />
-                {/* A message can be long, so the label reads to the end on hover rather than stopping at an
-                    ellipsis - the same treatment a long project name gets in the app sidebar. */}
                 <OverflowSlideText text={item.label} />
               </button>
             );

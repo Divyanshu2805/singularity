@@ -1,7 +1,12 @@
+/**
+ * Covers syntax highlighting for chat code blocks: keywords, strings and comments coloured, the code reassembled
+ * exactly including whitespace, a file path accepted as the language hint, an unknown language returned untouched,
+ * code that is not valid yet still highlighted as it is mid-stream, and anything too large skipped rather than parsed
+ * on every render.
+ */
 import { describe, it, expect } from "vitest";
 import { highlightCode, languageFor, MAX_HIGHLIGHT_CHARS } from "./highlight-code";
 
-/** The classes assigned to a given piece of the code, for asserting on what got coloured. */
 const classOf = (code: string, hint: string | undefined, fragment: string) =>
   highlightCode(code, hint).find((token) => token.text === fragment)?.cls;
 
@@ -14,7 +19,6 @@ describe("highlightCode", () => {
   });
 
   it("puts the code back together exactly, including whitespace", () => {
-    // A highlighter that drops or reorders a character silently corrupts the snippet it's colouring.
     const code = 'function add(a: number) {\n  return a + 1;\n}\n';
     expect(highlightCode(code, "tsx").map((t) => t.text).join("")).toBe(code);
   });
@@ -32,7 +36,6 @@ describe("highlightCode", () => {
   });
 
   it("still highlights code that isn't valid yet, as it is mid-stream", () => {
-    // Half-arrived code is the normal case while a reply streams in; it must not throw or come back empty.
     const partial = 'const handleAdd = (title: string) => {\n  const id = addTask({ ti';
     const tokens = highlightCode(partial, "tsx");
     expect(tokens.map((t) => t.text).join("")).toBe(partial);

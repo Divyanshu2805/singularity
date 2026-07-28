@@ -1,3 +1,8 @@
+/**
+ * The hover and focus tooltip, styled for this app.
+ *
+ * Handles: the provider, the trigger and the positioned content with its entry animation.
+ */
 import * as React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 

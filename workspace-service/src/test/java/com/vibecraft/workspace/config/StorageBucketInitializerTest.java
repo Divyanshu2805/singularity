@@ -18,9 +18,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * A brand-new MinIO has no bucket, and nothing else creates it: without this every file write on a fresh
- * environment fails until someone makes the bucket by hand. The step must create it when it is missing, leave an
- * existing one alone, and never stop the service from starting when MinIO can't be reached.
+ * Covers that the project-files bucket is created on a brand-new MinIO, that an existing one is left alone, and that
+ * MinIO being unreachable does not stop the service from starting.
+ *
+ * <p>Nothing else creates that bucket, so without this step every file write on a fresh environment fails until
+ * someone makes it by hand.
  */
 class StorageBucketInitializerTest {
 

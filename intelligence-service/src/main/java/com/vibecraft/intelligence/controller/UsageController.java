@@ -16,6 +16,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Token usage and plan limits, for the browser.
+ *
+ * <p>Handles: today's usage against the plan's ceilings, the plan limits on their own, the insights breakdown for a
+ * range, the paginated activity list, and the CSV export.
+ */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/usage")
@@ -24,13 +30,11 @@ public class UsageController {
     private final UsageService usageService;
     private final UsageInsightsService usageInsightsService;
 
-    /** {@code projectId} is optional: when given, the response also says how much of today went on that project. */
     @GetMapping("/today")
     public ResponseEntity<UsageTodayResponse> getTodayUsage(@RequestParam(required = false) Long projectId) {
         return ResponseEntity.ok(usageService.getTodayUsageOfUser(projectId));
     }
 
-    /** Charts and breakdowns for a range: {@code today}, {@code 7d}, {@code 30d} or {@code 90d}. */
     @GetMapping("/insights")
     public ResponseEntity<UsageInsightsResponse> getInsights(@RequestParam(defaultValue = "7d") String range) {
         return ResponseEntity.ok(usageInsightsService.getInsights(range));

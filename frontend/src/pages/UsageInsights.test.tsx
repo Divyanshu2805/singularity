@@ -1,3 +1,7 @@
+/**
+ * Covers the usage insights page end to end: the range picker, the chart and totals, the per-feature and per-project
+ * breakdowns, and the empty state when there is nothing to show yet.
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -91,14 +95,13 @@ describe("UsageInsights page", () => {
     await renderPage();
     await screen.findByText("Tokens by day");
 
-    expect(screen.getByText("12,000")).toBeTruthy(); // this period
+    expect(screen.getByText("12,000")).toBeTruthy();
     expect(screen.getByText("Days at limit")).toBeTruthy();
     expect(screen.getByText(/daily limit of 5,000/)).toBeTruthy();
-    // Earlier activity is named honestly, not folded into a feature.
     expect(screen.getAllByText("Earlier activity").length).toBeGreaterThan(0);
     expect(screen.getByText("Old shop")).toBeTruthy();
     expect(screen.getByText("deleted")).toBeTruthy();
-    expect(screen.getByText("70%")).toBeTruthy(); // output share
+    expect(screen.getByText("70%")).toBeTruthy();
     expect(await screen.findByText("Idea interview")).toBeTruthy();
   });
 

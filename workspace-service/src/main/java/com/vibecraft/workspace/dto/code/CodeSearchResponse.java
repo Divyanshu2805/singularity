@@ -3,8 +3,10 @@ package com.vibecraft.workspace.dto.code;
 import java.util.List;
 
 /**
- * Search results across a project's files. {@code truncated} means the overall match cap was hit, so there are
- * more results than these - the client says so rather than implying it found everything.
+ * Search results across a project's files.
+ *
+ * <p>Handles: the query, how many files and matches were found, the per-file results, and whether the overall cap was
+ * hit - so the client can say there are more rather than implying it found everything.
  */
 public record CodeSearchResponse(
         String query,

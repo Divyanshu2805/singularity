@@ -1,4 +1,8 @@
-
+/**
+ * An error the preview's own page threw, surfaced beside it.
+ *
+ * Handles: showing what broke and offering to hand it to the chat as a fix request, or to dismiss it.
+ */
 import { AlertCircle, X, Wrench, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -27,7 +31,6 @@ export function RuntimeErrorAlert({ error, onDismiss, onFix }: RuntimeErrorAlert
     return (
         <div className="absolute bottom-4 right-4 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
             <div className="w-[400px] bg-[#1e1e20] border border-red-500/20 rounded-xl shadow-2xl overflow-hidden">
-                {/* Header */}
                 <div className="flex items-center justify-between p-4 bg-red-500/10 border-b border-red-500/10">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
@@ -46,7 +49,6 @@ export function RuntimeErrorAlert({ error, onDismiss, onFix }: RuntimeErrorAlert
                     </button>
                 </div>
 
-                {/* Content */}
                 <div className="p-4">
                     <div
                         className="group cursor-pointer"
@@ -76,7 +78,6 @@ export function RuntimeErrorAlert({ error, onDismiss, onFix }: RuntimeErrorAlert
                         </div>
                     </div>
 
-                    {/* Stack Trace (Expanded) */}
                     {isExpanded && error.stack && (
                         <div className="mt-4 pl-6">
                             <div className="p-3 bg-black/30 rounded-lg border border-zinc-800/50">
@@ -88,7 +89,6 @@ export function RuntimeErrorAlert({ error, onDismiss, onFix }: RuntimeErrorAlert
                     )}
                 </div>
 
-                {/* Footer */}
                 <div className="p-3 bg-[#27272a] flex items-center justify-between border-t border-zinc-800">
                     <div className="flex items-center gap-3 text-xs text-zinc-500 px-2">
                         <button onClick={onDismiss} className="hover:text-zinc-300 transition-colors">

@@ -8,9 +8,13 @@ import org.mapstruct.Mapper;
 import java.util.List;
 
 /**
- * Hand-written rather than generated: the entity keeps the selection flat (so it is just four nullable
- * columns) while the DTO nests it, and "all four columns are null" has to become one absent selection rather
- * than an object full of nulls - which is a decision, not a field-name match.
+ * Turns saved code notes into the shape the notes panel reads.
+ *
+ * <p>Handles: one note or a list, folding the four flat selection columns into one nested selection - and into no
+ * selection at all when they are empty.
+ *
+ * <p>Hand-written rather than generated because that folding is a decision, not a field-name match: a note with no
+ * selection must come back with the field absent, not an object full of nulls.
  */
 @Mapper(componentModel = "spring")
 public interface CodeNoteMapper {

@@ -7,22 +7,25 @@ import java.util.Set;
 
 /**
  * Turns Stripe's minor-unit amounts into something a pricing page can print.
+ *
+ * <p>Handles: choosing the right divisor for the currency (some have no minor unit at all), dropping a zero fraction,
+ * grouping the digits and prefixing the symbol - falling back to the uppercase currency code when there is no symbol
+ * for it.
+ *
+ * <p>Grouping is per-currency because rupees group as the last three digits and then in pairs, which DecimalFormat
+ * cannot produce even under the en-IN locale.
  */
 public final class MoneyFormat {
 
     private MoneyFormat() {
     }
 
-    /** Currencies Stripe treats as having no minor unit at all - the amount is already whole. */
     private static final Set<String> ZERO_DECIMAL = Set.of("bif", "clp", "djf", "gnf", "jpy", "kmf", "krw",
             "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf");
 
     private static final Map<String, String> SYMBOLS = Map.of(
             "inr", "₹", "usd", "$", "eur", "€", "gbp", "£", "jpy", "¥", "aud", "A$", "cad", "C$");
 
-    /**
-     * {@code (49900, "inr")} → {@code "₹499"}, {@code (2050, "usd")} → {@code "$20.50"}.
-     */
     public static String format(Integer amountMinor, String currency) {
         if (amountMinor == null || amountMinor <= 0) {
             return "Free";
@@ -44,10 +47,6 @@ public final class MoneyFormat {
         return symbol != null ? symbol + number : code.toUpperCase() + " " + number;
     }
 
-    /**
-     * Groups digits the way that currency's own readers expect - rupees group as the last three digits then
-     * pairs (₹1,49,900), which {@code DecimalFormat} can't produce even under the {@code en-IN} locale.
-     */
     static String group(String digits, boolean indian) {
         if (digits.length() <= 3) {
             return digits;

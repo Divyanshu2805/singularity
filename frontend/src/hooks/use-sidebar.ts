@@ -1,3 +1,10 @@
+/**
+ * Whether the sidebar is pinned, peeking or hidden.
+ *
+ * Handles: pinning on click (the panel then takes real space) and peeking on hover while unpinned (it floats over the
+ * page until the pointer leaves), with a short close delay so crossing the gap between the toggle and the panel does
+ * not dismiss it. The pinned choice is remembered in browser storage.
+ */
 import { useEffect, useRef, useState } from "react";
 
 const SIDEBAR_PINNED_KEY = "sidebar_pinned";
@@ -5,10 +12,6 @@ const PEEK_CLOSE_DELAY_MS = 180;
 
 export type SidebarState = "pinned" | "peek" | "hidden";
 
-/**
- * Clicking the toggle pins the sidebar (it takes real space); hovering the toggle while unpinned
- * opens the same panel floating over the page until the pointer leaves.
- */
 export function useSidebar() {
   const [isPinned, setIsPinned] = useState(() => localStorage.getItem(SIDEBAR_PINNED_KEY) === "true");
   const [isPeekOpen, setIsPeekOpen] = useState(false);
@@ -43,11 +46,9 @@ export function useSidebar() {
     setIsPinned(next);
     localStorage.setItem(SIDEBAR_PINNED_KEY, String(next));
     closeNow();
-    // Unpinning leaves the pointer over the header toggle - don't instantly reopen it as a hover panel.
     if (!next) suppressPeekRef.current = true;
   };
 
-  /** Gives the space back without toggling it on again - used when a panel opens and needs the room. */
   const collapse = () => {
     if (isPinned) {
       setIsPinned(false);
@@ -92,7 +93,6 @@ export function useSidebar() {
         if (!isPinned) scheduleClose();
       },
     },
-    // The account menu renders in a portal outside the panel, so a hover panel must stay open while it's open.
     onMenuOpenChange: (open: boolean) => {
       isLockedRef.current = open;
       if (!open && !isPointerInPanelRef.current) scheduleClose();

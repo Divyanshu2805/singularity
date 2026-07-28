@@ -1,3 +1,9 @@
+/**
+ * The actions that appear on a chat message on hover: copy it, and when it applies, retry the turn.
+ *
+ * Handles: the copy with its own tick-then-revert state, tangled up with the row's hover reveal, and the timestamp
+ * beside them - a time for something today, a date once it is not.
+ */
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Pencil, Trash2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -5,7 +11,6 @@ import { cn } from "@/lib/utils";
 
 const COPY_FEEDBACK_MS = 1500;
 
-/** "Today at 8:29 PM" for something recent, a date once it isn't today. */
 export function formatMessageTime(iso?: string): string | null {
   if (!iso) return null;
   const at = new Date(iso);
@@ -29,23 +34,10 @@ export function formatMessageTime(iso?: string): string | null {
   return `${date} at ${time}`;
 }
 
-/**
- * The timestamp and hover actions under a message.
- *
- * <p>Always rendered, kept invisible until the message is hovered or something inside it has focus - so the
- * transcript stays quiet to read, but the controls are never more than a hover away and are still reachable
- * by keyboard. The parent needs `group/message` for the hover to reach here.
- */
 export function MessageActions({ at, onCopy, onEdit, onDelete, deleteLabel = "Delete", align = "left", className }: {
   at?: string;
-  /** Returns the text to put on the clipboard. Omit to leave out the copy button. */
   onCopy?: () => string;
-  /** Omit for messages that can't be edited (anything the AI said). */
   onEdit?: () => void;
-  /**
-   * Omit wherever a message can't be removed - the project transcript is the record of what was actually
-   * built and has no delete path, so only the code notes pass this.
-   */
   onDelete?: () => void;
   deleteLabel?: string;
   align?: "left" | "right";
@@ -64,7 +56,6 @@ export function MessageActions({ at, onCopy, onEdit, onDelete, deleteLabel = "De
       setCopied(true);
       resetRef.current = window.setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
     } catch {
-      // Clipboard access can be refused; the message itself is still selectable.
     }
   };
 
@@ -76,7 +67,6 @@ export function MessageActions({ at, onCopy, onEdit, onDelete, deleteLabel = "De
       className={cn(
         "flex items-center gap-1 pt-1 text-[10px] text-muted-foreground/70",
         "opacity-0 transition-opacity focus-within:opacity-100 group-hover/message:opacity-100",
-        // The copied tick has to stay visible after the pointer moves away, or the feedback is missed.
         copied && "opacity-100",
         align === "right" && "justify-end",
         className

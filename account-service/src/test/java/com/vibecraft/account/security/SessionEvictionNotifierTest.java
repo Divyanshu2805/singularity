@@ -24,9 +24,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
- * A signed-out session must reach every other service's cache as well as this one's - otherwise it keeps working
- * against them for up to a minute. Uses a real local HTTP server standing in for the sibling services, so the
- * request that actually goes over the wire (path, secret header, body) is what's asserted.
+ * Covers that a signed-out session reaches every other service's cache, not just this one's.
+ *
+ * <p>Uses a real local HTTP server standing in for the sibling services, so what is asserted is the request that
+ * actually goes over the wire - path, secret header and body - rather than a mock's recollection of it. Also covers
+ * that a sibling being unreachable is survivable, since otherwise a sign-out would fail because another service was
+ * down.
  */
 class SessionEvictionNotifierTest {
 
@@ -161,7 +164,7 @@ class SessionEvictionNotifierTest {
 
             org.junit.jupiter.api.Assertions.assertTimeout(Duration.ofSeconds(4), () -> notifier.evictSession("abc123"));
         } finally {
-            neverAnswer.countDown();   // let the fake server's handler finish so stop() doesn't wait on it
+            neverAnswer.countDown();
             hung.stop(0);
         }
     }

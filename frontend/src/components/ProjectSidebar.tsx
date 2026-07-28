@@ -1,3 +1,9 @@
+/**
+ * The sidebar panel: the project list, grouped and searchable, with everything a project row can do.
+ *
+ * Handles: the pinned, starred and recent groups, filtering and renaming, the per-project actions menu, creating a
+ * project, and the links to the dashboard, billing and settings.
+ */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { canForkProject } from "@/lib/project-fork";
 import { deleteCopy } from "@/lib/project-delete";
@@ -48,7 +54,6 @@ import type { ProjectSummaryResponse } from "@/lib/types";
 import { cn, generateGradient } from "@/lib/utils";
 
 const RECENT_LIMIT = 12;
-// Pinned and Starred stay short; the rest is one click away on the All projects page.
 const SECTION_LIMIT = 2;
 const SEARCH_SHORTCUT = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘K" : "Ctrl K";
 const COLLAPSED_SECTIONS_KEY = "sidebar_collapsed_sections";
@@ -57,16 +62,13 @@ type ProjectActions = ReturnType<typeof useProjectActions>;
 
 interface SidebarPanelProps {
   currentProjectId?: string;
-  /** Called after any navigation, so a hover-opened panel can close itself. */
   onNavigate?: () => void;
-  /** Menus and dialogs render in a portal outside the panel, so a hover panel must stay open while one is open. */
   onMenuOpenChange?: (open: boolean) => void;
 }
 
 const ROW_CLASS =
   "flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50";
 
-/** Which project sections are folded away, remembered between visits. */
 function useCollapsedSections() {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
     try {
@@ -84,7 +86,6 @@ function useCollapsedSections() {
       try {
         localStorage.setItem(COLLAPSED_SECTIONS_KEY, JSON.stringify([...next]));
       } catch {
-        // Remembering this is a convenience only
       }
       return next;
     });
@@ -108,15 +109,10 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
-// Module-level so the array reference stays stable for the typewriter hook.
 const NEW_PROJECT_PHRASES = ["Start a new project"];
 const PREFERS_REDUCED_MOTION =
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/**
- * Looks like a prompt box, but it's a button: the text keeps typing itself out as an invitation, and a
- * click starts a new project on the dashboard. Nothing can be typed into it.
- */
 function NewProjectItem({ onClick }: { onClick: () => void }) {
   const typed = useTypewriterPlaceholder(NEW_PROJECT_PHRASES, !PREFERS_REDUCED_MOTION);
   const text = PREFERS_REDUCED_MOTION ? NEW_PROJECT_PHRASES[0] : typed;
@@ -148,13 +144,11 @@ function NewProjectItem({ onClick }: { onClick: () => void }) {
   );
 }
 
-/** Inline rename in place of the row: Enter or clicking away saves, Escape cancels. */
 function RenameField({ project, onDone }: { project: ProjectSummaryResponse; onDone: (name: string | null) => void }) {
   const [draft, setDraft] = useState(project.name);
   const inputRef = useRef<HTMLInputElement>(null);
   const isDoneRef = useRef(false);
 
-  // The menu that started the rename has already closed by the time this mounts, so focus can go straight in.
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
@@ -204,8 +198,6 @@ function ProjectItem({ project, isCurrent, isRenaming, onOpen, onStartRename, on
   actions: ProjectActions;
 }) {
   const canEdit = project.role === "OWNER" || project.role === "EDITOR";
-  // Rename starts only once the menu has fully closed. Opening the box while the menu is still closing let the
-  // menu's focus handling pull focus back out of it, and losing focus ends the rename straight away.
   const pendingRenameRef = useRef(false);
   const beginPendingRename = () => {
     if (!pendingRenameRef.current) return;
@@ -254,7 +246,6 @@ function ProjectItem({ project, isCurrent, isRenaming, onOpen, onStartRename, on
           className="min-w-[180px]"
           onCloseAutoFocus={(e) => {
             if (!pendingRenameRef.current) return;
-            // Don't hand focus back to the trigger - it's about to go to the rename box instead.
             e.preventDefault();
             beginPendingRename();
           }}
@@ -264,7 +255,6 @@ function ProjectItem({ project, isCurrent, isRenaming, onOpen, onStartRename, on
               <DropdownMenuItem
                 onSelect={() => {
                   pendingRenameRef.current = true;
-                  // Fallback in case the menu closes without a focus hand-off (e.g. it unmounts first).
                   window.setTimeout(beginPendingRename, 400);
                 }}
               >
@@ -311,16 +301,11 @@ function ProjectItem({ project, isCurrent, isRenaming, onOpen, onStartRename, on
   );
 }
 
-/**
- * A labelled, collapsible list that shows at most `limit` projects, with a quiet link to the rest.
- * The label toggles it; folding animates the height and makes the hidden rows unreachable by keyboard.
- */
 function ProjectSection({ icon: Icon, label, projects, limit = SECTION_LIMIT, emptyMessage, isCollapsed, onToggle, renderProjects, onShowMore }: {
   icon?: LucideIcon;
   label: string;
   projects: ProjectSummaryResponse[];
   limit?: number;
-  /** Shown instead of hiding the section when it has no projects. */
   emptyMessage?: string;
   isCollapsed: boolean;
   onToggle: () => void;
@@ -358,7 +343,6 @@ function ProjectSection({ icon: Icon, label, projects, limit = SECTION_LIMIT, em
 
       <div
         id={contentId}
-        // `inert` keeps folded rows out of the tab order; React 18 has no prop for it yet.
         ref={(el) => {
           if (!el) return;
           if (isCollapsed) el.setAttribute("inert", "");
@@ -376,7 +360,6 @@ function ProjectSection({ icon: Icon, label, projects, limit = SECTION_LIMIT, em
             renderProjects(projects.slice(0, limit))
           )}
           {hiddenCount > 0 && (
-            // Just "···" at rest; hovering (or focusing) swaps it for "Show more +N" in the same spot.
             <button
               type="button"
               onClick={onShowMore}
@@ -404,12 +387,6 @@ function ProjectSection({ icon: Icon, label, projects, limit = SECTION_LIMIT, em
   );
 }
 
-/**
- * Same idea as `ProjectSection` (labelled, collapsible, capped with a "show more" link), but built for the
- * one section that has to fill whatever space is left in the sidebar and scroll internally: the header
- * stays put and only the list below it scrolls, so "Recent" is never carried out of view by its own rows,
- * and the fixed sections above it (Pinned, Starred, the nav links) never scroll at all.
- */
 function RecentSection({ label, projects, limit, emptyMessage, isCollapsed, onToggle, renderProjects, onShowMore }: {
   label: string;
   projects: ProjectSummaryResponse[];
@@ -455,7 +432,6 @@ function RecentSection({ label, projects, limit, emptyMessage, isCollapsed, onTo
             <>
               {renderProjects(projects.slice(0, limit))}
               {hiddenCount > 0 && (
-                // Just "···" at rest; hovering (or focusing) swaps it for "Show more +N" in the same spot.
                 <button
                   type="button"
                   onClick={onShowMore}
@@ -485,13 +461,6 @@ function RecentSection({ label, projects, limit, emptyMessage, isCollapsed, onTo
   );
 }
 
-/**
- * How much of today's AI allowance is left, sat above the account chip.
- *
- * <p>Quiet until it matters: nothing at all while there's plenty left, a bar once the allowance is running
- * down, and an upgrade prompt once it's gone. A meter that is always on screen becomes furniture, and the one
- * moment it needs to be noticed is the moment sending stops working.
- */
 function UsageMeter({ onUpgrade }: { onUpgrade: () => void }) {
   const { quota, subscription } = useBilling();
 
@@ -552,20 +521,17 @@ export function SidebarPanel({ currentProjectId, onNavigate, onMenuOpenChange }:
     onNavigate?.();
   };
 
-  // Deleting the project that's open leaves nothing to show, so head back to the dashboard.
   const actions = useProjectActions({
     onDeleted: (project) => {
       if (String(project.id) === currentProjectId) go("/projects");
     },
   });
 
-  // The palette is a dialog outside the panel, so it holds a hover-opened sidebar open like the menus do.
   const setPaletteOpen = (open: boolean) => {
     setIsPaletteOpen(open);
     onMenuOpenChange?.(open);
   };
 
-  // Ctrl/⌘ K from anywhere in the app. Read through a ref so the listener is added once.
   const paletteToggleRef = useRef(() => setPaletteOpen(!isPaletteOpen));
   paletteToggleRef.current = () => setPaletteOpen(!isPaletteOpen);
   useEffect(() => {
@@ -579,7 +545,6 @@ export function SidebarPanel({ currentProjectId, onNavigate, onMenuOpenChange }:
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Renaming keeps a hover-opened sidebar open; the lock is taken once the menu that started it has let go.
   const startRename = (project: ProjectSummaryResponse) => {
     setRenamingId(project.id);
     window.setTimeout(() => onMenuOpenChange?.(true), 0);
@@ -594,9 +559,6 @@ export function SidebarPanel({ currentProjectId, onNavigate, onMenuOpenChange }:
   const userInfo = getUserInfo();
   const initial = userInfo?.name?.charAt(0).toUpperCase() || "U";
 
-  // `signOut` rather than clearing the token and routing to /login: a route change keeps the page alive, and
-  // with it every module-level store, so the next account to sign in here inherited the last one's chat and
-  // code notes. It tears those down and leaves via a full document load.
   const handleLogout = () => signOut();
 
   const { pinned, starred, recent } = useMemo(() => groupSidebarSections(projects ?? []), [projects]);
@@ -636,11 +598,6 @@ export function SidebarPanel({ currentProjectId, onNavigate, onMenuOpenChange }:
         <NavItem icon={LayoutDashboard} label="Dashboard" onClick={() => go("/projects")} />
       </nav>
 
-      {/*
-        Only "Recent" scrolls internally (it's the one section that can genuinely outgrow the sidebar);
-        everything above it - the project nav links, Pinned, Starred - stays fixed, and Recent's own
-        heading stays put too, above its scrolling list, rather than being carried off screen with it.
-      */}
       <div className="flex min-h-0 flex-1 flex-col px-2 pb-2">
         <div className="shrink-0">
           <SectionLabel>Projects</SectionLabel>
@@ -701,7 +658,6 @@ export function SidebarPanel({ currentProjectId, onNavigate, onMenuOpenChange }:
       </div>
 
       <div className="border-t border-border/60 p-2">
-        {/* Inside a project the chat shows its own, always-on meter above the composer; two on one screen is noise. */}
         {!currentProjectId && <UsageMeter onUpgrade={() => go("/pricing")} />}
 
         <DropdownMenu onOpenChange={onMenuOpenChange}>

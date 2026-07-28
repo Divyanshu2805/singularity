@@ -1,14 +1,14 @@
+/**
+ * One line of text that fades out at the edge when it does not fit.
+ *
+ * Handles: measuring the overflow and, while its row is hovered or keyboard-focused, looping gently - rest at the
+ * start, glide to show the end, rest, glide back. Text that fits is left alone.
+ */
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
-// Share of the loop spent gliding one way (see the `slide-peek` keyframes: two 30% glides, the rest resting).
 const GLIDE_SHARE = 0.3;
 
-/**
- * One line of text that fades out at the edge when it doesn't fit. While its row - the nearest ancestor
- * with the `group/row` class - is hovered or keyboard-focused, it loops gently: rests at the start, glides
- * to show the end, rests, glides back. Text that fits is left alone.
- */
 export function OverflowSlideText({ text, className }: { text: string; className?: string }) {
     const containerRef = useRef<HTMLSpanElement>(null);
     const [overflow, setOverflow] = useState(0);
@@ -24,7 +24,6 @@ export function OverflowSlideText({ text, className }: { text: string; className
     }, [text]);
 
     const isOverflowing = overflow > 0;
-    // Longer names travel further, so they glide for longer at roughly the same reading speed.
     const glideMs = 400 + overflow * 10;
     const slideStyle = {
         "--slide-by": `-${overflow}px`,
@@ -34,7 +33,6 @@ export function OverflowSlideText({ text, className }: { text: string; className
     return (
         <span
             ref={containerRef}
-            // Reduced-motion users don't get the glide, so they get the full name as a tooltip instead.
             title={isOverflowing ? text : undefined}
             className={cn(
                 "block min-w-0 flex-1 overflow-hidden whitespace-nowrap",

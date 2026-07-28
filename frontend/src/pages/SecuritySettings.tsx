@@ -1,3 +1,13 @@
+/**
+ * The account's security page.
+ *
+ * Handles: re-authenticating before anything below can change, changing the password, enrolling and removing an
+ * authenticator app, signing out everywhere, and the recent security events.
+ *
+ * Re-authentication is asked for up front because the provider demands a recent sign-in for these changes anyway -
+ * doing it first means nobody gets halfway through a change and is then refused. Device descriptions are a rough hint
+ * from the user agent, not an identity.
+ */
 import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
@@ -59,7 +69,6 @@ const EVENT_LABELS: Record<AuthSecurityEventType, string> = {
     PASSWORD_CHANGED: "Password changed",
 };
 
-/** "Chrome on Windows" rather than a 200-character user agent. Rough on purpose - it's a hint, not an identity. */
 function describeDevice(userAgent: string | null): string {
     if (!userAgent) return "Unknown device";
     const browser = /Edg\//.test(userAgent) ? "Edge" : /Chrome\//.test(userAgent) ? "Chrome" : /Firefox\//.test(userAgent) ? "Firefox" : /Safari\//.test(userAgent) ? "Safari" : "Browser";
@@ -67,11 +76,6 @@ function describeDevice(userAgent: string | null): string {
     return os ? `${browser} on ${os}` : browser;
 }
 
-/**
- * Confirms it's really the account owner before anything below can change - password, or Google, plus their second
- * factor if they have one. Firebase demands a recent sign-in for these changes anyway; asking up front means nobody
- * fills in a form only to be told to sign in again.
- */
 function ConfirmIdentityDialog({ open, onOpenChange, onConfirmed }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -182,7 +186,6 @@ function ConfirmIdentityDialog({ open, onOpenChange, onConfirmed }: {
     );
 }
 
-/** Setting up an authenticator app: scan, then prove it works with one code before it's switched on. */
 function TotpSetup({ user, onDone, onCancel }: { user: User; onDone: () => void; onCancel: () => void }) {
     const [secret, setSecret] = useState<TotpSecret | null>(null);
     const [qr, setQr] = useState<string | null>(null);
@@ -291,7 +294,6 @@ export default function SecuritySettings() {
         if (signedIn) loadEvents();
     }, [signedIn, loadEvents]);
 
-    // The re-authenticated Firebase user, only while the owner is actively managing security. Released on leave.
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [user, setUser] = useState<User | null>(null);
     const [factors, setFactors] = useState<MultiFactorInfo[]>([]);
@@ -366,7 +368,6 @@ export default function SecuritySettings() {
                             <p className="mt-1 text-sm text-muted-foreground">How you sign in, and where you're signed in.</p>
                         </div>
 
-                        {/* Two-step verification + password */}
                         <section className="rounded-2xl border border-border/60 bg-panel/70 p-5 backdrop-blur">
                             <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div className="min-w-0">
@@ -469,7 +470,6 @@ export default function SecuritySettings() {
                             )}
                         </section>
 
-                        {/* Sessions */}
                         <section className="rounded-2xl border border-border/60 bg-panel/70 p-5 backdrop-blur">
                             <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div className="min-w-0">
@@ -503,7 +503,6 @@ export default function SecuritySettings() {
                             </div>
                         </section>
 
-                        {/* Activity */}
                         <section className="rounded-2xl border border-border/60 bg-panel/70 p-5 backdrop-blur">
                             <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Recent activity</p>
                             <p className="mt-1 text-xs text-muted-foreground">Your last 8 sign-in and security events.</p>

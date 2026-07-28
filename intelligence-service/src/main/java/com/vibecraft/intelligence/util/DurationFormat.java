@@ -3,16 +3,16 @@ package com.vibecraft.intelligence.util;
 /**
  * How long a turn took, written the way a person reads a clock rather than as a raw second count.
  *
- * <p>A real multi-file build runs for minutes, and "Thought for 220s" makes the reader do the division
- * themselves. Mirrored by {@code formatWorkedFor} in the frontend's {@code lib/utils.ts}, which the browser
- * uses for the same turn until the saved event arrives - keep the two in step.
+ * <p>Handles: seconds, minutes with seconds, and hours with minutes - never zero, since a turn always took some time.
+ *
+ * <p>A real multi-file build runs for minutes, and a raw second count makes the reader do the division. The frontend
+ * formats the same turn the same way until the saved event arrives; keep the two in step.
  */
 public final class DurationFormat {
 
     private DurationFormat() {
     }
 
-    /** e.g. {@code 45s}, {@code 3m 40s}, {@code 4m}, {@code 1h 2m}. Never zero - a turn always took some time. */
     public static String worked(long seconds) {
         long total = Math.max(1, seconds);
 

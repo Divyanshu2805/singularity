@@ -6,8 +6,10 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
- * A change the browser made directly with Firebase (a second factor added or removed, a password changed), reported
- * so it lands in the audit trail. The ID token must be fresh from that change and belong to the signed-in user.
+ * A change the browser made directly with Firebase, reported so it lands in the audit trail.
+ *
+ * <p>Handles: the event type - only the client-reportable ones are accepted - and an ID token that must be fresh from
+ * that change and belong to the signed-in user, which is what stops a client writing arbitrary history.
  */
 public record ReportSecurityEventRequest(
 

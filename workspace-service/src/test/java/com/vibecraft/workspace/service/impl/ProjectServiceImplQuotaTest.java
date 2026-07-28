@@ -4,11 +4,11 @@ import com.vibecraft.common.dto.PlanDto;
 import com.vibecraft.common.error.QuotaExceededException;
 import com.vibecraft.workspace.dto.project.CreateProjectFromPromptRequest;
 import com.vibecraft.workspace.dto.project.ProjectRequest;
-import com.vibecraft.workspace.feign.AccountServiceClient;
+import com.vibecraft.common.feign.AccountServiceClient;
 import com.vibecraft.workspace.mapper.ProjectMapper;
 import com.vibecraft.workspace.repository.ProjectMemberRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
-import com.vibecraft.workspace.security.AuthUtil;
+import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.workspace.service.ProjectFileService;
 import com.vibecraft.workspace.service.ProjectTemplateService;
 import org.junit.jupiter.api.DisplayName;
@@ -22,10 +22,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * The project-count limit spans two services: the allowance is account-service's (over Feign), the count owned is
- * this service's own table. At the limit a create must be refused with a 402 that carries the numbers, before
- * anything is written. This is the one quota path that can't reasonably be exercised live (it would mean creating
- * up to ten real projects), so it is pinned here.
+ * Covers the project-count limit, which spans two services: the allowance comes from account-service over Feign, the
+ * count owned is this service's own table.
+ *
+ * <p>At the limit a create must be refused with a 402 carrying the numbers, before anything is written. This is the
+ * one quota path that cannot reasonably be exercised live - it would mean creating up to ten real projects - so it is
+ * pinned here.
  */
 class ProjectServiceImplQuotaTest {
 

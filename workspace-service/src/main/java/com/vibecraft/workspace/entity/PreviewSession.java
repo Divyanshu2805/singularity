@@ -6,22 +6,25 @@ import lombok.experimental.FieldDefaults;
 
 import java.time.Instant;
 
-/**
- * One person's use of a project's preview. A {@link Preview} is the runner - one per project, shared, because
- * collaborators work on the same files and a second runner would only be a stale copy. A session is what makes it
- * <em>theirs</em>: a preview shows as running for someone only while they have an open session, their Stop ends
- * only their session, and their plan's preview allowance counts only their sessions. The runner is shut down once no
- * session is left on it.
- *
- * <p>Found 2026-09-16: before sessions existed, one collaborator starting a preview made it appear running for
- * everyone on the project, and any of them pressing Stop took it away from the others.
- */
 @Entity
 @Table(name = "preview_sessions", indexes = {
         @Index(name = "idx_preview_sessions_project_user", columnList = "project_id, user_id"),
         @Index(name = "idx_preview_sessions_preview_id", columnList = "preview_id"),
         @Index(name = "idx_preview_sessions_user_ended", columnList = "user_id, ended_at")
 })
+/**
+ * One person's use of a project's preview.
+ *
+ * <p>Handles: who has it open on which project, their own idle clock, and how and when their session ended -
+ * including whether it ended because the runner failed.
+ *
+ * <p>The distinction it exists for: a preview row is the runner, one per project and shared, because collaborators
+ * work on the same files and a second runner would only be a stale copy. A session is what makes it theirs - a
+ * preview shows as running for someone only while they have a session open, their Stop ends only their session, and
+ * their plan's allowance counts only their sessions. The runner shuts down once no session is left on it. Without
+ * sessions, one collaborator starting a preview made it appear running for everyone, and any of them pressing Stop
+ * took it away from the others.
+ */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -38,7 +41,6 @@ public class PreviewSession {
     @JoinColumn(name = "preview_id", nullable = false)
     Preview preview;
 
-    /** Denormalised from the preview so "this user's session on this project" is a single-table lookup. */
     @Column(name = "project_id", nullable = false)
     Long projectId;
 
@@ -47,16 +49,12 @@ public class PreviewSession {
 
     Instant startedAt;
 
-    /** The last time this person's app asked about the preview - their idle clock. */
     Instant lastSeenAt;
 
-    /** Null while open. */
     Instant endedAt;
 
-    /** Why it ended: "Stopped" when they pressed Stop, otherwise what ended it. */
     @Column(length = 500)
     String endReason;
 
-    /** True when it ended because the runner failed to start - the one ending shown as an error. */
     Boolean failed;
 }

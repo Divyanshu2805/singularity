@@ -1,3 +1,11 @@
+/**
+ * Covers exporting a conversation as markdown: each side under its own heading, an assistant turn rebuilt from its
+ * events rather than from the row's own content, build steps and changed files kept while progress chatter is
+ * dropped, walkthroughs labelled with the file they explain, a failed turn recorded as failed, and an empty
+ * conversation saying so.
+ *
+ * Also covers the code-lens export, where each snippet is quoted inline where it was first asked about.
+ */
 import { describe, it, expect } from "vitest";
 import { buildChatMarkdown, buildLensMarkdown, exportFilename } from "./chat-export";
 import type { ChatMessage } from "@/components/ChatPanel";
@@ -23,7 +31,6 @@ describe("buildChatMarkdown", () => {
   });
 
   it("rebuilds an assistant turn from its events, not the placeholder content the backend stores", () => {
-    // ChatMessage.content for an assistant row is a known placeholder; the readable text lives in the events.
     const markdown = buildChatMarkdown(
       [{
         id: "1",
@@ -59,7 +66,6 @@ describe("buildChatMarkdown", () => {
     expect(markdown).toContain("- Building the header");
     expect(markdown).toContain("**Files changed**");
     expect(markdown).toContain("- `src/Header.tsx`");
-    // A transcript shouldn't carry "Thought for 4s" or tool noise.
     expect(markdown).not.toContain("Thought for 4s");
     expect(markdown).not.toContain("Reading files...");
   });
@@ -108,7 +114,6 @@ describe("buildLensMarkdown", () => {
 
     expect(markdown).toContain("### `src/Counter.tsx` · line 4");
     expect(markdown).toContain("```tsx\nconst [count, setCount] = useState(0);\n```");
-    // The snippet comes before the turn that asked about it, not in a header above everything.
     expect(markdown.indexOf("src/Counter.tsx")).toBeLessThan(markdown.indexOf("Explain this"));
   });
 

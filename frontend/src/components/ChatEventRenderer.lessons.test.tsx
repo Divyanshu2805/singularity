@@ -1,3 +1,7 @@
+/**
+ * Covers the rendered form of a teaching-mode walkthrough: its summary, each part, and the link that opens the file
+ * at the line the part quotes.
+ */
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AssistantEvents } from "./ChatEventRenderer";
@@ -47,11 +51,9 @@ describe("walkthroughs in the chat", () => {
   it("sit under their build step, not on the edited file's row", () => {
     renderTurn();
 
-    // The step that wrote the file carries the walkthrough...
     const step = screen.getByText("Building the like button");
     expect(step.closest("li")).toContainElement(toggleFor("LikeButton.tsx"));
 
-    // ...while the "Edited 2 files" card is a plain list of files, with nothing to unfold.
     const editsCard = screen.getByText("Edited 2 files").closest("div.overflow-hidden")!;
     expect(editsCard.querySelectorAll("li")).toHaveLength(2);
     expect(editsCard.querySelector("[aria-expanded]")).toBeNull();
@@ -61,9 +63,7 @@ describe("walkthroughs in the chat", () => {
     renderTurn();
 
     const row = screen.getByText("Building the like button").closest("li")!;
-    // Shown so you can see what a step touched...
     expect(row).toHaveTextContent("LikeButton.tsx");
-    // ...but it isn't a way in: a jump from here would land at the top of the file, not at the explained line.
     expect([...row.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
       expect.stringContaining("How it works"),
     ]);
@@ -72,8 +72,6 @@ describe("walkthroughs in the chat", () => {
   it("give a step no way to open a file of its own - the quoted lines do that", () => {
     renderTurn();
 
-    // Only the "How it works" toggle is actionable on the row; opening a file at its top would land the
-    // learner somewhere other than the line the step is about.
     const row = screen.getByText("Building the like button").closest("li")!;
     const actions = [...row.querySelectorAll("button")].filter((button) => !button.hasAttribute("aria-expanded"));
     expect(actions).toHaveLength(0);
@@ -124,7 +122,6 @@ describe("a build step that wrote more than one file", () => {
       filePath: "src/LikeButton.tsx",
       content: "<summary>The heart button.</summary><part><code>const [likes, setLikes] = useState(0);</code>Keeps the count.</part>",
     },
-    // A second file the same step needed - no <todo> of its own names it.
     { type: ChatEventType.FILE_EDIT, filePath: "src/useLikes.ts", content: "export const useLikes = () => 0;" },
     {
       type: ChatEventType.LEARN,
@@ -144,7 +141,6 @@ describe("a build step that wrote more than one file", () => {
     expect(screen.getByText("The heart button.")).toBeInTheDocument();
     expect(screen.getByText("Where the count is kept.")).toBeInTheDocument();
 
-    // Each quoted line is labelled with its file, since the line number alone wouldn't say which.
     const reference = screen.getByRole("button", { name: /useLikes\.ts L1/ });
     fireEvent.click(reference);
     expect(onOpenFile).toHaveBeenCalledWith("src/useLikes.ts", { line: 1, code: "export const useLikes = () => 0;" });

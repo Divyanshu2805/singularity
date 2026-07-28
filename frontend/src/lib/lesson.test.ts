@@ -1,3 +1,10 @@
+/**
+ * Covers parsing a teaching-mode walkthrough: its summary and parts, showing as much as has arrived without half a
+ * closing tag, coping with parts the model forgot to close, dropping tags a lesson saved in an older shape still
+ * carries, undoing HTML escaping nobody asked for, and treating a body with no tags as a one-sentence lesson.
+ *
+ * Also covers not repeating a concept's name when the sentence already opens with it.
+ */
 import { describe, it, expect } from "vitest";
 import { findCodeLine, parseLesson, withLines, withoutLeadingConcept } from "./lesson";
 
@@ -45,7 +52,6 @@ describe("parseLesson", () => {
   });
 
   it("drops the related files of a walkthrough saved before they were removed, rather than showing the tags", () => {
-    // Transcripts still hold these; they must not leak into the last part's prose as raw markup.
     const lesson = parseLesson(FULL);
 
     expect(lesson.parts).toHaveLength(3);
@@ -54,7 +60,6 @@ describe("parseLesson", () => {
   });
 
   it("undoes HTML escaping the model wasn't asked for, including numeric entities", () => {
-    // Seen live in 7 of 73 quoted lines - without this, none of them would be found in the file.
     const lesson = parseLesson(
       "<summary>S</summary><part><code>const ref = useRef&lt;number | null&gt;(null);</code>a</part>" +
         "<part><code>key={`$&#123;id&#125;-&#x7B;x&#x7D;`}</code>b &amp; c</part>"
@@ -75,10 +80,8 @@ describe("parseLesson", () => {
 
 describe("withoutLeadingConcept", () => {
   it("doesn't repeat the concept's name when the sentence opens with it", () => {
-    // Seen live: the label already says "Composition", so "Composition means..." read as "Composition Composition".
     expect(withoutLeadingConcept("Composition means building a screen.", "Composition", true)).toBe("means building a screen.");
     expect(withoutLeadingConcept("Props: inputs a component is handed.", "Props", true)).toBe("inputs a component is handed.");
-    // Only the whole name counts - a sentence that merely starts with the same letters is left alone.
     expect(withoutLeadingConcept("Propsy things happen.", "Props", true)).toBe("Propsy things happen.");
   });
 
@@ -99,7 +102,6 @@ describe("findCodeLine", () => {
 
     expect(findCodeLine(file, 'type="button"', 1)).toBe(1);
     expect(findCodeLine(file, 'type="button"', 2)).toBe(3);
-    // Nothing below? Then it wraps back to the top rather than giving up.
     expect(findCodeLine(file, "between", 3)).toBe(2);
   });
 

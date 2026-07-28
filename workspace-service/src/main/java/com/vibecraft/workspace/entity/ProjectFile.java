@@ -8,6 +8,15 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 
+/**
+ * One file in a project: its metadata here, its bytes in object storage.
+ *
+ * <p>Handles: the canonical path, the storage object key, the size and content type, and when it was created and last
+ * changed.
+ *
+ * <p>There is deliberately no createdBy or updatedBy: nothing reads them, and they would be another user relation
+ * that cannot resolve now that users live in account-service's own database.
+ */
 @Getter
 @Setter
 @FieldDefaults(level = AccessLevel.PRIVATE)
@@ -40,9 +49,5 @@ public class ProjectFile {
 
     @UpdateTimestamp
     Instant updatedAt;
-
-    // No createdBy/updatedBy: unused by every reader in this codebase (confirmed against ProjectFileServiceImpl
-    // and ProjectFileMapper before dropping), and would otherwise be another User relation that can't resolve
-    // once User lives only in account-service's database.
 
 }

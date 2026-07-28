@@ -1,9 +1,14 @@
+/**
+ * The entry route: decides where to send someone.
+ *
+ * Handles: redirecting to their projects or to sign-in, showing the mark briefly while it decides. Kept eagerly
+ * loaded, since it is what the very first paint renders.
+ */
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatedLogo } from "@/components/VibeCraftLogo";
 import { isAuthenticated } from "@/lib/api";
 
-/** Briefly shown while deciding where to send someone: their projects, or sign-in. */
 const Index = () => {
   const navigate = useNavigate();
 

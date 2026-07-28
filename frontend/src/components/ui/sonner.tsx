@@ -1,3 +1,8 @@
+/**
+ * The stacked toast outlet, themed to match the app.
+ *
+ * Handles: mounting the toaster and mapping its parts onto this app's colours.
+ */
 import { useTheme } from "next-themes";
 import { Toaster as Sonner, toast } from "sonner";
 

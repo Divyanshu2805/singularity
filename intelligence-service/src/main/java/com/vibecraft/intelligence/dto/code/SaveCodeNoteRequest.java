@@ -5,8 +5,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * One finished exchange to keep, sent once the answer has finished streaming - the stream itself can't save
- * it, since a reply the reader stopped or lost halfway isn't worth keeping.
+ * One finished exchange to keep.
+ *
+ * <p>Handles: the question, the answer and the selection it was about.
+ *
+ * <p>Sent once the answer has finished streaming rather than by the stream itself: a reply the reader stopped or lost
+ * halfway is not worth keeping.
  */
 public record SaveCodeNoteRequest(
 

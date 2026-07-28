@@ -12,14 +12,21 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Reads and writes the per-person sessions on a preview runner.
+ *
+ * <p>Handles: a person's open or latest session on a project, counting their open sessions and a runner's, listing
+ * sessions that have gone idle, and the conditional updates that end one session, end every session on a runner, or
+ * record a visit.
+ *
+ * <p>Every lookup here is per user on purpose. There is deliberately no "is this project's preview open" query - that
+ * is exactly the question that once leaked one person's preview to every collaborator.
+ */
 @Repository
 public interface PreviewSessionRepository extends JpaRepository<PreviewSession, Long> {
 
-    /** The person's open session on this project, if any. Every query here is per user - there is deliberately no
-     * "is this project's preview open" lookup, which is exactly the question that leaked one person's preview to all. */
     Optional<PreviewSession> findFirstByProjectIdAndUserIdAndEndedAtIsNullOrderByIdDesc(Long projectId, Long userId);
 
-    /** Their most recent session on this project, open or ended - what their Preview tab shows. */
     Optional<PreviewSession> findFirstByProjectIdAndUserIdOrderByIdDesc(Long projectId, Long userId);
 
     int countByUserIdAndEndedAtIsNull(Long userId);
@@ -45,7 +52,6 @@ public interface PreviewSessionRepository extends JpaRepository<PreviewSession, 
             """)
     int end(@Param("id") Long id, @Param("reason") String reason, @Param("now") Instant now);
 
-    /** Ends every open session on a runner that has itself ended. */
     @Modifying(clearAutomatically = true)
     @Transactional
     @Query("""

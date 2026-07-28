@@ -1,7 +1,11 @@
+/**
+ * Covers the timestamp on a chat message: a time for something today, a date once it is not.
+ *
+ * Time is frozen so the assertions do not depend on the day the suite runs.
+ */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { formatMessageTime } from "./MessageActions";
 
-/** Freezes "now" so "Today"/"Yesterday" can be asserted without depending on the day the suite runs. */
 function at(now: string, run: () => void) {
   vi.useFakeTimers();
   vi.setSystemTime(new Date(now));

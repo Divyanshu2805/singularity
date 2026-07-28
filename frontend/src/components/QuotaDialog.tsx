@@ -1,3 +1,13 @@
+/**
+ * What a spent allowance looks like to the person who hit it.
+ *
+ * Handles: saying which limit was reached, showing the numbers off the error itself rather than parsing its sentence,
+ * and offering the upgrade.
+ *
+ * Deliberately a dialog offering an upgrade rather than a red error toast: nothing went wrong and the request was
+ * perfectly valid - they have simply reached the edge of what they are paying for, and treating that as a failure is
+ * both inaccurate and the worst possible framing at the moment someone is most likely to consider paying.
+ */
 import { useNavigate } from "react-router-dom";
 import { Sparkles, Zap } from "lucide-react";
 import {
@@ -13,17 +23,6 @@ import {
 import { formatResetIn, formatTokens } from "@/lib/billing";
 import type { QuotaDetails } from "@/lib/types";
 
-/**
- * What a 402 looks like to the person who hit it.
- *
- * <p>Deliberately a dialog offering an upgrade rather than a destructive-red error toast: nothing went wrong,
- * the request was perfectly valid, and they've simply reached the edge of what they're paying for. Treating
- * that as a failure is both inaccurate and the worst possible framing at the one moment someone is most
- * likely to consider paying.
- *
- * <p>Driven by the numbers off the error body rather than by its sentence, so the dialog can say exactly what
- * the limit was and - for a daily allowance - when it comes back.
- */
 export function QuotaDialog({ quota, onClose }: { quota: QuotaDetails | null; onClose: () => void }) {
   const navigate = useNavigate();
 

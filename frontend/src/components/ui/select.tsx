@@ -1,3 +1,8 @@
+/**
+ * The select control, styled for this app.
+ *
+ * Handles: the trigger, the positioned list with its scroll buttons, groups, labels, items and separators.
+ */
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";

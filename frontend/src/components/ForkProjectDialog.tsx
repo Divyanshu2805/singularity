@@ -1,3 +1,11 @@
+/**
+ * Asks what to call the copy, forks the project, and opens it.
+ *
+ * Handles: the name field with the backend's own length limit, the request, and reporting a refusal in place.
+ *
+ * The copy has every file but starts with a fresh chat, and the person forking owns it - nothing they do there
+ * reaches the original, and nothing done to the original reaches them.
+ */
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -8,13 +16,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 
-/** Matches the backend's project name limit. */
 const MAX_NAME_LENGTH = 255;
 
-/**
- * Asks what to call the copy, forks, and opens it. The copy has every file but starts with a fresh chat, and the
- * person forking owns it - nothing they do there reaches the original, and nothing done to the original reaches them.
- */
 export function ForkProjectDialog({ project, onOpenChange }: {
   project: { id: number | string; name: string } | null;
   onOpenChange: (open: boolean) => void;

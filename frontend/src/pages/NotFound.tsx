@@ -1,3 +1,8 @@
+/**
+ * The page for a URL nothing serves.
+ *
+ * Handles: saying so, logging the attempted path for diagnosis, and offering the way home.
+ */
 import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
 

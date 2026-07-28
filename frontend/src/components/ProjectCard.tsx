@@ -1,3 +1,9 @@
+/**
+ * One project, as a card on the dashboard or as a row in a list.
+ *
+ * Handles: the name with inline renaming, the generated gradient thumbnail, the last-edited time, the caller's role,
+ * and the actions menu - pin, star, fork, delete.
+ */
 import { useEffect, useRef, useState } from "react";
 import { deleteCopy } from "@/lib/project-delete";
 import { formatDistanceToNow } from "date-fns";
@@ -18,14 +24,11 @@ export interface ProjectItemProps {
     onOpen: () => void;
     onDownload: () => void;
     onDelete: () => void;
-    /** Only offered to editors of someone else's project. */
     onFork?: () => void;
     onTogglePin: () => void;
     onToggleStar: () => void;
-    /** Renaming is optional: a caller that doesn't wire these up just doesn't get the menu item. */
     isRenaming?: boolean;
     onStartRename?: () => void;
-    /** `null` means cancelled - nothing is renamed either way. */
     onRenameDone?: (name: string | null) => void;
 }
 
@@ -34,7 +37,6 @@ const ROLE_LABELS: Record<ProjectRole, string> = { OWNER: "Owner", EDITOR: "Edit
 const editedAgo = (project: ProjectSummaryResponse) =>
     formatDistanceToNow(new Date(project.updatedAt ?? project.createdAt), { addSuffix: true });
 
-/** Inline rename in place of the name: Enter or clicking away saves, Escape cancels. Stops clicks reaching the card underneath. */
 function RenameNameField({ project, onDone, className }: {
     project: ProjectSummaryResponse;
     onDone: (name: string | null) => void;
@@ -84,11 +86,9 @@ function RenameNameField({ project, onDone, className }: {
 }
 
 function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin, onToggleStar, isRenaming, onStartRename }: Omit<ProjectItemProps, "onOpen" | "onRenameDone">) {
-    // Same access this project's other management actions (delete) already use.
     const canManage = project.role === "OWNER" || project.role === "EDITOR";
 
     return (
-        // Non-modal: a modal menu that opens a dialog leaves the page unclickable after it closes
         <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                 <button
@@ -148,7 +148,6 @@ function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin
     );
 }
 
-/** Small pin/star marks shown next to a project's name. */
 function PreferenceMarks({ project }: { project: ProjectSummaryResponse }) {
     if (!project.pinnedAt && !project.starredAt) return null;
     return (

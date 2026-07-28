@@ -1,3 +1,13 @@
+/**
+ * The public pricing page.
+ *
+ * Handles: the plan cards with what each one buys, starting a checkout for someone with no subscription, and changing
+ * plan in place for someone who already has one.
+ *
+ * Feature lists are built from each plan's own numbers rather than written out per tier, so a limit changed on the
+ * server cannot leave the page claiming the old one. The unlimited-AI flag is deliberately not shown: no plan sets
+ * it, and a card promising unlimited AI beside a daily token figure would contradict itself.
+ */
 import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Check, Loader2, Sparkles } from "lucide-react";
@@ -13,7 +23,6 @@ import { Logo } from "@/components/VibeCraftLogo";
 import type { Plan } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// The same copper wash the projects pages use, so this doesn't read as a page from a different product.
 const PAGE_GLOW: CSSProperties = {
     backgroundImage: [
         "radial-gradient(70% 45% at 50% -8%, hsl(22 90% 55% / 0.22) 0%, transparent 70%)",
@@ -22,13 +31,6 @@ const PAGE_GLOW: CSSProperties = {
     ].join(", "),
 };
 
-/**
- * What each plan buys, in plain words. Built from the plan's own numbers rather than written out per tier, so
- * a limit changed in the seeder can't leave the marketing copy claiming the old one.
- *
- * <p>`unlimitedAi` is deliberately not mentioned: it is enforced nowhere, and a card promising unlimited AI
- * next to a daily token figure would be contradicting itself.
- */
 function planFeatures(plan: Plan): string[] {
     const projects = plan.maxProjects ?? 0;
     const tokens = plan.maxTokensPerDay ?? 0;
@@ -43,7 +45,6 @@ function planFeatures(plan: Plan): string[] {
     ];
 }
 
-/** The plan we point people at by default - the cheapest paid one. */
 const isRecommended = (plan: Plan, plans: Plan[]) =>
     !plan.isFree && plans.filter((candidate) => !candidate.isFree)[0]?.id === plan.id;
 
@@ -57,11 +58,8 @@ export function Pricing() {
     const { data: plans = [], isLoading, error } = usePlans();
     const { subscription } = useBilling();
     const [startingPlanId, setStartingPlanId] = useState<number | null>(null);
-    // The plan a paying subscriber has asked to move to, awaiting confirmation.
     const [changingTo, setChangingTo] = useState<Plan | null>(null);
 
-    // Stripe sends a cancelled checkout back here. Say so once, then drop it from the URL so a refresh or a
-    // shared link doesn't keep re-announcing a decision the user already made.
     useEffect(() => {
         if (searchParams.get("checkout") !== "cancelled") return;
         toast({ title: "Checkout cancelled", description: "No payment was taken - you can pick a plan whenever you like." });
@@ -84,22 +82,16 @@ export function Pricing() {
         }
         if (plan.id == null) return;
 
-        // Someone already paying changes the subscription they have. Sending them to Checkout - which is what
-        // every card used to do - starts a *second* subscription and bills both, and "Switch to Free" used to
-        // just open the billing page and do nothing. Cancel, resume, upgrade and downgrade all go through a
-        // confirmation that says what will happen, then change the existing subscription in place.
         if (hasPaidSubscription(subscription)) {
             setChangingTo(plan);
             return;
         }
 
-        // A free user choosing the free plan has nothing to do; its button is already disabled.
         if (plan.isFree) return;
 
         setStartingPlanId(plan.id);
         try {
             const url = await api.createCheckout(plan.id);
-            // A full navigation, not a router push: Stripe Checkout is their page, not ours.
             window.location.assign(url);
         } catch (err) {
             setStartingPlanId(null);
@@ -241,11 +233,6 @@ export function Pricing() {
     );
 }
 
-/**
- * Emphasis follows what the button does, not which card it sits on. Before, the "Most popular" card's button was
- * always the solid primary one - so a Business subscriber looking at Pro saw a bright orange *downgrade* as the
- * obvious thing to press, while the free plan's button was an off-theme secondary.
- */
 function buttonVariant(action: PlanAction, recommended: boolean): "default" | "outline" | "secondary" {
     switch (action) {
         case "upgrade":
@@ -254,7 +241,6 @@ function buttonVariant(action: PlanAction, recommended: boolean): "default" | "o
         case "signIn":
             return recommended ? "default" : "outline";
         default:
-            // current, scheduled, downgrade: available, but never the thing we push.
             return "outline";
     }
 }

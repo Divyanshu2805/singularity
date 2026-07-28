@@ -1,3 +1,9 @@
+/**
+ * The row of open file tabs above the editor.
+ *
+ * Handles: selecting and closing a tab, marking the ones the last turn changed, and hosting whatever the panel wants
+ * beside them.
+ */
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { getFileColor, getFileIcon, splitPath } from "@/lib/file-icons";
@@ -6,13 +12,10 @@ import { cn } from "@/lib/utils";
 interface FileTabsProps {
   openTabs: string[];
   activeTab: string | null;
-  /** Paths with AI changes still pending review - marked with a dot. */
   changedPaths?: ReadonlySet<string>;
   onSelectTab: (path: string) => void;
   onCloseTab: (path: string) => void;
-  /** Left-aligned control(s) that stay put before the tabs, e.g. the files-panel toggle. */
   leading?: ReactNode;
-  /** Right-aligned controls that stay put while the tabs scroll. */
   actions?: ReactNode;
 }
 

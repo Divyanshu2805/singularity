@@ -1,3 +1,10 @@
+/**
+ * Covers the quota arithmetic and its wording: what is left, exhaustion at the limit rather than past it, clamping an
+ * overshoot, a zero limit reading as full rather than dividing by it, warning only when the allowance is nearly gone,
+ * and an unparsable reset time being ignored rather than producing an invalid date.
+ *
+ * Also covers the countdown's formatting and the plan comparisons behind upgrade, downgrade, cancel and resume.
+ */
 import { describe, it, expect } from "vitest";
 import {
   cardPrice,
@@ -63,7 +70,6 @@ describe("toQuota", () => {
   });
 
   it("clamps an overshoot instead of reporting more than 100%", () => {
-    // A single response can cost more than the allowance it started inside - the check is pre-flight.
     const quota = toQuota(usage({ tokensUsed: 32_000, tokensLimit: 5_000 }))!;
     expect(quota.percent).toBe(100);
     expect(quota.remaining).toBe(0);
@@ -80,7 +86,6 @@ describe("toQuota", () => {
   it("warns when the allowance is nearly gone, but not before", () => {
     expect(toQuota(usage({ tokensUsed: 4_300, tokensLimit: 5_000 }))!.isLow).toBe(true);
     expect(toQuota(usage({ tokensUsed: 4_200, tokensLimit: 5_000 }))!.isLow).toBe(false);
-    // Exhausted is its own state - it shouldn't also read as "running low".
     expect(toQuota(usage({ tokensUsed: 5_000, tokensLimit: 5_000 }))!.isLow).toBe(false);
   });
 
@@ -105,7 +110,6 @@ describe("formatResetIn", () => {
   });
 
   it("does not count into negative numbers once the reset has passed", () => {
-    // The browser's clock can sit behind the server's, and the day rolls over on the server's zone.
     expect(formatResetIn(new Date("2026-09-16T11:00:00Z"), now)).toBe("any moment now");
   });
 
@@ -126,7 +130,6 @@ describe("planAction", () => {
   });
 
   it("calls a cheaper plan a downgrade even though it sits higher in the list", () => {
-    // Compared by price, not by position or id - Business looking at Pro is a step down.
     const onBusiness = subscription({ plan: business });
     expect(planAction(plan(), onBusiness, true)).toBe("downgrade");
     expect(planAction(free, onBusiness, true)).toBe("downgrade");
@@ -227,8 +230,6 @@ describe("subscriptionStatusLabel", () => {
   });
 
   it("says a cancelled subscription is ending, not that it is active", () => {
-    // It is still ACTIVE until the period ends, so reporting the status alone would tell someone who had
-    // just cancelled that nothing had happened.
     expect(subscriptionStatusLabel(subscription({ cancelAtPeriodEnd: true }))).toBe("Cancels on 14 Oct 2026");
   });
 

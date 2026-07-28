@@ -1,3 +1,9 @@
+/**
+ * A panel that slides in from an edge.
+ *
+ * Handles: the overlay and the content sliding from any of the four sides, with the same header, footer, title and
+ * description parts as the dialog.
+ */
 import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { cva, type VariantProps } from "class-variance-authority";
 import { X } from "lucide-react";

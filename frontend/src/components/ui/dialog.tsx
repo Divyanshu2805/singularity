@@ -1,3 +1,8 @@
+/**
+ * The general-purpose modal, styled for this app.
+ *
+ * Handles: the overlay, the content frame with its close button, and the header, footer, title and description parts.
+ */
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";

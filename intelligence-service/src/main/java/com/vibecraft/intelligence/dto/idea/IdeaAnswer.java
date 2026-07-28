@@ -6,7 +6,12 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-/** What someone picked or typed for one interview question. An empty {@code answers} list means they skipped it. */
+/**
+ * What someone picked or typed for one interview question.
+ *
+ * <p>Handles: the question it answers and the answers themselves, capped in number and length. An empty list means
+ * the question was skipped.
+ */
 public record IdeaAnswer(
 
         @NotBlank(message = "Question id is required")
