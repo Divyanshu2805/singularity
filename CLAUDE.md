@@ -8,9 +8,9 @@ VibeCraft is an AI-assisted project-building platform: a user describes an idea,
 
 **Two codebases, one repo:** a Spring Boot 4.1 (Java 25) backend, and a React 18 + TypeScript SPA in `frontend/`. Read `docs/architecture/` before assuming you know which one owns a given piece of behavior — several features (the streaming chat UI, the sign-out data-isolation fix, the live-preview panel) are genuinely split across both, with the file paths on each side named explicitly there.
 
-**The backend has been migrated from a monolith to microservices** — a multi-module Maven reactor now, not a single `pom.xml` at the repo root. Live traffic runs Gateway → `account-service` / `workspace-service` / `intelligence-service` (each with its own database), with `common-lib` and `discovery-service` around them. The original monolith (`legacy-monolith/`) has been **removed** — it survives only in git history, and `docs/migration/` says how to get it back. **Read `docs/migration/` before assuming a class, endpoint, or table lives where an older doc or your own memory says it does** — `docs/architecture/`, `docs/schema/`, and `docs/api/` describe the system as it is now (rewritten for the service split in Phase 5); `migration-map.md` is the running record of what moved, where, and why.
+**The backend is a set of microservices** — a multi-module Maven reactor, not a single `pom.xml` at the repo root. Traffic runs Gateway → `account-service` / `workspace-service` / `intelligence-service` (each with its own database), with `common-lib` and `discovery-service` around them. **Read `docs/architecture/` before assuming which service owns a class, endpoint, or table** — it, `docs/schema/`, and `docs/api/` describe the system as it is now.
 
-**Stage:** actively developed, not yet launched. Every backend service is implemented (no stubs remain) as of the last full audit; open gaps and deferred work are tracked in `TODO.md`, not here. The microservices migration is tracked in `docs/migration/` (what moved, the cutover, what was found after it) and a plan doc outside the repo (phase design and reliability strategy) — the migration is complete: cutover done, the architecture/data-model/API docs rewritten for the split, `legacy-monolith` removed. It is layered on top of the audited-complete backend, not a sign that something regressed.
+**Stage:** actively developed, not yet launched. Every backend service is implemented (no stubs remain) as of the last full audit; open gaps and deferred work are tracked in `TODO.md`, not here.
 
 ## Read Before Acting
 
@@ -22,7 +22,6 @@ Don't guess at structure or reconstruct decisions from scratch — these are aut
 | Entities, relationships, enum/schema conventions | [`docs/schema/`](docs/schema/README.md) |
 | Every endpoint, request/response shapes, SSE stream formats, error taxonomy | [`docs/api/`](docs/api/README.md) |
 | Setup, running live previews locally, troubleshooting | [`docs/local-development/`](docs/local-development/README.md) |
-| **Which service owns which URL/table, how the cutover was done, how to roll back** | [`docs/migration/`](docs/migration/) |
 | Known gaps, deferred features, open product/design questions | [`TODO.md`](TODO.md) *(local, gitignored — not on GitHub)* |
 
 If a change you're making would make any of the four tracked docs above inaccurate, **update that doc in the same change**. Don't leave it for later — "later" is how the previous docs on this project drifted enough to need this rewrite.
@@ -35,13 +34,18 @@ If a change you're making would make any of the four tracked docs above inaccura
 
 ## Repository Structure
 
-Multi-module Maven reactor, migrated to microservices (`docs/migration/` has the full record):
+Multi-module Maven reactor:
 
 ```
 pom.xml                     reactor parent (packaging=pom) — module list, shared dependencyManagement
-common-lib/                 shared: internal-JWT issue/verify, JwtAuthFilter, FeignClientInterceptor,
-                             ApiError/exception taxonomy, ClockConfig/AsyncConfig/Hashing. Depended on
-                             by account-service, workspace-service, and intelligence-service.
+common-lib/                 shared: the whole session-auth kit (SessionAuthFilter, SessionCache,
+                             SessionCookies, RateLimiter, UserPrincipal, AuthUtil, FirebaseIdentityVerifier,
+                             RemoteSessionAuthenticator, InternalSessionController, ServiceSecurityConfig),
+                             InternalServiceAuthFilter + FeignClientInterceptor + AccountServiceClient,
+                             ApiError/exception taxonomy, ClockConfig/AsyncConfig/FirebaseConfig/Hashing.
+                             All of it registered by CommonLibAutoConfiguration - these classes are NOT
+                             component-scanned, so a new one must be added there or it never exists.
+                             Depended on by account-service, workspace-service, intelligence-service.
 discovery-service/          Eureka server
 gateway-service/            Spring Cloud Gateway (reactive — non-blocking, doesn't buffer SSE streams).
                              The browser's single origin. Transparent passthrough (no auth logic of its
@@ -53,7 +57,7 @@ gateway-service/            Spring Cloud Gateway (reactive — non-blocking, doe
 account-service/            Users, Plans, Subscriptions, Stripe billing, the auth audit trail — its own
                              DB, its own full Firebase/session/CSRF chain (not delegated to gateway-
                              service). Owns /api/auth/**, /api/plans, /api/me/**, /api/payments/**,
-                             /webhooks/payment. Live since the Phase 4 cutover.
+                             /webhooks/payment.
 workspace-service/          Project/ProjectMember/ProjectFile/Preview/PreviewSession, the K8s/MinIO/
                              Redis live-preview pipeline — its own DB, its own full security chain,
                              calls account-service via Feign for anything User/Plan-shaped. Owns
@@ -63,10 +67,7 @@ intelligence-service/       ChatSession/ChatMessage/ChatEvent/CodeNote/UsageEven
                              security chain, calls account-service and workspace-service via Feign for
                              anything User/Project-shaped. Owns /api/chat/**, /api/ideas/**,
                              /api/usage/**, /api/projects/{id}/code/**.
-infra/data-migration/       legacy-to-services.sh — the one-off copy of the old monolith's database
-                             (vibecraft-db, still in Postgres) into the three service databases, used
-                             at the Phase 4 cutover. Dry-run by default; --execute TRUNCATES the service
-                             databases first, so never run it against services holding real writes.
+infra/postgres-init/        creates each service's database on a brand-new Postgres volume
   Inside each domain service — src/main/java/com/vibecraft/<account|workspace|intelligence>/:
     entity/, enums/          JPA schema — see docs/schema/ (the schema itself is owned by
                              src/main/resources/db/migration/, Flyway; Hibernate only validates)
@@ -75,21 +76,23 @@ infra/data-migration/       legacy-to-services.sh — the one-off copy of the ol
     service/, service/impl/   business logic — controllers never skip this layer
     controller/                REST endpoints, plus Internal*Controller under /internal/v1
     dto/                       request/response records, one subpackage per domain
-    security/                  session auth, rate limiting, @PreAuthorize SpEL root (its own copy per service)
+    security/                  only what can't be shared: SecurityExpressions (the @PreAuthorize SpEL root)
+                             in workspace/intelligence, and account's own WebSecurityConfig +
+                             LocalSessionAuthenticator + SessionEvictionNotifier. The rest is common-lib's.
     feign/                     clients for the other services' internal APIs (workspace, intelligence)
     llm/                       (intelligence-service) AI prompts, parsing, tools, advisors, usage recording
-    config/                    bean wiring (Stripe, MinIO, Spring AI, Kubernetes, Redis, Firebase, CORS)
+    config/                    bean wiring (Stripe, MinIO, Spring AI, Kubernetes, Redis)
     util/                      small, framework-free, directly-testable helpers
   src/main/resources/application.yaml   configuration — every secret is an env-var placeholder, no fallback
 frontend/src/
   pages/, components/, hooks/, lib/   see docs/architecture/'s module map for the boundary between these
 k8s/                        Kubernetes manifests for the live-preview runner pool + proxy
 proxy/                      standalone Node reverse proxy (routes preview hostnames via Redis)
-docs/                       architecture, data model, API reference, local dev, migration map
+docs/                       architecture, data model, API reference, local dev
 TODO.md                     local working reference of known gaps — gitignored, not pushed
 ```
 
-Full per-module ownership and a "where do I change X" table: `docs/architecture/`. How the monolith was split, and what was found afterwards: `docs/migration/`.
+Full per-module ownership and a "where do I change X" table: `docs/architecture/`.
 
 ## Commands
 
@@ -103,18 +106,18 @@ Full per-module ownership and a "where do I change X" table: `docs/architecture/
 ./mvnw -pl <module> test -Dtest=ClassName                  # one test class (works for any module)
 ./mvnw -pl <module> test -Dtest=ClassName#methodName       # one test method
 ./mvnw clean package                                       # build every module's jar
-./mvnw test                                                # every module's tests (113) — no database or cluster needed
+./mvnw test                                                # every module's tests (132) — no database or cluster needed
 ```
 
 On Windows, `mvnw.cmd` in place of `./mvnw`. A bare `./mvnw spring-boot:run` (no `-pl`) fails — the reactor's root `pom.xml` is an aggregator with no main class.
 
-A bare `./mvnw test` passes: the service tests are plain JUnit (no Spring context, so the Windows-timezone problem in `docs/local-development/troubleshooting.md`'s troubleshooting table can't bite), and the Gateway's route-table test needs no database. It used to fail only because of the old monolith's Spring-context tests. Still build and test as a reactor (`-pl common-lib,<service>`), not `-pl <service>` alone — see the shared `~/.m2` jar gotcha below.
+A bare `./mvnw test` passes: the service tests are plain JUnit (no Spring context, so the Windows-timezone problem in `docs/local-development/troubleshooting.md`'s troubleshooting table can't bite), and the Gateway's route-table test needs no database. Still build and test as a reactor (`-pl common-lib,<service>`), not `-pl <service>` alone — see the shared `~/.m2` jar gotcha below.
 
 ```bash
 cd frontend
 npm run dev      # dev server, :5173
 npm run build    # production build
-npm test         # vitest, 282 tests
+npm test         # vitest, 281 tests
 npx tsc --noEmit # typecheck only
 ```
 

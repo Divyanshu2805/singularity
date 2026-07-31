@@ -20,6 +20,7 @@ This README is the entry point. Deeper, accurate reference material lives in [`d
 - [Testing](#testing)
 - [Documentation Map](#documentation-map)
 - [Status & Roadmap](#status--roadmap)
+- [History: the monolith architecture](#history-the-monolith-architecture)
 
 ---
 
@@ -49,24 +50,39 @@ The full request-flow-with-real-file-paths version of this, including sequence d
 flowchart TD
     Browser["Browser"]
     Frontend["React SPA<br/>(frontend/)"]
-    Backend["Spring Boot backend"]
-    DB[("PostgreSQL<br/>system of record")]
+    Gateway["gateway-service :8000<br/>single origin, routes by URL"]
+    Account["account-service :8081<br/>users, plans, billing, sessions"]
+    Workspace["workspace-service :8082<br/>projects, files, live previews"]
+    Intel["intelligence-service :8083<br/>AI generation, code insight, usage"]
+    DB[("PostgreSQL<br/>one database per service")]
     MinIO[("MinIO<br/>project file content")]
-    Firebase["Firebase Admin SDK<br/>auth"]
+    Firebase["Firebase Auth"]
     OpenRouter["OpenRouter<br/>AI calls"]
     Stripe["Stripe<br/>billing"]
     K8s["Kubernetes (kind, local)<br/>runner pods + reverse proxy"]
 
     Browser -- "HTTPS (session cookie)" --> Frontend
-    Frontend -- "HTTPS (session cookie)" --> Backend
-    Backend --> DB
-    Backend --> MinIO
-    Backend --> Firebase
-    Backend --> OpenRouter
-    Backend --> Stripe
-    Backend -- "Kubernetes client / Redis" --> K8s
+    Frontend -- "/api" --> Gateway
+    Gateway --> Account
+    Gateway --> Workspace
+    Gateway --> Intel
+    Workspace -- "internal API" --> Account
+    Intel -- "internal API" --> Account
+    Intel -- "internal API" --> Workspace
+    Account --> DB
+    Workspace --> DB
+    Intel --> DB
+    Workspace --> MinIO
+    Account --> Firebase
+    Workspace --> Firebase
+    Intel --> Firebase
+    Intel --> OpenRouter
+    Account --> Stripe
+    Workspace -- "Kubernetes client / Redis" --> K8s
     Browser -- "direct, once routed" --> K8s
 ```
+
+Services find each other by name through Eureka (`discovery-service`, `:8761`, not drawn). The full picture, with the internal API each arrow stands for: [`docs/architecture/`](docs/architecture/README.md).
 
 **Key boundary:** AI-generated/user code executes **only** inside a live-preview Kubernetes pod — never in-process in the backend. Full reasoning and the exact isolation mechanism: [`docs/architecture/`](docs/architecture/README.md) §4.3.
 
@@ -76,7 +92,7 @@ flowchart TD
 
 **Frontend:** React 18 + TypeScript, Vite 5, Tailwind CSS + shadcn/ui, `@tanstack/react-query`, CodeMirror 6, Firebase JS SDK, Vitest.
 
-**Infra:** Kubernetes (`k8s/`) for live preview runner pods, a standalone Node reverse proxy (`proxy/`), Docker Compose for local Postgres/MinIO/Mailpit.
+**Infra:** Kubernetes (`k8s/`) for live preview runner pods, a standalone Node reverse proxy (`proxy/`), Docker Compose for local Postgres/MinIO.
 
 ## Getting Started
 
@@ -111,7 +127,7 @@ npm run dev
 
 Frontend: http://localhost:5173 · Gateway (the browser's actual API origin): http://localhost:8000 · services directly: account `:8081`, workspace `:8082`, intelligence `:8083`
 
-The backend is a multi-module Maven reactor of three domain services behind a Gateway, migrated from the original monolith (since removed; it survives in git history) — see [`docs/migration/`](docs/migration/) for what moved where and how the cutover went. Full setup (including live previews, which need a Kubernetes cluster) and a troubleshooting table for known gotchas: [`docs/local-development/`](docs/local-development/README.md).
+The backend is a multi-module Maven reactor of three domain services behind a Gateway. Full setup (including live previews, which need a Kubernetes cluster) and a troubleshooting table for known gotchas: [`docs/local-development/`](docs/local-development/README.md).
 
 ## Environment Variables
 
@@ -122,7 +138,7 @@ The backend is a multi-module Maven reactor of three domain services behind a Ga
 | `OPENROUTER_API_KEY` | ✅ | Every AI call (generation, idea clarifier, code insight) |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | ✅ | Project file storage |
 | `STRIPE_SECRET` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_PRO` / `STRIPE_PRICE_BUSINESS` | for billing | Everything else works without these |
-| `INTERNAL_JWT_SECRET` / `INTERNAL_SERVICE_SHARED_SECRET` | ✅ (microservices) | Service-to-service auth (the shared secret is the one on the live path) — see `docs/architecture/service-communication.md` §3 |
+| `INTERNAL_SERVICE_SHARED_SECRET` | ✅ | The only credential every service's `/internal/v1/**` API accepts — see `docs/architecture/service-communication.md` §3 |
 
 Every backend value above is a bare placeholder in `application.yaml` with **no** committed fallback — a missing one fails startup rather than running insecurely. Full list with context: [`.env.example`](.env.example). The frontend has its own [`frontend/.env.example`](frontend/.env.example) (Firebase web config). Never commit real values for either.
 
@@ -135,20 +151,19 @@ gateway-service/                       Spring Cloud Gateway — the browser's si
 account-service/                       Users, plans, subscriptions, Stripe billing, sign-in sessions (:8081)
 workspace-service/                     Projects, members, files and the live-preview pipeline (:8082)
 intelligence-service/                  AI chat generation, code insight, idea clarifier, usage metering (:8083)
-infra/data-migration/                  one-off script that copied the old monolith's database into the services'
+infra/postgres-init/                   creates each service's database on a brand-new Postgres volume
 frontend/                              React SPA
 k8s/                                   Kubernetes manifests for live previews
 proxy/                                 standalone Node reverse proxy (preview routing)
-docs/                                  architecture, data model, API reference, local dev setup, migration map
+docs/                                  architecture, data model, API reference, local dev setup
 ```
 
-Full per-module responsibilities and a "where do I change X" table: [`docs/architecture/`](docs/architecture/README.md). How the monolith was split into these services, and what was found afterwards: [`docs/migration/`](docs/migration/).
-
+Full per-module responsibilities and a "where do I change X" table: [`docs/architecture/`](docs/architecture/README.md).
 ## Testing
 
 ```bash
-./mvnw test                          # backend — every module's tests (113); needs no database or cluster
-cd frontend && npm test              # frontend — 282 tests
+./mvnw test                          # backend — every module's tests (132); needs no database or cluster
+cd frontend && npm test              # frontend — 281 tests
 ```
 
 The service tests are plain JUnit with no Spring context, deliberately — see `docs/local-development/troubleshooting.md`'s troubleshooting table for the Windows timezone problem a Spring-context test would hit. Neither the Kubernetes/Redis-backed live-preview pipeline nor Stripe billing has end-to-end automated coverage; both are verified by hand.
@@ -167,3 +182,14 @@ The service tests are plain JUnit with no Spring context, deliberately — see `
 ## Status & Roadmap
 
 Every backend service is implemented — no stubs remain as of the last full audit. Known gaps (an unenforced single-owner invariant, a nonexistent-project-id returning 403 instead of 404, no code-splitting on the frontend bundle, and others), and deferred product ideas (a static "Publish" alongside live previews, multi-stack preview support beyond React+Vite, an automatic preview-failure-to-AI-repair feedback loop) are tracked in `TODO.md` rather than here, so there's exactly one place that can go stale instead of two disagreeing ones.
+
+## History: the monolith architecture
+
+This repository used to be a **single Spring Boot application** (one deployable, one database) behind the same React frontend. It was split into the three services described above, and the original was then removed from the working tree, so nothing in the current code depends on it. It is preserved in git history:
+
+| To see | Commit | How |
+|---|---|---|
+| **The monolith backend**, exactly as it was before the split began — one Spring Boot app at the repo root (`src/main/java/com/java/vibecraft/`) | `2ce163c` | `git switch --detach 2ce163c`, or keep both checked out side by side with `git worktree add ../vibecraft-monolith 2ce163c` |
+| The record of how it was split into services: what moved where, the cutover, the lessons learned (`docs/migration/`) | `f61ac89` | `git show f61ac89:docs/migration/` |
+
+`2ce163c` is the last commit before the microservices work started; from `13ab563` onward the repository is the multi-module reactor.

@@ -14,7 +14,7 @@ services:
     volumes:
       - pgvector-data:/var/lib/postgresql
       # Creates each service's own database on first-ever container init - see the file's own comment. Only
-      # runs against a brand-new data volume; docs/local-development/, "Resetting local data", has the steps.
+      # runs against a brand-new data volume; docs/local-development/resetting-data.md, "Resetting local data", has the steps.
       - ./infra/postgres-init:/docker-entrypoint-initdb.d
     restart: unless-stopped
 
