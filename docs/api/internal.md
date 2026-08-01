@@ -30,5 +30,4 @@ Not part of the browser contract, and **never routed by the Gateway** (`/interna
 
 | Method | Path | Response | Notes |
 |---|---|---|---|
-| POST | `/internal/v1/project-names` | `ProjectNameResponse` | An AI-generated project name (billed as `PROJECT_NAMING`). **Nothing calls it today** — `POST /api/projects/from-prompt` uses the local heuristic instead. |
 | POST | `/internal/v1/sessions/evict` | 204 | As above. |
