@@ -2,8 +2,6 @@
 
 The map of the codebase: what each service and package owns, how a request actually flows through the system, and where to look to change something. Keep this accurate — `CLAUDE.md` points agents here first.
 
-The backend was migrated from one Spring Boot application into three domain services behind a Gateway. `docs/migration/` is the record of *how* (what moved, the cutover, what was found afterwards); this file describes the system as it is now.
-
 ## Contents
 
 - [1. System Context](system-context.md)
