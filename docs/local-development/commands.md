@@ -7,5 +7,5 @@
 | `./mvnw -pl <module> test -Dtest=ClassName#methodName` | Run one test method in one module |
 | `npm run build` | Frontend production build |
 | `npm run lint` | Frontend ESLint |
-| `docker compose -f services.docker-compose.yml down -v` | Wipe local Postgres/MinIO/Mailpit data entirely |
+| `docker compose -f services.docker-compose.yml down -v` | Wipe local Postgres/MinIO data entirely — read [Resetting Local Data](resetting-data.md#resetting-local-data) first |
 | `k8s/dev-port-forward.sh` / `.ps1` | Forward the preview proxy + Redis out of a local `kind` cluster |

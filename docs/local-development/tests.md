@@ -1,7 +1,7 @@
 # Running the Backend Test Suite
 
 ```bash
-./mvnw test                                      # every module (113 tests: common-lib 14, gateway 60, account 9, workspace 24, intelligence 6)
+./mvnw test                                      # every module (132 tests: common-lib 17, gateway 60, account 9, workspace 43, intelligence 3)
 ./mvnw -pl common-lib,workspace-service test     # one service, as a reactor with common-lib (see the shared ~/.m2 jar problem below)
 ./mvnw -pl <module> test -Dtest=ClassName        # one test class
 ```
@@ -10,7 +10,7 @@ The service tests are plain JUnit with no Spring context, so none of them need a
 
 ```bash
 cd frontend
-npm test          # 282 tests across 28 files, vitest
+npm test          # 281 tests across 27 files, vitest
 npx tsc --noEmit  # typecheck only
 npm run build     # production build — watch for the "chunks larger than 500kB" warning, see TODO.md
 ```
