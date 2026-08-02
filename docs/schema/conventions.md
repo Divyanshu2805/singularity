@@ -10,7 +10,7 @@
 
 ## Enum columns carry no `CHECK` constraint — by design
 
-Every enum-backed column (`project_role`, `status`, `role`, `type`, `feature`, …) is a plain `VARCHAR`, and none of the baseline migrations declare a `CHECK (col IN (...))`. That is deliberate. The monolith let Hibernate's `ddl-auto: update` create the schema, and `update` writes a `CHECK` listing an `@Enumerated(STRING)` column's values *as they were when the column was first created* and never widens it: adding a new enum constant then failed every insert of it at runtime, with no compile error and no startup warning (`ChatEventType.TODO` hit exactly this). The services start from a clean Flyway baseline with no such constraint, and `validate` never generates one.
+Every enum-backed column (`project_role`, `status`, `role`, `type`, `feature`, …) is a plain `VARCHAR`, and none of the baseline migrations declare a `CHECK (col IN (...))`. That is deliberate. Under Hibernate's `ddl-auto: update`, the schema gets a `CHECK` listing an `@Enumerated(STRING)` column's values *as they were when the column was first created*, and `update` never widens it: adding a new enum constant then fails every insert of it at runtime, with no compile error and no startup warning (`ChatEventType.TODO` hit exactly this). The services' Flyway baselines carry no such constraint, and `validate` never generates one.
 
 So adding an enum constant needs **no migration**. Don't add a hand-written `CHECK` "for safety" — it would recreate exactly the trap the baseline avoids, and this time Hibernate would not even be to blame.
 
@@ -20,15 +20,12 @@ So adding an enum constant needs **no migration**. Don't add a hand-written `CHE
 
 ## Changing the schema
 
-Each service's schema lives in `src/main/resources/db/migration/`; today that is one baseline, `V1__init.sql`, per service, written to match the entities exactly. The rules:
+Each service's schema lives in `src/main/resources/db/migration/`: a baseline `V1__init.sql` per service, written to match the entities exactly, plus account-service's `V2__drop_user_password.sql`, which removed the vestigial `users.password` column left over from the pre-Firebase local login. The rules:
 
 1. **A schema change is a new migration** — `V2__short_description.sql` in that service — never an edit to `V1`, and never something Hibernate does for you. Flyway refuses to start against a database whose applied migrations don't match the files.
 2. **The entity changes in the same commit.** With `ddl-auto: validate`, a service will not boot if an entity has a column or type the database doesn't — which is the check that catches an entity edited without its migration.
 3. **Another service's data is never joined.** A new reference to a user or project is a plain id column (see above), not a foreign key.
 4. Update this file in the same change.
-
-The `V1` baselines were derived from the monolith's schema; the differences that were intentional (the dropped columns, the `timestamptz` → `timestamp` conversion) are recorded in `docs/migration/`, Phase 4, "What changed".
-
 ## No checkpoint/rollback system
 
 Unlike some AI app-builders, this platform does **not** version or snapshot generated file trees — a file write (`ChatEvent.FILE_EDIT`) simply overwrites the previous content in MinIO, and there is no way to view or restore an earlier version of a file once the AI has rewritten it. The closest things to "history" that do exist:

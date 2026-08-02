@@ -97,7 +97,7 @@ The only record of who can access a project and how — owners and collaborators
 
 ## PROJECT_FILE
 
-Metadata for one file; content lives in MinIO, not this row. There is no `createdBy`/`updatedBy`: the monolith had them, nothing read them, and they were dropped in the split.
+Metadata for one file; content lives in MinIO, not this row. There is no `createdBy`/`updatedBy`: nothing would read them.
 
 | Field | Meaning |
 |---|---|
