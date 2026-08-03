@@ -32,8 +32,11 @@ build/
 ### VS Code ###
 .vscode/
 
-### Local TODO scratch file (not pushed) ###
+### Local working notes and generated analysis (not pushed) ###
 TODO.md
+CODE_REVIEW.md
+ADDITIONALS.md
+graphify-out/
 
 ### Local secrets (not pushed) ###
 .env
