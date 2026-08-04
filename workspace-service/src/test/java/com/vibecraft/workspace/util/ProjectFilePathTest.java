@@ -54,6 +54,29 @@ class ProjectFilePathTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {
+            "invoice\u202Egnp.exe",
+            "\u200Bsrc/App.tsx",
+            "src/App\u200D.tsx",
+            "\uFEFFsrc/App.tsx",
+            "src/App.tsx\u202C",
+    })
+    @DisplayName("a Unicode bidi-override or zero-width character is rejected, since ASCII control checks miss it")
+    void rejectsUnicodeFormatCharacters(String path) {
+        assertThatThrownBy(() -> ProjectFilePath.normalize(path)).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    @DisplayName("two Unicode encodings of the same visual filename normalise to one identical stored path")
+    void collapsesUnicodeNormalizationForms() {
+        String precomposed = "src/caf\u00e9.tsx";
+        String combining = "src/cafe\u0301.tsx";
+
+        assertThat(precomposed).isNotEqualTo(combining);
+        assertThat(ProjectFilePath.normalize(combining)).isEqualTo(ProjectFilePath.normalize(precomposed));
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"", "   ", "/"})
     @DisplayName("a blank path is rejected")
     void rejectsBlank(String path) {
