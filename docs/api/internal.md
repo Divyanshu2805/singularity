@@ -31,3 +31,4 @@ Not part of the browser contract, and **never routed by the Gateway** (`/interna
 | Method | Path | Response | Notes |
 |---|---|---|---|
 | POST | `/internal/v1/sessions/evict` | 204 | As above. |
+| POST | `/internal/v1/projects/{projectId}/generation/stop?userId=` | 200 | Stops in-flight generation(s) a project delete or member removal just revoked — every generation on the project if `userId` is omitted, only that user's otherwise. Sent by workspace-service's `ProjectServiceImpl.softDelete` and `ProjectMemberServiceImpl.removeProjectMember`. Best-effort: `AiGenerationServiceImpl.finalizeChats` rechecks the caller's access again right before committing generated files regardless of whether this call ever arrives, which is the actual authorization backstop. |
