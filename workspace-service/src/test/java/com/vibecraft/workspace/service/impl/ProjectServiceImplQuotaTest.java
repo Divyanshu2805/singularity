@@ -9,6 +9,8 @@ import com.vibecraft.workspace.mapper.ProjectMapper;
 import com.vibecraft.workspace.repository.ProjectMemberRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
 import com.vibecraft.common.security.AuthUtil;
+import com.vibecraft.workspace.feign.IntelligenceServiceClient;
+import com.vibecraft.workspace.service.PreviewDeploymentService;
 import com.vibecraft.workspace.service.ProjectFileService;
 import com.vibecraft.workspace.service.ProjectTemplateService;
 import org.junit.jupiter.api.DisplayName;
@@ -40,7 +42,8 @@ class ProjectServiceImplQuotaTest {
 
     private final ProjectServiceImpl service = new ProjectServiceImpl(
             projectRepository, mock(ProjectMapper.class), projectMemberRepository, authUtil, accountServiceClient,
-            mock(ProjectTemplateService.class), mock(ProjectFileService.class));
+            mock(ProjectTemplateService.class), mock(ProjectFileService.class), mock(PreviewDeploymentService.class),
+            mock(IntelligenceServiceClient.class));
 
     private void plan(String name, int maxProjects, int owned) {
         when(authUtil.getCurrentUserId()).thenReturn(USER_ID);

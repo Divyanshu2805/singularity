@@ -6,6 +6,8 @@ import com.vibecraft.workspace.dto.project.ForkProjectRequest;
 import com.vibecraft.common.error.FileStorageException;
 import com.vibecraft.common.error.ForbiddenException;
 import com.vibecraft.common.feign.AccountServiceClient;
+import com.vibecraft.workspace.feign.IntelligenceServiceClient;
+import com.vibecraft.workspace.service.PreviewDeploymentService;
 import com.vibecraft.workspace.service.ProjectFileService;
 import com.vibecraft.workspace.dto.project.ProjectRequest;
 import com.vibecraft.workspace.util.ProjectNameHeuristic;
@@ -53,6 +55,10 @@ import java.util.stream.Collectors;
  * <p>Forking is refused to the owner, who can already change the project however they like, and the fork is deleted
  * again if any file failed to copy - a fork quietly missing files would look like the original and then break
  * inexplicably. Deleting is the owner's for everyone; an editor's delete only removes their own membership.
+ *
+ * <p>Either shape of delete also revokes standing, not just access: it best-effort stops in-flight AI generation the
+ * project or membership can no longer authorize (intelligence-service's own recheck before committing is the actual
+ * backstop if that call fails) and stops the preview(s) that lost their reason to keep running.
  */
 @Service
 @RequiredArgsConstructor
@@ -68,6 +74,8 @@ public class ProjectServiceImpl implements ProjectService {
     AccountServiceClient accountServiceClient;
     ProjectTemplateService projectTemplateService;
     ProjectFileService projectFileService;
+    PreviewDeploymentService previewDeploymentService;
+    IntelligenceServiceClient intelligenceServiceClient;
 
     static final int MAX_NAME_LENGTH = 255;
 
@@ -246,12 +254,33 @@ public class ProjectServiceImpl implements ProjectService {
         if (getRole(id, userId) != ProjectRole.OWNER) {
             projectMemberRepository.deleteById(new ProjectMemberId(id, userId));
             log.info("User {} removed project {} from their projects (left as a non-owner)", userId, id);
+            revokeOngoingWork(id, userId);
+            previewDeploymentService.endSessionForUser(id, userId, "No longer a member of this project");
             return;
         }
 
         project.setDeletedAt(Instant.now());
         projectRepository.save(project);
         log.info("Owner {} deleted project {} for all its members", userId, id);
+
+        revokeOngoingWork(id, null);
+        previewDeploymentService.stopAllForProject(id, "The project was deleted");
+    }
+
+    /**
+     * Best-effort: stops in-flight AI generation the deleted project or removed member can no longer authorize, so
+     * it doesn't keep running toward a commit intelligence-service's own recheck would discard anyway. A null
+     * userId (project deletion) stops every generation running against the project; a specific one (member removal)
+     * stops only theirs. Never blocks or fails the delete/removal itself - intelligence-service being unreachable
+     * here just means a running generation finishes on its own and is discarded by that recheck instead.
+     */
+    private void revokeOngoingWork(Long projectId, Long userId) {
+        try {
+            intelligenceServiceClient.stopGeneration(projectId, userId);
+        } catch (Exception e) {
+            log.warn("Couldn't ask intelligence-service to stop generation for projectId: {}, userId: {} - " +
+                    "any in-flight response will still be denied when it tries to commit.", projectId, userId, e);
+        }
     }
 
     public Project getAccessibleProjectById(Long projectId, Long userId) {

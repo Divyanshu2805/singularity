@@ -11,9 +11,11 @@ import com.vibecraft.workspace.entity.Project;
 import com.vibecraft.workspace.entity.ProjectMember;
 import com.vibecraft.workspace.entity.ProjectMemberId;
 import com.vibecraft.workspace.enums.ProjectRole;
+import com.vibecraft.workspace.feign.IntelligenceServiceClient;
 import com.vibecraft.workspace.mapper.ProjectMemberMapper;
 import com.vibecraft.workspace.repository.ProjectMemberRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
+import com.vibecraft.workspace.service.PreviewDeploymentService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -52,8 +56,11 @@ class ProjectMemberServiceImplOwnershipTest {
     private final ProjectRepository projectRepository = mock(ProjectRepository.class);
     private final ProjectMemberMapper projectMemberMapper = mock(ProjectMemberMapper.class);
     private final AccountServiceClient accountServiceClient = mock(AccountServiceClient.class);
+    private final IntelligenceServiceClient intelligenceServiceClient = mock(IntelligenceServiceClient.class);
+    private final PreviewDeploymentService previewDeploymentService = mock(PreviewDeploymentService.class);
     private final ProjectMemberServiceImpl service = new ProjectMemberServiceImpl(
-            projectMemberRepository, projectRepository, projectMemberMapper, new AuthUtil(), accountServiceClient);
+            projectMemberRepository, projectRepository, projectMemberMapper, new AuthUtil(), accountServiceClient,
+            intelligenceServiceClient, previewDeploymentService);
 
     @BeforeEach
     void signIn() {
@@ -143,5 +150,30 @@ class ProjectMemberServiceImplOwnershipTest {
         service.removeProjectMember(PROJECT_ID, OTHER_MEMBER_ID);
 
         verify(projectMemberRepository).delete(member);
+    }
+
+    @Test
+    void removingAMemberAlsoStopsTheirGenerationAndPreviewSession() {
+        ProjectMemberId memberId = new ProjectMemberId(PROJECT_ID, OTHER_MEMBER_ID);
+        ProjectMember member = ProjectMember.builder().id(memberId).projectRole(ProjectRole.EDITOR).build();
+        when(projectMemberRepository.findById(memberId)).thenReturn(Optional.of(member));
+
+        service.removeProjectMember(PROJECT_ID, OTHER_MEMBER_ID);
+
+        verify(intelligenceServiceClient).stopGeneration(PROJECT_ID, OTHER_MEMBER_ID);
+        verify(previewDeploymentService).endSessionForUser(eq(PROJECT_ID), eq(OTHER_MEMBER_ID), anyString());
+    }
+
+    @Test
+    void removingTheOwnerDoesNotRevokeAnythingSinceItIsRejectedFirst() {
+        ProjectMemberId ownerId = new ProjectMemberId(PROJECT_ID, OWNER_ID);
+        ProjectMember owner = ProjectMember.builder().id(ownerId).projectRole(ProjectRole.OWNER).build();
+        when(projectMemberRepository.findById(ownerId)).thenReturn(Optional.of(owner));
+
+        assertThatThrownBy(() -> service.removeProjectMember(PROJECT_ID, OWNER_ID))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(intelligenceServiceClient, never()).stopGeneration(any(), any());
+        verify(previewDeploymentService, never()).endSessionForUser(any(), any(), any());
     }
 }

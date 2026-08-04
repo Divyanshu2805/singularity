@@ -12,16 +12,19 @@ import com.vibecraft.common.error.BadRequestException;
 import com.vibecraft.common.error.ConflictException;
 import com.vibecraft.common.error.ResourceNotFoundException;
 import com.vibecraft.common.feign.AccountServiceClient;
+import com.vibecraft.workspace.feign.IntelligenceServiceClient;
 import com.vibecraft.workspace.mapper.ProjectMemberMapper;
 import com.vibecraft.workspace.repository.ProjectMemberRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
 import com.vibecraft.common.security.AuthUtil;
+import com.vibecraft.workspace.service.PreviewDeploymentService;
 import com.vibecraft.workspace.service.ProjectMemberService;
 import feign.FeignException;
 import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
@@ -40,11 +43,16 @@ import java.util.List;
  *
  * <p>Listing makes one lookup per member because account-service has no batch user endpoint today. That is fine for
  * the membership sizes this feature actually has.
+ *
+ * <p>Removal also revokes standing, not just the row: it best-effort asks intelligence-service to stop that member's
+ * in-flight generation and ends their open preview session, so losing access takes effect immediately rather than
+ * only once whatever they were doing happens to finish.
  */
 @Service
 @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class ProjectMemberServiceImpl implements ProjectMemberService {
 
     ProjectMemberRepository projectMemberRepository;
@@ -52,6 +60,8 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     ProjectMemberMapper projectMemberMapper;
     AuthUtil authUtil;
     AccountServiceClient accountServiceClient;
+    IntelligenceServiceClient intelligenceServiceClient;
+    PreviewDeploymentService previewDeploymentService;
 
     @Override
     @PreAuthorize("@security.canViewMembers(#projectId)")
@@ -148,6 +158,23 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         }
 
         projectMemberRepository.delete(projectMember);
+        revokeAccessFor(projectId, memberId);
+    }
+
+    /**
+     * Best-effort: stops the removed member's in-flight generation and ends their preview session, so a removal
+     * takes effect immediately instead of only once their (already-unauthorized) work happens to finish on its own.
+     * Never fails the removal itself if intelligence-service is unreachable - AiGenerationServiceImpl's own recheck
+     * before committing is what actually keeps a removed member's changes out either way.
+     */
+    private void revokeAccessFor(Long projectId, Long userId) {
+        try {
+            intelligenceServiceClient.stopGeneration(projectId, userId);
+        } catch (Exception e) {
+            log.warn("Couldn't ask intelligence-service to stop generation for projectId: {}, userId: {} - " +
+                    "any in-flight response will still be denied when it tries to commit.", projectId, userId, e);
+        }
+        previewDeploymentService.endSessionForUser(projectId, userId, "Removed from the project");
     }
 
     private static void assertOwnershipUnchanged(ProjectMember member, ProjectRole requested) {

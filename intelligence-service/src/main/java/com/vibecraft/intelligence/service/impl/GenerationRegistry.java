@@ -3,6 +3,7 @@ package com.vibecraft.intelligence.service.impl;
 import com.vibecraft.common.error.ConflictException;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -10,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * The generations currently running, at most one per project per user.
  *
  * <p>Handles: registering a new generation and refusing a second one for the same project and user, finding the
- * caller's own, and removing one when it is finished.
+ * caller's own or every one running against a project, and removing one when it is finished.
  *
  * <p>A second concurrent generation is refused because two responses rewriting the same files at once would each save
  * over the other, and a refreshed page could not tell which to show. Removal targets the exact generation, so a late
@@ -40,6 +41,10 @@ public class GenerationRegistry {
 
     public Optional<ActiveGeneration> find(Long projectId, Long userId) {
         return Optional.ofNullable(active.get(key(projectId, userId)));
+    }
+
+    List<ActiveGeneration> findAllForProject(Long projectId) {
+        return active.values().stream().filter(generation -> generation.projectId().equals(projectId)).toList();
     }
 
     void remove(ActiveGeneration generation) {

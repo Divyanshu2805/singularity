@@ -1,6 +1,8 @@
 package com.vibecraft.intelligence.service.impl;
 
 import com.vibecraft.common.dto.FileContentDto;
+import com.vibecraft.common.dto.ProjectMembershipDto;
+import com.vibecraft.common.dto.ProjectPermission;
 import com.vibecraft.intelligence.dto.chat.ActiveGenerationResponse;
 import com.vibecraft.intelligence.dto.chat.StreamResponse;
 import com.vibecraft.intelligence.entity.ChatEvent;
@@ -69,6 +71,13 @@ import java.util.stream.Collectors;
  *
  * <p>A model stream must be retried by rebuilding the whole call rather than by attaching a retry to the built
  * stream: the advisor chain is single-use per subscription and throws on a second attempt otherwise.
+ *
+ * <p>Access is rechecked a second time, right before the file writes/deletes commit, because the one {@code
+ * @PreAuthorize} on streamResponse only ran once, well before this asynchronous save runs - a project delete or
+ * membership removal mid-generation must not still land through the internal write endpoints those checks don't
+ * guard. stopGenerationsForProject lets workspace-service also cut the model call short on the same events, but that
+ * alone cannot close this gap: once the stream itself has finished, stopping the (already-disposed) subscription does
+ * nothing, so the recheck before commit is what actually keeps a revoked caller's changes out.
  */
 @Service
 @RequiredArgsConstructor
@@ -193,6 +202,22 @@ public class AiGenerationServiceImpl implements AiGenerationService {
             }
         });
         return generation.isPresent();
+    }
+
+    @Override
+    public void stopGenerationsForProject(Long projectId, Long userId) {
+        List<ActiveGeneration> generations = userId != null
+                ? generationRegistry.find(projectId, userId).map(List::of).orElseGet(List::of)
+                : generationRegistry.findAllForProject(projectId);
+
+        for (ActiveGeneration generation : generations) {
+            if (generation.status() == ActiveGeneration.Status.RUNNING) {
+                generation.stop(new GenerationStoppedException());
+                log.info("Stopped generation for projectId: {}, userId: {} (project or membership revoked)",
+                        projectId, generation.userId());
+            }
+            generationRegistry.remove(generation);
+        }
     }
 
     private TeachingMode resolveTeachingMode(boolean enabled, Long userId, Long projectId) {
@@ -332,6 +357,47 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                         .sequenceOrder(0)
                 .build());
 
+        if (stillAuthorizedToCommit(projectId, chatSession.getId().getUserId())) {
+            commitFileChanges(chatEventList, projectId);
+        } else {
+            long discarded = chatEventList.stream()
+                    .filter(e -> e.getType() == ChatEventType.FILE_EDIT || e.getType() == ChatEventType.FILE_DELETE)
+                    .count();
+            log.warn("Discarding {} generated file change(s) for projectId: {} - the initiating user no longer has " +
+                    "edit access (project deleted or membership revoked mid-generation).", discarded, projectId);
+            chatEventList.add(ChatEvent.builder()
+                    .type(ChatEventType.MESSAGE)
+                    .chatMessage(assistantChatMessage)
+                    .content("Your access to this project changed while this was generating, so its file changes weren't saved.")
+                    .sequenceOrder(chatEventList.size() + 1)
+                    .build());
+        }
+
+        saveChatEvents(chatEventList, projectId);
+    }
+
+    /**
+     * Rechecks edit access right before committing, since {@code streamResponse}'s {@code @PreAuthorize} only ran
+     * once, well before this asynchronous save - a project delete or member removal mid-generation would otherwise
+     * still land through workspaceServiceClient's unguarded internal write endpoints. Fails open (lets the commit
+     * proceed) only when workspace-service itself could not be reached, since that is a transient infrastructure
+     * failure rather than a revocation signal, and this runs in the background with no request to fail instead.
+     */
+    private boolean stillAuthorizedToCommit(Long projectId, Long userId) {
+        try {
+            ProjectMembershipDto membership = workspaceServiceClient.getMembership(projectId, userId);
+            return membership.role() != null && membership.role().permissions().contains(ProjectPermission.EDIT);
+        } catch (FeignException.NotFound e) {
+            return false;
+        } catch (Exception e) {
+            log.warn("Couldn't verify project access before committing generated changes for projectId: {}, " +
+                    "userId: {} - proceeding, since workspace-service was unreachable rather than a confirmed revoke.",
+                    projectId, userId, e);
+            return true;
+        }
+    }
+
+    private void commitFileChanges(List<ChatEvent> chatEventList, Long projectId) {
         List<ChatEvent> fileEditEvents = chatEventList.stream()
                 .filter(e -> e.getType() == ChatEventType.FILE_EDIT)
                 .toList();
@@ -360,8 +426,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                         event.getFilePath(), projectId, e);
             }
         }
-
-        saveChatEvents(chatEventList, projectId);
     }
 
     private String previousContentOf(Long projectId, String path) {

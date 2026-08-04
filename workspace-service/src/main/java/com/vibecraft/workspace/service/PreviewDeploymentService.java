@@ -11,8 +11,9 @@ import java.util.Optional;
  *
  * <p>Handles: opening a project's preview for the caller - joining the runner a collaborator already has going, or
  * starting one - reading it, restarting the dev server in place, closing the caller's own session, reading the
- * runner's output, listing the caller's open previews, counting them for the plan allowance, and stopping every
- * preview of a project when the project itself is deleted.
+ * runner's output, listing the caller's open previews, counting them for the plan allowance, ending one specific
+ * member's session when they are removed from the project, and stopping every preview of a project when the project
+ * itself is deleted.
  *
  * <p>Starting returns while the preview is still coming up; the caller polls. The shared runner stops only once
  * nobody has it open.
@@ -34,4 +35,6 @@ public interface PreviewDeploymentService {
     int countActivePreviews(Long userId);
 
     void stopAllForProject(Long projectId, String reason);
+
+    void endSessionForUser(Long projectId, Long userId, String reason);
 }

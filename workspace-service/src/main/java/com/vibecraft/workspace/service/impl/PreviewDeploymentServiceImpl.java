@@ -203,6 +203,18 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
         }
     }
 
+    @Override
+    public void endSessionForUser(Long projectId, Long userId, String reason) {
+        synchronized (lockFor(projectId)) {
+            sessionRepository.findFirstByProjectIdAndUserIdAndEndedAtIsNullOrderByIdDesc(projectId, userId)
+                    .ifPresent(session -> {
+                        Preview runner = previewRepository.findById(session.getPreview().getId()).orElseThrow();
+                        sessionRepository.end(session.getId(), reason, Instant.now());
+                        shutDownIfUnused(runner, reason);
+                    });
+        }
+    }
+
     public void shutDownIfUnused(Preview runner, String reason) {
         if (sessionRepository.countByPreviewIdAndEndedAtIsNull(runner.getId()) == 0) {
             lifecycle.terminate(runner, reason);
