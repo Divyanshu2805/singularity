@@ -1,6 +1,28 @@
 # The warm pool of preview runners. The Deployment only selects status=idle pods: when the backend claims one it
 # relabels it status=busy, which detaches it from the ReplicaSet, so a fresh idle pod is started in its place and the
 # claimed pod belongs to that one preview until the backend deletes it (PreviewRunnerPool.java).
+#
+# These pods run arbitrary, untrusted, model-generated code (`npm install` plus whatever that installs and the
+# generated app itself) - see CLAUDE.md's guardrail that generated code executes only inside this pod, never
+# in-process in the backend. The security posture below (CODE_REVIEW.md SEC-08/09/10) follows from that: non-root,
+# no Linux capabilities, no privilege escalation, no mounted API token, no shared writable host state, and bounded
+# CPU/memory/ephemeral storage per pod. What it does NOT close, because a namespaced Pod/NetworkPolicy manifest
+# cannot: PID/fork-bomb limits (a kubelet `--pod-max-pids` flag or a RuntimeClass, set at the cluster level, not
+# here) and unrestricted outbound internet access (`npm install` must reach the public registry, which is also an
+# exfiltration path for whatever a malicious install script sends there - a stronger sandbox runtime, e.g. gVisor/
+# Kata via RuntimeClass, or an egress proxy allowlisting only the registry, is the real fix and is out of scope for
+# a plain manifest).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: preview-runner
+  namespace: vibecraft-ai
+  # No Role/RoleBinding is granted to this ServiceAccount anywhere - it exists only so the pod isn't implicitly
+  # `default`, and automountServiceAccountToken is false below anyway, so no token is even present to misuse.
+automountServiceAccountToken: false
+
+---
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,43 +42,74 @@ spec:
     spec:
       terminationGracePeriodSeconds: 0
       enableServiceLinks: false
+      serviceAccountName: preview-runner
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # the `node` user baked into the node:20-alpine image
+        runAsGroup: 1000
+        fsGroup: 1000 # so both containers can write the shared /app volume as that group
+        seccompProfile:
+          type: RuntimeDefault
       volumes:
         - name: workspace
-          emptyDir: {}
-        # npm's download cache, shared by every runner on the node: the first install of a dependency set is slow,
-        # every later one mostly unpacks from here.
+          emptyDir:
+            sizeLimit: 2Gi # bounds node_modules + the generated app; was unbounded
+        # npm's download cache. Per-pod now, not shared across runners on the node (was a hostPath every runner on
+        # the node could read and write) - one project's install can no longer tamper with or exhaust another's
+        # cache, at the cost of a cold cache on every fresh pod.
         - name: npm-cache
-          hostPath:
-            path: /mnt/npm-cache
-            type: DirectoryOrCreate
+          emptyDir:
+            sizeLimit: 512Mi
       containers:
         # 1. THE RUNNER - npm install + the Vite dev server, started by the backend over exec.
         - name: runner
           image: node:20-alpine
           workingDir: /app
           command: ["/bin/sh", "-c", "sleep infinity"]
+          env:
+            - name: HOME
+              value: /home/node
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           volumeMounts:
             - name: workspace
               mountPath: /app
             - name: npm-cache
-              mountPath: /root/.npm
+              mountPath: /home/node/.npm
           ports:
             - containerPort: 5173
           resources:
             requests:
               cpu: "100m"
               memory: "256Mi"
+              ephemeral-storage: "256Mi"
             limits:
+              cpu: "1" # was unset - an unbounded npm install/build could starve the node's other runners
               memory: "1Gi" # Prevent one user from crashing the node
+              ephemeral-storage: "2Gi"
 
         # 2. THE SYNCER - mirrors the project's MinIO objects into /app and keeps watching them.
         - name: syncer
           image: quay.io/minio/mc:latest
           command: ["/bin/sh", "-c", "sleep infinity"]
           env:
-            # Local-dev MinIO from services.docker-compose.yml. On a real cluster, read this from a Secret.
+            # Local-dev MinIO from services.docker-compose.yml, read from a Secret rather than a literal value so the
+            # credential isn't checked into git. Create it once per cluster:
+            #   kubectl create secret generic minio-runner-credentials -n vibecraft-ai \
+            #     --from-literal=host-uri='http://minioadmin:minioadmin123@minio-service:9000'
+            # (swap the literal for the real credential outside local dev).
             - name: MC_HOST_myminio
-              value: "http://minioadmin:minioadmin123@minio-service:9000"
+              valueFrom:
+                secretKeyRef:
+                  name: minio-runner-credentials
+                  key: host-uri
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           volumeMounts:
             - name: workspace
               mountPath: /app
@@ -64,3 +117,62 @@ spec:
             requests:
               cpu: "20m"
               memory: "32Mi"
+              ephemeral-storage: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "64Mi"
+              ephemeral-storage: "128Mi"
+
+---
+
+# Deny-by-default for the runner pods, with the two exceptions the pipeline actually needs: the proxy reaching the
+# dev server, and DNS/outbound so npm install and the app itself can work. Redis and the Kubernetes API server -
+# which a runner has no legitimate reason to reach - are not in the allow-list, so a compromised runner can't use
+# them as a pivot even though they're reachable in-cluster from other pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: runner-pool-policy
+  namespace: vibecraft-ai
+spec:
+  podSelector:
+    matchLabels:
+      app: runner
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only the preview proxy may reach a runner's dev server - no pod-to-pod traffic from anywhere else in the
+    # namespace, and nothing from outside the cluster (the proxy Service is the only public entry point).
+    - from:
+        - podSelector:
+            matchLabels:
+              app: vibecraft-proxy
+      ports:
+        - protocol: TCP
+          port: 5173
+  egress:
+    # DNS, needed to resolve the npm registry and MinIO.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # The npm registry and MinIO both need general outbound HTTP(S) - see the manifest-level limitation noted above
+    # the Deployment: this cannot be narrowed further to just those two hosts without an egress proxy or a CNI that
+    # supports FQDN-based policies, neither of which is assumed here.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 9000 # MinIO, when it isn't behind 80/443
