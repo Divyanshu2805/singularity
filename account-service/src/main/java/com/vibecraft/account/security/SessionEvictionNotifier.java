@@ -17,15 +17,20 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Tells every other service that keeps its own session cache to forget a session that just ended.
+ * Tells every service instance that keeps its own session cache to forget a session that just ended - including this
+ * service's own other replicas.
  *
  * <p>Handles: broadcasting either one signed-out session or every session of one user to each instance of
- * workspace-service and intelligence-service found through Eureka, authenticated with the shared internal-service
- * secret.
+ * account-service, workspace-service and intelligence-service found through Eureka, authenticated with the shared
+ * internal-service secret.
  *
  * <p>It exists because each service caches a validated session for app.auth.revocation-check-interval so it is not
- * asking Firebase on every request. account-service evicts only its own cache, so without this a signed-out cookie
- * kept working against the other services until their entries expired.
+ * asking Firebase on every request. account-service's own LocalSessionAuthenticator is no exception: it checks its
+ * in-memory SessionCache before the RevokedSession table, so a sign-out that only evicted the replica that handled it
+ * left every sibling account-service replica still authenticating that cookie until its cache entry's own TTL passed
+ * - a signed-out user routed to a different replica stayed signed in. Including "account-service" in the broadcast
+ * list closes that; a call looping back to the replica that initiated the sign-out is harmless; it already evicted
+ * its own cache entry before this broadcast runs.
  *
  * <p>Best effort by design: a service that cannot be reached is logged and skipped, and the cache lifetime is still
  * the backstop, so sign-out never fails or hangs because a sibling is down. Calls run in parallel with short timeouts
@@ -35,7 +40,7 @@ import java.util.concurrent.CompletableFuture;
 @Component
 public class SessionEvictionNotifier {
 
-    static final List<String> SERVICES = List.of("workspace-service", "intelligence-service");
+    static final List<String> SERVICES = List.of("account-service", "workspace-service", "intelligence-service");
 
     static final String EVICT_PATH = "/internal/v1/sessions/evict";
 

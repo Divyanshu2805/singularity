@@ -113,6 +113,23 @@ class SessionEvictionNotifierTest {
     }
 
     @Test
+    @DisplayName("every account-service replica is told too, not just workspace and intelligence")
+    void tellsEveryAccountServiceReplicaToo() {
+        SessionEvictionNotifier notifier = new SessionEvictionNotifier(discoveryOf(Map.of(
+                "account-service", List.of(instance("account-service", siblingPort()), instance("account-service-2", siblingPort())))),
+                SECRET);
+
+        notifier.evictSession("abc123");
+
+        assertThat(received)
+                .as("one call per registered account-service instance - the replica that handled the sign-out is " +
+                        "harmless to re-notify (already evicted locally), and a sibling replica is what SEC-12 is " +
+                        "about: without this, it keeps authenticating the revoked cookie until its cache entry expires")
+                .hasSize(2);
+        assertThat(received).allSatisfy(r -> assertThat(r.path()).isEqualTo("/internal/v1/sessions/evict"));
+    }
+
+    @Test
     @DisplayName("sign-out-everywhere sends the user's Firebase uid instead of a cookie hash")
     void signOutEverywhereSendsTheUid() {
         SessionEvictionNotifier notifier = new SessionEvictionNotifier(discoveryOf(Map.of(
