@@ -15,6 +15,7 @@
 | Change the error shape or a status mapping | `common-lib` `error/GlobalExceptionHandler.java` (all three services pick it up) |
 | Change how live previews are provisioned | workspace `service/impl/PreviewRunnerPool.java`/`PreviewBootstrapper.java`, `k8s/runner-pods.yml` (the pod spec itself) |
 | Change preview routing/proxying | workspace `service/impl/PreviewRouter.java`, `proxy/index.js`, `k8s/vibecraft-proxy.yml` |
+| Change the preview access-token scheme | workspace `util/PreviewAccessToken.java` **and** `proxy/auth.js` (must stay byte-for-byte identical - see `PreviewAccessTokenTest`'s and `proxy/auth.test.js`'s matching known-good HMAC value), `preview.access-token-secret`/`-ttl` in `application.yaml` |
 | Change frontend chat rendering | `frontend/src/components/ChatEventRenderer.tsx` (the block/checklist builder), `frontend/src/lib/project-chat-store.ts` (the module-level state) |
 | Change frontend auth/session handling | `frontend/src/lib/firebase-auth.ts`, `frontend/src/lib/session.ts` (the sign-out teardown registry — see §7) |
 | Add a new client-side module-level store | Register it with `frontend/src/lib/session.ts`'s `onSignOut(...)` — see §7, this is not optional |

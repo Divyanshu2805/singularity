@@ -12,6 +12,7 @@ import {
   changedDependencies,
   describePreviewStartFailure,
   formatStopsIn,
+  previewAddressFor,
   previewOrigin,
   previewStepIndex,
   shouldAutoStartPreview,
@@ -86,6 +87,37 @@ describe("previewOrigin", () => {
     expect(previewOrigin("http://p1-abc.localhost:8090/")).toBe("http://p1-abc.localhost:8090");
     expect(previewOrigin("not a url")).toBeNull();
     expect(previewOrigin(null)).toBeNull();
+  });
+});
+
+describe("previewAddressFor", () => {
+  const previewUrl = "http://p1-abc.localhost:8090/?pvt=1700000000.deadbeef";
+
+  it("carries the access token forward when resolving an in-app path, which new URL(path, base) alone drops", () => {
+    const { shareableLink } = previewAddressFor("/dashboard", previewUrl);
+
+    expect(shareableLink).toBe("http://p1-abc.localhost:8090/dashboard?pvt=1700000000.deadbeef");
+  });
+
+  it("keeps the visible address free of the token", () => {
+    const { address } = previewAddressFor("/dashboard", previewUrl);
+
+    expect(address).toBe("p1-abc.localhost:8090/dashboard");
+    expect(address).not.toContain("pvt");
+  });
+
+  it("preserves a hash in the in-app path", () => {
+    const { address, shareableLink } = previewAddressFor("/settings#billing", previewUrl);
+
+    expect(address).toBe("p1-abc.localhost:8090/settings#billing");
+    expect(shareableLink).toBe("http://p1-abc.localhost:8090/settings?pvt=1700000000.deadbeef#billing");
+  });
+
+  it("handles the root path the same way", () => {
+    const { address, shareableLink } = previewAddressFor("/", previewUrl);
+
+    expect(address).toBe("p1-abc.localhost:8090/");
+    expect(shareableLink).toBe(previewUrl);
   });
 });
 

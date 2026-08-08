@@ -11,8 +11,12 @@
  *
  * The page inside is the user's own code on another origin, so the only channel back is a posted message - accepted
  * only from that exact origin and that exact frame.
+ *
+ * previewUrl carries a short-lived access token (CODE_REVIEW.md SEC-06) that the backend mints fresh on every poll;
+ * the iframe's own src is memoized separately so a routine poll never re-navigates it, and "Copy link"/"Open in new
+ * tab" reattach the token by hand since resolving an in-app path against the base URL otherwise drops it.
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -47,6 +51,7 @@ import {
   autoStartKey,
   describePreviewStartFailure,
   formatStopsIn,
+  previewAddressFor,
   previewOrigin,
   previewStepIndex,
   shouldAutoStartPreview,
@@ -181,6 +186,14 @@ export function PreviewPanel({
   const isCreating = status === "CREATING";
   const hasLogs = !!preview && (isRunning || isCreating || status === "FAILED");
 
+  // previewUrl carries a fresh, short-lived access token on every poll (CODE_REVIEW.md SEC-06). Snapshot it only
+  // when the iframe would remount anyway - a new session or an explicit reload - so a routine background poll
+  // (every RUNNING_POLL_MS) doesn't change the src prop on the live iframe and silently reload it, dropping
+  // whatever the user was doing inside. The token itself doesn't need to be fresh on every poll for this to be
+  // secure: the cookie the proxy already set from the first load keeps authorizing every later request.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const frameSrc = useMemo(() => preview?.previewUrl, [preview?.id, reloadKey]);
+
   let body: ReactNode;
   if (startError && !isCreating && !isRunning) {
     body = <StartErrorState error={startError} onRetry={handleStart} onDownload={onDownload} />;
@@ -194,7 +207,7 @@ export function PreviewPanel({
         <iframe
           ref={iframeRef}
           key={`${preview.id}-${reloadKey}`}
-          src={preview.previewUrl}
+          src={frameSrc}
           title="Live preview"
           onLoad={() => setIsFrameLoading(false)}
           className={cn(
@@ -327,7 +340,7 @@ function PreviewToolbar({
   const [copied, copy] = useCopyFeedback();
   const isRunning = preview?.status === "RUNNING";
   const isActive = isRunning || preview?.status === "CREATING";
-  const address = preview ? new URL(path, preview.previewUrl).toString() : null;
+  const { address, shareableLink } = preview ? previewAddressFor(path, preview.previewUrl) : { address: null, shareableLink: null };
   const stopsIn = isRunning ? formatStopsIn(preview?.stopsAt) : null;
 
   return (
@@ -355,10 +368,10 @@ function PreviewToolbar({
       <ToolbarButton label={device === "desktop" ? "Phone width" : "Full width"} onClick={() => onDeviceChange(device === "desktop" ? "mobile" : "desktop")} disabled={!isRunning} active={device === "mobile"}>
         {device === "desktop" ? <Smartphone /> : <Monitor />}
       </ToolbarButton>
-      <ToolbarButton label={copied ? "Copied" : "Copy link"} onClick={() => address && void copy(address)} disabled={!isRunning}>
+      <ToolbarButton label={copied ? "Copied" : "Copy link"} onClick={() => shareableLink && void copy(shareableLink)} disabled={!isRunning}>
         {copied ? <Check className="text-syntax-string" /> : <Link2 />}
       </ToolbarButton>
-      <ToolbarButton label="Open in new tab" onClick={() => address && window.open(address, "_blank", "noopener,noreferrer")} disabled={!isRunning}>
+      <ToolbarButton label="Open in new tab" onClick={() => shareableLink && window.open(shareableLink, "_blank", "noopener,noreferrer")} disabled={!isRunning}>
         <ExternalLink />
       </ToolbarButton>
       <ToolbarButton label={isLogsOpen ? "Hide output" : "Show output"} onClick={onToggleLogs} disabled={!canShowLogs} active={isLogsOpen && canShowLogs}>

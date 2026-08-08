@@ -25,6 +25,15 @@ spec:
             - name: REDIS_URL
               # Refers to the service in the same namespace
               value: "redis://redis-service:6379"
+            - name: PREVIEW_ACCESS_TOKEN_SECRET
+              # Must be byte-for-byte the same value as the backend's PREVIEW_ACCESS_TOKEN_SECRET (.env) - it's how
+              # this proxy verifies the token PreviewAccessToken.java signs (CODE_REVIEW.md SEC-06). Create the
+              # Secret once per cluster: kubectl create secret generic preview-access-token -n vibecraft-ai
+              # --from-literal=secret='<same value as the backend .env>'
+              valueFrom:
+                secretKeyRef:
+                  name: preview-access-token
+                  key: secret
           ports:
             - containerPort: 80
           readinessProbe:

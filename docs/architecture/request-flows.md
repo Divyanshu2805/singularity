@@ -81,7 +81,11 @@ sequenceDiagram
     end
     Boot->>PD: markRunning() once serving
     PD->>Redis: PreviewRouter writes route:<hostname> -> podIp:port
-    FE->>Proxy: browser loads http://<hostname>.localhost:8090
+    PD-->>FE: previewUrl = http://<hostname>.localhost:8090/?pvt=<signed, expiring token>
+    FE->>Proxy: browser loads previewUrl
+    Proxy->>Proxy: verify token (HmacSHA256, PreviewAccessToken's scheme); 401 if invalid/expired
+    Proxy-->>FE: 302, strips ?pvt=, Set-Cookie: pv_auth=<token>
+    FE->>Proxy: browser follows the redirect, cookie attached
     Proxy->>Redis: GET route:<hostname>
     Proxy-->>FE: reverse-proxied to the pod's dev server
 ```
@@ -92,7 +96,9 @@ Real files:
 2. **`PreviewRunnerPool`** — claims a warm pod from the idle/busy label-swapped pool (`k8s/runner-pods.yml`: a Deployment that only selects `status=idle`, so relabelling a claimed pod to `busy` detaches it from the ReplicaSet and a replacement starts warming immediately). The claim is a **merge patch that carries the listed `resourceVersion`**, so two simultaneous claims of the same pod can't both win — the API server answers the loser 409 and it takes the next. It is a patch and not an `update` of the fetched Pod because `kubernetes-client` 6.13.4 can't serialize a Pod it read back under Boot 4.1's Jackson (`docs/local-development/`). No idle pod at all is a `CapacityUnavailableException` (503).
 3. **`PreviewBootstrapper`** — execs into the pod's two containers: `syncer` (mirrors the project's MinIO objects in via the `mc` CLI, then watches for later changes) and `runner` (`npm install && vite dev --host 0.0.0.0 --port 5173`). Polls a probe script (`wget /@vite/client`, the single most Vite-specific line in the whole preview pipeline) until the dev server answers.
 4. **`PreviewRouter`** — once serving, writes `route:<hostname> -> <podIp>:<port>` to Redis.
-5. **`proxy/index.js`** (a standalone Node process, **not** part of any Spring Boot service) — reads that route from Redis and reverse-proxies the browser's request to the pod directly; also records `seen:<hostname>` timestamps in Redis for the idle reaper.
+5. **`proxy/index.js`** (a standalone Node process, **not** part of any Spring Boot service) — verifies the `?pvt=` access token (or the `pv_auth` cookie a valid one was already exchanged for) before doing anything else, then reads the route from Redis and reverse-proxies the browser's request to the pod directly; also records `seen:<hostname>` timestamps in Redis for the idle reaper.
 6. **`PreviewSession`** (per-collaborator), **`PreviewLifecycle`** and **`PreviewReaper`** govern teardown — see `docs/schema/`'s `PREVIEW`/`PREVIEW_SESSION` entities for the full session-sharing model. The runner is torn down only when its last session ends or the reaper finds it idle.
 
 **Isolation boundary, stated plainly:** generated/user code executes **only** inside a runner pod, reached by the fabric8 Kubernetes client's `exec` API — never in-process in a Spring Boot service, never via a local shell call. If you're extending this, any change that runs untrusted project content outside a runner pod is a hard no.
+
+**Access boundary** (CODE_REVIEW.md SEC-06): a preview's hostname alone used to be a permanent, unauthenticated bearer link — the proxy had no concept of project membership, so anyone who ever saw the URL kept working access forever, including a member later removed from the project. `PreviewAccessToken.java` (`workspace/util/`) signs `hostname + "." + expiresAt` with HMAC-SHA256 (`preview.access-token-secret`); `PreviewDeploymentServiceImpl.withAccessToken` appends it to every `previewUrl` it hands out, always from an already-`@PreAuthorize`-guarded method. `proxy/auth.js` re-implements the identical scheme in Node (byte-for-byte - `PreviewAccessTokenTest`'s cross-language contract test in Java and `proxy/auth.test.js` in Node both pin the same known-good HMAC value) to verify it statelessly, with no session store of its own. A valid token is exchanged once, on first load, for a `SameSite=None; Secure` cookie (`None` because previews are shown in a cross-site iframe from the main app) - the token itself is then dropped from the URL via a redirect. `preview.access-token-ttl` (6h default) is what actually bounds how long a removed member's already-open tab keeps working: there is nothing to push a live revocation to, so this is an expiry bound, not instant revocation. `PreviewPanel.tsx` mints a fresh token on every poll but deliberately does **not** feed it straight into the iframe's `src` - see that file's header comment - or a routine 60-second poll would silently reload the iframe and drop whatever the embedded app's own state was.

@@ -1,9 +1,25 @@
 /**
- * The preview proxy: routes every preview hostname to the runner pod serving it.
+ * The preview proxy: routes every preview hostname to the runner pod serving it, to whoever presents a valid access
+ * token for that hostname.
  *
- * Handles: looking a hostname's route up in Redis, proxying both HTTP and websockets to that pod, recording that a
+ * Handles: looking a hostname's route up in Redis, verifying the signed access token workspace-service appended to
+ * the preview URL (CODE_REVIEW.md SEC-06) before proxying either HTTP or websockets to that pod, recording that a
  * preview was visited, rewriting a page load's HTML on the way out to inject the runtime-error reporter, and serving
- * a readable page when there is no route or the runner does not answer.
+ * a readable page when there is no route, no valid token, or the runner does not answer.
+ *
+ * Without the token check, a preview's hostname alone is a permanent, unauthenticated bearer link: this proxy has no
+ * concept of project membership, so anyone who ever saw the URL - including a member later removed from the project
+ * - kept working access forever. verifyToken re-implements PreviewAccessToken.java's exact HMAC-SHA256 scheme so
+ * this stays a fully stateless check with no database or session store of its own; the two must stay byte-for-byte
+ * identical (see PreviewAccessTokenTest's cross-language contract test) or every link starts failing.
+ *
+ * The token arrives once, as a query parameter, on the first page load; a valid one is exchanged for a cookie
+ * (`SameSite=None` because previews are shown in a cross-site iframe from the main app, which browsers otherwise
+ * refuse to attach a cookie to) and the URL is redirected to drop the token from the address bar, browser history
+ * and any outbound Referer. Every later request - including the websocket upgrade - is authorized by that cookie
+ * alone, re-verified statelessly on every single request rather than looked up anywhere, so the token's own expiry
+ * (`preview.access-token-ttl`) is what actually bounds how long a removed member's already-open tab keeps working:
+ * there is nothing to push a revocation to.
  *
  * The backend writes the route key once a preview's dev server answers and removes it when the preview stops; this
  * writes the last-seen key as pages load, which is how the backend's idle reaper knows a preview open in its own tab
@@ -19,8 +35,10 @@
  * usual error handler.
  */
 const http = require('http');
+const { URL } = require('url');
 const httpProxy = require('http-proxy');
 const Redis = require('ioredis');
+const { verifyToken, readCookie, accessCookieHeader, ACCESS_COOKIE_NAME, TOKEN_QUERY_PARAM } = require('./auth');
 
 const redisUrl = process.env.REDIS_URL || 'redis://redis-service:6379';
 const port = Number(process.env.PORT || 80);
@@ -29,6 +47,19 @@ const SEEN_WRITE_EVERY_MS = 15_000;
 const REDIS_MAX_RETRIES = 2;
 const REDIS_COMMAND_TIMEOUT_MS = 2_000;
 const MAX_TRACKED_HOSTNAMES = 5_000;
+
+const ACCESS_TOKEN_SECRET = process.env.PREVIEW_ACCESS_TOKEN_SECRET;
+// `.localhost` is treated as a potentially-trustworthy origin by every major browser even over plain http, which is
+// exactly why this project picked it as the local-dev preview domain (see PreviewProperties) - Secure cookies work
+// there without TLS. A real deployment needs an actual HTTPS-terminated domain for this cookie to ever be set;
+// that's OPS-01's job, not this proxy's.
+if (!ACCESS_TOKEN_SECRET) {
+    console.error('PREVIEW_ACCESS_TOKEN_SECRET is not set - every preview request will be refused rather than served unauthenticated');
+}
+
+function isAuthorized(req, hostname) {
+    return verifyToken(ACCESS_TOKEN_SECRET, hostname, readCookie(req.headers.cookie, ACCESS_COOKIE_NAME));
+}
 
 const redis = new Redis(redisUrl, {
     maxRetriesPerRequest: REDIS_MAX_RETRIES,
@@ -168,6 +199,25 @@ const server = http.createServer(async (req, res) => {
             'Open the project in VibeCraft and switch to Preview to start it.');
     }
 
+    const requestUrl = new URL(req.url, `http://${hostname}`);
+    const queryToken = requestUrl.searchParams.get(TOKEN_QUERY_PARAM);
+    if (queryToken && verifyToken(ACCESS_TOKEN_SECRET, hostname, queryToken)) {
+        // Exchange the one-time URL token for a cookie, then redirect it away so it never sits in the address bar,
+        // browser history or an outbound Referer header from whatever the generated app links out to.
+        requestUrl.searchParams.delete(TOKEN_QUERY_PARAM);
+        res.writeHead(302, {
+            Location: requestUrl.pathname + requestUrl.search + requestUrl.hash || '/',
+            'Set-Cookie': accessCookieHeader(queryToken),
+            'Cache-Control': 'no-store',
+        });
+        return res.end();
+    }
+
+    if (!isAuthorized(req, hostname)) {
+        return statusPage(res, 401, "This preview link isn't valid",
+            'Reopen the project and switch to Preview again to get a fresh link.');
+    }
+
     if (isPageLoad(req)) recordVisit(hostname);
 
     const onError = (e) => {
@@ -186,6 +236,11 @@ server.on('upgrade', async (req, socket, head) => {
     const hostname = (req.headers.host || '').split(':')[0];
     const target = await getTarget(hostname);
     if (!target) return socket.destroy();
+
+    if (!isAuthorized(req, hostname)) {
+        socket.destroy();
+        return;
+    }
 
     proxy.ws(req, socket, head, { target: getTargetUrl(target) }, (e) => {
         console.error(`Proxy error (ws) for ${hostname}:`, e.message);

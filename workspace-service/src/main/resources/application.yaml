@@ -65,6 +65,14 @@ preview:
   idle-timeout: 10m
   boot-timeout: 2m
   route-ttl: 90s
+  # Signs the short-lived access token appended to every previewUrl this service hands out (SEC-06): a bare
+  # hostname is otherwise a permanent, unauthenticated bearer link the proxy has no way to revoke. The proxy
+  # (proxy/index.js) verifies the same signature with the same secret - PREVIEW_ACCESS_TOKEN_SECRET must be set
+  # identically on both. Deliberately a separate secret from internal-service.shared-secret: one signs a browser-
+  # facing, comparatively low-stakes token, the other authenticates full machine-to-machine API access - a leak of
+  # one shouldn't compromise the other.
+  access-token-secret: ${PREVIEW_ACCESS_TOKEN_SECRET}
+  access-token-ttl: 6h
   port-forward:
     # Only one process should hold the local port-forwards into the kind cluster's Redis/proxy pods at a time.
     # Off by default: the standalone k8s/dev-port-forward scripts hold them (docs/local-development/). Set

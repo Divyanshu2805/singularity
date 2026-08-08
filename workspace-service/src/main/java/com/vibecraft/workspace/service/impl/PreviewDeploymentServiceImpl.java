@@ -18,6 +18,7 @@ import com.vibecraft.workspace.repository.PreviewSessionRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
 import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.workspace.service.PreviewDeploymentService;
+import com.vibecraft.workspace.util.PreviewAccessToken;
 import io.fabric8.kubernetes.api.model.Pod;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -316,13 +317,24 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
                 session.getProjectId(),
                 projectName,
                 status,
-                runner.getPreviewUrl(),
+                withAccessToken(runner),
                 open ? runner.getDetail() : session.getEndReason(),
                 open ? runner.getStartedAt() : session.getStartedAt(),
                 open ? runner.getReadyAt() : null,
                 open ? null : session.getEndedAt(),
                 stopsAt,
                 open);
+    }
+
+    /**
+     * Appends a fresh, short-lived access token to the preview's URL - see PreviewAccessToken. Minted fresh on
+     * every response rather than once at preview start, since toResponse only ever runs for a caller who just
+     * passed a canView/EditProject check, and a longer-lived token handed out once would outlive that check.
+     */
+    private String withAccessToken(Preview runner) {
+        String token = PreviewAccessToken.mint(
+                properties.accessTokenSecret(), runner.getHostname(), Instant.now(), properties.accessTokenTtl());
+        return runner.getPreviewUrl() + "?pvt=" + token;
     }
 
     private String newHostname(Long projectId) {

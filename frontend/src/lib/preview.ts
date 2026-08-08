@@ -56,6 +56,31 @@ export function previewOrigin(previewUrl: string | null | undefined): string | n
   }
 }
 
+export interface PreviewAddress {
+  /** Host + path + hash only, safe to render as visible UI text - never carries the access token. */
+  address: string;
+  /** The full URL, including the access token, for "Copy link"/"Open in new tab" to actually work. */
+  shareableLink: string;
+}
+
+/**
+ * Combines the in-app path (reported by the previewed page's own navigation, via postMessage) with previewUrl into
+ * one address, for both display and sharing.
+ *
+ * previewUrl carries a `?pvt=` access token (CODE_REVIEW.md SEC-06) that resolving an absolute-path reference
+ * against it would otherwise silently drop - `new URL("/dashboard", "http://host/?pvt=xxx")` discards the base's
+ * query string entirely, which would make every "Copy link"/"Open in new tab" hand out a URL the proxy immediately
+ * rejects. This reattaches it by hand.
+ */
+export function previewAddressFor(path: string, previewUrl: string): PreviewAddress {
+  const target = new URL(path, previewUrl);
+  target.search = new URL(previewUrl).search;
+  return {
+    address: `${target.host}${target.pathname}${target.hash}`,
+    shareableLink: target.toString(),
+  };
+}
+
 export interface PreviewStartFailure {
   kind: "busy" | "failed" | "unreachable";
   title: string;

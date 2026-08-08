@@ -4,6 +4,8 @@
 
 *Owner: `workspace-service`.* The project-scoped methods need project `VIEW` (any member), checked in the service; `GET /api/previews` lists only the caller's own.
 
+Every `PreviewResponse.previewUrl` carries a `?pvt=` access token (CODE_REVIEW.md SEC-06) — see `docs/architecture/`'s "Access boundary" note under §4.3. A fresh one is minted on every response; the proxy accepts either it or the cookie a prior valid token was already exchanged for, and 401s a hostname with neither. Don't treat `previewUrl` as a stable identifier across polls — a client that needs to detect "did the preview change" should compare `id`/`status`, not the URL string.
+
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
 | GET | `/preview` | — | `PreviewResponse` or 204 | The project's latest preview in any state. Polling it (which the client does while active) is what keeps a live preview out of the idle reaper. |
