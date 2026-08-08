@@ -3,7 +3,7 @@
 Live previews need a real Kubernetes cluster — they're not simulated. Without one, every other feature works normally; only starting/viewing a preview fails.
 
 1. Stand up a local cluster (`kind` — this project's manifests assume the namespace `vibecraft-ai`).
-2. Apply `k8s/infra.yml` first — it creates the `vibecraft-ai` namespace the next steps need, plus Redis.
+2. Apply `k8s/infra.yml` first — it creates the `vibecraft-ai` namespace the next steps need, plus Redis, a namespace-wide `LimitRange` (defaults/caps any container that doesn't set its own resources) and `ResourceQuota` (CODE_REVIEW.md SEC-10). Tune the quota's numbers for your cluster's real capacity - the checked-in ones are a starting point, not a load-tested ceiling.
 3. Create two secrets once per cluster — both are `Secret` references now, not literals in the manifests:
    ```bash
    # The runner pods' MinIO credential (CODE_REVIEW.md SEC-09):

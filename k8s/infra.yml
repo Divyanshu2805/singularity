@@ -6,6 +6,50 @@ metadata:
 
 ---
 
+# Defense in depth for CODE_REVIEW.md SEC-10: every container in k8s/runner-pods.yml and this file already sets its
+# own CPU/memory/ephemeral-storage requests and limits, but this is what stops a future manifest change from
+# quietly shipping an unbounded container, and what caps the whole namespace's footprint regardless of how many
+# runner replicas end up scheduled. It does not bound PIDs per pod - that needs a kubelet `--pod-max-pids` flag or a
+# RuntimeClass, both cluster-level settings no namespaced object can express; a fork bomb inside a runner is not
+# stopped by anything in this file. Don't treat this as closing SEC-10 by itself.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: vibecraft-ai-limits
+  namespace: vibecraft-ai
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+        ephemeral-storage: "512Mi"
+      defaultRequest:
+        cpu: "50m"
+        memory: "64Mi"
+        ephemeral-storage: "64Mi"
+      max:
+        cpu: "2"
+        memory: "2Gi"
+        ephemeral-storage: "4Gi"
+
+---
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: vibecraft-ai-quota
+  namespace: vibecraft-ai
+spec:
+  hard:
+    pods: "20"
+    requests.cpu: "4"
+    requests.memory: "4Gi"
+    limits.cpu: "12"
+    limits.memory: "12Gi"
+
+---
+
 apiVersion: v1
 kind: Service
 metadata:
