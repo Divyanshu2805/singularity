@@ -44,28 +44,36 @@ class AiGenerationServiceImplStopGenerationsTest {
             registry);
 
     @Test
-    void stoppingWithNoUserStopsEveryGenerationOnTheProjectButNotOthers() {
+    void stoppingWithNoUserStopsTheProjectsGenerationButNotOtherProjects() {
         registry.start(PROJECT_ID, USER_A, "build a form", false);
-        registry.start(PROJECT_ID, USER_B, "build a table", false);
         ActiveGeneration onAnotherProject = registry.start(2L, USER_A, "build a nav", false);
 
         service.stopGenerationsForProject(PROJECT_ID, null);
 
         assertThat(registry.find(PROJECT_ID, USER_A)).isEmpty();
-        assertThat(registry.find(PROJECT_ID, USER_B)).isEmpty();
         assertThat(registry.find(2L, USER_A)).contains(onAnotherProject);
     }
 
     @Test
-    void stoppingWithAUserOnlyStopsTheirsOnThatProject() {
+    void stoppingWithAUserOnlyStopsTheirsNotAnUnrelatedGenerationOnAnotherProject() {
         ActiveGeneration removedMembersRun = registry.start(PROJECT_ID, USER_A, "build a form", false);
-        ActiveGeneration remainingMembersRun = registry.start(PROJECT_ID, USER_B, "build a table", false);
+        ActiveGeneration unrelatedProjectsRun = registry.start(2L, USER_B, "build a table", false);
 
         service.stopGenerationsForProject(PROJECT_ID, USER_A);
 
         assertThat(registry.find(PROJECT_ID, USER_A)).isEmpty();
-        assertThat(registry.find(PROJECT_ID, USER_B)).contains(remainingMembersRun);
-        assertThat(remainingMembersRun.status()).isEqualTo(ActiveGeneration.Status.RUNNING);
+        assertThat(registry.find(2L, USER_B)).contains(unrelatedProjectsRun);
+        assertThat(unrelatedProjectsRun.status()).isEqualTo(ActiveGeneration.Status.RUNNING);
+    }
+
+    @Test
+    void stoppingWithAUserThatIsNotTheOneRunningLeavesTheActualGenerationAlone() {
+        ActiveGeneration actuallyRunning = registry.start(PROJECT_ID, USER_B, "build a table", false);
+
+        service.stopGenerationsForProject(PROJECT_ID, USER_A);
+
+        assertThat(registry.find(PROJECT_ID, USER_B)).contains(actuallyRunning);
+        assertThat(actuallyRunning.status()).isEqualTo(ActiveGeneration.Status.RUNNING);
     }
 
     @Test
