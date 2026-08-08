@@ -8,6 +8,7 @@ import com.vibecraft.intelligence.dto.code.CodeNoteResponse;
 import com.vibecraft.intelligence.dto.code.CodeNoteSelection;
 import com.vibecraft.intelligence.dto.code.ExplainCodeRequest;
 import com.vibecraft.intelligence.dto.code.SaveCodeNoteRequest;
+import com.vibecraft.intelligence.dto.usage.UsageReservation;
 import com.vibecraft.intelligence.entity.CodeNote;
 import com.vibecraft.intelligence.enums.UsageFeature;
 import com.vibecraft.common.error.BadRequestException;
@@ -77,8 +78,9 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public CodeInsightResponse explain(Long projectId, ExplainCodeRequest request) {
-        usageService.assertWithinDailyTokenBudget();
+        UsageReservation reservation = usageService.reserveBudget();
         String answer = callModel(
+                reservation,
                 CodeInsightPrompts.explainSystemPrompt(),
                 List.of(new UserMessage(CodeInsightPrompts.selectionBlock(
                         request.path(), request.startLine(), request.endLine(), request.code()))),
@@ -91,16 +93,17 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public CodeInsightResponse ask(Long projectId, AskCodeRequest request) {
-        usageService.assertWithinDailyTokenBudget();
+        UsageReservation reservation = usageService.reserveBudget();
         return new CodeInsightResponse(
-                callModel(CodeInsightPrompts.askSystemPrompt(), askMessages(projectId, request), projectId, "code question"));
+                callModel(reservation, CodeInsightPrompts.askSystemPrompt(), askMessages(projectId, request), projectId, "code question"));
     }
 
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public Flux<String> streamExplain(Long projectId, ExplainCodeRequest request) {
-        usageService.assertWithinDailyTokenBudget();
+        UsageReservation reservation = usageService.reserveBudget();
         return streamModel(
+                reservation,
                 CodeInsightPrompts.explainSystemPrompt(),
                 List.of(new UserMessage(CodeInsightPrompts.selectionBlock(
                         request.path(), request.startLine(), request.endLine(), request.code()))),
@@ -111,8 +114,8 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public Flux<String> streamAsk(Long projectId, AskCodeRequest request) {
-        usageService.assertWithinDailyTokenBudget();
-        return streamModel(CodeInsightPrompts.askSystemPrompt(), askMessages(projectId, request), projectId, "code question");
+        UsageReservation reservation = usageService.reserveBudget();
+        return streamModel(reservation, CodeInsightPrompts.askSystemPrompt(), askMessages(projectId, request), projectId, "code question");
     }
 
     @Override
@@ -162,9 +165,8 @@ public class CodeInsightServiceImpl implements CodeInsightService {
         log.info("Cleared {} code notes on projectId: {} for userId: {}", removed, projectId, userId);
     }
 
-    private Flux<String> streamModel(String systemPrompt, List<Message> messages, Long projectId, String label) {
+    private Flux<String> streamModel(UsageReservation reservation, String systemPrompt, List<Message> messages, Long projectId, String label) {
         AtomicReference<ChatResponse> lastWithUsage = new AtomicReference<>();
-        Long userId = authUtil.getCurrentUserId();
 
         return Flux.defer(() -> {
                     NarrationFilter narration = new NarrationFilter();
@@ -186,10 +188,16 @@ public class CodeInsightServiceImpl implements CodeInsightService {
                             .concatWith(Flux.defer(() -> Flux.fromIterable(narration.finish())));
                 })
                 .doOnComplete(() -> Mono.fromRunnable(() ->
-                                aiUsageRecorder.record(lastWithUsage.get(), UsageFeature.EXPLAIN, userId, projectId))
+                                aiUsageRecorder.reconcile(reservation, lastWithUsage.get(), UsageFeature.EXPLAIN, projectId))
                         .subscribeOn(Schedulers.boundedElastic())
                         .subscribe())
-                .doOnError(error -> log.error("Streaming {} failed", label, error));
+                .doOnError(error -> {
+                    log.error("Streaming {} failed", label, error);
+                    Mono.fromRunnable(() -> aiUsageRecorder.release(reservation)).subscribeOn(Schedulers.boundedElastic()).subscribe();
+                })
+                .doOnCancel(() -> Mono.fromRunnable(() -> aiUsageRecorder.release(reservation))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .subscribe());
     }
 
     private List<Message> askMessages(Long projectId, AskCodeRequest request) {
@@ -234,31 +242,31 @@ public class CodeInsightServiceImpl implements CodeInsightService {
         return history.subList(from, history.size());
     }
 
-    private String callModel(String systemPrompt, List<Message> messages, Long projectId, String label) {
+    private String callModel(UsageReservation reservation, String systemPrompt, List<Message> messages, Long projectId, String label) {
+        ChatResponse response;
         try {
-            ChatResponse response = chatClient.prompt()
+            response = chatClient.prompt()
                     .system(systemPrompt)
                     .messages(messages)
                     .tools(readOnlyTools(projectId))
                     .call()
                     .chatResponse();
-
-            aiUsageRecorder.record(response, UsageFeature.EXPLAIN, projectId);
-
-            String answer = response == null || response.getResult() == null
-                    ? null
-                    : response.getResult().getOutput().getText();
-
-            if (answer == null || answer.isBlank()) {
-                log.warn("The model returned an empty {}", label);
-                throw new BadRequestException("The AI didn't return an answer. Please try again.");
-            }
-            return answer.strip();
-        } catch (BadRequestException e) {
-            throw e;
         } catch (Exception e) {
+            aiUsageRecorder.release(reservation);
             log.error("AI {} failed", label, e);
             throw new BadRequestException("Couldn't get an answer from the AI right now. Please try again.");
         }
+
+        aiUsageRecorder.reconcile(reservation, response, UsageFeature.EXPLAIN, projectId);
+
+        String answer = response == null || response.getResult() == null
+                ? null
+                : response.getResult().getOutput().getText();
+
+        if (answer == null || answer.isBlank()) {
+            log.warn("The model returned an empty {}", label);
+            throw new BadRequestException("The AI didn't return an answer. Please try again.");
+        }
+        return answer.strip();
     }
 }

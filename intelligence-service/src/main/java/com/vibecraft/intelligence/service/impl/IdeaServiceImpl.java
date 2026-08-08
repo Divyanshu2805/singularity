@@ -6,6 +6,7 @@ import com.vibecraft.intelligence.dto.idea.ClarifyingQuestion;
 import com.vibecraft.intelligence.dto.idea.CompileIdeaRequest;
 import com.vibecraft.intelligence.dto.idea.CompileIdeaResponse;
 import com.vibecraft.intelligence.dto.idea.IdeaAnswer;
+import com.vibecraft.intelligence.dto.usage.UsageReservation;
 import com.vibecraft.intelligence.llm.AiUsageRecorder;
 import com.vibecraft.intelligence.service.IdeaService;
 import com.vibecraft.intelligence.service.UsageService;
@@ -154,7 +155,7 @@ public class IdeaServiceImpl implements IdeaService {
 
     @Override
     public ClarifyIdeaResponse clarify(ClarifyIdeaRequest request) {
-        usageService.assertWithinDailyTokenBudget();
+        UsageReservation reservation = usageService.reserveBudget();
         String idea = truncate(request.idea().strip(), MAX_IDEA_CHARS);
         int budget = questionBudget(idea);
         log.debug("Asking {} clarifying question(s) for an idea of {} words", budget, wordCount(idea));
@@ -164,9 +165,10 @@ public class IdeaServiceImpl implements IdeaService {
                     .user(idea)
                     .call()
                     .chatResponse();
-            aiUsageRecorder.record(response, com.vibecraft.intelligence.enums.UsageFeature.IDEA_INTERVIEW, null);
+            aiUsageRecorder.reconcile(reservation, response, com.vibecraft.intelligence.enums.UsageFeature.IDEA_INTERVIEW, null);
             return new ClarifyIdeaResponse(sanitizeQuestions(QUESTIONS_CONVERTER.convert(responseText(response)), budget));
         } catch (Exception e) {
+            aiUsageRecorder.release(reservation);
             log.warn("AI idea clarification failed, falling back to untailored questions", e);
             return new ClarifyIdeaResponse(sanitizeQuestions(null, budget));
         }
@@ -187,7 +189,7 @@ public class IdeaServiceImpl implements IdeaService {
 
     @Override
     public CompileIdeaResponse compile(CompileIdeaRequest request) {
-        usageService.assertWithinDailyTokenBudget();
+        UsageReservation reservation = usageService.reserveBudget();
         String idea = truncate(request.idea().strip(), MAX_IDEA_CHARS);
         List<IdeaAnswer> answered = request.answers().stream()
                 .filter(answer -> !cleanAnswers(answer.answers()).isEmpty())
@@ -205,13 +207,14 @@ public class IdeaServiceImpl implements IdeaService {
                     .user("Idea: " + idea + "\n\nInterview answers:\n" + interview)
                     .call()
                     .chatResponse();
-            aiUsageRecorder.record(response, com.vibecraft.intelligence.enums.UsageFeature.IDEA_INTERVIEW, null);
+            aiUsageRecorder.reconcile(reservation, response, com.vibecraft.intelligence.enums.UsageFeature.IDEA_INTERVIEW, null);
             String spec = responseText(response);
             if (spec != null && !spec.isBlank()) {
                 return new CompileIdeaResponse(truncate(spec.strip(), MAX_SPEC_CHARS));
             }
             log.warn("AI returned an empty project brief, falling back to a template brief");
         } catch (Exception e) {
+            aiUsageRecorder.release(reservation);
             log.warn("AI brief compilation failed, falling back to a template brief", e);
         }
         return new CompileIdeaResponse(templateSpec(idea, answered));

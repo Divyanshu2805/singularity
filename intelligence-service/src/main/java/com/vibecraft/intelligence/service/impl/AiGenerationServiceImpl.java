@@ -5,6 +5,8 @@ import com.vibecraft.common.dto.ProjectMembershipDto;
 import com.vibecraft.common.dto.ProjectPermission;
 import com.vibecraft.intelligence.dto.chat.ActiveGenerationResponse;
 import com.vibecraft.intelligence.dto.chat.StreamResponse;
+import com.vibecraft.intelligence.dto.usage.UsageRecord;
+import com.vibecraft.intelligence.dto.usage.UsageReservation;
 import com.vibecraft.intelligence.entity.ChatEvent;
 import com.vibecraft.intelligence.entity.ChatMessage;
 import com.vibecraft.intelligence.entity.ChatSession;
@@ -101,9 +103,22 @@ public class AiGenerationServiceImpl implements AiGenerationService {
     @PreAuthorize("@security.canEditProject(#projectId)")
     public Flux<StreamResponse> streamResponse(String userMessage, Long projectId, boolean teachingMode) {
 
-        usageService.assertWithinDailyTokenBudget();
-
         Long userId = authUtil.getCurrentUserId();
+
+        // Registering the generation first, and reserving budget second, means a project already mid-generation is
+        // refused before it ever touches the daily counter - see GenerationRegistry for why this is now one-per-
+        // project, not one-per-project-per-user.
+        ActiveGeneration generation = generationRegistry.start(projectId, userId, userMessage, teachingMode);
+
+        UsageReservation reservation;
+        try {
+            reservation = usageService.reserveBudget();
+        } catch (RuntimeException e) {
+            generationRegistry.remove(generation);
+            throw e;
+        }
+        generation.setReservation(reservation);
+
         ChatSession chatSession = createChatSessionIfNotExists(projectId, userId);
         TeachingMode teaching = resolveTeachingMode(teachingMode, userId, projectId);
 
@@ -118,8 +133,6 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         AtomicReference<Long> startTime = new AtomicReference<>(System.currentTimeMillis());
         AtomicReference<Usage> usageRef = new AtomicReference<>();
         AtomicReference<String> finishReason = new AtomicReference<>();
-
-        ActiveGeneration generation = generationRegistry.start(projectId, userId, userMessage, teachingMode);
 
         Disposable subscription;
         try {
@@ -149,6 +162,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                         log.error("Error during generation for projectId: {}", projectId, error);
                         generation.markFailed(error);
                         generationRegistry.remove(generation);
+                        reconcileInterrupted(generation, usageRef.get());
                     }, () -> {
                         long endTime = System.currentTimeMillis();
                         generation.markStreamComplete();
@@ -156,7 +170,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                             long duration = Math.max(1, (endTime - startTime.get()) / 1000);
                             try {
                                 finalizeChats(userMessage, chatSession, fullResponseBuffer.toString(), duration,
-                                        usageRef.get(), teaching, finishReason.get());
+                                        usageRef.get(), teaching, finishReason.get(), generation.takeReservation());
                             } catch (Exception e) {
                                 log.error("Failed to finalize chat for projectId: {}. Raw response was: {}", projectId, fullResponseBuffer, e);
                             } finally {
@@ -166,11 +180,47 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                     });
         } catch (RuntimeException e) {
             generationRegistry.remove(generation);
+            aiUsageRecorder.release(reservation);
             throw e;
         }
         generation.setSubscription(subscription);
 
         return generation.watch();
+    }
+
+    /**
+     * Trues up the reservation for a generation that ended without ever reaching {@code finalizeChats} - stopped by a
+     * user/revocation, or a provider error mid-stream. Neither path gets a final usage chunk from the provider in
+     * practice (streamed usage arrives, if at all, only in the last chunk of a run that finished normally), so real
+     * numbers are used when they happen to be available and a rough character-based estimate of the text actually
+     * produced is recorded otherwise - closer to the truth than recording nothing, which is what let a stopped run
+     * disappear from the ledger entirely despite real provider spend.
+     */
+    private void reconcileInterrupted(ActiveGeneration generation, Usage realUsage) {
+        UsageReservation reservation = generation.takeReservation();
+        if (reservation == null) {
+            return;
+        }
+        Schedulers.boundedElastic().schedule(() -> {
+            try {
+                if (realUsage != null && realUsage.getTotalTokens() != null && realUsage.getTotalTokens() > 0) {
+                    aiUsageRecorder.reconcile(reservation, realUsage, UsageFeature.BUILD, generation.projectId());
+                    return;
+                }
+                String textSoFar = generation.textSoFar();
+                if (textSoFar.isBlank()) {
+                    aiUsageRecorder.release(reservation);
+                    return;
+                }
+                int estimatedTokens = Math.max(1, textSoFar.length() / 4);
+                usageService.reconcileBudget(reservation, new UsageRecord(
+                        reservation.userId(), generation.projectId(), UsageFeature.BUILD, 0, estimatedTokens, estimatedTokens));
+                log.info("Recorded an estimated {} token(s) for an interrupted generation with no final usage " +
+                        "reported by the provider, projectId: {}", estimatedTokens, generation.projectId());
+            } catch (Exception e) {
+                log.warn("Couldn't reconcile usage for an interrupted generation on projectId: {}", generation.projectId(), e);
+            }
+        });
     }
 
     @Override
@@ -198,6 +248,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
             if (active.status() == ActiveGeneration.Status.RUNNING) {
                 active.stop(new GenerationStoppedException());
                 generationRegistry.remove(active);
+                reconcileInterrupted(active, null);
                 log.info("Generation stopped by the user for projectId: {}", projectId);
             }
         });
@@ -213,6 +264,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         for (ActiveGeneration generation : generations) {
             if (generation.status() == ActiveGeneration.Status.RUNNING) {
                 generation.stop(new GenerationStoppedException());
+                reconcileInterrupted(generation, null);
                 log.info("Stopped generation for projectId: {}, userId: {} (project or membership revoked)",
                         projectId, generation.userId());
             }
@@ -282,17 +334,15 @@ public class AiGenerationServiceImpl implements AiGenerationService {
     }
 
     private void finalizeChats(String userMessage, ChatSession chatSession, String fullText, Long duration, Usage usage,
-                               TeachingMode teaching, String finishReason) {
+                               TeachingMode teaching, String finishReason, UsageReservation reservation) {
         Long projectId = chatSession.getId().getProjectId();
 
-        Integer promptTokens = null;
-        Integer completionTokens = null;
+        // Reconciled first, before anything else here has a chance to throw: once this runs, the reservation is
+        // trued up and must never be touched again, so nothing later in this method may retry or repeat it.
+        aiUsageRecorder.reconcile(reservation, usage, UsageFeature.BUILD, projectId);
 
-        if(usage != null) {
-            aiUsageRecorder.record(usage, UsageFeature.BUILD, chatSession.getId().getUserId(), projectId);
-            promptTokens = usage.getPromptTokens();
-            completionTokens = usage.getCompletionTokens();
-        }
+        Integer promptTokens = usage != null ? usage.getPromptTokens() : null;
+        Integer completionTokens = usage != null ? usage.getCompletionTokens() : null;
 
         chatMessageRepository.save(
                 ChatMessage.builder()

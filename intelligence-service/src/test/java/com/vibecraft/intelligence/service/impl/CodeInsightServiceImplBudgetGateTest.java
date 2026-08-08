@@ -37,7 +37,7 @@ class CodeInsightServiceImplBudgetGateTest {
             usageService, mock(CodeNoteRepository.class), mock(CodeNoteMapper.class), mock(AuthUtil.class));
 
     private void overBudget() {
-        doThrow(new IllegalStateException("over the daily allowance")).when(usageService).assertWithinDailyTokenBudget();
+        doThrow(new IllegalStateException("over the daily allowance")).when(usageService).reserveBudget();
     }
 
     @Test

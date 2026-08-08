@@ -1,6 +1,7 @@
 package com.vibecraft.intelligence.service.impl;
 
 import com.vibecraft.intelligence.dto.chat.StreamResponse;
+import com.vibecraft.intelligence.dto.usage.UsageReservation;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
@@ -23,6 +24,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * <p>Every mutation and every new viewer goes through this object's monitor, which is what guarantees a viewer sees
  * each chunk exactly once - replayed if it arrived before they attached, live if after, never both or neither.
+ *
+ * <p>Also carries the usage reservation claimed before this generation started, and the text accumulated so far, so a
+ * stop or a mid-stream provider error - both of which end this outside the model stream's own completion/error
+ * signal - can still reconcile that reservation to an estimate of what was actually produced, rather than losing the
+ * charge entirely or leaving it stuck at the full reservation forever.
  */
 public final class ActiveGeneration {
 
@@ -43,6 +49,7 @@ public final class ActiveGeneration {
     private boolean streamEnded;
     private Throwable failure;
     private volatile Disposable subscription;
+    private UsageReservation reservation;
 
     ActiveGeneration(Long projectId, Long userId, String userMessage, boolean teachingMode) {
         this.projectId = projectId;
@@ -91,6 +98,25 @@ public final class ActiveGeneration {
 
     void setSubscription(Disposable subscription) {
         this.subscription = subscription;
+    }
+
+    synchronized void setReservation(UsageReservation reservation) {
+        this.reservation = reservation;
+    }
+
+    /**
+     * Hands back the reservation exactly once and clears it, so a stop/error path and this generation's own natural
+     * completion can never both reconcile the same reservation - whichever asks first gets it, and the other gets
+     * {@code null}, which every reconcile/release call already treats as a no-op.
+     */
+    synchronized UsageReservation takeReservation() {
+        UsageReservation taken = reservation;
+        reservation = null;
+        return taken;
+    }
+
+    synchronized String textSoFar() {
+        return text.toString();
     }
 
     void stop(Throwable reason) {
