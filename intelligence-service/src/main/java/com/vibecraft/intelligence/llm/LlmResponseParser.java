@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -22,19 +23,25 @@ import java.util.regex.Pattern;
  *
  * <p>Handles: recognising the tagged sections the generation prompt asks for - files to write, files to delete,
  * checklist items, teaching lessons and tool logs - and everything between them as plain message text, each assigned
- * its place in the turn.
+ * its place in the turn; dropping every FILE_EDIT for a path but the last when the model re-outputs the same file
+ * (a mistake the prompt forbids but does not prevent), since only the final version is ever actually saved and an
+ * earlier one left in the transcript would show a phantom extra write.
  *
  * <p>It parses free text rather than a structured format, so it is tolerant by design: an unclosed or malformed tag
- * degrades to message text rather than losing the turn.
+ * degrades to message text rather than losing the turn. A tag's content ends at the LAST occurrence of its closing
+ * tag before the next top-level tag opens (or the end of the response) rather than the first - a plain lazy match
+ * against the first `</file>` would cut a file's content short the moment its own source happened to contain that
+ * literal substring (documentation about this very protocol, an example, a string literal). This narrows but does
+ * not eliminate the risk: content that happens to contain what looks like an entire subsequent tag's opening (not
+ * just a bare closing tag) can still confuse the boundary - a fully validated, escaped protocol is what actually
+ * closes that gap; see CODE_REVIEW.md AI-08.
  */
 @Component
 @Slf4j
 public class LlmResponseParser {
 
-    private static final Pattern GENERIC_TAG_PATTERN = Pattern.compile(
-            "(<(message|file|delete|tool|todo|learn)([^>]*)>)([\\s\\S]*?)(</\\2>)",
-            Pattern.CASE_INSENSITIVE | Pattern.DOTALL
-    );
+    private static final Pattern OPEN_TAG_PATTERN = Pattern.compile(
+            "<(message|file|delete|tool|todo|learn)\\b([^>]*)>", Pattern.CASE_INSENSITIVE);
 
     private static final Pattern ATTRIBUTE_PATTERN = Pattern.compile(
             "(path|args|concept)=\"([^\"]+)\""
@@ -53,16 +60,30 @@ public class LlmResponseParser {
         int checklistSteps = 0;
         Set<String> lessonPaths = new HashSet<>();
 
-        Matcher matcher = GENERIC_TAG_PATTERN.matcher(fullResponse);
+        String haystack = fullResponse.toLowerCase(Locale.ROOT);
+        Matcher openMatcher = OPEN_TAG_PATTERN.matcher(fullResponse);
+        int cursor = 0;
 
-        while (matcher.find()) {
-            logUnparsedGap(fullResponse, lastMatchEnd, matcher.start());
-            lastMatchEnd = matcher.end();
+        while (cursor <= fullResponse.length() && openMatcher.find(cursor)) {
+            String tagName = openMatcher.group(1).toLowerCase(Locale.ROOT);
+            String attributes = openMatcher.group(2);
+            int contentStart = openMatcher.end();
 
-            String tagName = matcher.group(2).toLowerCase();
-            String attributes = matcher.group(3);
-            String content = matcher.group(4).trim();
+            int searchLimit = nextOpenTagStart(fullResponse, contentStart).orElse(fullResponse.length());
+            int closeStart = haystack.lastIndexOf("</" + tagName + ">", searchLimit - 1);
+            if (closeStart < contentStart) {
+                // No closing tag before the next tag opens (or before the response ends) - leave this stretch as
+                // unparsed text, same as a malformed tag always has: never guess where an unclosed tag would end.
+                cursor = openMatcher.end();
+                continue;
+            }
+            int closeEnd = closeStart + tagName.length() + 3;
 
+            logUnparsedGap(fullResponse, lastMatchEnd, openMatcher.start());
+            lastMatchEnd = closeEnd;
+            cursor = closeEnd;
+
+            String content = fullResponse.substring(contentStart, closeStart).trim();
             Map<String, String> attrMap = extractAttributes(attributes);
 
             ChatEvent.ChatEventBuilder builder = ChatEvent.builder()
@@ -130,7 +151,39 @@ public class LlmResponseParser {
 
         logUnparsedGap(fullResponse, lastMatchEnd, fullResponse.length());
 
-        return events;
+        return dedupeFileEdits(events);
+    }
+
+    private Optional<Integer> nextOpenTagStart(String fullResponse, int from) {
+        Matcher lookahead = OPEN_TAG_PATTERN.matcher(fullResponse);
+        return lookahead.find(from) ? Optional.of(lookahead.start()) : Optional.empty();
+    }
+
+    /**
+     * Keeps only the last {@code <file>} for a given path when the model re-output one it already wrote earlier in
+     * the same turn - the "ATOMIC UPDATES" prompt rule forbids this, but nothing stops a non-compliant response from
+     * doing it anyway, and only the final write is ever actually saved to storage.
+     */
+    private List<ChatEvent> dedupeFileEdits(List<ChatEvent> events) {
+        Map<String, ChatEvent> lastEditByPath = new LinkedHashMap<>();
+        for (ChatEvent event : events) {
+            if (event.getType() == ChatEventType.FILE_EDIT) {
+                lastEditByPath.put(event.getFilePath(), event);
+            }
+        }
+        if (lastEditByPath.size() == events.stream().filter(e -> e.getType() == ChatEventType.FILE_EDIT).count()) {
+            return events;
+        }
+        List<ChatEvent> deduped = new ArrayList<>(events.size());
+        for (ChatEvent event : events) {
+            if (event.getType() == ChatEventType.FILE_EDIT && lastEditByPath.get(event.getFilePath()) != event) {
+                log.warn("Dropping an earlier <file> for '{}' - the model rewrote it again later in the same " +
+                        "response, so only that final version is kept", event.getFilePath());
+                continue;
+            }
+            deduped.add(event);
+        }
+        return deduped;
     }
 
     public static int lessonPartCount(String lessonBody) {

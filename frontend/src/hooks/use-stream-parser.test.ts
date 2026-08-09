@@ -64,3 +64,47 @@ describe("deleting a file in the stream", () => {
     expect(findSafeEnd("Done <dele")).toBe(5);
   });
 });
+
+describe("a file containing a literal closing tag of its own", () => {
+  it("is not cut short by an embedded `</file>` with no matching fake opening tag", () => {
+    const raw = '<file path="docs/Protocol.md">A generated file always ends with a literal `</file>` tag.</file>'
+      + '<message>Done.</message>';
+
+    const events = parseStreamEvents(raw);
+
+    expect(events[0]).toMatchObject({
+      type: ChatEventType.FILE_EDIT,
+      content: "A generated file always ends with a literal `</file>` tag.",
+      isComplete: true,
+    });
+    expect(events[1]).toMatchObject({ type: ChatEventType.MESSAGE, content: "Done.", isComplete: true });
+  });
+
+  it("still reports a still-arriving file as incomplete when no closing tag exists anywhere yet", () => {
+    const events = parseStreamEvents('<file path="a.tsx">export const x = 1;\nconst partial');
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ isComplete: false, content: "export const x = 1;\nconst partial" });
+  });
+});
+
+describe("re-outputting the same file mid-turn", () => {
+  it("keeps only the last version, matching what the backend persists", () => {
+    const raw = '<file path="src/App.tsx">first draft</file><message>Fixing a typo.</message>'
+      + '<file path="src/App.tsx">final version</file>';
+
+    const events = parseStreamEvents(raw);
+
+    const fileEdits = events.filter((event) => event.type === ChatEventType.FILE_EDIT);
+    expect(fileEdits).toHaveLength(1);
+    expect(fileEdits[0].content).toBe("final version");
+    expect(events.map((event) => event.type)).toEqual([ChatEventType.MESSAGE, ChatEventType.FILE_EDIT]);
+  });
+
+  it("does not treat two different files as duplicates of each other", () => {
+    const events = parseStreamEvents('<file path="a.tsx">a</file><file path="b.tsx">b</file>');
+
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.filePath)).toEqual(["a.tsx", "b.tsx"]);
+  });
+});

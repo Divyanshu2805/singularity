@@ -3,10 +3,15 @@
  *
  * Handles: recognising each tagged section and its attributes, treating everything outside the tags as message text,
  * telling the smooth reveal which ranges are readable text, and where it must stop so a half-arrived tag is never
- * shown.
+ * shown; dropping every FILE_EDIT for a path but the last when the model re-outputs the same file, matching what the
+ * backend's LlmResponseParser keeps once the turn is saved.
  *
  * It is deliberately lenient about a missing closing tag on the last element, because the stream may still be
- * mid-tag.
+ * mid-tag - a tag's content is bounded by the LAST occurrence of its closing tag before the next recognised tag
+ * opens, falling back to searching the rest of the buffer, and finally to "still arriving" (open to the end of the
+ * buffer) only when no closing tag exists at all. A plain first-match search would let a file whose own content
+ * happens to contain a literal closing tag (documentation about this protocol, an example) get cut off early - the
+ * same fix CODE_REVIEW.md AI-08 applies on the backend, kept in step here since the two parse the same text.
  */
 import { useMemo } from 'react';
 import { ChatEvent, ChatEventType } from '@/lib/types';
@@ -14,48 +19,94 @@ import type { TextRange } from './use-smooth-stream';
 
 const TAG_NAMES = ["message", "file", "delete", "tool", "todo", "learn"];
 
-const PARSE_REGEX = /<(tool|message|file|delete|todo|learn)\b([^>]*)>([\s\S]*?)(<\/\1>|$)/gi;
+const OPEN_TAG_REGEX = /<(tool|message|file|delete|todo|learn)\b([^>]*)>/gi;
 const TAG_REGEX = /<(message|file|delete|tool|todo|learn)\b[^>]*>|<\/(message|file|delete|tool|todo|learn)>/gi;
 
 const readAttr = (attrs: string, name: string) =>
   new RegExp(`${name}="([^"]*)"`, "i").exec(attrs)?.[1];
 
-export function parseStreamEvents(buffer: string): ChatEvent[] {
-  const events: ChatEvent[] = [];
-  PARSE_REGEX.lastIndex = 0;
-  let match: RegExpExecArray | null;
+function findNextOpenStart(buffer: string, from: number): number {
+  OPEN_TAG_REGEX.lastIndex = from;
+  const match = OPEN_TAG_REGEX.exec(buffer);
+  return match ? match.index : -1;
+}
 
-  while ((match = PARSE_REGEX.exec(buffer)) !== null) {
-    const [, tag, attrs, content, closing] = match;
-    const base = { content: content.trim(), isComplete: closing !== "" };
+/** The end of `tag`'s content and whether a real closing tag was found for it, searched narrowest-bound first. */
+function findContentEnd(buffer: string, lower: string, tag: string, contentStart: number, nextOpenStart: number) {
+  const closeTag = `</${tag}>`;
+  const narrowLimit = nextOpenStart === -1 ? buffer.length : nextOpenStart;
 
-    switch (tag.toLowerCase()) {
-      case "file":
-        events.push({ ...base, type: ChatEventType.FILE_EDIT, filePath: readAttr(attrs, "path") });
-        break;
-      case "delete":
-        events.push({ ...base, type: ChatEventType.FILE_DELETE, filePath: readAttr(attrs, "path") });
-        break;
-      case "tool":
-        events.push({ ...base, type: ChatEventType.TOOL_LOG, metadata: readAttr(attrs, "args") });
-        break;
-      case "todo":
-        events.push({ ...base, type: ChatEventType.TODO, filePath: readAttr(attrs, "path") });
-        break;
-      case "learn":
-        events.push({
-          ...base,
-          type: ChatEventType.LEARN,
-          filePath: readAttr(attrs, "path"),
-          metadata: readAttr(attrs, "concept")?.trim() || undefined,
-        });
-        break;
-      default:
-        events.push({ ...base, type: ChatEventType.MESSAGE });
-    }
+  let closeStart = lower.lastIndexOf(closeTag, Math.max(contentStart, narrowLimit - 1));
+  if (closeStart >= contentStart && closeStart < narrowLimit) {
+    return { end: closeStart, closeTagEnd: closeStart + closeTag.length, isComplete: true };
   }
 
-  return events;
+  closeStart = lower.lastIndexOf(closeTag);
+  if (closeStart >= contentStart) {
+    return { end: closeStart, closeTagEnd: closeStart + closeTag.length, isComplete: true };
+  }
+
+  return { end: buffer.length, closeTagEnd: buffer.length, isComplete: false };
+}
+
+function buildEvent(tag: string, attrs: string, content: string, isComplete: boolean): ChatEvent {
+  const base = { content: content.trim(), isComplete };
+
+  switch (tag) {
+    case "file":
+      return { ...base, type: ChatEventType.FILE_EDIT, filePath: readAttr(attrs, "path") };
+    case "delete":
+      return { ...base, type: ChatEventType.FILE_DELETE, filePath: readAttr(attrs, "path") };
+    case "tool":
+      return { ...base, type: ChatEventType.TOOL_LOG, metadata: readAttr(attrs, "args") };
+    case "todo":
+      return { ...base, type: ChatEventType.TODO, filePath: readAttr(attrs, "path") };
+    case "learn":
+      return {
+        ...base,
+        type: ChatEventType.LEARN,
+        filePath: readAttr(attrs, "path"),
+        metadata: readAttr(attrs, "concept")?.trim() || undefined,
+      };
+    default:
+      return { ...base, type: ChatEventType.MESSAGE };
+  }
+}
+
+function dedupeFileEdits(events: ChatEvent[]): ChatEvent[] {
+  const lastByPath = new Map<string, ChatEvent>();
+  for (const event of events) {
+    if (event.type === ChatEventType.FILE_EDIT && event.filePath) {
+      lastByPath.set(event.filePath, event);
+    }
+  }
+  return events.filter((event) =>
+    event.type !== ChatEventType.FILE_EDIT || !event.filePath || lastByPath.get(event.filePath) === event);
+}
+
+export function parseStreamEvents(buffer: string): ChatEvent[] {
+  const events: ChatEvent[] = [];
+  const lower = buffer.toLowerCase();
+  OPEN_TAG_REGEX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = OPEN_TAG_REGEX.exec(buffer)) !== null) {
+    const tag = match[1].toLowerCase();
+    const attrs = match[2];
+    const contentStart = OPEN_TAG_REGEX.lastIndex;
+
+    const nextOpenStart = findNextOpenStart(buffer, contentStart);
+    const { end, closeTagEnd, isComplete } = findContentEnd(buffer, lower, tag, contentStart, nextOpenStart);
+
+    events.push(buildEvent(tag, attrs, buffer.slice(contentStart, end), isComplete));
+
+    if (!isComplete) {
+      break; // still arriving - nothing after an unclosed tag can be a complete event yet
+    }
+    OPEN_TAG_REGEX.lastIndex = closeTagEnd;
+  }
+
+  return dedupeFileEdits(events);
 }
 
 export function findVisibleRanges(raw: string): TextRange[] {
