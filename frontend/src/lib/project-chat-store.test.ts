@@ -351,6 +351,38 @@ describe("projectChatStore stopping and retrying", () => {
     expect(vi.mocked(api.streamChat)).toHaveBeenCalledTimes(2);
     expect(vi.mocked(api.streamChat).mock.calls[1][1]).toBe("build me a todo app");
   });
+
+  it("drops a retry the server rejected as a conflict, instead of leaving it stuck with a stale error", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useProjectChat(projectId));
+      const original = startResponse(projectId);
+      act(() => {
+        original.chunk("<message>Done.</message>");
+        original.onComplete();
+      });
+      expect(result.current.messages).toHaveLength(2);
+
+      act(() => projectChat.retryLastMessage(projectId));
+      expect(result.current.messages).toHaveLength(4);
+
+      const retry = lastStream();
+      act(() => retry.onError(new ApiRequestError("A response is already being generated for this project.", 409)));
+
+      // The doomed retry's optimistic pair is gone - the original turn is all that is left.
+      expect(result.current.messages).toHaveLength(2);
+      expect(result.current.messages[1].content).toContain("Done.");
+
+      vi.mocked(api.getChatHistory).mockResolvedValueOnce([]);
+      await act(async () => {
+        vi.advanceTimersByTime(1500);
+        await Promise.resolve();
+      });
+      expect(vi.mocked(api.getChatHistory)).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("projectChatStore after a refresh mid-response", () => {

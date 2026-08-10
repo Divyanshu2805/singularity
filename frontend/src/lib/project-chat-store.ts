@@ -12,6 +12,13 @@
  * Server history replaces the live copy only once it has really caught up - a final assistant turn with no events
  * means the events did not save, and taking that copy would blank a response the reader is looking at.
  *
+ * A retry (automatic, on an answer that looks unfinished, or an explicit click) can reach the server while it is
+ * still finalizing the turn that just finished streaming - GenerationRegistry allows only one generation per project
+ * at a time, and that slot is not freed until saving (and the server's own internal retry, if it runs one) is done.
+ * The server answers that race with a 409, which is not a real failure: the optimistic pair added for the retry is
+ * dropped rather than shown with an error, and history is reloaded shortly after to pick up what the server actually
+ * ended up saving.
+ *
  * It registers its own reset with the session module: module state outlives a client-side route change, and not
  * clearing it once leaked one account's chat to the next person who signed in on the same browser.
  */
@@ -248,7 +255,8 @@ function followTurn(
     openStream: (handlers: StreamHandlers) => () => void,
     options: { teachingMode?: boolean },
     prompt: string,
-    isResume = false
+    isResume = false,
+    userMessageId?: string
 ) {
     let awaitingBacklog = isResume;
     const turnId = (latestTurnIds.get(projectId) ?? 0) + 1;
@@ -352,6 +360,27 @@ function followTurn(
         },
         onError: (error) => {
             cancelStreams.delete(projectId);
+
+            // A 409 here means the server was still finalizing the turn that just finished streaming - saving its
+            // events, possibly committing files, possibly running its own internal retry - when this request (an
+            // automatic or a fast manual retry) reached GenerationRegistry's one-per-project lock before that slot
+            // was freed. The turn itself did not fail; showing it as a failed prompt with a stale error would be
+            // actively wrong once the server catches up, so this reconciles from history instead of guessing.
+            if (error instanceof ApiRequestError && error.status === 409) {
+                update(projectId, (state) => ({
+                    isStreaming: false,
+                    streamingFilePath: null,
+                    streamingFiles: EMPTY_FILES,
+                    // This turn was never accepted by the server at all - unlike every other error path, its
+                    // optimistic placeholder pair is removed rather than kept-with-an-error, so it doesn't
+                    // permanently desync the live view from server history (which will never contain a turn the
+                    // server rejected at the door).
+                    messages: state.messages.filter((message) => message.id !== aiMessageId && message.id !== userMessageId),
+                }));
+                window.setTimeout(() => void projectChat.loadHistory(projectId), 1500);
+                return;
+            }
+
             const notSent = error instanceof ApiRequestError;
             if (!(error instanceof ApiRequestError && error.status === 401)) {
                 writeFailedPrompt(projectId, {
@@ -493,13 +522,14 @@ export const projectChat = {
         isAutoRetry.set(projectId, options.isRetry === true);
         writeFailedPrompt(projectId, null);
 
+        const userMessageId = nextMessageId();
         const aiMessageId = nextMessageId();
         const askedAt = Date.now();
 
         update(projectId, (state) => ({
             messages: [
                 ...state.messages,
-                { id: nextMessageId(), role: "user", content, createdAt: new Date(askedAt).toISOString() },
+                { id: userMessageId, role: "user", content, createdAt: new Date(askedAt).toISOString() },
                 { id: aiMessageId, role: "assistant", content: "", isStreaming: true, editedFiles: [] },
             ],
             isStreaming: true,
@@ -517,7 +547,9 @@ export const projectChat = {
             ({ onChunk, onFile, onComplete, onError }) =>
                 api.streamChat(projectId, content, onChunk, onFile, onComplete, onError, { teachingMode: options.teachingMode === true }),
             options,
-            content
+            content,
+            false,
+            userMessageId
         );
     },
 
