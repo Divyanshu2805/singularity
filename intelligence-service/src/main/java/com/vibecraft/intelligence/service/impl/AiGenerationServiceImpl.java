@@ -33,6 +33,9 @@ import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.data.domain.PageRequest;
@@ -45,6 +48,7 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -55,12 +59,14 @@ import java.util.stream.Collectors;
 /**
  * The build pipeline: a user's message in, generated files and a saved chat turn out.
  *
- * <p>Handles: checking the daily budget before anything starts, opening the model stream and subscribing to it
- * server-side, recording usage, parsing the answer into events, writing and deleting the files it asked for, and
+ * <p>Handles: reserving the daily budget before anything starts, replaying the caller's own recent turns on this
+ * project so a build call has memory of earlier decisions, opening the model stream and subscribing to it
+ * server-side, reconciling usage, parsing the answer into events, writing and deleting the files it asked for, and
  * saving the turn - plus reattaching to a running generation and stopping one.
  *
- * <p>The budget check is raised synchronously, before the response has started, so it surfaces as a real 402 with the
- * quota numbers on it rather than a generic error event the client could not tell from a provider failure.
+ * <p>The budget reservation is claimed synchronously, before the response has started, so a rejection surfaces as a
+ * real 402 with the quota numbers on it rather than a generic error event the client could not tell from a provider
+ * failure - see {@code reserveBudget}/{@code recentHistory} for what each actually does.
  *
  * <p>Two failure modes are handled rather than hidden. A turn that announced an edit - through a tool log or a
  * checklist - and produced none is retried once to completion, and flagged in the transcript if the retry also
@@ -85,6 +91,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class AiGenerationServiceImpl implements AiGenerationService {
+
+    private static final int MAX_REPLAYED_TURNS = 10;
 
     private final ChatClient chatClient;
     private final AuthUtil authUtil;
@@ -121,6 +129,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
 
         ChatSession chatSession = createChatSessionIfNotExists(projectId, userId);
         TeachingMode teaching = resolveTeachingMode(teachingMode, userId, projectId);
+        List<Message> history = recentHistory(chatSession);
 
         Map<String, Object> advisorParams = Map.of(
                 "userId", userId,
@@ -136,7 +145,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
 
         Disposable subscription;
         try {
-            subscription = buildGenerationFlux(userMessage, advisorParams, codeGenerationTools, teaching)
+            subscription = buildGenerationFlux(userMessage, history, advisorParams, codeGenerationTools, teaching)
                     .subscribe(response -> {
                         if(response.getMetadata().getUsage() != null) {
                             usageRef.set(response.getMetadata().getUsage());
@@ -170,7 +179,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                             long duration = Math.max(1, (endTime - startTime.get()) / 1000);
                             try {
                                 finalizeChats(userMessage, chatSession, fullResponseBuffer.toString(), duration,
-                                        usageRef.get(), teaching, finishReason.get(), generation.takeReservation());
+                                        usageRef.get(), teaching, finishReason.get(), generation.takeReservation(), history);
                             } catch (Exception e) {
                                 log.error("Failed to finalize chat for projectId: {}. Raw response was: {}", projectId, fullResponseBuffer, e);
                             } finally {
@@ -287,11 +296,14 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         return teaching;
     }
 
-    private Flux<ChatResponse> buildGenerationFlux(String userMessage, Map<String, Object> advisorParams, CodeGenerationTools tools,
-                                                   TeachingMode teaching) {
+    private Flux<ChatResponse> buildGenerationFlux(String userMessage, List<Message> history, Map<String, Object> advisorParams,
+                                                   CodeGenerationTools tools, TeachingMode teaching) {
+        List<Message> messages = new ArrayList<>(history);
+        messages.add(new UserMessage(userMessage));
+
         return Flux.defer(() -> chatClient.prompt()
                         .system(PromptUtils.getSystemPrompt(teaching))
-                        .user(userMessage)
+                        .messages(messages)
                         .tools(tools)
                         .advisors(advisorSpec -> {
                                     advisorSpec.params(advisorParams);
@@ -305,11 +317,64 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                         .doBeforeRetry(signal -> log.warn("Rate limited by OpenRouter, retrying (attempt {})", signal.totalRetries() + 1)));
     }
 
-    private String collectFullResponse(String userMessage, Map<String, Object> advisorParams, CodeGenerationTools tools,
-                                       TeachingMode teaching, Long userId, Long projectId) {
+    /**
+     * Bounded conversation memory for a build turn: the caller's own last {@value #MAX_REPLAYED_TURNS} exchanges on
+     * this project, condensed rather than replayed verbatim - an assistant turn becomes what it said plus which
+     * files it touched, not the full file bodies the model can already re-read on demand via its tool. Never crosses
+     * chat sessions, so it can never surface another member's conversation: {@code ChatSession} is keyed by project
+     * and user, and this only ever reads the caller's own.
+     */
+    List<Message> recentHistory(ChatSession chatSession) {
+        List<ChatMessage> turns = chatMessageRepository.findByChatSession(chatSession);
+        int from = Math.max(0, turns.size() - MAX_REPLAYED_TURNS * 2);
+        List<Message> history = new ArrayList<>();
+        for (ChatMessage turn : turns.subList(from, turns.size())) {
+            if (turn.getRole() == MessageRole.USER) {
+                if (turn.getContent() != null && !turn.getContent().isBlank()) {
+                    history.add(new UserMessage(turn.getContent()));
+                }
+            } else {
+                String summary = summarizeAssistantTurn(turn);
+                if (!summary.isBlank()) {
+                    history.add(new AssistantMessage(summary));
+                }
+            }
+        }
+        return history;
+    }
+
+    private String summarizeAssistantTurn(ChatMessage turn) {
+        List<ChatEvent> turnEvents = turn.getEvents();
+        if (turnEvents == null || turnEvents.isEmpty()) {
+            return "";
+        }
+        String spoken = turnEvents.stream()
+                .filter(event -> event.getType() == ChatEventType.MESSAGE)
+                .map(ChatEvent::getContent)
+                .filter(content -> content != null && !content.isBlank())
+                .collect(Collectors.joining(" "));
+        List<String> touched = turnEvents.stream()
+                .filter(event -> (event.getType() == ChatEventType.FILE_EDIT || event.getType() == ChatEventType.FILE_DELETE)
+                        && event.getFilePath() != null)
+                .map(ChatEvent::getFilePath)
+                .distinct()
+                .toList();
+
+        StringBuilder summary = new StringBuilder(spoken);
+        if (!touched.isEmpty()) {
+            if (!summary.isEmpty()) {
+                summary.append(' ');
+            }
+            summary.append("(Files touched: ").append(String.join(", ", touched)).append(")");
+        }
+        return summary.toString();
+    }
+
+    private String collectFullResponse(String userMessage, List<Message> history, Map<String, Object> advisorParams,
+                                       CodeGenerationTools tools, TeachingMode teaching, Long userId, Long projectId) {
         StringBuilder buffer = new StringBuilder();
         AtomicReference<Usage> retryUsage = new AtomicReference<>();
-        buildGenerationFlux(userMessage, advisorParams, tools, teaching)
+        buildGenerationFlux(userMessage, history, advisorParams, tools, teaching)
                 .doOnNext(response -> {
                     if (response.getMetadata() != null && response.getMetadata().getUsage() != null
                             && response.getMetadata().getUsage().getTotalTokens() != null
@@ -334,7 +399,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
     }
 
     private void finalizeChats(String userMessage, ChatSession chatSession, String fullText, Long duration, Usage usage,
-                               TeachingMode teaching, String finishReason, UsageReservation reservation) {
+                               TeachingMode teaching, String finishReason, UsageReservation reservation, List<Message> history) {
         Long projectId = chatSession.getId().getProjectId();
 
         // Reconciled first, before anything else here has a chance to throw: once this runs, the reservation is
@@ -376,7 +441,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
             CodeGenerationTools tools = new CodeGenerationTools(projectFileReader, projectId);
 
             long retryStart = System.currentTimeMillis();
-            String retryText = collectFullResponse(userMessage, advisorParams, tools, teaching,
+            String retryText = collectFullResponse(userMessage, history, advisorParams, tools, teaching,
                     chatSession.getId().getUserId(), projectId);
             duration = (System.currentTimeMillis() - retryStart) / 1000;
 
