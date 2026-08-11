@@ -49,6 +49,7 @@ import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -75,7 +76,11 @@ import java.util.stream.Collectors;
  *
  * <p>Individual failures degrade rather than cascade: a file that cannot be written is skipped and logged while the
  * rest of the turn proceeds, and if saving the events as one batch is rejected they are retried one at a time,
- * because losing the whole transcript after the files were already written looks like a broken product.
+ * because losing the whole transcript after the files were already written looks like a broken product. A file that
+ * failed to save is never recorded as if it had - its event is stripped before the turn is persisted, with a message
+ * naming what didn't save - and if any save failed, every delete in the same turn is withheld too, since a rename is
+ * a new file plus a delete of the old path with nothing marking them as a pair, and applying the delete anyway could
+ * destroy the only surviving copy of that content.
  *
  * <p>A model stream must be retried by rebuilding the whole call rather than by attaching a retry to the built
  * stream: the advisor chain is single-use per subscription and throws on a second attempt otherwise.
@@ -473,7 +478,18 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 .build());
 
         if (stillAuthorizedToCommit(projectId, chatSession.getId().getUserId())) {
-            commitFileChanges(chatEventList, projectId);
+            Set<String> failedPaths = commitFileChanges(chatEventList, projectId);
+            if (!failedPaths.isEmpty()) {
+                chatEventList.removeIf(event -> (event.getType() == ChatEventType.FILE_EDIT || event.getType() == ChatEventType.FILE_DELETE)
+                        && failedPaths.contains(event.getFilePath()));
+                chatEventList.add(ChatEvent.builder()
+                        .type(ChatEventType.MESSAGE)
+                        .chatMessage(assistantChatMessage)
+                        .content("Couldn't save " + (failedPaths.size() == 1 ? "this file" : "these files") + ": "
+                                + String.join(", ", failedPaths) + ". Please try again.")
+                        .sequenceOrder(chatEventList.size() + 1)
+                        .build());
+            }
         } else {
             long discarded = chatEventList.stream()
                     .filter(e -> e.getType() == ChatEventType.FILE_EDIT || e.getType() == ChatEventType.FILE_DELETE)
@@ -512,11 +528,20 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         }
     }
 
-    private void commitFileChanges(List<ChatEvent> chatEventList, Long projectId) {
+    /**
+     * Writes every generated file, then deletes - unless a save failed, in which case every delete this turn is
+     * skipped rather than guessed at. A rename is written as a new file plus a delete of the old path with nothing
+     * marking them as a pair; if the new file's save failed, applying the delete anyway would destroy the only
+     * surviving copy of that content on a guess that it was unrelated. Returns every path that did not actually end
+     * up saved/deleted, so the caller can strip those events from what gets persisted - a failed write must never be
+     * recorded as if it succeeded.
+     */
+    Set<String> commitFileChanges(List<ChatEvent> chatEventList, Long projectId) {
         List<ChatEvent> fileEditEvents = chatEventList.stream()
                 .filter(e -> e.getType() == ChatEventType.FILE_EDIT)
                 .toList();
 
+        Set<String> failedPaths = new LinkedHashSet<>();
         int savedCount = 0;
         for (ChatEvent event : fileEditEvents) {
             event.setPreviousContent(previousContentOf(projectId, event.getFilePath()));
@@ -526,21 +551,33 @@ public class AiGenerationServiceImpl implements AiGenerationService {
             } catch (Exception e) {
                 log.error("Failed to save file '{}' for projectId: {}. Skipping this file; other files and " +
                         "chat history are unaffected.", event.getFilePath(), projectId, e);
+                failedPaths.add(event.getFilePath());
             }
         }
         if (savedCount < fileEditEvents.size()) {
             log.warn("Saved {}/{} generated file(s) for projectId: {}", savedCount, fileEditEvents.size(), projectId);
         }
 
-        for (ChatEvent event : chatEventList) {
-            if (event.getType() != ChatEventType.FILE_DELETE) continue;
-            try {
-                workspaceServiceClient.deleteFile(projectId, event.getFilePath());
-            } catch (Exception e) {
-                log.error("Failed to delete file '{}' for projectId: {}. Other changes are unaffected.",
-                        event.getFilePath(), projectId, e);
+        List<ChatEvent> deleteEvents = chatEventList.stream()
+                .filter(e -> e.getType() == ChatEventType.FILE_DELETE)
+                .toList();
+        if (!failedPaths.isEmpty() && !deleteEvents.isEmpty()) {
+            log.warn("Skipping {} delete(s) for projectId: {} because {} edit(s) failed in the same turn - a " +
+                    "delete may be the other half of a rename whose replacement never saved.",
+                    deleteEvents.size(), projectId, failedPaths.size());
+            deleteEvents.forEach(event -> failedPaths.add(event.getFilePath()));
+        } else {
+            for (ChatEvent event : deleteEvents) {
+                try {
+                    workspaceServiceClient.deleteFile(projectId, event.getFilePath());
+                } catch (Exception e) {
+                    log.error("Failed to delete file '{}' for projectId: {}. Other changes are unaffected.",
+                            event.getFilePath(), projectId, e);
+                    failedPaths.add(event.getFilePath());
+                }
             }
         }
+        return failedPaths;
     }
 
     private String previousContentOf(Long projectId, String path) {
