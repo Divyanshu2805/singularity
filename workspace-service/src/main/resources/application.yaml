@@ -51,6 +51,10 @@ minio:
   access-key: ${MINIO_ACCESS_KEY}
   secret-key: ${MINIO_SECRET_KEY}
   project-bucket: projects
+  # Where the starter template a new project is seeded from actually lives - CODE_REVIEW.md DATA-03 flagged these as
+  # hardcoded constants living apart from every other bucket name, which does come from configuration.
+  template-bucket: starter-projects
+  template-name: react-vite-tailwind-daisyui-starter
 
 # The kind namespace, Redis and MinIO bucket the live-preview pipeline runs against (PreviewRouter's Redis keys
 # are per-hostname).

@@ -11,7 +11,6 @@ import com.vibecraft.workspace.util.ContentTypeUtils;
 import com.vibecraft.workspace.util.ProjectFilePath;
 import io.minio.*;
 import io.minio.messages.Item;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -30,10 +29,15 @@ import java.util.stream.Collectors;
  * for a partial failure - the result says what is missing so the caller can surface it.
  *
  * <p>Skipping files the project already has is what makes a retry safe, including the user-triggered retry much
- * later. Both the source and destination buckets come from configuration rather than being hard-coded, so template
- * files land in the same bucket every other write uses.
+ * later. The source and destination buckets, and the template's own name, all come from configuration rather than
+ * being hard-coded, so template files land in the same bucket every other write uses and pointing at a different
+ * starter never needs a code change.
+ *
+ * <p>A listing that comes back with zero objects at all - the template bucket or name misconfigured, or genuinely
+ * empty - is treated as a failed attempt, not a vacuously complete one: an empty result and no explicit failure look
+ * identical to a plain empty-list check, and previously produced a "successfully initialized" project with no files
+ * and no error, silently.
  */
-@RequiredArgsConstructor
 @Service
 @Slf4j
 public class ProjectTemplateServiceImpl implements ProjectTemplateService {
@@ -41,13 +45,22 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
     private final MinioClient minioClient;
     private final ProjectFileRepository projectFileRepository;
     private final ProjectRepository projectRepository;
+    private final String projectBucket;
+    private final String templateBucket;
+    private final String templateName;
 
-    @Value("${minio.project-bucket}")
-    private String projectBucket;
-
-    private static final String TEMPLATE_BUCKET = "starter-projects";
-
-    private static final String TEMPLATE_NAME = "react-vite-tailwind-daisyui-starter";
+    public ProjectTemplateServiceImpl(MinioClient minioClient, ProjectFileRepository projectFileRepository,
+                                       ProjectRepository projectRepository,
+                                       @Value("${minio.project-bucket}") String projectBucket,
+                                       @Value("${minio.template-bucket}") String templateBucket,
+                                       @Value("${minio.template-name}") String templateName) {
+        this.minioClient = minioClient;
+        this.projectFileRepository = projectFileRepository;
+        this.projectRepository = projectRepository;
+        this.projectBucket = projectBucket;
+        this.templateBucket = templateBucket;
+        this.templateName = templateName;
+    }
 
     private static final int MAX_ATTEMPTS = 3;
     private static final Duration RETRY_DELAY = Duration.ofSeconds(1);
@@ -86,25 +99,27 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
         try {
             results = minioClient.listObjects(
                     ListObjectsArgs.builder()
-                            .bucket(TEMPLATE_BUCKET)
-                            .prefix(TEMPLATE_NAME + "/")
+                            .bucket(templateBucket)
+                            .prefix(templateName + "/")
                             .recursive(true)
                             .build()
             );
         } catch (Exception e) {
-            log.error("Failed to list template '{}' files for project {}", TEMPLATE_NAME, projectId, e);
+            log.error("Failed to list template '{}' files for project {}", templateName, projectId, e);
             return new TemplateInitResult(0, existingPaths.size(), List.of("(unable to list template files)"));
         }
 
+        int itemsSeen = 0;
         int copied = 0;
         List<String> failedPaths = new ArrayList<>();
 
         for (Result<Item> result : results) {
+            itemsSeen++;
             String cleanPath = null;
             try {
                 Item item = result.get();
                 String sourceKey = item.objectName();
-                cleanPath = sourceKey.replaceFirst(TEMPLATE_NAME + "/", "");
+                cleanPath = sourceKey.replaceFirst(templateName + "/", "");
 
                 if (existingPaths.contains(cleanPath)) {
                     continue;
@@ -118,7 +133,7 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
                                 .object(destKey)
                                 .source(
                                         CopySource.builder()
-                                                .bucket(TEMPLATE_BUCKET)
+                                                .bucket(templateBucket)
                                                 .object(sourceKey)
                                                 .build()
                                 )
@@ -138,6 +153,12 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
                 log.error("Failed to initialize template file '{}' for project {}", cleanPath, projectId, e);
                 failedPaths.add(cleanPath != null ? cleanPath : "(unknown file)");
             }
+        }
+
+        if (itemsSeen == 0) {
+            log.error("Template '{}' in bucket '{}' returned no files at all for project {} - it appears empty " +
+                    "or misconfigured.", templateName, templateBucket, projectId);
+            failedPaths.add("(the starter template has no files - it may be empty or misconfigured)");
         }
 
         return new TemplateInitResult(copied, existingPaths.size(), failedPaths);
