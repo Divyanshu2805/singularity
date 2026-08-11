@@ -47,6 +47,15 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Deliberately not transactional: every status change is a single conditional update, and the asynchronous
  * bootstrap must see the committed row before it starts.
+ *
+ * <p>The plan's concurrent-preview allowance is per user, across every project they can see - not per project - so
+ * checking it has to be serialized against that same user's other concurrent starts too, not just against other
+ * activity on the one project being started. {@code startPreview} takes a lock keyed on the user for exactly that
+ * span, nested around the existing per-project lock (which still separately protects the "join or create a runner"
+ * decision two collaborators opening the same project's preview at once must not both get wrong). Like the
+ * per-project locks, this is in-memory and per instance: it closes the race within one running copy of this
+ * service, not across replicas - the same limitation {@code GenerationRegistry} documents in intelligence-service
+ * for the same reason.
  */
 @Service
 @RequiredArgsConstructor
@@ -73,40 +82,47 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
     private final AuthUtil authUtil;
 
     private final ConcurrentHashMap<Long, Object> projectLocks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, Object> userLocks = new ConcurrentHashMap<>();
 
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public PreviewResponse startPreview(Long projectId) {
         Long userId = authUtil.getCurrentUserId();
 
-        synchronized (lockFor(projectId)) {
-            Preview runner = activeRunner(projectId).orElse(null);
+        // The user-scoped lock is what actually protects the plan's per-user allowance across different projects;
+        // the project-scoped lock nested inside it is what protects the runner-per-project decision. Two different
+        // users starting previews - even on the same project - only ever contend on the project lock, never on
+        // each other's user lock.
+        synchronized (userLockFor(userId)) {
+            synchronized (lockFor(projectId)) {
+                Preview runner = activeRunner(projectId).orElse(null);
 
-            Optional<PreviewSession> open = sessionRepository.findFirstByProjectIdAndUserIdAndEndedAtIsNullOrderByIdDesc(projectId, userId);
-            if (open.isPresent() && runner != null && runner.getId().equals(open.get().getPreview().getId())) {
-                markVisited(runner, open.get());
-                return toResponse(runner, open.get(), null);
+                Optional<PreviewSession> open = sessionRepository.findFirstByProjectIdAndUserIdAndEndedAtIsNullOrderByIdDesc(projectId, userId);
+                if (open.isPresent() && runner != null && runner.getId().equals(open.get().getPreview().getId())) {
+                    markVisited(runner, open.get());
+                    return toResponse(runner, open.get(), null);
+                }
+                open.ifPresent(stale -> sessionRepository.end(stale.getId(), "Replaced", Instant.now()));
+
+                assertWithinPreviewAllowance(userId);
+
+                if (runner == null) {
+                    runner = startRunner(projectId, userId);
+                } else {
+                    log.info("User {} joined preview {} of project {}", userId, runner.getId(), projectId);
+                }
+
+                Instant now = Instant.now();
+                PreviewSession session = sessionRepository.save(PreviewSession.builder()
+                        .preview(runner)
+                        .projectId(projectId)
+                        .userId(userId)
+                        .startedAt(now)
+                        .lastSeenAt(now)
+                        .failed(false)
+                        .build());
+                return toResponse(runner, session, null);
             }
-            open.ifPresent(stale -> sessionRepository.end(stale.getId(), "Replaced", Instant.now()));
-
-            assertWithinPreviewAllowance(userId);
-
-            if (runner == null) {
-                runner = startRunner(projectId, userId);
-            } else {
-                log.info("User {} joined preview {} of project {}", userId, runner.getId(), projectId);
-            }
-
-            Instant now = Instant.now();
-            PreviewSession session = sessionRepository.save(PreviewSession.builder()
-                    .preview(runner)
-                    .projectId(projectId)
-                    .userId(userId)
-                    .startedAt(now)
-                    .lastSeenAt(now)
-                    .failed(false)
-                    .build());
-            return toResponse(runner, session, null);
         }
     }
 
@@ -127,26 +143,31 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
     @PreAuthorize("@security.canViewProject(#projectId)")
     public PreviewResponse restartPreview(Long projectId) {
         Long userId = authUtil.getCurrentUserId();
-        synchronized (lockFor(projectId)) {
-            Optional<PreviewSession> open = sessionRepository.findFirstByProjectIdAndUserIdAndEndedAtIsNullOrderByIdDesc(projectId, userId);
-            Preview runner = activeRunner(projectId).orElse(null);
-            if (open.isEmpty() || runner == null || !runner.getId().equals(open.get().getPreview().getId())) {
-                return startPreview(projectId);
-            }
-            if (runner.getStatus() == PreviewStatus.CREATING) {
-                return toResponse(runner, open.get(), null);
-            }
-            if (previewRepository.markRestarting(runner.getId(), "Restarting the dev server", Instant.now()) == 0) {
-                return startPreview(projectId);
-            }
+        // Same outer-user/inner-project lock order as startPreview - this method falls through to startPreview in
+        // two branches below, and acquiring the project lock first here while startPreview acquires the user lock
+        // first would let two threads deadlock on each other's lock.
+        synchronized (userLockFor(userId)) {
+            synchronized (lockFor(projectId)) {
+                Optional<PreviewSession> open = sessionRepository.findFirstByProjectIdAndUserIdAndEndedAtIsNullOrderByIdDesc(projectId, userId);
+                Preview runner = activeRunner(projectId).orElse(null);
+                if (open.isEmpty() || runner == null || !runner.getId().equals(open.get().getPreview().getId())) {
+                    return startPreview(projectId);
+                }
+                if (runner.getStatus() == PreviewStatus.CREATING) {
+                    return toResponse(runner, open.get(), null);
+                }
+                if (previewRepository.markRestarting(runner.getId(), "Restarting the dev server", Instant.now()) == 0) {
+                    return startPreview(projectId);
+                }
 
-            router.remove(runner.getHostname());
-            bootstrapper.stopDevServer(runner.getPodName());
-            bootstrapper.start(runner.getId(), projectId, false);
-            log.info("User {} restarted preview {} for project {}", userId, runner.getId(), projectId);
+                router.remove(runner.getHostname());
+                bootstrapper.stopDevServer(runner.getPodName());
+                bootstrapper.start(runner.getId(), projectId, false);
+                log.info("User {} restarted preview {} for project {}", userId, runner.getId(), projectId);
 
-            Preview restarted = previewRepository.findById(runner.getId()).orElse(runner);
-            return toResponse(restarted, open.get(), null);
+                Preview restarted = previewRepository.findById(runner.getId()).orElse(runner);
+                return toResponse(restarted, open.get(), null);
+            }
         }
     }
 
@@ -224,6 +245,10 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
 
     public Object lockFor(Long projectId) {
         return projectLocks.computeIfAbsent(projectId, id -> new Object());
+    }
+
+    private Object userLockFor(Long userId) {
+        return userLocks.computeIfAbsent(userId, id -> new Object());
     }
 
     private Optional<Preview> activeRunner(Long projectId) {

@@ -105,6 +105,11 @@ public class ProjectServiceImpl implements ProjectService {
         Long userId = authUtil.getCurrentUserId();
         PlanDto plan = accountServiceClient.getPlanLimits(userId);
         int allowance = plan.maxProjects();
+
+        // Serializes this user's own concurrent creates/forks so two requests that both read "under the limit"
+        // can't both be admitted before either has committed - held for the rest of this transaction, which
+        // includes the project insert that follows a passing check, and released automatically at commit/rollback.
+        projectMemberRepository.lockProjectQuota(userId);
         int owned = projectMemberRepository.countProjectOwnedByUser(userId);
 
         if (owned < allowance) {
