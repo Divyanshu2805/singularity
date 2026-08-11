@@ -51,7 +51,14 @@ public interface ProjectMemberRepository extends JpaRepository<ProjectMember, Pr
      * the same transaction as the project insert that follows - the transaction, not the connection, is what the
      * lock is scoped to, so it is never left held across a request boundary. The second key namespaces this lock
      * away from any other advisory lock this service might use.
+     *
+     * <p>Selects a literal rather than the lock call's own result: {@code pg_advisory_xact_lock} returns SQL
+     * {@code void}, which pgjdbc represents as a {@link org.postgresql.util.PGobject} that cannot be cast to
+     * {@code Integer} - every call threw {@code ClassCastException} until this was caught live, driving a real
+     * project-creation request into a 500. {@code FROM} still evaluates the function (and so still takes the lock);
+     * only what gets projected changes. Verified directly against the real driver: the original form reports its
+     * column type as {@code void} with a {@code PGobject} value, this form reports {@code int4}/{@code Integer}.
      */
-    @Query(value = "SELECT pg_advisory_xact_lock(hashtext('project-quota'), CAST(:userId AS int))", nativeQuery = true)
+    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(hashtext('project-quota'), CAST(:userId AS int))", nativeQuery = true)
     Integer lockProjectQuota(@Param("userId") Long userId);
 }
