@@ -5,6 +5,7 @@ import com.vibecraft.workspace.dto.code.CodeSearchResponse;
 import com.vibecraft.workspace.dto.project.FileContentResponse;
 import com.vibecraft.workspace.dto.project.FileNode;
 import com.vibecraft.workspace.dto.project.FileTreeResponse;
+import com.vibecraft.workspace.dto.project.ProjectZipResult;
 import com.vibecraft.workspace.entity.Project;
 import com.vibecraft.workspace.entity.ProjectFile;
 import com.vibecraft.common.error.BadRequestException;
@@ -24,9 +25,9 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.errors.ErrorResponseException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
@@ -51,22 +52,32 @@ import java.util.zip.ZipOutputStream;
  * reaches storage, a ZIP entry name or a preview pod. Reads and writes derive the object key the same way, so they
  * cannot disagree about the same file.
  *
- * <p>Several operations degrade rather than fail: a file listed but missing from storage is skipped when zipping,
- * forking and searching, and an unreadable file is skipped mid-search. Forking copies inside storage rather than
- * downloading bytes, so images and other binaries come through intact.
+ * <p>A file listed in the database but missing from storage - metadata and bytes disagreeing, which should never
+ * happen - is skipped rather than failing the whole operation outright, but it is never skipped silently: forking
+ * counts it as a failed copy (the caller rolls the fork back rather than presenting an incomplete one as done), the
+ * ZIP export reports every path it could not include, and search distinguishes a file it could not read from one
+ * that was searched and simply had no match. Forking copies inside storage rather than downloading bytes, so images
+ * and other binaries come through intact.
  */
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class ProjectFileServiceImpl implements ProjectFileService {
 
     private final ProjectRepository projectRepository;
     private final ProjectFileRepository projectFileRepository;
     private final MinioClient minioClient;
     private final ProjectFileMapper projectFileMapper;
+    private final String projectBucket;
 
-    @Value("${minio.project-bucket}")
-    private String projectBucket;
+    public ProjectFileServiceImpl(ProjectRepository projectRepository, ProjectFileRepository projectFileRepository,
+                                   MinioClient minioClient, ProjectFileMapper projectFileMapper,
+                                   @Value("${minio.project-bucket}") String projectBucket) {
+        this.projectRepository = projectRepository;
+        this.projectFileRepository = projectFileRepository;
+        this.minioClient = minioClient;
+        this.projectFileMapper = projectFileMapper;
+        this.projectBucket = projectBucket;
+    }
 
     private static final int MAX_MATCHES_PER_FILE = 50;
     private static final int MAX_TOTAL_MATCHES = 300;
@@ -127,18 +138,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                             .contentType(contentType)
                             .build());
 
-            ProjectFile file = projectFileRepository.findByProjectIdAndPath(projectId, cleanPath)
-                    .orElseGet(() -> ProjectFile.builder()
-                            .project(project)
-                            .path(cleanPath)
-                            .minioObjectKey(objectName)
-                            .createdAt(Instant.now())
-                            .build());
-
-            file.setSize((long) contentBytes.length);
-            file.setType(contentType);
-            file.setUpdatedAt(Instant.now());
-            projectFileRepository.save(file);
+            saveMetadata(project, projectId, cleanPath, objectName, contentBytes.length, contentType);
             log.info("Saved file: {}", objectName);
         } catch (Exception e) {
             log.error("Failed to save file {}/{}", projectId, cleanPath, e);
@@ -147,11 +147,44 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     }
 
+    /**
+     * Finds-or-creates the metadata row for a path, tolerating a concurrent writer for that exact path. The read and
+     * the write here are not atomic, so two callers can both see no existing row and both try to insert one; the
+     * unique (project_id, path) constraint means only one of those inserts wins, and the loser retries once as an
+     * update against the row the winner just created rather than surfacing a spurious failure for a save whose bytes
+     * already reached storage.
+     */
+    private void saveMetadata(Project project, Long projectId, String cleanPath, String objectName, int contentLength, String contentType) {
+        ProjectFile file = projectFileRepository.findByProjectIdAndPath(projectId, cleanPath)
+                .orElseGet(() -> ProjectFile.builder()
+                        .project(project)
+                        .path(cleanPath)
+                        .minioObjectKey(objectName)
+                        .createdAt(Instant.now())
+                        .build());
+        file.setSize((long) contentLength);
+        file.setType(contentType);
+        file.setUpdatedAt(Instant.now());
+
+        try {
+            projectFileRepository.save(file);
+        } catch (DataIntegrityViolationException e) {
+            ProjectFile existing = projectFileRepository.findByProjectIdAndPath(projectId, cleanPath)
+                    .orElseThrow(() -> e);
+            existing.setMinioObjectKey(objectName);
+            existing.setSize((long) contentLength);
+            existing.setType(contentType);
+            existing.setUpdatedAt(Instant.now());
+            projectFileRepository.save(existing);
+        }
+    }
+
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
-    public byte[] buildProjectZip(Long projectId) {
+    public ProjectZipResult buildProjectZip(Long projectId) {
         List<ProjectFile> files = projectFileRepository.findByProjectId(projectId);
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        List<String> missing = new ArrayList<>();
 
         try (ZipOutputStream zip = new ZipOutputStream(buffer)) {
             for (ProjectFile file : files) {
@@ -163,7 +196,10 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                     zip.closeEntry();
                 } catch (ErrorResponseException e) {
                     if (!"NoSuchKey".equals(e.errorResponse().code())) throw e;
+                    // Metadata claims this file exists but storage doesn't have it - a real gap, not a normal
+                    // outcome, so it is reported rather than silently making the export look complete.
                     log.warn("Skipping file missing from storage while zipping project {}: {}", projectId, objectName);
+                    missing.add(file.getPath());
                 }
             }
         } catch (Exception e) {
@@ -171,7 +207,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             throw new FileStorageException("Failed to build ZIP for project " + projectId, e);
         }
 
-        return buffer.toByteArray();
+        return new ProjectZipResult(buffer.toByteArray(), List.copyOf(missing));
     }
 
     @Override
@@ -187,6 +223,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
         List<ProjectFile> files = projectFileRepository.findByProjectId(projectId);
         List<CodeSearchFileResult> results = new ArrayList<>();
+        List<String> unavailable = new ArrayList<>();
         int matchCount = 0;
         boolean truncated = false;
 
@@ -203,6 +240,9 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
             String content = readForSearch(projectId, file);
             if (content == null) {
+                // A searchable file storage could not actually return - distinct from one that was searched and
+                // simply had no match, so a caller doesn't read this as a confirmed "no matches here".
+                unavailable.add(file.getPath());
                 continue;
             }
 
@@ -216,7 +256,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             truncated |= result.truncated();
         }
 
-        return new CodeSearchResponse(needle, results.size(), matchCount, truncated, List.copyOf(results));
+        return new CodeSearchResponse(needle, results.size(), matchCount, truncated, List.copyOf(results), List.copyOf(unavailable));
     }
 
     private boolean isSearchable(ProjectFile file) {
@@ -267,7 +307,11 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                         .build());
             } catch (ErrorResponseException e) {
                 if ("NoSuchKey".equals(e.errorResponse().code())) {
+                    // Metadata exists but the bytes don't - the fork would silently be missing this file rather
+                    // than the copy it claims to be. Counted as a failure so the caller's "any failed -> roll the
+                    // fork back" check actually fires instead of presenting an incomplete fork as a complete one.
                     log.warn("Skipping file missing from storage while forking project {}: {}", sourceProjectId, sourceKey);
+                    failed++;
                     continue;
                 }
                 log.error("Failed to copy {} while forking project {}", sourceKey, sourceProjectId, e);

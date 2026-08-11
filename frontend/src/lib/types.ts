@@ -144,6 +144,7 @@ export interface CodeSearchResponse {
   matchCount: number;
   truncated: boolean;
   files: CodeSearchFileResult[];
+  unavailablePaths: string[];
 }
 
 export interface CodeSelection {

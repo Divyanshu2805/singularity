@@ -34,7 +34,7 @@ export function useProjectActions({ onDeleted }: { onDeleted?: (project: Project
 
     const downloadProject = async (project: ProjectSummaryResponse) => {
         try {
-            const blob = await api.downloadProjectZip(String(project.id));
+            const { blob, missingFileCount } = await api.downloadProjectZip(String(project.id));
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
@@ -43,6 +43,13 @@ export function useProjectActions({ onDeleted }: { onDeleted?: (project: Project
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
+            if (missingFileCount > 0) {
+                toast({
+                    title: "Download incomplete",
+                    description: `${missingFileCount} file${missingFileCount === 1 ? "" : "s"} couldn't be included - storage didn't have ${missingFileCount === 1 ? "it" : "them"}.`,
+                    variant: "destructive",
+                });
+            }
         } catch (error) {
             toast({
                 title: "Couldn't download project",

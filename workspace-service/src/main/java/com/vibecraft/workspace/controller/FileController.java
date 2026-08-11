@@ -3,6 +3,7 @@ package com.vibecraft.workspace.controller;
 import com.vibecraft.workspace.dto.code.CodeSearchResponse;
 import com.vibecraft.workspace.dto.project.FileContentResponse;
 import com.vibecraft.workspace.dto.project.FileTreeResponse;
+import com.vibecraft.workspace.dto.project.ProjectZipResult;
 import com.vibecraft.workspace.service.ProjectFileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
@@ -52,12 +53,17 @@ public class FileController {
 
     @GetMapping("/download-zip")
     public ResponseEntity<byte[]> downloadProjectZip(@PathVariable Long projectId) {
-        byte[] zip = projectFileService.buildProjectZip(projectId);
-        return ResponseEntity.ok()
+        ProjectZipResult result = projectFileService.buildProjectZip(projectId);
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename("project-" + projectId + ".zip").build().toString())
-                .contentType(MediaType.parseMediaType("application/zip"))
-                .body(zip);
+                .contentType(MediaType.parseMediaType("application/zip"));
+        if (!result.isComplete()) {
+            // A listed file's metadata and its object storage bytes disagreed - never expected, so it is
+            // disclosed rather than shipping a ZIP that quietly has less in it than the project actually does.
+            response.header("X-Missing-File-Count", String.valueOf(result.missingPaths().size()));
+        }
+        return response.body(result.bytes());
     }
 
 }

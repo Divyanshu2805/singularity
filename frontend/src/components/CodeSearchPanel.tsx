@@ -71,6 +71,8 @@ export function CodeSearchPanel({ projectId, query, onQueryChange, onOpenMatch, 
     return `${matches} in ${results.fileCount} file${results.fileCount === 1 ? "" : "s"}`;
   }, [results]);
 
+  const unavailableCount = results?.unavailablePaths.length ?? 0;
+
   const hasQuery = trimmed.length > 0;
 
   return (
@@ -113,6 +115,8 @@ export function CodeSearchPanel({ projectId, query, onQueryChange, onOpenMatch, 
           <p className="px-0.5 pt-1.5 text-[10px] text-muted-foreground">
             {summary}
             {results?.truncated && " · refine to see the rest"}
+            {unavailableCount > 0 &&
+              ` · ${unavailableCount} file${unavailableCount === 1 ? "" : "s"} couldn't be searched`}
           </p>
         )}
       </form>

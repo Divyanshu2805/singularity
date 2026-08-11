@@ -3,6 +3,7 @@ package com.vibecraft.workspace.service;
 import com.vibecraft.workspace.dto.code.CodeSearchResponse;
 import com.vibecraft.workspace.dto.project.FileContentResponse;
 import com.vibecraft.workspace.dto.project.FileTreeResponse;
+import com.vibecraft.workspace.dto.project.ProjectZipResult;
 
 /**
  * A project's files: metadata in the database, bytes in object storage.
@@ -25,7 +26,7 @@ public interface ProjectFileService {
 
     int copyAllFiles(Long sourceProjectId, Long targetProjectId);
 
-    byte[] buildProjectZip(Long projectId);
+    ProjectZipResult buildProjectZip(Long projectId);
 
     CodeSearchResponse searchFiles(Long projectId, String query);
 }

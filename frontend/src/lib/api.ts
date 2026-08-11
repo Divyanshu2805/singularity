@@ -483,11 +483,12 @@ export const api = {
     return response.json();
   },
 
-  async downloadProjectZip(id: string): Promise<Blob> {
+  async downloadProjectZip(id: string): Promise<{ blob: Blob; missingFileCount: number }> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${id}/files/download-zip`, {
     });
     await ensureOk(response, "Failed to download project");
-    return response.blob();
+    const missingFileCount = Number(response.headers.get("X-Missing-File-Count") ?? "0") || 0;
+    return { blob: await response.blob(), missingFileCount };
   },
 
   streamCodeInsight(
