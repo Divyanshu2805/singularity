@@ -96,6 +96,17 @@ spec:
           image: quay.io/minio/mc:latest
           command: ["/bin/sh", "-c", "sleep infinity"]
           env:
+            # quay.io/minio/mc has no home directory for uid 1000 the way node:20-alpine's `node` user does, so
+            # HOME defaults to / under runAsUser: 1000 below - every mc command, even one whose alias comes entirely
+            # from MC_HOST_myminio, still tries to write its own state under $HOME/.mc and fails outright
+            # ("mkdir /.mc: permission denied"). This is what made every preview start fail after SEC-08 added
+            # runAsUser without a home for this image specifically; caught live re-testing the actual sync path
+            # (CODE_REVIEW.md PRE-01), not by the security-context checks SEC-08 itself verified. /tmp needs no
+            # extra volume - it's already the one path guaranteed writable by any UID (sticky-bit 0777) - and mc
+            # keeps nothing here worth persisting across a restart anyway, since the alias is supplied fresh by
+            # MC_HOST_myminio every time.
+            - name: HOME
+              value: /tmp
             # Local-dev MinIO from services.docker-compose.yml, read from a Secret rather than a literal value so the
             # credential isn't checked into git. Create it once per cluster:
             #   kubectl create secret generic minio-runner-credentials -n vibecraft-ai \
