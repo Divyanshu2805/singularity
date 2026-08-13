@@ -18,8 +18,10 @@ import java.time.Instant;
  * a Vite dev server behind the preview proxy.
  *
  * <p>Handles: which pod and namespace it runs in, the hostname and URL it is served on, who started it, its status
- * and the step or failure reason behind that, the tail of the output when a start fails, and the lifecycle timestamps
- * including the last time anyone looked at it.
+ * and the step or failure reason behind that, the tail of the output when a start fails, the lifecycle timestamps
+ * including the last time anyone looked at it, and which service instance's bootstrap owns it and when that
+ * bootstrap last proved it was still alive - CODE_REVIEW.md PRE-03, so a rolling deployment's new instance can tell
+ * a still-running bootstrap apart from one truly abandoned by a crashed process.
  *
  * <p>A new row per start, so a failure stays readable after a retry. The hostname is reused by every later preview of
  * the same project, so a shared link keeps working across stops and restarts, and is random so it cannot be guessed
@@ -71,6 +73,9 @@ public class Preview {
     Instant readyAt;
     Instant lastAccessedAt;
     Instant terminatedAt;
+
+    String bootstrapOwner;
+    Instant bootstrapHeartbeatAt;
 
     @CreationTimestamp
     Instant createdAt;

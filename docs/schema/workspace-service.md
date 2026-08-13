@@ -119,6 +119,7 @@ One attempt at running a project live (see `docs/architecture/request-flows.md` 
 | `detail` | While `CREATING`: the step in progress. Once ended: why. |
 | `failureLog` | Tail of install/dev-server output on a failed start — the pod is gone by the time anyone reads this, so it has to be captured before that. |
 | `lastAccessedAt` | Refreshed by `PreviewLifecycle` while the app polls `GET .../preview`. Distinct from the proxy's own Redis-side "seen" tracking of direct browser visits. |
+| `bootstrapOwner` / `bootstrapHeartbeatAt` | CODE_REVIEW.md PRE-03. Written when a bootstrap claims a `CREATING` row and refreshed on every poll while it runs. On startup, `PreviewReaper` fails a `CREATING` row left over from before only if this heartbeat is missing or older than its own staleness grace period — not unconditionally — so a rolling deployment's new instance doesn't fail a bootstrap another, still-live instance owns. `bootstrapOwner` is a diagnostic label only; the fail/keep decision is judged by heartbeat age, not identity. |
 
 ## PREVIEW_SESSION
 

@@ -1,5 +1,6 @@
 package com.vibecraft.workspace.service.impl;
 
+import com.vibecraft.workspace.config.InstanceId;
 import com.vibecraft.workspace.config.PreviewProperties;
 import com.vibecraft.workspace.entity.Preview;
 import com.vibecraft.workspace.enums.PreviewStatus;
@@ -32,6 +33,15 @@ import static com.vibecraft.workspace.service.impl.PreviewRunnerPool.SYNCER_CONT
  *
  * <p>The route is published before the status flips to running, because the tab loads the URL the moment it sees that
  * status and must not get a 404.
+ *
+ * <p>{@link #checkHealth} answers the question a pod's phase cannot (CODE_REVIEW.md PRE-06): a pod stays Running long
+ * after the dev server inside it has crashed or gone unresponsive, or after the file-sync watcher has died and left
+ * later edits never reaching it. The reaper calls it periodically on every RUNNING preview and decides what to do
+ * with the answer - this class only reports what it finds.
+ *
+ * <p>Every step of a bootstrap - claiming it and each poll while waiting for the dev server - touches the preview's
+ * bootstrap heartbeat (CODE_REVIEW.md PRE-03), so another instance's startup can tell this one is still actively
+ * driving the row rather than having crashed mid-bootstrap.
  */
 @Component
 @RequiredArgsConstructor
@@ -41,6 +51,7 @@ public class PreviewBootstrapper {
     private static final Duration SYNC_TIMEOUT = Duration.ofMinutes(2);
     private static final Duration QUICK_COMMAND_TIMEOUT = Duration.ofSeconds(30);
     private static final Duration POLL_INTERVAL = Duration.ofSeconds(2);
+    private static final Duration HEALTH_CHECK_TIMEOUT = Duration.ofSeconds(10);
 
     private static final String MIRROR_FLAGS = "--overwrite --remove --quiet --exclude 'node_modules/*'";
 
@@ -49,11 +60,16 @@ public class PreviewBootstrapper {
     private final PreviewRouter router;
     private final PreviewLifecycle lifecycle;
     private final PreviewProperties properties;
+    private final InstanceId instanceId;
 
     @Async
     public void start(Long previewId, Long projectId, boolean syncFiles) {
         Preview preview = previewRepository.findById(previewId).orElse(null);
         if (preview == null || preview.getStatus() != PreviewStatus.CREATING) return;
+
+        // Claims this bootstrap for this instance (CODE_REVIEW.md PRE-03): a startup on another instance decides
+        // whether a CREATING row is still-running work or abandoned by how recently this heartbeat was touched.
+        previewRepository.heartbeatBootstrap(previewId, instanceId.value(), Instant.now());
 
         String pod = preview.getPodName();
         try {
@@ -95,6 +111,7 @@ public class PreviewBootstrapper {
             PreviewStatus status = previewRepository.findById(preview.getId())
                     .map(Preview::getStatus).orElse(PreviewStatus.TERMINATED);
             if (status != PreviewStatus.CREATING) return;
+            previewRepository.heartbeatBootstrap(preview.getId(), instanceId.value(), Instant.now());
 
             Probe probe = Probe.parse(runnerPool.exec(preview.getPodName(), RUNNER_CONTAINER,
                     QUICK_COMMAND_TIMEOUT, probeScript()).output());
@@ -132,6 +149,19 @@ public class PreviewBootstrapper {
         log.info("Preview {} for project {} is live at {}", preview.getId(), projectId, preview.getPreviewUrl());
     }
 
+    public record HealthCheck(boolean devServerAlive, boolean serving, boolean watcherAlive) {
+    }
+
+    public HealthCheck checkHealth(String podName) {
+        Probe probe = Probe.parse(runnerPool.exec(podName, RUNNER_CONTAINER, HEALTH_CHECK_TIMEOUT, probeScript()).output());
+        boolean watcherAlive = runnerPool.exec(podName, SYNCER_CONTAINER, HEALTH_CHECK_TIMEOUT, watcherAliveScript()).succeeded();
+        return new HealthCheck(probe.devExit() == null, probe.serving(), watcherAlive);
+    }
+
+    public boolean restartWatcher(Long projectId, String podName) {
+        return runnerPool.exec(podName, SYNCER_CONTAINER, QUICK_COMMAND_TIMEOUT, watchScript(projectId)).succeeded();
+    }
+
     public void stopDevServer(String podName) {
         runnerPool.exec(podName, RUNNER_CONTAINER, QUICK_COMMAND_TIMEOUT,
                 "if [ -f /tmp/boot.pid ]; then kill -TERM -$(cat /tmp/boot.pid) 2>/dev/null; fi; sleep 1; true");
@@ -160,6 +190,31 @@ public class PreviewBootstrapper {
     private String watchScript(Long projectId) {
         return "nohup mc mirror " + MIRROR_FLAGS + " --watch " + source(projectId)
                 + " /app/ > /tmp/sync.log 2>&1 < /dev/null & echo started";
+    }
+
+    /**
+     * Scans /proc by hand rather than using pgrep, ps, or grep: quay.io/minio/mc is a minimal image with none of
+     * them (only GNU coreutils and mc itself) - caught live re-testing this exact check (CODE_REVIEW.md PRE-06)
+     * when the missing binary's "command not found" made every watcher look dead on every single preview. The
+     * first, grep-free rewrite had the opposite bug just as badly: matching the shell's own command line, since a
+     * `sh -c "<script containing the literal search text>"` process's /proc/self/cmdline contains that text too -
+     * every check "found" the pattern in itself and reported alive even with no watcher running at all. Comparing
+     * each candidate pid against $$ (this shell's own pid, no subprocess needed) excludes exactly that one process.
+     */
+    private String watcherAliveScript() {
+        return """
+                self=$$
+                for f in /proc/[0-9]*/cmdline; do
+                  pid=${f#/proc/}
+                  pid=${pid%/cmdline}
+                  [ "$pid" = "$self" ] && continue
+                  c=$(tr '\\0' ' ' < "$f" 2>/dev/null)
+                  case "$c" in
+                    *"mc mirror"*"--watch"*) exit 0 ;;
+                  esac
+                done
+                exit 1
+                """;
     }
 
     private String bootScript() {

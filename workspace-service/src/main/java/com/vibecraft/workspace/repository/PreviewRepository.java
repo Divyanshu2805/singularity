@@ -18,8 +18,9 @@ import java.util.Optional;
  * Reads and writes preview runners.
  *
  * <p>Handles: finding a project's latest preview in any or a given state, listing previews by state, remembering the
- * hostname a project was last served on so its next preview keeps the same URL, counting a user's previews, and the
- * status transitions.
+ * hostname a project was last served on so its next preview keeps the same URL, counting a user's previews, the
+ * status transitions, and the bootstrap heartbeat a rolling deployment's startup check reads to tell a still-running
+ * bootstrap apart from one truly abandoned (CODE_REVIEW.md PRE-03).
  *
  * <p>Every transition is a conditional update that applies only from the state it expects and returns how many rows
  * changed, so the caller learns whether it won a race - the bootstrap finishing against someone pressing Stop -
@@ -53,6 +54,14 @@ public interface PreviewRepository extends JpaRepository<Preview, Long> {
     @Transactional
     @Query("UPDATE Preview p SET p.detail = :detail WHERE p.id = :id AND p.status = com.vibecraft.workspace.enums.PreviewStatus.CREATING")
     int updatePhase(@Param("id") Long id, @Param("detail") String detail);
+
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("""
+            UPDATE Preview p SET p.bootstrapOwner = :owner, p.bootstrapHeartbeatAt = :now
+            WHERE p.id = :id AND p.status = com.vibecraft.workspace.enums.PreviewStatus.CREATING
+            """)
+    int heartbeatBootstrap(@Param("id") Long id, @Param("owner") String owner, @Param("now") Instant now);
 
     @Modifying(clearAutomatically = true)
     @Transactional

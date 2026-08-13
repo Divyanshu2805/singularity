@@ -5,8 +5,9 @@ package com.vibecraft.workspace.enums;
  *
  * <p>Handles: naming them - starting, running, failed to start, and ended.
  *
- * <p>Unlike this codebase's other enum columns, the previews table carries a database check constraint listing
- * exactly these values, so adding a status means dropping that constraint in a migration first.
+ * <p>Like every other enum column in this codebase, the previews table carries no database check constraint listing
+ * these values (see docs/schema/conventions.md, "Enum columns carry no CHECK constraint") - this column has already grown a
+ * fourth value once with no migration needed for it.
  */
 public enum PreviewStatus {
     CREATING, RUNNING, FAILED, TERMINATED
