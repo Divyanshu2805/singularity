@@ -48,6 +48,16 @@ public class Subscription {
     @Builder.Default
     Boolean cancelAtPeriodEnd = false;
 
+    /** When the row entered PAST_DUE most recently - null otherwise. Drives BILL-05's grace-period expiry. */
+    Instant pastDueSince;
+
+    /** The timestamp of the last Stripe event (or live sync) actually applied - guards against out-of-order webhooks. */
+    Instant lastEventAt;
+
+    /** Set when a plan-change's Stripe write succeeded but the immediate re-read back from Stripe failed. */
+    @Builder.Default
+    Boolean syncPending = false;
+
     @CreationTimestamp
     Instant createdAt;
 
