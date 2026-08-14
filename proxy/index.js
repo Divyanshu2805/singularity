@@ -25,9 +25,14 @@
  * writes the last-seen key as pages load, which is how the backend's idle reaper knows a preview open in its own tab
  * is still in use. Keep both key names in step with the backend's router - nothing else ties the two together.
  *
- * Redis waits are bounded on purpose: an unlimited command queue turns an outage into requests that hang forever
- * rather than failing, and the last-seen map is swept so a long-lived process cannot accumulate one entry per
- * hostname it has ever served.
+ * Redis waits are bounded on purpose (CODE_REVIEW.md PRE-08): an unlimited command queue turns an outage into
+ * requests that hang forever rather than failing, and the last-seen map is swept so a long-lived process cannot
+ * accumulate one entry per hostname it has ever served. A Redis error and a genuinely missing route are told apart
+ * (routing.js's ROUTER_UNAVAILABLE) so an outage shows "try again" rather than "this preview isn't running" - the
+ * latter is what a visitor sees when their own preview was never started, which a Redis hiccup is not. Waiting on
+ * the runner pod itself is bounded too: a pod at "Running" whose dev server has died or wedged (PRE-06) must fail a
+ * request the same way an unreachable one does, not hang until the client gives up - proxyTimeout covers the plain
+ * HTTP passes, and the manual proxyReqWs timer covers the websocket pass, which http-proxy never times out itself.
  *
  * The HTML rewrite asks for an uncompressed response, since it has to read the body - the dev server does not
  * compress, but a user's own server might. The injected reporter covers uncaught errors, unhandled rejections and the
@@ -39,6 +44,7 @@ const { URL } = require('url');
 const httpProxy = require('http-proxy');
 const Redis = require('ioredis');
 const { verifyToken, readCookie, accessCookieHeader, ACCESS_COOKIE_NAME, TOKEN_QUERY_PARAM } = require('./auth');
+const { ROUTER_UNAVAILABLE, classifyMissingRoute } = require('./routing');
 
 const redisUrl = process.env.REDIS_URL || 'redis://redis-service:6379';
 const port = Number(process.env.PORT || 80);
@@ -47,6 +53,11 @@ const SEEN_WRITE_EVERY_MS = 15_000;
 const REDIS_MAX_RETRIES = 2;
 const REDIS_COMMAND_TIMEOUT_MS = 2_000;
 const MAX_TRACKED_HOSTNAMES = 5_000;
+// How long to wait for the runner pod itself to respond, once Redis has told us where it is. A pod stuck at
+// "Running" with a dead or hung dev server inside it (CODE_REVIEW.md PRE-06) must not hang a request forever - it
+// should fail the same way an unreachable pod does.
+const UPSTREAM_TIMEOUT_MS = Number(process.env.PREVIEW_UPSTREAM_TIMEOUT_MS || 15_000);
+const WS_HANDSHAKE_TIMEOUT_MS = Number(process.env.PREVIEW_WS_HANDSHAKE_TIMEOUT_MS || 10_000);
 
 const ACCESS_TOKEN_SECRET = process.env.PREVIEW_ACCESS_TOKEN_SECRET;
 // `.localhost` is treated as a potentially-trustworthy origin by every major browser even over plain http, which is
@@ -75,9 +86,27 @@ const redis = new Redis(redisUrl, {
 redis.on('error', (err) => console.error('Redis Client Error:', err.message));
 redis.on('connect', () => console.log('Connected to Redis'));
 
-const proxy = httpProxy.createProxyServer({ ws: true, xfwd: true, changeOrigin: true });
+const proxy = httpProxy.createProxyServer({ ws: true, xfwd: true, changeOrigin: true, proxyTimeout: UPSTREAM_TIMEOUT_MS });
 
-const htmlProxy = httpProxy.createProxyServer({ xfwd: true, changeOrigin: true, selfHandleResponse: true });
+const htmlProxy = httpProxy.createProxyServer({
+    xfwd: true, changeOrigin: true, selfHandleResponse: true, proxyTimeout: UPSTREAM_TIMEOUT_MS,
+});
+
+// http-proxy's proxyTimeout only guards the plain HTTP passes; its websocket pass never times out an upstream that
+// accepts the TCP connection but never completes the upgrade handshake (Vite's HMR socket, wedged). Time that out by
+// hand and destroy both ends, the same failure shape as any other unreachable-upstream error.
+proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+    const timer = setTimeout(() => {
+        console.error(`Preview websocket upgrade for ${req.headers.host || 'unknown host'} timed out waiting for the runner`);
+        proxyReq.destroy();
+        socket.destroy();
+    }, WS_HANDSHAKE_TIMEOUT_MS);
+    const clear = () => clearTimeout(timer);
+    proxyReq.once('response', clear);
+    proxyReq.once('upgrade', clear);
+    proxyReq.once('error', clear);
+    socket.once('close', clear);
+});
 
 htmlProxy.on('proxyReq', (proxyReq) => proxyReq.setHeader('accept-encoding', 'identity'));
 
@@ -106,7 +135,7 @@ async function getTarget(hostname) {
         return await redis.get(`route:${hostname}`);
     } catch (err) {
         console.error('Redis Error:', err.message);
-        return null;
+        return ROUTER_UNAVAILABLE;
     }
 }
 
@@ -194,9 +223,9 @@ const server = http.createServer(async (req, res) => {
     const hostname = (req.headers.host || '').split(':')[0];
     const target = await getTarget(hostname);
 
-    if (!target) {
-        return statusPage(res, 404, "This preview isn't running",
-            'Open the project in VibeCraft and switch to Preview to start it.');
+    if (!target || target === ROUTER_UNAVAILABLE) {
+        const page = classifyMissingRoute(target);
+        return statusPage(res, page.status, page.title, page.message, { refreshSeconds: page.refreshSeconds });
     }
 
     const requestUrl = new URL(req.url, `http://${hostname}`);
@@ -235,7 +264,8 @@ const server = http.createServer(async (req, res) => {
 server.on('upgrade', async (req, socket, head) => {
     const hostname = (req.headers.host || '').split(':')[0];
     const target = await getTarget(hostname);
-    if (!target) return socket.destroy();
+    if (target === ROUTER_UNAVAILABLE) console.error(`Refusing a websocket upgrade for ${hostname}: the router (Redis) didn't answer`);
+    if (!target || target === ROUTER_UNAVAILABLE) return socket.destroy();
 
     if (!isAuthorized(req, hostname)) {
         socket.destroy();
