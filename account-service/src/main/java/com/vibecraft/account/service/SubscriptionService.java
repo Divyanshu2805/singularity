@@ -21,6 +21,11 @@ import java.util.Optional;
  *
  * <p>Counting owned projects is deliberately not here: that is workspace-service's table. This service only ever
  * answers what a plan allows, and the caller does its own counting.
+ *
+ * <p>Every state-changing method takes an {@code eventTime}: the Stripe webhook's own event-creation timestamp, or
+ * {@code null} for a caller that isn't racing other events (a fresh live re-read from Stripe, or the row's own
+ * creation). It is compared against the row's last-applied event time so a delayed or redelivered-out-of-order
+ * webhook cannot overwrite newer state with older state - see SubscriptionServiceImpl's class Javadoc.
  */
 public interface SubscriptionService {
 
@@ -31,15 +36,18 @@ public interface SubscriptionService {
 
     SubscriptionResponse getCurrentSubscription();
 
-    void activateSubscription(Long userId, Long planId, String subscriptionId, String customerId);
+    void activateSubscription(Long userId, Long planId, String subscriptionId, String customerId, Instant eventTime);
 
-    void updateSubscription(String gatewaySubscriptionId, SubscriptionStatus status, Instant periodStart, Instant periodEnd, Boolean cancelAtPeriodEnd, Long planId);
+    void updateSubscription(String gatewaySubscriptionId, SubscriptionStatus status, Instant periodStart, Instant periodEnd, Boolean cancelAtPeriodEnd, Long planId, Instant eventTime);
 
-    void cancelSubscription(String gatewaySubscriptionId);
+    void cancelSubscription(String gatewaySubscriptionId, Instant eventTime);
 
-    void renewSubscriptionPeriod(String gatewaySubscriptionId, Instant periodStart, Instant periodEnd);
+    void renewSubscriptionPeriod(String gatewaySubscriptionId, Instant periodStart, Instant periodEnd, Instant eventTime);
 
-    void markSubscriptionPastDue(String gatewaySubscriptionId);
+    void markSubscriptionPastDue(String gatewaySubscriptionId, Instant eventTime);
+
+    /** Records that a plan-change's Stripe write succeeded but the immediate re-read back from Stripe failed. */
+    void markSyncPending(String gatewaySubscriptionId);
 
     Plan getActivePlan(Long userId);
 

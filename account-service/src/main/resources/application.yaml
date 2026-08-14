@@ -52,6 +52,11 @@ stripe:
     pro: ${STRIPE_PRICE_PRO}
     business: ${STRIPE_PRICE_BUSINESS}
 
+billing:
+  # How long a PAST_DUE subscription keeps entitling after it first went delinquent (SubscriptionServiceImpl,
+  # BILL-05) - after this, a user with no further Stripe update reads back as free without needing another webhook.
+  past-due-grace-days: 7
+
 client.url: http://localhost:5173
 
 server:

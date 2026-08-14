@@ -6,11 +6,14 @@ import com.vibecraft.account.dto.subscription.CheckoutResponse;
 import com.vibecraft.account.dto.subscription.ConfirmCheckoutRequest;
 import com.vibecraft.account.dto.subscription.PortalResponse;
 import com.vibecraft.account.dto.subscription.SubscriptionResponse;
+import com.vibecraft.account.entity.CheckoutIntent;
 import com.vibecraft.account.entity.Plan;
 import com.vibecraft.account.entity.User;
 import com.vibecraft.account.enums.SubscriptionStatus;
+import com.vibecraft.account.repository.CheckoutIntentRepository;
 import com.vibecraft.account.repository.PlanRepository;
 import com.vibecraft.account.repository.UserRepository;
+import com.vibecraft.account.repository.WebhookEventRepository;
 import com.vibecraft.common.security.AuthUtil;
 import com.vibecraft.account.service.PaymentProcessor;
 import com.vibecraft.account.service.SubscriptionService;
@@ -26,6 +29,7 @@ import com.stripe.model.StripeObject;
 import com.stripe.model.Subscription;
 import com.stripe.model.SubscriptionItem;
 import com.stripe.model.checkout.Session;
+import com.stripe.net.RequestOptions;
 import com.stripe.param.SubscriptionUpdateParams;
 import com.stripe.param.checkout.SessionCreateParams;
 import lombok.AccessLevel;
@@ -36,8 +40,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * The Stripe implementation of everything this platform does with payments.
@@ -52,6 +59,17 @@ import java.util.Map;
  * saying the plan has not changed, rather than as a failure of unknown effect. Stripe being unreachable is an
  * ExternalServiceException, which becomes a 503 tagged as an upstream failure - not a bare runtime exception, which
  * would surface as a generic 500.
+ *
+ * <p>Checkout-session creation goes through a CheckoutIntent: at most one outstanding intent per user (enforced by
+ * its primary key), reused with the same Stripe idempotency key and Session id across double clicks and parallel
+ * tabs until it goes stale or targets a different plan, so a retry can never mint a second Stripe session.
+ *
+ * <p>Every webhook delivery is claimed through WebhookEventRepository before its handler runs, by Stripe's own event
+ * id: an already-PROCESSED event is skipped outright, one still stuck at RECEIVED (in flight, or its own handler
+ * previously threw) is reclaimed. Each handler also carries the event's own creation time down into
+ * SubscriptionService so a delayed or redelivered-out-of-order event can never overwrite newer state with older
+ * state. switchPrice folds the cancellation-clearing and the price change into one Stripe update call, so a declined
+ * card on an upgrade leaves the subscription entirely untouched rather than partially applied.
  */
 @Slf4j
 @Service
@@ -62,7 +80,12 @@ public class StripePaymentProcessor implements PaymentProcessor {
     AuthUtil authUtil;
     PlanRepository planRepository;
     UserRepository userRepository;
+    CheckoutIntentRepository checkoutIntentRepository;
+    WebhookEventRepository webhookEventRepository;
     SubscriptionService subscriptionService;
+    Clock clock;
+
+    private static final Duration CHECKOUT_INTENT_TTL = Duration.ofHours(23);
 
     @NonFinal
     @Value("${client.url}")
@@ -82,6 +105,12 @@ public class StripePaymentProcessor implements PaymentProcessor {
         }
         if (plan.getStripePriceId() == null || plan.getStripePriceId().isBlank()) {
             throw new BadRequestException("The free plan doesn't need a checkout.");
+        }
+
+        CheckoutIntent intent = reuseOrMintIntent(userId, plan.getId());
+        String reusableUrl = reuseOpenSession(intent);
+        if (reusableUrl != null) {
+            return new CheckoutResponse(reusableUrl);
         }
 
         var params = SessionCreateParams.builder()
@@ -107,11 +136,48 @@ public class StripePaymentProcessor implements PaymentProcessor {
             } else {
                 params.setCustomer(stripeCustomerId);
             }
-            Session session = Session.create(params.build());
+            RequestOptions options = RequestOptions.builder().setIdempotencyKey(intent.getIdempotencyKey()).build();
+            Session session = Session.create(params.build(), options);
+            checkoutIntentRepository.recordSession(userId, intent.getIdempotencyKey(), session.getId());
             return new CheckoutResponse(session.getUrl());
         } catch (StripeException e) {
             throw new ExternalServiceException("Stripe rejected the checkout session for user " + userId, e);
         }
+    }
+
+    /**
+     * Atomically claims or refreshes the user's checkout intent (CheckoutIntentRepository.claimOrRefresh), then
+     * re-reads it - always safe, since that statement guarantees a matching row exists afterward whether this call's
+     * own candidate values won or an existing fresh one on the same plan did. Two concurrent callers for the same
+     * user therefore always converge on the same idempotency key, never two different ones.
+     */
+    private CheckoutIntent reuseOrMintIntent(Long userId, Long planId) {
+        String idempotencyKey = UUID.randomUUID().toString();
+        Instant staleThreshold = clock.instant().minus(CHECKOUT_INTENT_TTL);
+        checkoutIntentRepository.claimOrRefresh(userId, planId, idempotencyKey, staleThreshold);
+        return checkoutIntentRepository.findById(userId)
+                .orElseThrow(() -> new ExternalServiceException("Checkout intent for user " + userId + " vanished right after being claimed", null));
+    }
+
+    /**
+     * If the intent already minted a Stripe session and that session is still open, returns its URL so a retried
+     * request never asks Stripe to create a second one. Any Stripe failure here just falls through to minting a new
+     * session under the same idempotency key.
+     */
+    private String reuseOpenSession(CheckoutIntent intent) {
+        if (intent.getStripeSessionId() == null) {
+            return null;
+        }
+        try {
+            Session existing = Session.retrieve(intent.getStripeSessionId());
+            if ("open".equals(existing.getStatus())) {
+                return existing.getUrl();
+            }
+        } catch (StripeException e) {
+            log.warn("Couldn't reuse checkout session {} for user {}, minting a new one",
+                    intent.getStripeSessionId(), intent.getUserId(), e);
+        }
+        return null;
     }
 
     @Override
@@ -179,21 +245,26 @@ public class StripePaymentProcessor implements PaymentProcessor {
             throw new BadRequestException("Couldn't change your plan right now. Please try again.");
         }
 
-        syncFromStripe(subscriptionId);
+        syncFromStripe(subscriptionId, clock.instant());
         return subscriptionService.getCurrentSubscription();
     }
 
+    /**
+     * One Stripe update call carrying both the price-item change and (when applicable) clearing the scheduled
+     * cancellation - never two calls. A declined card on an upgrade (payment_behavior=error_if_incomplete) then
+     * fails the whole request atomically, so the renewal state can never end up changed while the price change that
+     * was reported as failed silently wasn't.
+     */
     private void switchPrice(Subscription stripeSubscription, Plan from, Plan to, boolean cancelling) throws StripeException {
         String itemId = stripeSubscription.getItems().getData().get(0).getId();
         boolean upgrade = amount(to) > amount(from);
 
-        if (cancelling) {
-            stripeSubscription = stripeSubscription.update(
-                    SubscriptionUpdateParams.builder().setCancelAtPeriodEnd(false).build());
-        }
-
         SubscriptionUpdateParams.Builder params = SubscriptionUpdateParams.builder()
                 .addItem(SubscriptionUpdateParams.Item.builder().setId(itemId).setPrice(to.getStripePriceId()).build());
+
+        if (cancelling) {
+            params.setCancelAtPeriodEnd(false);
+        }
 
         if (upgrade) {
             params.setProrationBehavior(SubscriptionUpdateParams.ProrationBehavior.ALWAYS_INVOICE)
@@ -209,28 +280,51 @@ public class StripePaymentProcessor implements PaymentProcessor {
     }
 
     @Override
-    public void handleWebhookEvent(String type, StripeObject stripeObject, Map<String, String> metadata) {
-        log.info("Handling stripe event: {}", type);
+    public void handleWebhookEvent(String type, StripeObject stripeObject, Map<String, String> metadata,
+                                    String eventId, Instant eventCreatedAt) {
+        log.info("Handling stripe event: {} ({})", type, eventId);
+
+        if (!claimEvent(eventId, type, eventCreatedAt)) {
+            log.info("Skipping already-processed webhook event {} ({})", eventId, type);
+            return;
+        }
 
         switch (type) {
-            case "checkout.session.completed" -> handleCheckoutSessionCompleted((Session) stripeObject, metadata);
-            case "customer.subscription.updated" -> handleCustomerSubscriptionUpdated((Subscription) stripeObject);
-            case "customer.subscription.deleted" -> handleCustomerSubscriptionDeleted((Subscription) stripeObject);
-            case "invoice.paid" -> handleInvoicePaid((Invoice) stripeObject);
-            case "invoice.payment_failed" -> handleInvoicePaymentFailed((Invoice) stripeObject);
+            case "checkout.session.completed" -> handleCheckoutSessionCompleted((Session) stripeObject, metadata, eventCreatedAt);
+            case "customer.subscription.updated" -> handleCustomerSubscriptionUpdated((Subscription) stripeObject, eventCreatedAt);
+            case "customer.subscription.deleted" -> handleCustomerSubscriptionDeleted((Subscription) stripeObject, eventCreatedAt);
+            case "invoice.paid" -> handleInvoicePaid((Invoice) stripeObject, eventCreatedAt);
+            case "invoice.payment_failed" -> handleInvoicePaymentFailed((Invoice) stripeObject, eventCreatedAt);
             default -> log.debug("Ignoring the event: {}", type);
+        }
+
+        if (eventId != null) {
+            webhookEventRepository.markProcessed(eventId);
         }
     }
 
-    private void handleCheckoutSessionCompleted(Session session, Map<String, String> metadata) {
+    /**
+     * Atomically claims eventId for processing: false when it was already fully PROCESSED (skip - a true duplicate
+     * delivery), true otherwise, including reclaiming one still stuck at RECEIVED from a prior attempt that never
+     * finished. An event with no id (shouldn't happen for a real Stripe delivery) is processed defensively rather
+     * than silently dropped.
+     */
+    private boolean claimEvent(String eventId, String type, Instant eventCreatedAt) {
+        if (eventId == null) {
+            return true;
+        }
+        return webhookEventRepository.tryClaim(eventId, type, eventCreatedAt) > 0;
+    }
+
+    private void handleCheckoutSessionCompleted(Session session, Map<String, String> metadata, Instant eventCreatedAt) {
         if (session == null) {
             log.error("session object was null");
             return;
         }
-        activateFromSession(session, metadata);
+        activateFromSession(session, metadata, eventCreatedAt);
     }
 
-    private Long activateFromSession(Session session, Map<String, String> metadata) {
+    private Long activateFromSession(Session session, Map<String, String> metadata, Instant eventCreatedAt) {
         Long userId = parseMetadataId(metadata, "user_id");
         Long planId = parseMetadataId(metadata, "plan_id");
         String subscriptionId = session.getSubscription();
@@ -247,12 +341,20 @@ public class StripePaymentProcessor implements PaymentProcessor {
             userRepository.save(user);
         }
 
-        subscriptionService.activateSubscription(userId, planId, subscriptionId, session.getCustomer());
-        syncFromStripe(subscriptionId);
+        subscriptionService.activateSubscription(userId, planId, subscriptionId, session.getCustomer(), eventCreatedAt);
+        syncFromStripe(subscriptionId, clock.instant());
+        checkoutIntentRepository.deleteById(userId);
         return userId;
     }
 
-    private void syncFromStripe(String subscriptionId) {
+    /**
+     * A live re-read of Stripe's current state, not itself a webhook event racing others - asOf is this call's own
+     * "now" (the caller's clock.instant()), which always wins against any past event and becomes the new floor: any
+     * later legitimate webhook necessarily has an event-creation time after it. On a Stripe failure the write that
+     * preceded this call already happened - the local mirror is just unconfirmed - so this marks the row
+     * sync-pending rather than silently leaving the caller's 200 response looking authoritative.
+     */
+    private void syncFromStripe(String subscriptionId, Instant asOf) {
         try {
             Subscription subscription = Subscription.retrieve(subscriptionId);
             SubscriptionStatus status = mapStripeStatusToEnum(subscription.getStatus());
@@ -264,9 +366,12 @@ public class StripePaymentProcessor implements PaymentProcessor {
                     toInstant(item.getCurrentPeriodStart()),
                     toInstant(item.getCurrentPeriodEnd()),
                     subscription.getCancelAtPeriodEnd(),
-                    resolvePlanId(item.getPrice()));
+                    resolvePlanId(item.getPrice()),
+                    asOf);
         } catch (StripeException e) {
-            log.warn("Couldn't read subscription {} back from Stripe", subscriptionId, e);
+            log.error("Couldn't read subscription {} back from Stripe after a write succeeded - marking it sync-pending",
+                    subscriptionId, e);
+            subscriptionService.markSyncPending(subscriptionId);
         }
     }
 
@@ -306,11 +411,11 @@ public class StripePaymentProcessor implements PaymentProcessor {
             throw new BadRequestException("That checkout session doesn't belong to this account.");
         }
 
-        activateFromSession(session, session.getMetadata());
+        activateFromSession(session, session.getMetadata(), null);
         return subscriptionService.getCurrentSubscription();
     }
 
-    private void handleCustomerSubscriptionUpdated(Subscription subscription) {
+    private void handleCustomerSubscriptionUpdated(Subscription subscription, Instant eventCreatedAt) {
         if (subscription == null) {
             log.error("subscription object was null inside handleCustomerSubscriptionUpdated");
             return;
@@ -330,19 +435,19 @@ public class StripePaymentProcessor implements PaymentProcessor {
 
         subscriptionService.updateSubscription(
                 subscription.getId(), status, periodStart, periodEnd,
-                subscription.getCancelAtPeriodEnd(), planId
+                subscription.getCancelAtPeriodEnd(), planId, eventCreatedAt
         );
     }
 
-    private void handleCustomerSubscriptionDeleted(Subscription subscription) {
+    private void handleCustomerSubscriptionDeleted(Subscription subscription, Instant eventCreatedAt) {
         if (subscription == null) {
             log.error("subscription object was null inside handleCustomerSubscriptionDeleted");
             return;
         }
-        subscriptionService.cancelSubscription(subscription.getId());
+        subscriptionService.cancelSubscription(subscription.getId(), eventCreatedAt);
     }
 
-    private void handleInvoicePaid(Invoice invoice) {
+    private void handleInvoicePaid(Invoice invoice, Instant eventCreatedAt) {
         String subId = extractSubscriptionId(invoice);
         if (subId == null) return;
 
@@ -353,17 +458,17 @@ public class StripePaymentProcessor implements PaymentProcessor {
             Instant periodStart = toInstant(item.getCurrentPeriodStart());
             Instant periodEnd = toInstant(item.getCurrentPeriodEnd());
 
-            subscriptionService.renewSubscriptionPeriod(subId, periodStart, periodEnd);
+            subscriptionService.renewSubscriptionPeriod(subId, periodStart, periodEnd, eventCreatedAt);
         } catch (StripeException e) {
             throw new ExternalServiceException("Couldn't read subscription " + subId + " from Stripe", e);
         }
     }
 
-    private void handleInvoicePaymentFailed(Invoice invoice) {
+    private void handleInvoicePaymentFailed(Invoice invoice, Instant eventCreatedAt) {
         String subId = extractSubscriptionId(invoice);
         if (subId == null) return;
 
-        subscriptionService.markSubscriptionPastDue(subId);
+        subscriptionService.markSubscriptionPastDue(subId, eventCreatedAt);
     }
 
     private User getUser(Long userId) {
@@ -371,12 +476,20 @@ public class StripePaymentProcessor implements PaymentProcessor {
                 new ResourceNotFoundException("user", userId.toString()));
     }
 
+    /**
+     * BILL-05: unpaid and paused are dunning-exhausted/deliberately-suspended states with no grace period, not
+     * delinquency - they must not map to PAST_DUE, which SubscriptionServiceImpl still treats as entitling within
+     * its grace window. incomplete_expired means the checkout itself never completed, so it maps to CANCELED rather
+     * than to any state that implies a subscription once existed to be delinquent on.
+     */
     private SubscriptionStatus mapStripeStatusToEnum(String status) {
         return switch (status) {
             case "active" -> SubscriptionStatus.ACTIVE;
             case "trialing" -> SubscriptionStatus.TRIALING;
-            case "past_due", "unpaid", "paused", "incomplete_expired" -> SubscriptionStatus.PAST_DUE;
-            case "canceled" -> SubscriptionStatus.CANCELED;
+            case "past_due" -> SubscriptionStatus.PAST_DUE;
+            case "unpaid" -> SubscriptionStatus.UNPAID;
+            case "paused" -> SubscriptionStatus.PAUSED;
+            case "canceled", "incomplete_expired" -> SubscriptionStatus.CANCELED;
             case "incomplete" -> SubscriptionStatus.INCOMPLETE;
             default -> {
                 log.warn("Unmapped Stripe status: {}", status);

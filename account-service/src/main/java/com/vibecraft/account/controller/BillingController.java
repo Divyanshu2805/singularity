@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -111,7 +112,8 @@ public class BillingController {
                 metadata = session.getMetadata();
             }
 
-            paymentProcessor.handleWebhookEvent(event.getType(), stripeObject, metadata);
+            Instant eventCreatedAt = event.getCreated() != null ? Instant.ofEpochSecond(event.getCreated()) : null;
+            paymentProcessor.handleWebhookEvent(event.getType(), stripeObject, metadata, event.getId(), eventCreatedAt);
             return ResponseEntity.ok().build();
 
         } catch (SignatureVerificationException e) {

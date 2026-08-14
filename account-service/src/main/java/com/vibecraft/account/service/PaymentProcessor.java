@@ -8,6 +8,7 @@ import com.vibecraft.account.dto.subscription.PortalResponse;
 import com.vibecraft.account.dto.subscription.SubscriptionResponse;
 import com.stripe.model.StripeObject;
 
+import java.time.Instant;
 import java.util.Map;
 
 /**
@@ -16,6 +17,9 @@ import java.util.Map;
  * <p>Handles: starting a checkout session, opening the billing portal, settling a subscription straight from the
  * session the browser returned with, changing an existing subscriber's plan in place, and consuming the provider's
  * webhook events.
+ *
+ * <p>eventId and eventCreatedAt back the webhook idempotency/ordering guarantees documented on the implementation -
+ * pass the provider's own event id and its creation timestamp, not anything derived locally.
  */
 public interface PaymentProcessor {
 
@@ -23,7 +27,8 @@ public interface PaymentProcessor {
 
     PortalResponse openCustomerPortal();
 
-    void handleWebhookEvent(String type, StripeObject stripeObject, Map<String, String> metadata);
+    void handleWebhookEvent(String type, StripeObject stripeObject, Map<String, String> metadata,
+                             String eventId, Instant eventCreatedAt);
 
     SubscriptionResponse confirmCheckoutSession(ConfirmCheckoutRequest request);
 
