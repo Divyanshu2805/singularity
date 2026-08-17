@@ -4,6 +4,8 @@
 erDiagram
     USER ||--o{ SUBSCRIPTION : subscribes
     PLAN ||--o{ SUBSCRIPTION : follows
+    USER ||--o| CHECKOUT_INTENT : "has at most one"
+    PLAN ||--o{ CHECKOUT_INTENT : targets
     USER ||--o{ AUTH_AUDIT_EVENT : "audited for (plain id)"
 
     USER {
@@ -37,12 +39,31 @@ erDiagram
         bigint id PK
         bigint userId FK
         bigint planId FK
-        string status "ACTIVE, TRIALING, CANCELED, PAST_DUE, INCOMPLETE"
-        string stripeSubscriptionId
+        string status "ACTIVE, TRIALING, CANCELED, PAST_DUE, INCOMPLETE, UNPAID, PAUSED"
+        string stripeSubscriptionId UK "nullable in the column, unique when set"
         timestamp currentPeriodStart
         timestamp currentPeriodEnd
         bool cancelAtPeriodEnd
+        timestamp pastDueSince "nullable - when the row most recently entered PAST_DUE"
+        timestamp lastEventAt "nullable - the last Stripe event (or live sync) actually applied"
+        bool syncPending "true when a write to Stripe succeeded but the read-back failed"
         timestamp createdAt
+        timestamp updatedAt
+    }
+
+    CHECKOUT_INTENT {
+        bigint userId PK "also FK to users"
+        bigint planId FK
+        string idempotencyKey
+        string stripeSessionId "nullable until Stripe actually mints one"
+        timestamp updatedAt
+    }
+
+    WEBHOOK_EVENT {
+        string id PK "Stripe's own event id"
+        string type
+        string status "RECEIVED, PROCESSED"
+        timestamp createdAt "Stripe's event.created"
         timestamp updatedAt
     }
 
@@ -83,6 +104,18 @@ An account holder — collaborates on projects, holds a subscription. Everything
 A user's billing relationship to a `PLAN` (billing tier). `Plan` is seeded on every boot by `config.PlanSeeder`, upserted on `stripePriceId` (Free, which has none, on `name`), so a restart never duplicates a plan. Free's limits come from `SubscriptionService.FREE_TIER_PROJECTS_ALLOWED`/`FREE_TIER_DAILY_TOKENS`/`FREE_TIER_PREVIEWS` — the same Java constants that gate a user with no subscription at all, so the seeded row and enforcement can never disagree. `unlimitedAi` short-circuits the daily token check in `UsageServiceImpl.assertWithinDailyTokenBudget` — a plan with it set is not capped by `maxTokensPerDay`, which stays populated for display. No seeded plan sets it today.
 
 Other services never read these tables. They ask `GET /internal/v1/users/{id}/plan-limits`, which returns the *effective* limits (the free-tier fallback included) as a `PlanDto`.
+
+Two database constraints back `SubscriptionServiceImpl.activateSubscription`: `stripe_subscription_id` is globally unique, and a partial unique index (`uk_subscriptions_user_non_terminal`, on `user_id` `WHERE status <> 'CANCELED'`) means a user can hold at most one non-terminal subscription row at a time — CANCELED rows are exempt so resubscribing after cancelling isn't blocked. A violation of the first is treated as an idempotent duplicate webhook/confirm race; a violation of the second refuses to open a second concurrent subscription.
+
+Entitlement is not a flat status set: ACTIVE and TRIALING always entitle, PAST_DUE entitles only within `billing.past-due-grace-days` of `pastDueSince` (computed at read time in `SubscriptionServiceImpl.isCurrentlyEntitling`, not by another webhook), and CANCELED/INCOMPLETE/UNPAID/PAUSED never do. `lastEventAt` guards every mutator against a delayed or redelivered-out-of-order Stripe webhook applying older state after newer state already landed — see `SubscriptionServiceImpl`'s class Javadoc. `syncPending` is set when a plan-change's write to Stripe succeeded but the immediate read-back failed, so `GET /api/me/subscription` never implies the mirrored fields are known-current just because it returned 200.
+
+## CHECKOUT_INTENT
+
+At most one outstanding Stripe Checkout attempt per user, keyed on `userId` itself. `CheckoutIntentRepository.claimOrRefresh` is a native `INSERT ... ON CONFLICT (user_id) DO UPDATE ... WHERE ...` upsert rather than a JPA `save()` — this entity's manually-assigned id would otherwise route `save()` through `entityManager.merge()`, which upserts silently instead of ever failing on conflict, so two concurrent requests could mint two different idempotency keys instead of converging on one (see CLAUDE.md's gotchas table). Carries the Stripe idempotency key and (once minted) the Stripe Checkout Session id, both reused across a double click or a parallel tab until the intent goes stale (older than a Checkout Session's own ~24h expiry) or targets a different plan. Cleared once the checkout activates a subscription.
+
+## WEBHOOK_EVENT
+
+A durable inbox of Stripe webhook deliveries, keyed on Stripe's own event id — what makes `StripePaymentProcessor.handleWebhookEvent` idempotent. `RECEIVED` covers both "still in flight" and "a previous attempt's handler threw"; both are reclaimable by a retry. `PROCESSED` is terminal — an event in that state is skipped outright on redelivery. The claim itself (`WebhookEventRepository.tryClaim`) is a native `INSERT ... ON CONFLICT ... DO UPDATE ... WHERE status <> 'PROCESSED'`, not a JPA `save()`, because `save()` on this entity's manually-assigned id would merge rather than insert and so could never detect a duplicate.
 
 ## AUTH_AUDIT_EVENT / REVOKED_SESSION
 

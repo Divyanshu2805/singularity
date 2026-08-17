@@ -4,7 +4,7 @@ All three live on one local Postgres server (the `pgvector-vibecraft` container,
 
 | Service | Database | Tables | Entities |
 |---|---|---|---|
-| `account-service` | `vibecraft-account-db` | `users`, `plans`, `subscriptions`, `auth_audit_events`, `revoked_sessions` | `User`, `Plan`, `Subscription`, `AuthAuditEvent`, `RevokedSession` |
+| `account-service` | `vibecraft-account-db` | `users`, `plans`, `subscriptions`, `checkout_intents`, `webhook_events`, `auth_audit_events`, `revoked_sessions` | `User`, `Plan`, `Subscription`, `CheckoutIntent`, `WebhookEvent`, `AuthAuditEvent`, `RevokedSession` |
 | `workspace-service` | `vibecraft-workspace-db` | `projects`, `project_members`, `project_files`, `previews`, `preview_sessions` | `Project`, `ProjectMember` (+ `ProjectMemberId`), `ProjectFile`, `Preview`, `PreviewSession` |
 | `intelligence-service` | `vibecraft-intelligence-db` | `chat_sessions`, `chat_messages`, `chat_events`, `code_notes`, `usage_events`, `usage_logs` | `ChatSession` (+ `ChatSessionId`), `ChatMessage`, `ChatEvent`, `CodeNote`, `UsageEvent`, `UsageLog` |
 
