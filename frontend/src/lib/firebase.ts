@@ -5,6 +5,11 @@
  * authorized domains and the backend's token checks - the Google provider, and turning a Firebase error code into a
  * readable sentence.
  *
+ * An unrecognised code is appended to the fallback rather than dropped, so a cause this switch does not name yet is
+ * still diagnosable from the UI. The code is only read when it is actually a string: an ApiRequestError declares a
+ * code property that is usually undefined, and treating that as present once made every backend failure during the
+ * sign-in exchange - a spent quota, an unverified email, a stale sign-in - read as the generic provider error.
+ *
  * Persistence is in-memory on purpose: Firebase's default keeps a refresh token in browser storage, where any script
  * on the page could read it. This app's own session is an httpOnly cookie instead, so the Firebase user is needed
  * only long enough to mint it.
@@ -51,7 +56,8 @@ export function googleProvider() {
 }
 
 export function friendlyFirebaseError(error: unknown, fallback: string): string {
-  const code = typeof error === "object" && error && "code" in error ? String((error as { code: unknown }).code) : "";
+  const raw = typeof error === "object" && error && "code" in error ? (error as { code: unknown }).code : undefined;
+  const code = typeof raw === "string" ? raw : "";
   switch (code) {
     case "auth/invalid-credential":
     case "auth/wrong-password":
@@ -90,6 +96,7 @@ export function friendlyFirebaseError(error: unknown, fallback: string): string 
     case "auth/unverified-email":
       return "Verify your email address first - check your inbox for the link.";
     default:
-      return error instanceof Error && error.message && !code ? error.message : fallback;
+      if (!code) return error instanceof Error && error.message ? error.message : fallback;
+      return `${fallback} (${code})`;
   }
 }

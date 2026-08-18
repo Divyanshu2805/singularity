@@ -109,7 +109,18 @@ describe("friendlyFirebaseError", () => {
     expect(friendlyFirebaseError({ code: "auth/invalid-credential" }, "x")).toBe(wrong);
   });
 
-  it("falls back for unknown codes", () => {
-    expect(friendlyFirebaseError({ code: "auth/something-new" }, "fallback")).toBe("fallback");
+  it("names an unknown code alongside the fallback, so it can still be diagnosed", () => {
+    expect(friendlyFirebaseError({ code: "auth/something-new" }, "fallback")).toBe("fallback (auth/something-new)");
+  });
+
+  it("shows a backend failure's own message rather than the provider fallback", () => {
+    const backendFailure = Object.assign(new Error("You've used today's AI allowance."), { code: undefined });
+    expect(friendlyFirebaseError(backendFailure, "Couldn't sign you in with Google.")).toBe(
+      "You've used today's AI allowance."
+    );
+  });
+
+  it("falls back when there is no message and no code to report", () => {
+    expect(friendlyFirebaseError({}, "fallback")).toBe("fallback");
   });
 });
