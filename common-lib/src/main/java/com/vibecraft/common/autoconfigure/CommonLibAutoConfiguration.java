@@ -3,6 +3,7 @@ package com.vibecraft.common.autoconfigure;
 import com.google.firebase.auth.FirebaseAuth;
 import com.vibecraft.common.config.AsyncConfig;
 import com.vibecraft.common.config.ClockConfig;
+import com.vibecraft.common.config.FeignResilienceConfig;
 import com.vibecraft.common.config.FirebaseConfig;
 import com.vibecraft.common.error.GlobalExceptionHandler;
 import com.vibecraft.common.feign.AccountServiceClient;
@@ -39,8 +40,11 @@ import java.time.Clock;
  *
  * <p>Handles: the shared error handler, clock and async config; the Firebase app and the identity verifier built on
  * it; the whole session-authentication kit (properties, cookie reader/writer, cache, the /internal/v1/sessions/evict
- * endpoint and the caller-principal helper); the default browser-facing security chain; and both halves of
- * service-to-service authentication, the outbound Feign interceptor and the inbound InternalServiceAuthFilter.
+ * endpoint and the caller-principal helper); the default browser-facing security chain; both halves of
+ * service-to-service authentication, the outbound Feign interceptor and the inbound InternalServiceAuthFilter; and
+ * the bounded Feign retry policy every outbound call gets (FeignResilienceConfig) - per-service connect/read
+ * timeouts live in each service's own application.yaml (feign.client.config.default) instead, since that's plain
+ * Spring Cloud OpenFeign configuration with nothing shared to centralize.
  * Resolved through Spring Boot's auto-configuration mechanism
  * (META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports), so these beans exist in every
  * service even though they live outside com.vibecraft.&lt;service&gt;.
@@ -53,7 +57,7 @@ import java.time.Clock;
  */
 @AutoConfiguration
 @EnableMethodSecurity
-@Import({GlobalExceptionHandler.class, ClockConfig.class, AsyncConfig.class, FirebaseConfig.class})
+@Import({GlobalExceptionHandler.class, ClockConfig.class, AsyncConfig.class, FirebaseConfig.class, FeignResilienceConfig.class})
 @EnableConfigurationProperties(AuthProperties.class)
 public class CommonLibAutoConfiguration {
 
