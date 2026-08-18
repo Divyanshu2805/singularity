@@ -36,6 +36,8 @@ build/
 TODO.md
 CODE_REVIEW.md
 ADDITIONALS.md
+GKE_DEPLOYMENT_PLAN.md
+RESUME_METRICS.md
 graphify-out/
 
 ### Local secrets (not pushed) ###
