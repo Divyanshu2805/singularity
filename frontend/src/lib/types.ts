@@ -177,7 +177,14 @@ export interface Plan {
   isFree: boolean;
 }
 
-export type SubscriptionStatus = "ACTIVE" | "TRIALING" | "PAST_DUE" | "CANCELED" | "INCOMPLETE";
+export type SubscriptionStatus =
+  | "ACTIVE"
+  | "TRIALING"
+  | "PAST_DUE"
+  | "CANCELED"
+  | "INCOMPLETE"
+  | "UNPAID"
+  | "PAUSED";
 
 export interface Subscription {
   plan: Plan;
@@ -186,6 +193,8 @@ export interface Subscription {
   periodEnd?: string | null;
   cancelAtPeriodEnd?: boolean | null;
   isFree: boolean;
+  /** True when a plan-change reached Stripe but the read-back to confirm it locally failed - treat as provisional. */
+  syncPending?: boolean;
 }
 
 export interface UsageToday {
