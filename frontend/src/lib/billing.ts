@@ -199,7 +199,7 @@ export function subscriptionStatusLabel(subscription: Subscription | undefined):
 export function formatBillingDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export const needsAttention = (subscription: Subscription | undefined) =>
