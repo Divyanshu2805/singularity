@@ -35,6 +35,7 @@ build/
 ### Local working notes and generated analysis (not pushed) ###
 TODO.md
 CODE_REVIEW.md
+CODE_TODO.md
 ADDITIONALS.md
 GKE_DEPLOYMENT_PLAN.md
 RESUME_METRICS.md
