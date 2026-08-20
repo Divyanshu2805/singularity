@@ -1,0 +1,69 @@
+name: CI
+
+# CODE_REVIEW.md QA-03 / CODE_TODO.md GATE-05: the reactor and frontend suites have been run by hand before every
+# push up to now. This is what makes every "tests pass" / "clean build" claim in this repo's history durable instead
+# of a one-time manual check - it runs the same commands CLAUDE.md documents as this project's own build/test
+# workflow, nothing CI-specific invented on top.
+#
+# Deliberately not attempted here (see CODE_TODO.md GATE-05 for the fuller list): Flyway migration checks against a
+# real Postgres, and a browser-journey smoke test - both need live infrastructure this job doesn't stand up. The
+# backend suite needs neither database nor cluster (CLAUDE.md: "A bare `./mvnw test` passes"), which is exactly why
+# it's safe to run here as-is.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend reactor (build + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Build and test every module's jar
+        # A single reactor build, not per-module: common-lib must be resolved from the in-progress reactor, not a
+        # pre-installed ~/.m2 copy - see CLAUDE.md's shared-~/.m2-jar gotcha for why building modules independently
+        # is the wrong shape even locally.
+        run: ./mvnw --batch-mode --no-transfer-progress clean package
+
+  frontend:
+    name: Frontend (typecheck + lint + build + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies (from the committed lockfile)
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
