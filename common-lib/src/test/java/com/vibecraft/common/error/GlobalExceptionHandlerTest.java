@@ -117,6 +117,17 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("API-QA-14: every error carries its own requestId, and two errors never share one")
+    void everyErrorCarriesItsOwnRequestId() {
+        String first = new ApiError(HttpStatus.NOT_FOUND, "Not found").requestId();
+        String second = new ApiError(HttpStatus.NOT_FOUND, "Not found").requestId();
+
+        assertThat(first).isNotBlank();
+        assertThat(second).isNotBlank();
+        assertThat(first).isNotEqualTo(second);
+    }
+
+    @Test
     @DisplayName("an error with no code serializes exactly as before - the field is omitted, not null")
     void codeIsOmittedWhenAbsent() throws Exception {
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper()
