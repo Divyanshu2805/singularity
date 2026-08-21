@@ -82,6 +82,14 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
+		<!-- QA-02: the first full-servlet-filter-chain test in this codebase (real SessionAuthFilter, CSRF,
+		     @PreAuthorize) - see FullChainFileAccessTest's own header for why this is safe against the
+		     Windows-timezone/Postgres gotcha every other backend test in this repo avoids @SpringBootTest for. -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-test</artifactId>
+			<scope>test</scope>
+		</dependency>
 		<!-- Firebase Authentication (Identity Platform) - session-cookie verification only, same as account-service. -->
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
