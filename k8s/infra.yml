@@ -80,9 +80,26 @@ spec:
       labels:
         app: redis
     spec:
+      # CODE_REVIEW.md OPS-01: this image runs as root by default - checked live (`id` inside a running container
+      # returned uid=0) - even though it ships a non-root `redis` user (uid 999, gid 1000, confirmed via
+      # /etc/passwd) nothing here asked for it. No volume is mounted (Redis here is pure reconstructible routing
+      # cache - nothing to persist), so dropping to the non-root user needs no
+      # further filesystem changes.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: redis
-          image: redis:7-alpine
+          # Pinned to the version actually running when this was checked, not the floating `7-alpine` major-version
+          # tag.
+          image: redis:7.4.11-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 6379
           resources:
@@ -108,3 +125,54 @@ spec:
       port: 6379
       targetPort: 6379
   type: ClusterIP
+
+---
+
+# CODE_REVIEW.md OPS-01: a least-privilege identity for workspace-service's own K8s API access (PreviewRunnerPool's
+# fabric8 client - claiming/releasing runner pods, exec-ing commands and uploading files into them). Forward-looking:
+# workspace-service itself doesn't run inside this cluster yet (docs/local-development/ - it reads a developer's
+# local kubeconfig, which is full-privilege, not scoped by anything here), so nothing binds this ServiceAccount to a
+# running pod today. It exists so that when workspace-service does get deployed in-cluster, there's already a
+# narrowly-scoped identity to give it instead of the implicit `default` ServiceAccount - the same gap runner-pods.yml
+# already closes for the pods it manages, just not yet for the manager itself.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workspace-service
+  namespace: vibecraft-ai
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workspace-service-runner-manager
+  namespace: vibecraft-ai
+rules:
+  # Matches exactly what PreviewRunnerPool.java calls: list/get to find and check pods, patch to claim one
+  # (the resourceVersion-guarded merge patch), delete to release one. No create - runner pods themselves come
+  # from the Deployment in this file, workspace-service only ever claims/releases existing ones.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "patch", "delete"]
+  # The exec/file-upload subresource PreviewRunnerPool.exec/uploadFile use - a fabric8 exec or tar-upload is a
+  # POST to this subresource, which RBAC models as "create".
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workspace-service-runner-manager
+  namespace: vibecraft-ai
+subjects:
+  - kind: ServiceAccount
+    name: workspace-service
+    namespace: vibecraft-ai
+roleRef:
+  kind: Role
+  name: workspace-service-runner-manager
+  apiGroup: rbac.authorization.k8s.io

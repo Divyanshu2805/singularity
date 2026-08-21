@@ -46,7 +46,7 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000 # the `node` user baked into the node:20-alpine image
+        runAsUser: 1000 # the `node` user baked into the node:20.20.2-alpine image
         runAsGroup: 1000
         fsGroup: 1000 # so both containers can write the shared /app volume as that group
         seccompProfile:
@@ -64,7 +64,9 @@ spec:
       containers:
         # 1. THE RUNNER - npm install + the Vite dev server, started by the backend over exec.
         - name: runner
-          image: node:20-alpine
+          # CODE_REVIEW.md OPS-01: pinned to the version actually running when this was checked, not the floating
+          # `20-alpine` major-version tag.
+          image: node:20.20.2-alpine
           workingDir: /app
           command: ["/bin/sh", "-c", "sleep infinity"]
           env:
@@ -93,7 +95,9 @@ spec:
 
         # 2. THE SYNCER - mirrors the project's MinIO objects into /app and keeps watching them.
         - name: syncer
-          image: quay.io/minio/mc:latest
+          # CODE_REVIEW.md OPS-01/OPS-02: pinned to the version actually running when this was checked, not
+          # `latest` - closes OPS-02's specific image-pinning complaint (its lockfile/SBOM/CI-scan asks stay open).
+          image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
           command: ["/bin/sh", "-c", "sleep infinity"]
           env:
             # quay.io/minio/mc has no home directory for uid 1000 the way node:20-alpine's `node` user does, so

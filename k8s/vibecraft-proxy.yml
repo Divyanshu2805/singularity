@@ -1,3 +1,11 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vibecraft-proxy
+  namespace: vibecraft-ai
+
+---
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -13,10 +21,26 @@ spec:
       labels:
         app: vibecraft-proxy
     spec:
+      # CODE_REVIEW.md OPS-01: the same least-privilege pattern k8s/runner-pods.yml already has and had live-verified
+      # (SEC-08/09/10) - this manifest never had it, unlike the pods it sits in front of. No Role/RoleBinding is
+      # granted (same reasoning as preview-runner in runner-pods.yml): this ServiceAccount exists only so the pod
+      # isn't implicitly `default`, and automountServiceAccountToken is false anyway.
+      serviceAccountName: vibecraft-proxy
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # the `node` user baked into the node:20.20.2-alpine base image (proxy/Dockerfile)
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: proxy
           image: vibecraft-proxy:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           resources:
             requests:
               cpu: "100m"
@@ -34,11 +58,16 @@ spec:
                 secretKeyRef:
                   name: preview-access-token
                   key: secret
+            # A non-root process can't bind port 80 (needs CAP_NET_BIND_SERVICE or root) - rather than grant that
+            # capability back, listen on an unprivileged port instead (proxy/index.js already reads PORT) and let
+            # the Service below remap its own external port 80 to this one. No external behavior change.
+            - name: PORT
+              value: "8080"
           ports:
-            - containerPort: 80
+            - containerPort: 8080
           readinessProbe:
             tcpSocket:
-              port: 80
+              port: 8080
             periodSeconds: 5
 
 ---
@@ -53,6 +82,6 @@ spec:
   type: LoadBalancer
   ports:
     - port: 80
-      targetPort: 80
+      targetPort: 8080
   selector:
     app: vibecraft-proxy
