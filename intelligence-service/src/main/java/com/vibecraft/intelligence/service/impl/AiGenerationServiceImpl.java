@@ -1,8 +1,10 @@
 package com.vibecraft.intelligence.service.impl;
 
-import com.vibecraft.common.dto.FileContentDto;
+import com.vibecraft.common.dto.FileChangeDto;
 import com.vibecraft.common.dto.ProjectMembershipDto;
 import com.vibecraft.common.dto.ProjectPermission;
+import com.vibecraft.common.dto.PublishRevisionRequest;
+import com.vibecraft.common.dto.PublishRevisionResponse;
 import com.vibecraft.intelligence.dto.chat.ActiveGenerationResponse;
 import com.vibecraft.intelligence.dto.chat.StreamResponse;
 import com.vibecraft.intelligence.dto.usage.UsageRecord;
@@ -49,7 +51,6 @@ import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -74,13 +75,14 @@ import java.util.stream.Collectors;
  * produces nothing, instead of looking like a silent success. A turn that ran out of output budget, or that wrote
  * only some of the files it listed, gets a note saying so next to the unticked steps.
  *
- * <p>Individual failures degrade rather than cascade: a file that cannot be written is skipped and logged while the
- * rest of the turn proceeds, and if saving the events as one batch is rejected they are retried one at a time,
- * because losing the whole transcript after the files were already written looks like a broken product. A file that
- * failed to save is never recorded as if it had - its event is stripped before the turn is persisted, with a message
- * naming what didn't save - and if any save failed, every delete in the same turn is withheld too, since a rename is
- * a new file plus a delete of the old path with nothing marking them as a pair, and applying the delete anyway could
- * destroy the only surviving copy of that content.
+ * <p>A turn's file changes publish as one atomic revision (CODE_REVIEW.md AI-05) - all of them, or none, via
+ * {@code commitFileChanges}. A failed publish is never recorded as if it had succeeded: every changed path's event
+ * is stripped before the turn is persisted, with a message naming what didn't save. This also closes the rename
+ * case for good, rather than working around it: a rename is a new file plus a delete of the old path with nothing
+ * marking them as a pair, but since the whole turn either lands or doesn't, a failed replacement can no longer
+ * leave its delete half applied. Saving the chat events themselves as one batch is retried one at a time if
+ * rejected, because losing the whole transcript after the files were already published looks like a broken
+ * product.
  *
  * <p>A model stream must be retried by rebuilding the whole call rather than by attaching a retry to the built
  * stream: the advisor chain is single-use per subscription and throws on a second attempt otherwise.
@@ -478,8 +480,13 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 .build());
 
         if (stillAuthorizedToCommit(projectId, chatSession.getId().getUserId())) {
-            Set<String> failedPaths = commitFileChanges(chatEventList, projectId);
-            if (!failedPaths.isEmpty()) {
+            PublishRevisionResponse revision = commitFileChanges(chatEventList, projectId, chatSession.getId().getUserId());
+            chatEventList.stream()
+                    .filter(event -> event.getType() == ChatEventType.FILE_EDIT)
+                    .forEach(event -> event.setPreviousContent(revision.previousContent().get(event.getFilePath())));
+
+            if (revision.status() != PublishRevisionResponse.Status.APPLIED) {
+                List<String> failedPaths = revision.failedPaths();
                 chatEventList.removeIf(event -> (event.getType() == ChatEventType.FILE_EDIT || event.getType() == ChatEventType.FILE_DELETE)
                         && failedPaths.contains(event.getFilePath()));
                 chatEventList.add(ChatEvent.builder()
@@ -529,65 +536,33 @@ public class AiGenerationServiceImpl implements AiGenerationService {
     }
 
     /**
-     * Writes every generated file, then deletes - unless a save failed, in which case every delete this turn is
-     * skipped rather than guessed at. A rename is written as a new file plus a delete of the old path with nothing
-     * marking them as a pair; if the new file's save failed, applying the delete anyway would destroy the only
-     * surviving copy of that content on a guess that it was unrelated. Returns every path that did not actually end
-     * up saved/deleted, so the caller can strip those events from what gets persisted - a failed write must never be
-     * recorded as if it succeeded.
+     * Publishes every generated file edit and delete in this turn as one atomic revision (CODE_REVIEW.md AI-05) -
+     * a single {@code publishRevision} call instead of one Feign call per file. All-or-nothing: workspace-service
+     * either applies the whole turn or none of it, so there is no longer a rename-safety special case here - a
+     * failed replacement can no longer leave its delete half applied, because nothing in the turn applies unless
+     * everything does. {@code expectedParentRevisionId} is left null: {@code GenerationRegistry} already serializes
+     * one active generation per project, so there is no real conflict for this caller to assert against yet.
      */
-    Set<String> commitFileChanges(List<ChatEvent> chatEventList, Long projectId) {
-        List<ChatEvent> fileEditEvents = chatEventList.stream()
-                .filter(e -> e.getType() == ChatEventType.FILE_EDIT)
-                .toList();
-
-        Set<String> failedPaths = new LinkedHashSet<>();
-        int savedCount = 0;
-        for (ChatEvent event : fileEditEvents) {
-            event.setPreviousContent(previousContentOf(projectId, event.getFilePath()));
-            try {
-                workspaceServiceClient.saveFile(projectId, new FileContentDto(event.getFilePath(), event.getContent()));
-                savedCount++;
-            } catch (Exception e) {
-                log.error("Failed to save file '{}' for projectId: {}. Skipping this file; other files and " +
-                        "chat history are unaffected.", event.getFilePath(), projectId, e);
-                failedPaths.add(event.getFilePath());
+    PublishRevisionResponse commitFileChanges(List<ChatEvent> chatEventList, Long projectId, Long userId) {
+        List<FileChangeDto> changes = new ArrayList<>();
+        for (ChatEvent event : chatEventList) {
+            if (event.getType() == ChatEventType.FILE_EDIT) {
+                changes.add(new FileChangeDto(event.getFilePath(), FileChangeDto.ChangeType.EDIT, event.getContent()));
+            } else if (event.getType() == ChatEventType.FILE_DELETE) {
+                changes.add(new FileChangeDto(event.getFilePath(), FileChangeDto.ChangeType.DELETE, null));
             }
         }
-        if (savedCount < fileEditEvents.size()) {
-            log.warn("Saved {}/{} generated file(s) for projectId: {}", savedCount, fileEditEvents.size(), projectId);
+        if (changes.isEmpty()) {
+            return new PublishRevisionResponse(null, PublishRevisionResponse.Status.APPLIED, null, List.of(), Map.of());
         }
 
-        List<ChatEvent> deleteEvents = chatEventList.stream()
-                .filter(e -> e.getType() == ChatEventType.FILE_DELETE)
-                .toList();
-        if (!failedPaths.isEmpty() && !deleteEvents.isEmpty()) {
-            log.warn("Skipping {} delete(s) for projectId: {} because {} edit(s) failed in the same turn - a " +
-                    "delete may be the other half of a rename whose replacement never saved.",
-                    deleteEvents.size(), projectId, failedPaths.size());
-            deleteEvents.forEach(event -> failedPaths.add(event.getFilePath()));
-        } else {
-            for (ChatEvent event : deleteEvents) {
-                try {
-                    workspaceServiceClient.deleteFile(projectId, event.getFilePath());
-                } catch (Exception e) {
-                    log.error("Failed to delete file '{}' for projectId: {}. Other changes are unaffected.",
-                            event.getFilePath(), projectId, e);
-                    failedPaths.add(event.getFilePath());
-                }
-            }
-        }
-        return failedPaths;
-    }
-
-    private String previousContentOf(Long projectId, String path) {
         try {
-            return workspaceServiceClient.getFileContent(projectId, path).content();
-        } catch (FeignException.NotFound e) {
-            return "";
+            return workspaceServiceClient.publishRevision(projectId,
+                    new PublishRevisionRequest(null, userId, "AI_GENERATION", changes));
         } catch (Exception e) {
-            log.warn("Couldn't read the previous version of '{}' for projectId: {} - its diff won't be available", path, projectId, e);
-            return null;
+            log.error("Failed to publish revision for projectId: {} - {} file change(s) not saved.", projectId, changes.size(), e);
+            List<String> failedPaths = changes.stream().map(FileChangeDto::path).toList();
+            return new PublishRevisionResponse(null, PublishRevisionResponse.Status.FAILED, null, failedPaths, Map.of());
         }
     }
 
