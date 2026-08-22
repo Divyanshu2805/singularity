@@ -1,0 +1,17 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+
+# CODE_REVIEW.md SEC-10: caps every pod's process count on the node, so a fork bomb inside one runner pod
+# (LimitRange/ResourceQuota in k8s/infra.yml bound CPU and ephemeral storage, but never process count) cannot
+# exhaust the node's global PID space and starve every other pod scheduled on it - including other tenants'
+# runners and this cluster's own Redis/proxy. 1024 is generous for a real npm install/vite dev session (which
+# stays well under three figures even under load) and low enough that a rapid-fork loop hits the ceiling and
+# gets ENOMEM/EAGAIN from the kernel almost immediately, well before it can affect anything outside its own pod.
+# Only settable at node bootstrap - `kind create cluster --config k8s/kind-config.yaml`, not applied after the
+# fact - which is why this couldn't live in k8s/infra.yml alongside the LimitRange/ResourceQuota it complements.
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: KubeletConfiguration
+        podPidsLimit: 1024
