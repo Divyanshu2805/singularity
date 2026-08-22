@@ -14,25 +14,24 @@ import io.minio.messages.ErrorResponse;
 import okhttp3.Request;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Covers CODE_REVIEW.md DATA-01 and DATA-05 for {@link ProjectFileServiceImpl}: a concurrent metadata write for the
- * same path must not fail outright now that (project_id, path) is unique (DATA-01), and fork/zip/search must never
- * present an incomplete result as a complete one (DATA-05).
+ * Covers CODE_REVIEW.md DATA-05 for {@link ProjectFileServiceImpl}: fork/zip/search must never present an
+ * incomplete result as a complete one. The concurrent-metadata-write coverage this class used to carry for
+ * {@code saveFile} (DATA-01) moved with the write path itself to {@code RevisionPublisherImplTest} - and the CAS in
+ * {@code ProjectRepository.casAdvanceCurrentRevision} now serializes every write to a project's files per project
+ * (CODE_REVIEW.md AI-05), so the specific "two inserts race for one path" scenario DATA-01 fixed can no longer
+ * happen the way it used to.
  */
 class ProjectFileServiceImplTest {
 
@@ -66,19 +65,6 @@ class ProjectFileServiceImplTest {
                 .message("Not Found")
                 .build();
         return new ErrorResponseException(errorResponse, httpResponse, "req-id");
-    }
-
-    @Test
-    void savingAFileThatRacesAConcurrentInsertRetriesAsAnUpdateInsteadOfFailing() {
-        when(projectFileRepository.findByProjectIdAndPath(eq(PROJECT_ID), anyString()))
-                .thenReturn(Optional.empty())
-                .thenReturn(Optional.of(projectFile("src/App.tsx")));
-        when(projectFileRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate key"))
-                .thenReturn(projectFile("src/App.tsx"));
-
-        service.saveFile(PROJECT_ID, "src/App.tsx", "content");
-
-        verify(projectFileRepository, times(2)).save(any());
     }
 
     @Test

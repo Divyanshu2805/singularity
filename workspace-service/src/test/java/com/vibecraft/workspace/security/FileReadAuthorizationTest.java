@@ -113,7 +113,7 @@ class FileReadAuthorizationTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @ValueSource(strings = {"getFileContent", "saveFile", "deleteFile"})
+    @ValueSource(strings = {"getFileContent"})
     @DisplayName("the service methods the internal API shares carry no user guard")
     void internalApiMethodsStayUnguardedAtTheService(String method) {
         assertThat(AnnotatedElementUtils.hasAnnotation(methodNamed(SERVICE, method), PreAuthorize.class))

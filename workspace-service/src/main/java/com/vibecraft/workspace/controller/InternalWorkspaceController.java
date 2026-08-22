@@ -5,6 +5,8 @@ import com.vibecraft.common.dto.FileTreeDto;
 import com.vibecraft.common.dto.ProjectMembershipDto;
 import com.vibecraft.common.dto.ProjectRole;
 import com.vibecraft.common.dto.ProjectSummaryDto;
+import com.vibecraft.common.dto.PublishRevisionRequest;
+import com.vibecraft.common.dto.PublishRevisionResponse;
 import com.vibecraft.common.error.ResourceNotFoundException;
 import com.vibecraft.workspace.entity.Project;
 import com.vibecraft.workspace.repository.ProjectFileRepository;
@@ -12,8 +14,8 @@ import com.vibecraft.workspace.repository.ProjectMemberRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
 import com.vibecraft.workspace.service.PreviewDeploymentService;
 import com.vibecraft.workspace.service.ProjectFileService;
+import com.vibecraft.workspace.service.RevisionPublisher;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,8 +30,9 @@ import java.util.List;
  * workspace-service's API for the other services, not the browser.
  *
  * <p>Handles: the membership lookup behind every cross-service permission check, project summaries singly and in
- * batch, the file tree and file content that AI prompts and code insight read, the file writes and deletes a
- * generated turn lands, and the two counts the usage meter shows - projects owned and previews running.
+ * batch, the file tree and file content that AI prompts and code insight read, the atomic revision publish a
+ * generated turn commits through (CODE_REVIEW.md AI-05), and the two counts the usage meter shows - projects owned
+ * and previews running.
  *
  * <p>Guarded by the shared internal-service secret rather than a caller's permissions, exactly like account-service's
  * equivalent: the caller is intelligence-service acting on a request it has already authorized itself. These
@@ -50,6 +53,7 @@ public class InternalWorkspaceController {
     private final ProjectFileRepository projectFileRepository;
     private final ProjectFileService projectFileService;
     private final PreviewDeploymentService previewDeploymentService;
+    private final RevisionPublisher revisionPublisher;
 
     @GetMapping("/projects/{projectId}/members/{userId}")
     public ProjectMembershipDto getMembership(@PathVariable Long projectId, @PathVariable Long userId) {
@@ -86,14 +90,9 @@ public class InternalWorkspaceController {
         return new FileContentDto(response.path(), response.content());
     }
 
-    @PostMapping("/projects/{projectId}/files")
-    public void saveFile(@PathVariable Long projectId, @RequestBody FileContentDto request) {
-        projectFileService.saveFile(projectId, request.path(), request.content());
-    }
-
-    @DeleteMapping("/projects/{projectId}/files")
-    public void deleteFile(@PathVariable Long projectId, @RequestParam String path) {
-        projectFileService.deleteFile(projectId, path);
+    @PostMapping("/projects/{projectId}/revisions")
+    public PublishRevisionResponse publishRevision(@PathVariable Long projectId, @RequestBody PublishRevisionRequest request) {
+        return revisionPublisher.publish(projectId, request);
     }
 
     @GetMapping("/projects/owned-count")

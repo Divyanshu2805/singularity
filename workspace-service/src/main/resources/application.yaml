@@ -67,6 +67,9 @@ minio:
   # hardcoded constants living apart from every other bucket name, which does come from configuration.
   template-bucket: starter-projects
   template-name: react-vite-tailwind-daisyui-starter
+  # CODE_REVIEW.md AI-05: immutable, content-addressed revision blobs - a dedicated bucket so it is structurally
+  # impossible for the K8s preview syncer's `mc mirror` (scoped to project-bucket/{projectId}/) to ever touch it.
+  blob-bucket: project-blobs
 
 # The kind namespace, Redis and MinIO bucket the live-preview pipeline runs against (PreviewRouter's Redis keys
 # are per-hostname).

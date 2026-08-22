@@ -26,12 +26,17 @@ Each service's schema lives in `src/main/resources/db/migration/`: a baseline `V
 2. **The entity changes in the same commit.** With `ddl-auto: validate`, a service will not boot if an entity has a column or type the database doesn't — which is the check that catches an entity edited without its migration.
 3. **Another service's data is never joined.** A new reference to a user or project is a plain id column (see above), not a foreign key.
 4. Update this file in the same change.
-## No checkpoint/rollback system
+## Revision manifests
 
-Unlike some AI app-builders, this platform does **not** version or snapshot generated file trees — a file write (`ChatEvent.FILE_EDIT`) simply overwrites the previous content in MinIO, and there is no way to view or restore an earlier version of a file once the AI has rewritten it. The closest things to "history" that do exist:
+CODE_REVIEW.md AI-05 / CODE_TODO.md GATE-02: every file write publishes through `RevisionPublisherImpl` as one atomic, immutable revision — replacing what used to be a direct MinIO overwrite with no history at all. The design, in order:
 
-- The **chat transcript itself** (`ChatMessage`/`ChatEvent` rows) is permanent and un-deletable — it's the record of what was actually built, which is why editing a sent message refills the composer rather than rewriting history in place.
-- The **last turn's diff**: each `FILE_EDIT`/`FILE_DELETE` event stores the file's `previousContent`, so the editor can show what the *latest* turn changed. Only the previous version is kept, not a chain of them, and there is no way to restore it.
-- A **client-side baseline** — the client also mirrors a file's pre-edit content to `sessionStorage` for the duration of a turn. That is purely per-tab and gone once the tab/session ends.
+1. **Stage** — every changed path's new content is uploaded to a second, dedicated MinIO bucket (`project-blobs`, configured via `minio.blob-bucket`), keyed purely by `sha256(content)` hex (`blob/<hash>`) — content-addressed and immutable, never overwritten or deleted. The same bytes written twice, even across projects, land at the same key (free dedup). A failure here leaves the live `project-bucket` layout and every table untouched, since nothing yet references the new content.
+2. **Manifest** — one short Postgres transaction inserts a `PROJECT_FILE_REVISION` row (`STAGING`) and one `PROJECT_FILE_REVISION_ENTRY` per changed path, carrying both the new hash and the path's previous hash (the rollback data).
+3. **Apply** — each entry is server-side copied from its blob key onto the project's existing live path key (`{bucket}/{projectId}/{path}` — the layout every other reader, and the K8s preview syncer's `mc mirror`, already depends on; this migration does not touch it) or removed, for a delete. Any failure rolls back every entry already applied *in that same call* using its captured previous hash, and marks the revision `FAILED`.
+4. **Publish** — a single-statement compare-and-swap, `ProjectRepository.casAdvanceCurrentRevision`, atomically advances `PROJECT.currentFileRevisionId` only if it still matches the revision this publish was staged against. Losing the race rolls back the same way and marks the revision `CONFLICT`.
 
-Adding real versioning would be a meaningful schema change (something like a `FileVersion` table keyed by `ProjectFile` + a monotonic revision), not present today — see `TODO.md` if this is being considered.
+**A legacy file** (any `ProjectFile` row with `contentHash IS NULL` — everything that existed before this shipped) is lazily adopted the first time it's next touched: its current live bytes are read once, hashed, and staged into `project-blobs` as-is, becoming that write's `previousContentHash`. No bulk backfill migration runs — Flyway SQL cannot hash MinIO bytes, and a file never touched again simply never gains revision history.
+
+**What this deliberately does not do yet**, so the scope stays honest:
+- **No blob garbage collection.** Blobs are never deleted, so storage grows monotonically — correct today (it's what makes rollback and restore always possible), but a refcount/reaper is future work once real usage shows it's needed.
+- **No crash recovery mid-apply.** The rollback above handles an in-request failure; a process crash between two apply steps would leave a revision stuck `STAGING` with no automatic reconciliation — a startup job in the shape of `PREVIEW.bootstrapHeartbeatAt`'s stale-row pattern is the natural future fix.

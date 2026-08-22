@@ -44,6 +44,17 @@ public class ProjectFile {
 
     String type;
 
+    /**
+     * The live content's hash in the content-addressed blob bucket (CODE_REVIEW.md AI-05) - null for a file never
+     * touched since GATE-02 shipped, lazily adopted the first time it's next edited or deleted.
+     */
+    String contentHash;
+
+    /**
+     * The revision that last changed this path - null for the same reason {@link #contentHash} can be.
+     */
+    Long currentRevisionId;
+
     @CreationTimestamp
     Instant createdAt;
 

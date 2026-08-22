@@ -6,6 +6,8 @@ erDiagram
     PROJECT ||--o{ PROJECT_FILE : contains
     PROJECT ||--o{ PREVIEW : "has previews"
     PREVIEW ||--o{ PREVIEW_SESSION : "watched by"
+    PROJECT ||--o{ PROJECT_FILE_REVISION : "has revisions"
+    PROJECT_FILE_REVISION ||--o{ PROJECT_FILE_REVISION_ENTRY : "changed paths"
 
     PROJECT {
         bigint id PK
@@ -13,6 +15,7 @@ erDiagram
         bool isPublic
         string templateInitIssue "nullable"
         bigint forkedFromProjectId "nullable, plain id"
+        bigint currentFileRevisionId "nullable, plain id - see Revision manifests"
         timestamp createdAt
         timestamp updatedAt
         timestamp deletedAt
@@ -35,8 +38,33 @@ erDiagram
         string minioObjectKey
         bigint size
         string type
+        string contentHash "nullable - null until first touched post-GATE-02"
+        bigint currentRevisionId "nullable, plain id"
         timestamp createdAt
         timestamp updatedAt
+    }
+
+    PROJECT_FILE_REVISION {
+        bigint id PK
+        bigint projectId FK
+        bigint parentRevisionId "nullable, plain id - the revision chain"
+        string status "STAGING, APPLIED, FAILED, CONFLICT"
+        string source "AI_GENERATION, MANUAL_EDIT, RESTORE"
+        bigint createdByUserId "plain id"
+        string failureDetail "nullable"
+        timestamp createdAt
+        timestamp appliedAt "nullable"
+    }
+
+    PROJECT_FILE_REVISION_ENTRY {
+        bigint id PK
+        bigint revisionId FK
+        string path
+        string changeType "EDIT, DELETE"
+        string contentHash "nullable - null for DELETE"
+        string previousContentHash "nullable - rollback data"
+        bigint size "nullable"
+        string contentType "nullable"
     }
 
     PREVIEW {
@@ -83,6 +111,7 @@ A workspace being built.
 | `templateInitIssue` | Nullable. `null` = the starter template copied cleanly (or wasn't needed); otherwise a short description of what's still missing. Cleared by `POST /api/projects/{id}/retry-template-init`. |
 | `forkedFromProjectId` | Nullable, a plain `Long` (not a relation) — set by `POST /api/projects/{id}/fork`. Plain so a fork keeps working after its source is deleted. |
 | `deletedAt` | Soft-delete marker. An owner's delete sets this; an editor's delete instead removes only their own `PROJECT_MEMBER` row and leaves the project untouched — see `docs/api/`'s `ProjectController` section. |
+| `currentFileRevisionId` | Nullable, a plain `Long` (not a relation on purpose — see [Revision manifests](conventions.md#revision-manifests)) — the project's currently-published revision. `null` until the project's first post-GATE-02 write. Only ever advanced by `ProjectRepository.casAdvanceCurrentRevision`'s single-statement compare-and-swap, never a plain entity save. |
 
 ## PROJECT_MEMBER
 
@@ -102,9 +131,36 @@ Metadata for one file; content lives in MinIO, not this row. There is no `create
 | Field | Meaning |
 |---|---|
 | `project` | `@ManyToOne`, not null. |
-| `path` | The file's path within the project (`src/App.tsx`). Every MinIO key for it is built through one place, `ProjectFileServiceImpl.objectKey(projectId, path)`. |
+| `path` | The file's path within the project (`src/App.tsx`). Every MinIO key for it is built through one place, `ProjectFilePath.objectKey(projectId, path)`. |
 | `minioObjectKey` | Locates the content in object storage. |
 | `size` / `type` | Set from the real uploaded content (or the template source's real size, at template-init time) — never guessed. |
+| `contentHash` | Nullable — the live content's SHA-256 hash in the `project-blobs` bucket (see [Revision manifests](conventions.md#revision-manifests)). `null` for a file never touched since GATE-02 shipped; lazily adopted the first time it's next edited or deleted. |
+| `currentRevisionId` | Nullable, a plain `Long` — the revision that last changed this path. `null` for the same reason `contentHash` can be. |
+
+## PROJECT_FILE_REVISION
+
+One attempted change set (CODE_REVIEW.md AI-05) — the durable manifest `RevisionPublisherImpl.publish` records before touching the live layout. See [Revision manifests](conventions.md#revision-manifests) for the full design.
+
+| Field | Meaning |
+|---|---|
+| `projectId` | Plain `Long`, not a relation — a revision chain is walked by id via a recursive query, not loaded as an object graph. |
+| `parentRevisionId` | Nullable, a plain `Long` — the revision this one was published against. `null` only for a project's very first revision. The optimistic-concurrency base for `ProjectRepository.casAdvanceCurrentRevision`. |
+| `status` | `STAGING` → `APPLIED` (landed), `FAILED` (rolled back — storage/DB error), or `CONFLICT` (rolled back — lost the CAS race). |
+| `source` | `AI_GENERATION`, `MANUAL_EDIT` (not built yet — ADDITIONALS.md MID-04), or `RESTORE`. |
+| `createdByUserId` | Plain `Long`. |
+| `failureDetail` | Nullable — set only on `FAILED`. |
+
+## PROJECT_FILE_REVISION_ENTRY
+
+One path's change within a revision — a delta entry against its parent, not a full-tree snapshot row. A snapshot at any revision is reconstructed by walking `parentRevisionId` back to the root and keeping each path's most recent entry (`ProjectFileRevisionRepository.reconstructSnapshot`, a native recursive CTE).
+
+| Field | Meaning |
+|---|---|
+| `revisionId` | Plain `Long`, not a relation, for the same reason as `PROJECT_FILE_REVISION.projectId`. |
+| `path` / `changeType` | `EDIT` or `DELETE`. |
+| `contentHash` | The new content's hash in `project-blobs`. `null` for `DELETE`. |
+| `previousContentHash` | The path's content hash immediately before this revision — the rollback data a failed or superseded publish restores from. `null` only if the path did not exist before this revision (a brand-new file). |
+| `size` / `contentType` | `null` for `DELETE`. |
 
 ## PREVIEW
 

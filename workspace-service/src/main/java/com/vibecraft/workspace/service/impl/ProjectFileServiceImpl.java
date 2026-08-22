@@ -16,26 +16,20 @@ import com.vibecraft.workspace.repository.ProjectFileRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
 import com.vibecraft.workspace.service.ProjectFileService;
 import com.vibecraft.workspace.util.CodeSearchScanner;
-import com.vibecraft.workspace.util.ContentTypeUtils;
 import com.vibecraft.workspace.util.ProjectFilePath;
 import io.minio.CopyObjectArgs;
 import io.minio.CopySource;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
-import io.minio.RemoveObjectArgs;
 import io.minio.errors.ErrorResponseException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -45,8 +39,9 @@ import java.util.zip.ZipOutputStream;
 /**
  * A project's files: metadata in the database, bytes in MinIO.
  *
- * <p>Handles: listing the tree, reading and writing one file, deleting one, copying a whole project's files inside
- * storage for a fork, building a ZIP, and plain-text search with per-file and overall caps.
+ * <p>Handles: listing the tree, reading one file, copying a whole project's files inside storage for a fork,
+ * building a ZIP, and plain-text search with per-file and overall caps. Writing and deleting a file go through
+ * {@link com.vibecraft.workspace.service.RevisionPublisher} instead (CODE_REVIEW.md AI-05), not this class.
  *
  * <p>Every path goes through the shared validator, so a path that could escape the project is rejected before it
  * reaches storage, a ZIP entry name or a preview pod. Reads and writes derive the object key the same way, so they
@@ -114,68 +109,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
         } catch (Exception e) {
             log.error("Unexpected error while reading file: {}", objectName, e);
             throw new FileStorageException("Failed to read file content for " + path, e);
-        }
-    }
-
-    @Override
-    public void saveFile(Long projectId, String path, String content) {
-        Project project = projectRepository.findById(projectId).orElseThrow(
-                () -> new ResourceNotFoundException("Project", projectId.toString())
-        );
-
-        String cleanPath = ProjectFilePath.normalize(path);
-        String objectName = ProjectFilePath.objectKey(projectId, path);
-
-        try {
-            byte[] contentBytes = content.getBytes(StandardCharsets.UTF_8);
-            InputStream inputStream = new ByteArrayInputStream(contentBytes);
-            String contentType = ContentTypeUtils.determineContentType(path);
-            minioClient.putObject(
-                    PutObjectArgs.builder()
-                            .bucket(projectBucket)
-                            .object(objectName)
-                            .stream(inputStream, contentBytes.length, -1)
-                            .contentType(contentType)
-                            .build());
-
-            saveMetadata(project, projectId, cleanPath, objectName, contentBytes.length, contentType);
-            log.info("Saved file: {}", objectName);
-        } catch (Exception e) {
-            log.error("Failed to save file {}/{}", projectId, cleanPath, e);
-            throw new FileStorageException("Failed to save file " + cleanPath, e);
-        }
-
-    }
-
-    /**
-     * Finds-or-creates the metadata row for a path, tolerating a concurrent writer for that exact path. The read and
-     * the write here are not atomic, so two callers can both see no existing row and both try to insert one; the
-     * unique (project_id, path) constraint means only one of those inserts wins, and the loser retries once as an
-     * update against the row the winner just created rather than surfacing a spurious failure for a save whose bytes
-     * already reached storage.
-     */
-    private void saveMetadata(Project project, Long projectId, String cleanPath, String objectName, int contentLength, String contentType) {
-        ProjectFile file = projectFileRepository.findByProjectIdAndPath(projectId, cleanPath)
-                .orElseGet(() -> ProjectFile.builder()
-                        .project(project)
-                        .path(cleanPath)
-                        .minioObjectKey(objectName)
-                        .createdAt(Instant.now())
-                        .build());
-        file.setSize((long) contentLength);
-        file.setType(contentType);
-        file.setUpdatedAt(Instant.now());
-
-        try {
-            projectFileRepository.save(file);
-        } catch (DataIntegrityViolationException e) {
-            ProjectFile existing = projectFileRepository.findByProjectIdAndPath(projectId, cleanPath)
-                    .orElseThrow(() -> e);
-            existing.setMinioObjectKey(objectName);
-            existing.setSize((long) contentLength);
-            existing.setType(contentType);
-            existing.setUpdatedAt(Instant.now());
-            projectFileRepository.save(existing);
         }
     }
 
@@ -332,20 +265,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                     .build());
         }
         return failed;
-    }
-
-    @Override
-    public void deleteFile(Long projectId, String path) {
-        String cleanPath = ProjectFilePath.normalize(path);
-        String objectName = ProjectFilePath.objectKey(projectId, path);
-        try {
-            minioClient.removeObject(RemoveObjectArgs.builder().bucket(projectBucket).object(objectName).build());
-            projectFileRepository.findByProjectIdAndPath(projectId, cleanPath).ifPresent(projectFileRepository::delete);
-            log.info("Deleted file: {}", objectName);
-        } catch (Exception e) {
-            log.error("Failed to delete file {}/{}", projectId, cleanPath, e);
-            throw new FileStorageException("Failed to delete file " + path, e);
-        }
     }
 
 }

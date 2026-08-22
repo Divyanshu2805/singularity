@@ -54,4 +54,12 @@ public class Project {
     String templateInitIssue;
 
     Long forkedFromProjectId;
+
+    /**
+     * The project's currently-published revision (CODE_REVIEW.md AI-05) - null until the project's first
+     * post-GATE-02 write, and the value a publish's optimistic-concurrency check is compared against. Not a
+     * relation: {@code ProjectFileRevisionRepository}'s CAS update writes this column directly by id, and loading
+     * it as an entity here would fight that single-statement compare-and-swap.
+     */
+    Long currentFileRevisionId;
 }
