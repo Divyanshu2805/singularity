@@ -122,6 +122,26 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-redis</artifactId>
 		</dependency>
+		<!-- CODE_REVIEW.md AI-05: RevisionPublisherIntegrationTest proves the CAS in
+		     ProjectRepository.casAdvanceCurrentRevision actually serializes concurrent publishes against a real
+		     Postgres, and that restore reproduces exact bytes through a real MinIO - both are exactly the kind of
+		     real transactional/storage interaction a mocked MinioClient/repository cannot demonstrate. No version
+		     pinned here - managed transitively via spring-boot-dependencies' own testcontainers-bom import. -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-minio</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
