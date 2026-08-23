@@ -55,6 +55,8 @@ Real files, in the order the flow touches them (all under `intelligence-service/
 
 **Self-correction that does *not* exist yet:** if the generated code fails to install or fails to boot in the live-preview pod, nothing feeds that failure back into another AI turn automatically. The model gets feedback only within *this* request/response cycle (e.g. `looksLikeAbandonedEdit` retrying once if the model narrated an edit but produced zero `FILE_EDIT` events) — never from an actual runtime/build failure. See `TODO.md`'s "AI prompt/generation reliability improvements" if this is being worked on.
 
+**Pre-publish validation (CODE_REVIEW.md AI-09):** `RevisionValidator`'s first real implementation, `RevisionBuildValidator` (`workspace-service`, `service/impl/`), runs between the manifest commit and apply in `RevisionPublisherImpl.publish` — it claims a fresh disposable runner pod, materializes the staged revision's snapshot into it, runs `npm install` then a configurable typecheck/build command (`npx tsc --noEmit` by default), and rejects the revision (no rollback needed - nothing has touched the live layout yet) on a non-zero exit. Gated behind `revision-validation.enabled` (default `false`) and off the critical path today - see `docs/schema/conventions.md`'s "Revision manifests" section for the full design and what it deliberately doesn't do (a repair loop, categorized diagnostics, a warm build cache).
+
 ## 4.3 Live preview: start a preview
 
 This runs entirely in `workspace-service` (`.../workspace/`).

@@ -71,6 +71,17 @@ minio:
   # impossible for the K8s preview syncer's `mc mirror` (scoped to project-bucket/{projectId}/) to ever touch it.
   blob-bucket: project-blobs
 
+# CODE_REVIEW.md AI-09: isolated build/typecheck validation on a staged revision before it publishes. Off by
+# default - see RevisionValidationProperties' javadoc for why - until real per-turn latency/cluster-load numbers
+# justify turning it on. `command` is confirmed against the real starter template's package.json/tsconfig.json,
+# not guessed; change it here, not in code, if the template's checks change.
+revision-validation:
+  enabled: false
+  command: npx tsc --noEmit
+  install-timeout: 2m
+  build-timeout: 2m
+  output-max-chars: 8000
+
 # The kind namespace, Redis and MinIO bucket the live-preview pipeline runs against (PreviewRouter's Redis keys
 # are per-hostname).
 preview:

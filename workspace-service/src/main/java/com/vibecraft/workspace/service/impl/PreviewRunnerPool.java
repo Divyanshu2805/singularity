@@ -17,7 +17,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -170,6 +172,28 @@ public class PreviewRunnerPool {
             throw clusterUnreachable(e);
         } catch (Exception e) {
             throw new ExternalServiceException("Couldn't run a command in the preview runner", e);
+        }
+    }
+
+    /**
+     * Uploads bytes to a path inside a container - a tar-based transfer (the same mechanism {@code kubectl cp}
+     * uses), unlike {@link #exec}, which only ever pipes a script through a shell. CODE_REVIEW.md AI-09 uses this
+     * to materialize a staged revision's snapshot into a freshly claimed, disposable validation pod; nothing else
+     * in this service needs to write arbitrary file content into a pod today.
+     */
+    public void uploadFile(String podName, String container, String pathInContainer, byte[] content) {
+        try (InputStream in = new ByteArrayInputStream(content)) {
+            boolean uploaded = pods().withName(podName).inContainer(container).file(pathInContainer).upload(in);
+            if (!uploaded) {
+                throw new ExternalServiceException("Upload of " + pathInContainer + " to " + podName + " did not succeed",
+                        new IllegalStateException("fabric8 upload() returned false"));
+            }
+        } catch (KubernetesClientException e) {
+            throw clusterUnreachable(e);
+        } catch (ExternalServiceException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ExternalServiceException("Couldn't upload " + pathInContainer + " to " + podName, e);
         }
     }
 
