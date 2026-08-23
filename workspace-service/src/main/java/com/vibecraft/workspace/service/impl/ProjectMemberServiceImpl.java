@@ -29,6 +29,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -63,14 +64,30 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     IntelligenceServiceClient intelligenceServiceClient;
     PreviewDeploymentService previewDeploymentService;
 
+    /**
+     * One dangling {@code user_id} - account-service unreachable, or (CODE_REVIEW.md OPS-03) a cross-database
+     * restore taken at a different point in time than workspace-service's own - must not take the rest of an
+     * otherwise-healthy project's member list down with it. A loop with a per-member try/catch, not
+     * {@code .stream().map(...)}: a plain {@code map} has no way to skip one element on exception without aborting
+     * the whole pipeline, which is exactly the bug this replaces (every member became unlistable because of one
+     * unrelated one). Mirrors {@code InternalWorkspaceController.getProjectSummaries}' existing "drop what can't
+     * resolve" behavior for the same class of problem.
+     */
     @Override
     @PreAuthorize("@security.canViewMembers(#projectId)")
     public List<MemberResponse> getProjectMembers(Long projectId) {
 
-        return projectMemberRepository.findByIdProjectId(projectId)
-                .stream()
-                .map(member -> projectMemberMapper.toMemberResponse(member, resolveUser(member.getId().getUserId())))
-                .toList();
+        List<MemberResponse> members = new ArrayList<>();
+        for (ProjectMember member : projectMemberRepository.findByIdProjectId(projectId)) {
+            Long userId = member.getId().getUserId();
+            try {
+                members.add(projectMemberMapper.toMemberResponse(member, resolveUser(userId)));
+            } catch (ResourceNotFoundException e) {
+                log.warn("Skipping unresolvable member userId: {} on projectId: {} - its account row no longer " +
+                        "resolves; the rest of the member list is unaffected.", userId, projectId);
+            }
+        }
+        return members;
     }
 
     @Override
