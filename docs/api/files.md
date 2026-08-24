@@ -13,4 +13,4 @@
 
 All four require project `VIEW` — any member, whatever their role — and answer 403 to anyone else. The tree and content reads are guarded on `FileController` itself; search and zip on `ProjectFileService`, because `InternalWorkspaceController` also calls that service as a machine caller with no user to check (see `docs/architecture/cross-cutting-concerns.md` §7).
 
-There is no endpoint to write a file directly. Files are written only by the AI generation pipeline, through the internal API ([`POST /internal/v1/projects/{id}/files`](internal.md#internal-api-service-to-service)) — which the Gateway never routes.
+There is no endpoint to write a file directly. Files change only by publishing a revision: an AI turn does it through the internal API ([`POST /internal/v1/projects/{id}/revisions`](internal.md#internal-api-service-to-service)), which the Gateway never routes, and a user does it by restoring an earlier revision (below).

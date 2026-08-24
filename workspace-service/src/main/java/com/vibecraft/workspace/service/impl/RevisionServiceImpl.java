@@ -10,6 +10,7 @@ import com.vibecraft.workspace.dto.revision.RevisionSummaryResponse;
 import com.vibecraft.workspace.entity.ProjectFile;
 import com.vibecraft.workspace.entity.ProjectFileRevision;
 import com.vibecraft.workspace.enums.RevisionSource;
+import com.vibecraft.workspace.enums.RevisionStatus;
 import com.vibecraft.workspace.repository.ProjectFileRepository;
 import com.vibecraft.workspace.repository.ProjectFileRevisionRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
@@ -24,6 +25,21 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * A project's revision history: listing it, previewing a restore, and restoring (CODE_REVIEW.md AI-05).
+ *
+ * <p>Handles: listing a project's revisions newest first; reconstructing any revision's path/content-hash snapshot
+ * and diffing it against the project's current files; and restoring by publishing that diff as a new forward-only
+ * {@code RESTORE} revision through {@link RevisionPublisher}, the same pipeline as every other write.
+ *
+ * <p>Invariant: {@code preview} and {@code restore} only accept a revision that belongs to the given project and is
+ * {@code APPLIED}; anything else is a 404. The controller's {@code @PreAuthorize} only proves access to
+ * {@code projectId}, and revision ids are sequential, so without this check an editor of their own project could
+ * pass another project's revision id and restore that project's files into theirs, then read them - a cross-tenant
+ * read of private source. A {@code FAILED}/{@code CONFLICT}/{@code STAGING} revision never became a project state,
+ * so it is not a restore point either. {@code snapshot} stays unchecked: its only caller is the internal build
+ * validator, handing it a revision it just staged itself.
+ */
 @org.springframework.stereotype.Service
 @RequiredArgsConstructor
 public class RevisionServiceImpl implements RevisionService {
@@ -43,6 +59,7 @@ public class RevisionServiceImpl implements RevisionService {
 
     @Override
     public RevisionPreviewResponse preview(Long projectId, Long revisionId) {
+        requireRestorePoint(projectId, revisionId);
         return new RevisionPreviewResponse(revisionId, diffAgainstCurrent(projectId, targetSnapshot(revisionId)));
     }
 
@@ -55,6 +72,7 @@ public class RevisionServiceImpl implements RevisionService {
     public PublishRevisionResponse restore(Long projectId, Long revisionId, Long userId) {
         var project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", projectId.toString()));
+        requireRestorePoint(projectId, revisionId);
         Map<String, String> target = targetSnapshot(revisionId);
         List<RevisionFileChange> diff = diffAgainstCurrent(projectId, target);
 
@@ -71,6 +89,13 @@ public class RevisionServiceImpl implements RevisionService {
         PublishRevisionRequest request = new PublishRevisionRequest(
                 project.getCurrentFileRevisionId(), userId, RevisionSource.RESTORE.name(), changes);
         return revisionPublisher.publish(projectId, request);
+    }
+
+    private void requireRestorePoint(Long projectId, Long revisionId) {
+        revisionRepository.findById(revisionId)
+                .filter(revision -> projectId.equals(revision.getProjectId()))
+                .filter(revision -> revision.getStatus() == RevisionStatus.APPLIED)
+                .orElseThrow(() -> new ResourceNotFoundException("Revision", revisionId.toString()));
     }
 
     /** path -> content hash, for every path that exists (not deleted) as of the given revision. */

@@ -22,6 +22,7 @@ Every endpoint requires authentication except `GET /api/auth/csrf`, `POST /api/a
 - [Authentication](authentication.md)
 - [Projects](projects.md)
 - [Files](files.md)
+- [Revisions](revisions.md)
 - [AI Chat / Code Generation](chat.md)
 - [Idea Clarifier](ideas.md)
 - [Code Insight (Code Lens / Code Notes)](code-insight.md)

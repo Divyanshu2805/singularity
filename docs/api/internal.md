@@ -21,8 +21,7 @@ Not part of the browser contract, and **never routed by the Gateway** (`/interna
 | GET | `/internal/v1/projects?ids=1,2,3` | `List<ProjectSummaryDto>` | Batched; soft-deleted projects included (usage insights attribute tokens spent before a delete). |
 | GET | `/internal/v1/projects/{projectId}/files` | `FileTreeDto { projectId, entries: [{ path, size, type }] }` | |
 | GET | `/internal/v1/projects/{projectId}/files/content?path=` | `FileContentDto { path, content }` | |
-| POST | `/internal/v1/projects/{projectId}/files` | 200 | **Write.** Body `FileContentDto`. The only way a generated file reaches storage. |
-| DELETE | `/internal/v1/projects/{projectId}/files?path=` | 200 | **Write.** |
+| POST | `/internal/v1/projects/{projectId}/revisions` | `PublishRevisionResponse` | **Write.** Body `PublishRevisionRequest { expectedParentRevisionId, createdByUserId, source, changes: [{ path, changeType: EDIT \| DELETE, content }] }`. The only way a generated file reaches storage: one AI turn's changes as a single all-or-nothing revision. |
 | GET | `/internal/v1/projects/owned-count?userId=` | `int` | How many projects the user owns — the count half of the project-limit check. |
 | POST | `/internal/v1/sessions/evict` | 204 | Body `EvictSessionRequest { cookieHash \| firebaseUid }` — exactly one set. Drops that session (or every cached session of that Firebase user) from this service's in-process cache. Sent by account on sign-out. |
 

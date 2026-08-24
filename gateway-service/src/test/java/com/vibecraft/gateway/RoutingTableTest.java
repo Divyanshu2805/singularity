@@ -82,6 +82,9 @@ class RoutingTableTest {
                         "/api/projects/7/deploy",
                         "/api/projects/7/preview/restart",
                         "/api/projects/7/preview/logs",
+                        "/api/projects/7/revisions",
+                        "/api/projects/7/revisions/12/preview",
+                        "/api/projects/7/revisions/12/restore",
                         "/api/previews"),
                 INTELLIGENCE, List.of(
                         "/api/chat/stream",

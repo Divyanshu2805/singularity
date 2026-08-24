@@ -22,10 +22,15 @@ import java.util.List;
  * <p>Handles: listing revisions, previewing what restoring to one would change, and restoring. Not consumed by any
  * frontend yet - ADDITIONALS.md MID-03's checkpoint list and preview-before-restore screen are what will eventually
  * call this, so this exists as the primitive they need rather than being built ahead of them.
+ *
+ * <p>The path sits under {@code /api/projects/**} so the Gateway's workspace route owns it - it was briefly
+ * {@code /api/v1/...}, which no Gateway route matches, so every call 404'd before reaching this service. The
+ * {@code @PreAuthorize} guards only prove access to {@code projectId}; that the revision belongs to that project is
+ * enforced in {@code RevisionServiceImpl}, not here.
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/projects/{projectId}/revisions")
+@RequestMapping("/api/projects/{projectId}/revisions")
 public class ProjectRevisionController {
 
     private final RevisionService revisionService;
