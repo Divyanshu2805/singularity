@@ -6,6 +6,7 @@ import com.vibecraft.intelligence.dto.code.CodeNoteResponse;
 import com.vibecraft.intelligence.dto.code.ExplainCodeRequest;
 import com.vibecraft.intelligence.dto.code.SaveCodeNoteRequest;
 import com.vibecraft.intelligence.service.CodeInsightService;
+import com.vibecraft.intelligence.util.SseHeartbeat;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +32,8 @@ import java.util.List;
  *
  * <p>The answering endpoints are read-only and can produce text and nothing else. The notes are the thread itself:
  * one per project per user, kept until its author clears it. A failure mid-stream arrives as a named error event, the
- * same shape the build chat uses.
+ * same shape the build chat uses. Both streams carry an {@link SseHeartbeat} for the same reason the build chat's
+ * does - a quiet model shouldn't outlast Cloudflare's idle-connection timeout in production.
  */
 @RestController
 @RequiredArgsConstructor
@@ -63,13 +65,14 @@ public class CodeInsightController {
     }
 
     private Flux<ServerSentEvent<String>> asEvents(Flux<String> answer, Long projectId) {
-        return answer
+        Flux<ServerSentEvent<String>> events = answer
                 .map(text -> ServerSentEvent.builder(text).build())
                 .onErrorResume(error -> {
                     log.error("Streaming code insight failed for projectId: {}", projectId, error);
                     return Flux.just(ServerSentEvent.builder("Couldn't get an answer from the AI right now. "
                             + "Please try again.").event("error").build());
                 });
+        return SseHeartbeat.withHeartbeat(events);
     }
 
     @PostMapping("/ask")

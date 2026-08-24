@@ -8,6 +8,7 @@ import com.vibecraft.intelligence.dto.chat.StreamResponse;
 import com.vibecraft.intelligence.service.AiGenerationService;
 import com.vibecraft.intelligence.service.ChatService;
 import com.vibecraft.intelligence.service.impl.GenerationStoppedException;
+import com.vibecraft.intelligence.util.SseHeartbeat;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,7 +30,8 @@ import java.util.List;
  * <p>Closing the response no longer stops a generation - it only stops watching it; stopping is its own endpoint. A
  * failure mid-stream cannot become an HTTP status, because the response has already started, so it arrives as a named
  * error event the client renders in place, with rate limiting and a user-requested stop distinguished from a genuine
- * failure.
+ * failure. Both streams carry an {@link SseHeartbeat} so a long silent stretch of "the model is thinking" doesn't
+ * outlast Cloudflare's idle-connection timeout in production.
  */
 @RestController
 @RequiredArgsConstructor
@@ -81,7 +83,7 @@ public class ChatController {
     }
 
     private Flux<ServerSentEvent<StreamResponse>> toEvents(Flux<StreamResponse> stream, Long projectId) {
-        return stream
+        Flux<ServerSentEvent<StreamResponse>> events = stream
                 .map(data -> ServerSentEvent.<StreamResponse>builder()
                         .data(data)
                         .build())
@@ -100,6 +102,7 @@ public class ChatController {
                             .data(new StreamResponse(message))
                             .build());
                 });
+        return SseHeartbeat.withHeartbeat(events);
     }
 
     private boolean isRateLimited(Throwable error) {
