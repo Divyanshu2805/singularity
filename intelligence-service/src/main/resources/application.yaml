@@ -67,6 +67,23 @@ app:
 server:
   port: ${INTELLIGENCE_SERVICE_PORT:8083}
 
+# CODE_REVIEW.md DEP-036: liveness/readiness on a separate port from server.port, so Kubernetes probes hit the pod
+# directly and /actuator/health is never reachable through this service's own port - no Service or gateway route
+# ever forwards to management.server.port. show-details: never keeps the response a bare UP/DOWN, not component
+# internals (DB connection state, etc).
+management:
+  server:
+    port: ${MANAGEMENT_SERVER_PORT:9404}
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
 eureka:
   client:
     service-url:

@@ -71,6 +71,10 @@ public class WebSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        // CODE_REVIEW.md DEP-036: actuator's own management.server.port already runs outside this
+                        // chain entirely (a separate child context) - this rule is defense in depth for the day
+                        // someone removes that port separation, not the thing actually keeping health reachable.
+                        .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/internal/**").hasAuthority(InternalServiceAuthFilter.ROLE)
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/session", "/api/auth/logout").permitAll()

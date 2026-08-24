@@ -20,6 +20,13 @@
 	</description>
 
 	<dependencies>
+		<!-- CODE_REVIEW.md DEP-036: liveness/readiness for the Kubernetes deploy pipeline, exposed only on
+		     management.server.port (below in application.yaml) - never reachable through the public gateway path
+		     or any Service the Cloudflare tunnel forwards, since that separate port has no Service pointing at it. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
 		<!-- Reactive/WebFlux Gateway (non-blocking — required so SSE streams pass through unbuffered).
 		     Renamed from spring-cloud-starter-gateway as of the 2025.0 release train; -server-webmvc is the
 		     newer blocking sibling, deliberately not used here. -->

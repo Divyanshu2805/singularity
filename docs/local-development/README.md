@@ -11,4 +11,5 @@ The backend is three domain services behind a Gateway. The frontend talks to a `
 - [Resetting Local Data](resetting-data.md)
 - [Running the Backend Test Suite](tests.md)
 - [Common Problems](troubleshooting.md)
+- [Health Checks](health-checks.md)
 - [Useful Commands](commands.md)

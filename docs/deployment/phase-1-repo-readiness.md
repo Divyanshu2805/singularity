@@ -9,7 +9,7 @@ The code needs about a day of fixes before it can run anywhere but a developer l
 - [ ] **Preview pods' MinIO login:** use a read-only MinIO user instead of the admin credentials they get today.
 - [ ] **Preview network rule:** today it allows any address on ports 80/443/9000. That includes other pods and the cloud metadata address `169.254.169.254`. Exclude both, and allow MinIO explicitly.
 - [ ] **Stream keep-alive:** chat and code-insight streams send nothing while the model thinks. Cloudflare closes a connection after 100 seconds of silence. Add a keep-alive comment every ~20 seconds.
-- [ ] **Health checks:** add Spring Boot Actuator's liveness/readiness endpoints to each service, permitted in each security chain and never routed through the Gateway.
+- [x] **Health checks:** added Spring Boot Actuator's `/actuator/health` to all 5 services, on a separate `management.server.port` (default 9404) rather than a Gateway route — verified live that it's reachable with no auth on that port and unreachable on the service's own port, with only `health` exposed (no env/beans). See `docs/local-development/health-checks.md`'s "Health Checks" section.
 - [ ] **Preview boot timeout:** raise `preview.boot-timeout` from 2 to 4 minutes, because installs are slower on 2 cores.
 - [ ] **Production settings, as environment variables only (no code change):**
 

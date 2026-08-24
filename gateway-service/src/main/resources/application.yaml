@@ -1,6 +1,22 @@
 server:
   port: ${GATEWAY_SERVICE_PORT:8000}
 
+# CODE_REVIEW.md DEP-036: liveness/readiness on a separate port, so /actuator/health never has to be a route in
+# the table above - it's not reachable on server.port at all, and there is deliberately no catch-all route there
+# for it to hide behind. Kubernetes probes hit management.server.port on the pod directly.
+management:
+  server:
+    port: ${MANAGEMENT_SERVER_PORT:9404}
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
 spring:
   application:
     name: gateway-service

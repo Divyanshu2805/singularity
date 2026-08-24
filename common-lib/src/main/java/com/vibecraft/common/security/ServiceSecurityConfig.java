@@ -61,6 +61,10 @@ public final class ServiceSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        // DEP-036: actuator's own management.server.port already runs outside this chain
+                        // entirely (a separate child context) - this rule is defense in depth for the day someone
+                        // removes that port separation, not the thing actually keeping health checks reachable.
+                        .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/internal/**").hasAuthority(InternalServiceAuthFilter.ROLE)
                         .anyRequest().authenticated())
                 .addFilterBefore(sessionAuthFilter, UsernamePasswordAuthenticationFilter.class)

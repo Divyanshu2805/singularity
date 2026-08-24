@@ -1,6 +1,21 @@
 server:
   port: ${DISCOVERY_SERVICE_PORT:8761}
 
+# CODE_REVIEW.md DEP-036: liveness/readiness on a separate port from the Eureka console/API port, so a Kubernetes
+# probe never depends on Eureka's own request handling being healthy in a way that could mask the two apart.
+management:
+  server:
+    port: ${MANAGEMENT_SERVER_PORT:9404}
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
 spring:
   application:
     name: discovery-service
