@@ -78,8 +78,12 @@ metadata:
   name: vibecraft-proxy-svc
   namespace: vibecraft-ai
 spec:
-  # Pending forever on kind, which has no load balancer: locally it's reached through k8s/dev-port-forward.ps1.
-  type: LoadBalancer
+  # ClusterIP, not LoadBalancer: on kind this was always pending forever anyway (no load balancer to provision),
+  # reached locally through k8s/dev-port-forward.ps1/.sh's kubectl port-forward - which targets a Service's
+  # ClusterIP either way, so this changes nothing for local dev. On a real cluster, LoadBalancer would have
+  # provisioned a public external IP with no authentication in front of it; the Cloudflare tunnel is meant to be
+  # the only public entry point, reaching this Service privately from inside the cluster.
+  type: ClusterIP
   ports:
     - port: 80
       targetPort: 8080
