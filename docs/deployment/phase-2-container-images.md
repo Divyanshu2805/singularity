@@ -5,7 +5,7 @@ Eight arm64 images, built natively on [GitHub's free Arm runners](https://github
 | Image | Base | How it's built |
 | --- | --- | --- |
 | discovery, gateway, account, workspace, intelligence | `eclipse-temurin:25-jre-alpine` | One shared Dockerfile with a `MODULE` argument. Jars come from the tested reactor build, and Spring Boot's layered extraction means a deploy only pulls the small app layer. |
-| frontend | `nginx-unprivileged` (alpine) | `npm run build` with the Firebase public config and `VITE_CSP_FRAME_ORIGINS=https://*.<domain>`, SPA fallback to `index.html`, long cache for hashed assets |
+| frontend | `nginx-unprivileged` (alpine) | `npm run build` with the Firebase public config and `VITE_CSP_FRAME_ORIGINS=https://*.divyanshuagrahari.dev`, SPA fallback to `index.html`, long cache for hashed assets |
 | preview-proxy | `node:20.20.2-alpine` (existing Dockerfile) | Add a `package-lock.json` and switch `npm install` to `npm ci` |
 | preview runner (Phase 7) | `node:20.20.2-alpine` | Pre-installs the starter template's npm packages, so a preview starts in seconds instead of about a minute |
 

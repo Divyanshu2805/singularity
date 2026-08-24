@@ -2,7 +2,7 @@
 
 The first real deploy always surfaces a few issues that local testing can't. Common ones are cookies and CSRF behind the real HTTPS origin, WebSocket live reload through the tunnel, and Firebase sign-in on a new domain. Budget 6–10 hours. The site counts as live only when every box below is ticked.
 
-- [ ] `https://app.<domain>` loads with a valid certificate, and refreshing a deep link like `/projects` still works
+- [ ] `https://app.divyanshuagrahari.dev` loads with a valid certificate, and refreshing a deep link like `/projects` still works
 - [ ] Sign in with Google and with email; sign out; a second account sees none of the first account's projects
 - [ ] Create a project, and it starts from the seeded starter template
 - [ ] An AI build streams text as it's generated and commits files

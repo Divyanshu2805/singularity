@@ -2,7 +2,7 @@
 
 The code needs about a day of fixes before it can run anywhere but a developer laptop. Each item below came from reading the repo on 2026-08-24.
 
-- [ ] **Land or park the in-progress revision work.** About 50 changed or new files, including the `V4__revision_manifests.sql` migration, sat uncommitted on 2026-08-24. Auto-deploy ships whatever is on `main`, so this goes first.
+- [x] **Land or park the in-progress revision work.** About 50 changed or new files, including the `V4__revision_manifests.sql` migration, sat uncommitted on 2026-08-24. Landed as 12 separate commits by concern, pushed and green on CI, plus a follow-up fix once the revision endpoints' gateway path was found broken and their cross-tenant restore check was found missing (commit `d41d355`).
 - [ ] **Move the starter template into the repo.** `starter-projects/react-vite-tailwind-daisyui-starter/` exists only in the local MinIO. Without it, a fresh server can't create projects. It goes under `deploy/seed/`, and a one-time Job loads it.
 - [ ] **Preview proxy Service:** change `type: LoadBalancer` to `ClusterIP` in `k8s/vibecraft-proxy.yml`. The tunnel reaches it privately.
 - [ ] **MinIO:** replace the `minio-service` ExternalName that points at `host.docker.internal` (the developer's laptop) with a real in-cluster MinIO.
@@ -18,9 +18,9 @@ The code needs about a day of fixes before it can run anywhere but a developer l
 | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://postgres:5432/vibecraft-<service>-db` |
 | `SPRING_DATA_REDIS_HOST` | `redis-service.vibecraft-ai` |
 | `MINIO_URL` | `http://minio:9000` |
-| `CLIENT_URL` | `https://app.<domain>` |
+| `CLIENT_URL` | `https://app.divyanshuagrahari.dev` |
 | `EUREKA_SERVER_URL` | `http://discovery-service:8761/eureka/` |
-| `PREVIEW_PUBLIC_SCHEME`, `PREVIEW_PUBLIC_DOMAIN`, `PREVIEW_PUBLIC_PORT` | `https`, `<domain>`, `443` |
+| `PREVIEW_PUBLIC_SCHEME`, `PREVIEW_PUBLIC_DOMAIN`, `PREVIEW_PUBLIC_PORT` | `https`, `divyanshuagrahari.dev`, `443` |
 | `SPRING_JPA_SHOW_SQL` | `false` |
 | `FIREBASE_CREDENTIALS_PATH` | Mounted secret file, e.g. `/var/secrets/firebase/sa.json` |
 | `SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL` | Optional: a cheaper model than `x-ai/grok-4.5` for the demo |

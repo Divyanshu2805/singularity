@@ -11,5 +11,5 @@ The owner creates the VM in the Oracle console; everything after it is scripted.
     - `--secrets-encryption`: Kubernetes secrets are encrypted on disk.
     - `--tls-san <tailscale name>`: the API is reachable only over the tailnet.
 5. **Deploy identity:** a `deployer` service account limited to the two app namespaces (no cluster-admin). Its token becomes the `KUBE_DEPLOYER_TOKEN` GitHub secret.
-6. **Tunnel routing:** cloudflared runs as a Deployment with rules kept in the repo: `app.<domain>` paths `/api/*` and `/webhooks/*` go to the gateway, the rest to the frontend, and `*.<domain>` goes to the preview-proxy. In Cloudflare DNS, `app` and `*` both point at the tunnel.
+6. **Tunnel routing:** cloudflared runs as a Deployment with rules kept in the repo: `app.divyanshuagrahari.dev` paths `/api/*` and `/webhooks/*` go to the gateway, the rest to the frontend, and `*.divyanshuagrahari.dev` goes to the preview-proxy. In Cloudflare DNS, `app` and `*` both point at the tunnel.
 7. **Secrets:** the pipeline creates the Kubernetes secrets from the GitHub environment on every deploy, so the server never needs a hand-edited secret file.

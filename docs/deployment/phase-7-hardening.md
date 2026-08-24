@@ -3,7 +3,7 @@
 This phase makes the demo safe to leave running for months and good to show. About 4–6 hours.
 
 - [ ] **Nightly backup** (Kubernetes CronJob): `pg_dump` of the three databases plus a copy of the MinIO buckets to Cloudflare R2, keeping 7 days. Do one real restore drill onto kind.
-- [ ] **Uptime monitor** on `https://app.<domain>` and `/api/plans`, emailing the owner when either fails.
+- [ ] **Uptime monitor** on `https://app.divyanshuagrahari.dev` and `/api/plans`, emailing the owner when either fails.
 - [ ] **Updates:** automatic OS security updates, plus a monthly k3s patch upgrade.
 - [ ] **Logs:** SQL logging off, log files capped in size, no secrets or preview tokens in logs.
 - [ ] **Faster previews:** switch the preview pool to the pre-baked runner image from Phase 2.
