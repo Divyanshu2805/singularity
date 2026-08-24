@@ -39,6 +39,12 @@ import java.util.Map;
  * read of private source. A {@code FAILED}/{@code CONFLICT}/{@code STAGING} revision never became a project state,
  * so it is not a restore point either. {@code snapshot} stays unchecked: its only caller is the internal build
  * validator, handing it a revision it just staged itself.
+ *
+ * <p>The actual snapshot reconstruction lives in {@link RevisionSnapshotReader}, a separate leaf bean with no
+ * dependency on {@link RevisionPublisher} - this class depends on {@code RevisionPublisher} itself (for
+ * {@code restore}), and {@code RevisionPublisherImpl} depends on every {@code RevisionValidator}, including the one
+ * that needs a snapshot; folding reconstruction into this class instead closed a real Spring bean-wiring cycle
+ * that only surfaced on an actual boot, since no test here boots a real context.
  */
 @org.springframework.stereotype.Service
 @RequiredArgsConstructor
@@ -49,6 +55,7 @@ public class RevisionServiceImpl implements RevisionService {
     private final ProjectFileRevisionRepository revisionRepository;
     private final BlobStore blobStore;
     private final RevisionPublisher revisionPublisher;
+    private final RevisionSnapshotReader snapshotReader;
 
     @Override
     public List<RevisionSummaryResponse> listRevisions(Long projectId) {
@@ -60,12 +67,12 @@ public class RevisionServiceImpl implements RevisionService {
     @Override
     public RevisionPreviewResponse preview(Long projectId, Long revisionId) {
         requireRestorePoint(projectId, revisionId);
-        return new RevisionPreviewResponse(revisionId, diffAgainstCurrent(projectId, targetSnapshot(revisionId)));
+        return new RevisionPreviewResponse(revisionId, diffAgainstCurrent(projectId, snapshotReader.snapshot(revisionId)));
     }
 
     @Override
     public Map<String, String> snapshot(Long revisionId) {
-        return targetSnapshot(revisionId);
+        return snapshotReader.snapshot(revisionId);
     }
 
     @Override
@@ -73,7 +80,7 @@ public class RevisionServiceImpl implements RevisionService {
         var project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", projectId.toString()));
         requireRestorePoint(projectId, revisionId);
-        Map<String, String> target = targetSnapshot(revisionId);
+        Map<String, String> target = snapshotReader.snapshot(revisionId);
         List<RevisionFileChange> diff = diffAgainstCurrent(projectId, target);
 
         List<FileChangeDto> changes = new ArrayList<>();
@@ -96,17 +103,6 @@ public class RevisionServiceImpl implements RevisionService {
                 .filter(revision -> projectId.equals(revision.getProjectId()))
                 .filter(revision -> revision.getStatus() == RevisionStatus.APPLIED)
                 .orElseThrow(() -> new ResourceNotFoundException("Revision", revisionId.toString()));
-    }
-
-    /** path -> content hash, for every path that exists (not deleted) as of the given revision. */
-    private Map<String, String> targetSnapshot(Long revisionId) {
-        Map<String, String> snapshot = new LinkedHashMap<>();
-        for (var row : revisionRepository.reconstructSnapshot(revisionId)) {
-            if (!"DELETE".equals(row.getChangeType())) {
-                snapshot.put(row.getPath(), row.getContentHash());
-            }
-        }
-        return snapshot;
     }
 
     /**

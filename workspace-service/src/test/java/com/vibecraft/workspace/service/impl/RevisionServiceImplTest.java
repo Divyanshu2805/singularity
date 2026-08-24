@@ -19,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,9 +53,10 @@ class RevisionServiceImplTest {
     private final ProjectFileRevisionRepository revisionRepository = mock(ProjectFileRevisionRepository.class);
     private final BlobStore blobStore = mock(BlobStore.class);
     private final RevisionPublisher revisionPublisher = mock(RevisionPublisher.class);
+    private final RevisionSnapshotReader snapshotReader = mock(RevisionSnapshotReader.class);
 
     private final RevisionServiceImpl service = new RevisionServiceImpl(
-            projectRepository, projectFileRepository, revisionRepository, blobStore, revisionPublisher);
+            projectRepository, projectFileRepository, revisionRepository, blobStore, revisionPublisher, snapshotReader);
 
     @BeforeEach
     void stubProject() {
@@ -68,14 +70,6 @@ class RevisionServiceImplTest {
                 ProjectFileRevision.builder().id(REVISION_ID).projectId(projectId).status(status).build()));
     }
 
-    private static ProjectFileRevisionRepository.SnapshotRow row(String path, String hash) {
-        return new ProjectFileRevisionRepository.SnapshotRow() {
-            public String getPath() { return path; }
-            public String getContentHash() { return hash; }
-            public String getChangeType() { return "EDIT"; }
-        };
-    }
-
     @Test
     @DisplayName("preview rejects a revision that belongs to another project")
     void previewRejectsAnotherProjectsRevision() {
@@ -83,7 +77,7 @@ class RevisionServiceImplTest {
 
         assertThatThrownBy(() -> service.preview(PROJECT_ID, REVISION_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
-        verify(revisionRepository, never()).reconstructSnapshot(anyLong());
+        verify(snapshotReader, never()).snapshot(anyLong());
     }
 
     @Test
@@ -93,7 +87,7 @@ class RevisionServiceImplTest {
 
         assertThatThrownBy(() -> service.restore(PROJECT_ID, REVISION_ID, USER_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
-        verify(revisionRepository, never()).reconstructSnapshot(anyLong());
+        verify(snapshotReader, never()).snapshot(anyLong());
         verify(revisionPublisher, never()).publish(anyLong(), any());
     }
 
@@ -122,7 +116,7 @@ class RevisionServiceImplTest {
     @DisplayName("restore of this project's applied revision publishes a RESTORE revision against the current one")
     void restoreOfOwnAppliedRevisionPublishes() {
         stubRevision(PROJECT_ID, RevisionStatus.APPLIED);
-        when(revisionRepository.reconstructSnapshot(REVISION_ID)).thenReturn(List.of(row("src/App.tsx", "abc")));
+        when(snapshotReader.snapshot(REVISION_ID)).thenReturn(Map.of("src/App.tsx", "abc"));
         when(blobStore.read("abc")).thenReturn("export default 1".getBytes(StandardCharsets.UTF_8));
 
         service.restore(PROJECT_ID, REVISION_ID, USER_ID);

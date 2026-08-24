@@ -4,7 +4,6 @@ import com.vibecraft.workspace.config.RevisionValidationProperties;
 import com.vibecraft.workspace.entity.ProjectFileRevision;
 import com.vibecraft.workspace.entity.ProjectFileRevisionEntry;
 import com.vibecraft.workspace.service.BlobStore;
-import com.vibecraft.workspace.service.RevisionService;
 import com.vibecraft.workspace.service.RevisionValidator;
 import io.fabric8.kubernetes.api.model.Pod;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +33,11 @@ import java.util.regex.Pattern;
  * a bounded repair loop (the finding marks it optional), structured per-category diagnostics (ADDITIONALS.md
  * IMP-19 - this returns one flat, stage-prefixed string), or reusing a warm {@code node_modules}/npm cache across
  * runs (every run is a cold install, the single largest cost in this design).
+ *
+ * <p>Depends on {@link RevisionSnapshotReader} directly, not the full {@code RevisionService} - that interface's
+ * {@code RevisionServiceImpl} depends on {@code RevisionPublisher}, and {@code RevisionPublisherImpl} depends on
+ * every {@code RevisionValidator} bean including this one, which closed a real Spring bean-wiring cycle that only
+ * surfaced on an actual boot.
  */
 @Component
 @RequiredArgsConstructor
@@ -43,7 +47,7 @@ public class RevisionBuildValidator implements RevisionValidator {
     private static final Pattern ANSI_CODES = Pattern.compile("\\[[0-9;]*m");
 
     private final PreviewRunnerPool runnerPool;
-    private final RevisionService revisionService;
+    private final RevisionSnapshotReader snapshotReader;
     private final BlobStore blobStore;
     private final RevisionValidationProperties properties;
 
@@ -62,7 +66,7 @@ public class RevisionBuildValidator implements RevisionValidator {
 
         String podName = claimed.get().getMetadata().getName();
         try {
-            materialize(podName, revisionService.snapshot(revision.getId()));
+            materialize(podName, snapshotReader.snapshot(revision.getId()));
 
             PreviewRunnerPool.ExecResult install = runnerPool.exec(podName, PreviewRunnerPool.RUNNER_CONTAINER,
                     properties.installTimeout(), "cd /app && npm install --no-audit --no-fund --loglevel=error");

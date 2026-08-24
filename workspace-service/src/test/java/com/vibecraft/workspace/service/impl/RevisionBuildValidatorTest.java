@@ -3,7 +3,6 @@ package com.vibecraft.workspace.service.impl;
 import com.vibecraft.workspace.config.RevisionValidationProperties;
 import com.vibecraft.workspace.entity.ProjectFileRevision;
 import com.vibecraft.workspace.service.BlobStore;
-import com.vibecraft.workspace.service.RevisionService;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import org.junit.jupiter.api.DisplayName;
@@ -39,13 +38,13 @@ class RevisionBuildValidatorTest {
     private static final String POD_NAME = "runner-pool-abc123";
 
     private final PreviewRunnerPool runnerPool = mock(PreviewRunnerPool.class);
-    private final RevisionService revisionService = mock(RevisionService.class);
+    private final RevisionSnapshotReader snapshotReader = mock(RevisionSnapshotReader.class);
     private final BlobStore blobStore = mock(BlobStore.class);
 
     private RevisionBuildValidator validator(boolean enabled) {
         RevisionValidationProperties properties = new RevisionValidationProperties(
                 enabled, "npx tsc --noEmit", Duration.ofMinutes(2), Duration.ofMinutes(2), 8000);
-        return new RevisionBuildValidator(runnerPool, revisionService, blobStore, properties);
+        return new RevisionBuildValidator(runnerPool, snapshotReader, blobStore, properties);
     }
 
     private ProjectFileRevision revision() {
@@ -84,7 +83,7 @@ class RevisionBuildValidatorTest {
     @DisplayName("a failed install is reported and the pod is still released")
     void failedInstallIsReportedAndPodReleased() {
         when(runnerPool.claim(PROJECT_ID)).thenReturn(Optional.of(claimedPod()));
-        when(revisionService.snapshot(10L)).thenReturn(Map.of("src/App.tsx", "hash-1"));
+        when(snapshotReader.snapshot(10L)).thenReturn(Map.of("src/App.tsx", "hash-1"));
         when(blobStore.read("hash-1")).thenReturn("content".getBytes(StandardCharsets.UTF_8));
         when(runnerPool.exec(eq(POD_NAME), anyString(), any(), org.mockito.ArgumentMatchers.contains("npm install")))
                 .thenReturn(new PreviewRunnerPool.ExecResult(1, "npm ERR! missing dependency"));
@@ -101,7 +100,7 @@ class RevisionBuildValidatorTest {
     @DisplayName("a failed build check is reported and the pod is still released")
     void failedBuildIsReportedAndPodReleased() {
         when(runnerPool.claim(PROJECT_ID)).thenReturn(Optional.of(claimedPod()));
-        when(revisionService.snapshot(10L)).thenReturn(Map.of("src/App.tsx", "hash-1"));
+        when(snapshotReader.snapshot(10L)).thenReturn(Map.of("src/App.tsx", "hash-1"));
         when(blobStore.read("hash-1")).thenReturn("content".getBytes(StandardCharsets.UTF_8));
         when(runnerPool.exec(eq(POD_NAME), anyString(), any(), org.mockito.ArgumentMatchers.contains("npm install")))
                 .thenReturn(new PreviewRunnerPool.ExecResult(0, "added 42 packages"));
@@ -119,7 +118,7 @@ class RevisionBuildValidatorTest {
     @DisplayName("success - materializes, installs, builds, releases, in order, and passes")
     void successMaterializesInstallsBuildsAndReleases() {
         when(runnerPool.claim(PROJECT_ID)).thenReturn(Optional.of(claimedPod()));
-        when(revisionService.snapshot(10L)).thenReturn(Map.of("src/App.tsx", "hash-1"));
+        when(snapshotReader.snapshot(10L)).thenReturn(Map.of("src/App.tsx", "hash-1"));
         when(blobStore.read("hash-1")).thenReturn("content".getBytes(StandardCharsets.UTF_8));
         when(runnerPool.exec(eq(POD_NAME), anyString(), any(), any()))
                 .thenReturn(new PreviewRunnerPool.ExecResult(0, "ok"));
@@ -139,7 +138,7 @@ class RevisionBuildValidatorTest {
     @DisplayName("an exception while materializing the snapshot still releases the claimed pod")
     void exceptionDuringMaterializeStillReleasesThePod() {
         when(runnerPool.claim(PROJECT_ID)).thenReturn(Optional.of(claimedPod()));
-        when(revisionService.snapshot(10L)).thenReturn(Map.of("src/App.tsx", "hash-1"));
+        when(snapshotReader.snapshot(10L)).thenReturn(Map.of("src/App.tsx", "hash-1"));
         when(blobStore.read("hash-1")).thenThrow(new RuntimeException("MinIO unreachable"));
 
         try {
@@ -156,7 +155,7 @@ class RevisionBuildValidatorTest {
     void diagnosticsStripsAnsiAndTruncatesKeepingTheTail() {
         RevisionValidationProperties properties = new RevisionValidationProperties(
                 true, "npx tsc --noEmit", Duration.ofMinutes(2), Duration.ofMinutes(2), 30);
-        RevisionBuildValidator validator = new RevisionBuildValidator(runnerPool, revisionService, blobStore, properties);
+        RevisionBuildValidator validator = new RevisionBuildValidator(runnerPool, snapshotReader, blobStore, properties);
 
         String raw = "[31mnoise noise noise noise[0m the real error at the end";
         String result = validator.diagnostics("Build validation failed", raw);
