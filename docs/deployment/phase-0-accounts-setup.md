@@ -23,10 +23,10 @@ These steps need the owner's identity, card or dashboard logins. About 2–3 hou
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | secret | The Firebase Admin key file's contents | ✅ Done |
 | `OPENROUTER_API_KEY` | secret | The capped key | ✅ Done |
 | `STRIPE_SECRET`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS` | secret | Test-mode values | ✅ Done |
-| `CLOUDFLARE_TUNNEL_CREDENTIALS` | secret | The tunnel credentials JSON | ⏳ Pending — file handed to the owner, not yet confirmed added |
+| `CLOUDFLARE_TUNNEL_CREDENTIALS` | secret | The tunnel credentials JSON | ✅ Done |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | secret | Backup bucket token | ✅ Done |
 | `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` | secret | Lets the pipeline join the tailnet briefly | ✅ Done |
 | `KUBE_DEPLOYER_TOKEN` | secret | Namespace-scoped deploy token, created in Phase 4 | ⏳ Phase 4 |
 | `APP_DOMAIN`, `FIREBASE_PROJECT_ID`, `VITE_FIREBASE_*` | variable | Public values, safe to show | ✅ Done |
 
-Every secret and variable Phase 0 asked for is set in the `production` environment, restricted to deploys from `main`, except `CLOUDFLARE_TUNNEL_CREDENTIALS` (handed to the owner to paste in) and `KUBE_DEPLOYER_TOKEN`, which needs the deploy identity Phase 4 creates.
+Every secret and variable Phase 0 asked for is set in the `production` environment, restricted to deploys from `main`, except `KUBE_DEPLOYER_TOKEN`, which needs the deploy identity Phase 4 creates.

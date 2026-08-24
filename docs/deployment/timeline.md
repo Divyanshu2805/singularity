@@ -4,7 +4,7 @@ Total effort is 34–54 hours: a first public URL after about 4–6 working days
 
 | Phase | Who | Effort | Status | Notes |
 | --- | --- | --- | --- | --- |
-| 0: Accounts | Owner | 2–3 h | 🔄 11/12 items — 1 secret pending | Oracle capacity and DNS can add 1–3 days of waiting |
+| 0: Accounts | Owner | 2–3 h | ✅ Done | Oracle capacity and DNS can add 1–3 days of waiting |
 | 1: Repo readiness | Owner + assistant | 4–8 h | 🔄 1/9 items | Depends on how close the in-progress revision work is to done |
 | 2: Images | Assistant | 3–5 h | ⏳ Not started | |
 | 3: Kubernetes files + kind rehearsal | Assistant | 8–12 h | ⏳ Not started | The longest code phase |
