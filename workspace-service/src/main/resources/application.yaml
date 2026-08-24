@@ -93,7 +93,10 @@ preview:
   storage-alias: myminio
   bucket: ${minio.project-bucket}
   idle-timeout: 10m
-  boot-timeout: 2m
+  # 4m, not 2m: a fresh npm install on a 2-core production node runs noticeably slower than on a real dev
+  # machine, and this is a safety ceiling, not a performance target - a longer bound costs nothing when a
+  # preview boots normally in well under a minute either way.
+  boot-timeout: 4m
   route-ttl: 90s
   # Signs the short-lived access token appended to every previewUrl this service hands out (SEC-06): a bare
   # hostname is otherwise a permanent, unauthenticated bearer link the proxy has no way to revoke. The proxy
