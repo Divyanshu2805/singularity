@@ -1,0 +1,15 @@
+eslint.config.js
+index.html
+package.json
+public/daisyui.svg
+public/vite.svg
+src/App.css
+src/App.tsx
+src/assets/react.svg
+src/index.css
+src/main.tsx
+src/pages/Index.tsx
+src/pages/NotFound.tsx
+src/vite-env.d.ts
+tsconfig.json
+vite.config.js

@@ -16,6 +16,6 @@ Starts everything over from nothing: the three service databases, the MinIO proj
    ```bash
    kubectl -n vibecraft-ai delete pod -l status=busy
    ```
-4. **Start the stack again** (discovery, the three services, the Gateway). Each service's Flyway creates its schema on first start, `PlanSeeder` seeds the Free/Pro/Business plans, and workspace-service creates the `projects` bucket. Then sign in through the frontend.
+4. **Start the stack again** (discovery, the three services, the Gateway). Each service's Flyway creates its schema on first start, `PlanSeeder` seeds the Free/Pro/Business plans, and workspace-service creates the `projects`/`project-blobs`/`starter-projects` buckets and re-uploads the starter template's own 15 files into the last one (`StarterTemplateSeeder`, checked into the repo under `workspace-service/src/main/resources/starter-templates/` — this used to live only in one developer's long-lived local MinIO volume, so a reset like this one previously left every new project's template-init step failing with no files to copy). Then sign in through the frontend.
 
 Two things to know. First, the reset has to *recreate* the databases, not just empty the tables: Flyway records a checksum for each applied migration, so a service started against an old database after its `V1__init.sql` was edited refuses to boot. Second, existing browser sessions stop working after a reset (the signed-in user has no account row any more) — the frontend signs you out and you sign in again.
