@@ -1,0 +1,20 @@
+# Applies when the repo root is the build context (docker/java-service.Dockerfile, built with
+# `-f docker/java-service.Dockerfile .`). Trims what gets sent to the Docker daemon to roughly what that Dockerfile
+# actually copies (each module's target/*.jar), instead of the whole reactor build output and every checkout's dev
+# tooling. frontend/ and proxy/ build with their own directory as context and keep their own .dockerignore.
+.git
+.idea
+.claude
+graphify-out
+node_modules
+frontend/node_modules
+frontend/dist
+proxy/node_modules
+**/target/classes
+**/target/test-classes
+**/target/generated-sources
+**/target/generated-test-sources
+**/target/maven-archiver
+**/target/maven-status
+**/target/surefire-reports
+**/*.log
