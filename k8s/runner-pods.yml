@@ -111,11 +111,15 @@ spec:
             # MC_HOST_myminio every time.
             - name: HOME
               value: /tmp
-            # Local-dev MinIO from services.docker-compose.yml, read from a Secret rather than a literal value so the
-            # credential isn't checked into git. Create it once per cluster:
+            # CODE_REVIEW.md / docs/deployment/phase-1-repo-readiness.md Phase 1: a read-only user (`previewreader`), not the MinIO
+            # admin credentials - a compromised runner pod's syncer can list and read the projects bucket, never
+            # write, delete, or touch any other bucket or the admin API. k8s/minio.yml's bootstrap Job creates that
+            # user; create the secret before running it:
             #   kubectl create secret generic minio-runner-credentials -n vibecraft-ai \
-            #     --from-literal=host-uri='http://minioadmin:minioadmin123@minio-service:9000'
-            # (swap the literal for the real credential outside local dev).
+            #     --from-literal=password='<MINIO_RUNNER_SECRET from the deployment plan>' \
+            #     --from-literal=host-uri='http://previewreader:<the same value>@minio-service:9000'
+            # Local kind dev against k8s/minio-hostbridge.yml can keep using the admin literal instead - it's your
+            # own laptop's throwaway local data either way, not a real deployment's.
             - name: MC_HOST_myminio
               valueFrom:
                 secretKeyRef:
@@ -178,16 +182,34 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # The npm registry and MinIO both need general outbound HTTP(S) - see the manifest-level limitation noted above
-    # the Deployment: this cannot be narrowed further to just those two hosts without an egress proxy or a CNI that
-    # supports FQDN-based policies, neither of which is assumed here.
+    # MinIO, explicitly - CODE_REVIEW.md / docs/deployment/phase-1-repo-readiness.md Phase 1: the syncer's own credential is a
+    # read-only user scoped to the projects bucket (k8s/minio.yml's bootstrap Job), and this is what stops a
+    # compromised runner reaching any OTHER in-cluster pod on port 9000 the way the old blanket rule below did.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: minio
+      ports:
+        - protocol: TCP
+          port: 9000
+    # The npm registry needs general outbound HTTP(S) - see the manifest-level limitation noted above the
+    # Deployment: this cannot be narrowed further to just that one host without an egress proxy or a CNI that
+    # supports FQDN-based policies, neither of which is assumed here. The exclusions matter more than they look:
+    # 169.254.0.0/16 is the cloud metadata address every major provider (AWS/GCP/Azure/Oracle) serves node
+    # credentials from - reachable in-cluster from any pod with no other guard - and the three RFC1918 ranges cover
+    # every pod/service/node CIDR this manifest could ever run under (kind, k3s, and the Oracle VCN's own network
+    # all differ, but all three sit inside these blocks), so excluding them here is correct regardless of which
+    # cluster this is applied to, without needing to know its specific CIDRs.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
+            except:
+              - 169.254.0.0/16
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
       ports:
         - protocol: TCP
           port: 80
         - protocol: TCP
           port: 443
-        - protocol: TCP
-          port: 9000 # MinIO, when it isn't behind 80/443

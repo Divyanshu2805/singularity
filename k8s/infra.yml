@@ -50,20 +50,10 @@ spec:
 
 ---
 
-apiVersion: v1
-kind: Service
-metadata:
-  name: minio-service
-  namespace: vibecraft-ai
-spec:
-  type: ExternalName
-  externalName: host.docker.internal # Points to your laptop/host
-  ports:
-    - port: 9000
-      targetPort: 9000
-      protocol: TCP
-
----
+# MinIO itself is NOT defined here any more (CODE_REVIEW.md/docs/deployment/phase-1-repo-readiness.md Phase 1) - apply exactly one
+# of k8s/minio-hostbridge.yml (local kind dev, bridges to the laptop's own docker-compose MinIO) or k8s/minio.yml
+# (a real in-cluster MinIO, for an actual deployment) after this file. Both define a Service named minio-service
+# in this namespace; applying both is a mistake, not a valid combined configuration.
 
 apiVersion: apps/v1
 kind: Deployment

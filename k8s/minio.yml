@@ -1,0 +1,216 @@
+# A real in-cluster MinIO, for an actual deployment (docs/deployment/phase-1-repo-readiness.md Phase 1) - the alternative to
+# k8s/minio-hostbridge.yml (local kind dev only, bridges to the laptop's own docker-compose MinIO). Apply EXACTLY
+# ONE of these two files, never both: both define a Service named minio-service in this namespace, and applying
+# the second silently overwrites whatever the first created.
+#
+# Single replica, no HA - the same "beta tradeoff, not HA" as the rest of the stack,
+# not a new one introduced here. Namespace: vibecraft-ai for now, alongside the runner
+# pool it primarily serves - docs/deployment/'s architecture table's eventual trusted `vibecraft` namespace
+# doesn't exist as a manifest yet (the rest of Phase 3's platform buildout), and moving a namespace before there is
+# any real data in it is a non-event, not a migration.
+#
+# Create the root credentials once per cluster, before applying this file:
+#   kubectl create secret generic minio-root-credentials -n vibecraft-ai \
+#     --from-literal=username=minioadmin \
+#     --from-literal=password='<a long random value - this is MINIO_ROOT_PASSWORD in the deployment plan>'
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: vibecraft-ai
+spec:
+  serviceName: minio-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: minio
+          # Pinned to the same version services.docker-compose.yml uses locally, not `latest`.
+          image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+          args: ["server", "/data", "--console-address", ":9001"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              # MinIO's server needs this for admin user/IAM operations - almost certainly to mlock() the
+              # per-user key material it derives so it's never swapped to disk. Live-verified: dropping every
+              # capability (no add) makes `mc admin user add` hang indefinitely with no error and no server-side
+              # log line at all - the client waits forever for a response the server's own handler never sends,
+              # not a permission error. `mc admin policy create` (no per-user secret involved) is unaffected,
+              # which is what makes this easy to miss - the bootstrap Job below would appear to make progress
+              # and then silently stop. See CLAUDE.md's gotchas table.
+              add: ["IPC_LOCK"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: username
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: password
+          ports:
+            - name: api
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            # docs/deployment/'s architecture table: 20 GB for MinIO on the Oracle machine.
+            storage: 20Gi
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-service
+  namespace: vibecraft-ai
+spec:
+  # No console port exposed here on purpose - :9001 stays reachable only via kubectl port-forward, never through
+  # any Service a NetworkPolicy or the Cloudflare tunnel could accidentally expose further.
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+  type: ClusterIP
+
+---
+
+# CODE_REVIEW.md / docs/deployment/phase-1-repo-readiness.md Phase 1: preview pods used to get the MinIO admin credentials outright
+# (minio-runner-credentials' host-uri embedded minioadmin's own password). This Job creates a read-only user
+# instead, scoped to the project bucket only, so a compromised runner pod's syncer container can list and read
+# project files but can never write, delete, or touch any other bucket (starter-projects, project-blobs) or the
+# MinIO admin API itself.
+#
+# Idempotent - mc admin policy create/user add/policy attach all just re-apply the same state on a re-run, so this
+# is safe to run again after minio-runner-credentials' password rotates. Needs both secrets already created:
+#   kubectl create secret generic minio-runner-credentials -n vibecraft-ai \
+#     --from-literal=password='<MINIO_RUNNER_SECRET from the deployment plan>' \
+#     --from-literal=host-uri='http://previewreader:<the same value>@minio-service:9000'
+# (host-uri is what k8s/runner-pods.yml's syncer container actually reads; password is what this Job reads to set
+# that same user up in the first place - both keys hold the same secret value, in the two shapes each consumer
+# needs.)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-bootstrap-preview-reader
+  namespace: vibecraft-ai
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mc
+          # Same pinned version the syncer container already uses.
+          image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              # The mc CLIENT itself, not just the MinIO server above, needs this for `admin user add`
+              # specifically - live-verified the same hang (indefinite, no output, not even `--help` for that one
+              # subcommand tree) happens client-side too if this is missing, while every other mc command here
+              # (`alias set`, `admin policy create/attach`) works fine without it. Consistent with mlock()-ing
+              # credential material client-side before it's ever sent, specific to the one command that handles a
+              # new password.
+              add: ["IPC_LOCK"]
+          env:
+            # quay.io/minio/mc has no home directory baked in for uid 1000 - see k8s/runner-pods.yml's syncer
+            # container for the same gotcha, hit live there first.
+            - name: HOME
+              value: /tmp
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: username
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: password
+            - name: PREVIEW_READER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-runner-credentials
+                  key: password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              mc alias set myminio http://minio-service:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+              cat > /tmp/preview-readonly-policy.json <<'POLICY'
+              {
+                "Version": "2012-10-17",
+                "Statement": [
+                  { "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": ["arn:aws:s3:::projects"] },
+                  { "Effect": "Allow", "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::projects/*"] }
+                ]
+              }
+              POLICY
+              mc admin policy create myminio preview-readonly /tmp/preview-readonly-policy.json
+              mc admin user add myminio previewreader "$PREVIEW_READER_PASSWORD"
+              mc admin policy attach myminio preview-readonly --user previewreader
+              echo "previewreader is ready, read-only on the projects bucket"
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              # 512Mi, not the ~64Mi a plain CLI invocation would need: live-verified OOMKilled at 64Mi on
+              # `mc admin user add` specifically, once IPC_LOCK is granted above - mlockall() pins the Go
+              # runtime's whole reserved (not just used) address space as resident, which cgroups then count
+              # against this limit even though actual heap use stays tiny. A one-time Job, so the temporarily
+              # generous limit costs nothing ongoing.
+              memory: "512Mi"
