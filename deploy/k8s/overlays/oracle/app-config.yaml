@@ -1,0 +1,11 @@
+# firebase-project-id is the same real project everywhere (base/app-config.yaml) - not patched here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: vibecraft
+data:
+  client-url: https://app.divyanshuagrahari.dev
+  preview-public-scheme: https
+  preview-public-domain: divyanshuagrahari.dev
+  preview-public-port: "443"

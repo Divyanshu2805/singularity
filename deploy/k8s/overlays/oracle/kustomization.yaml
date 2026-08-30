@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - cloudflared.yaml
+
+# Phase 5's CI job runs `kustomize edit set image vibecraft-discovery=ghcr.io/divyanshu2805/vibecraft-discovery:$SHA`
+# (one per image) before `kubectl apply -k .`, replacing the placeholder tag below with the real commit SHA Phase 2's
+# build just pushed. `REPLACED_BY_CI` is deliberately not a valid tag - applying this overlay unmodified fails loudly
+# (ImagePullBackOff) instead of silently running a stale image.
+images:
+  - name: vibecraft-discovery:local
+    newName: ghcr.io/divyanshu2805/vibecraft-discovery
+    newTag: REPLACED_BY_CI
+  - name: vibecraft-gateway:local
+    newName: ghcr.io/divyanshu2805/vibecraft-gateway
+    newTag: REPLACED_BY_CI
+  - name: vibecraft-account:local
+    newName: ghcr.io/divyanshu2805/vibecraft-account
+    newTag: REPLACED_BY_CI
+  - name: vibecraft-workspace:local
+    newName: ghcr.io/divyanshu2805/vibecraft-workspace
+    newTag: REPLACED_BY_CI
+  - name: vibecraft-intelligence:local
+    newName: ghcr.io/divyanshu2805/vibecraft-intelligence
+    newTag: REPLACED_BY_CI
+  - name: vibecraft-frontend:local
+    newName: ghcr.io/divyanshu2805/vibecraft-frontend
+    newTag: REPLACED_BY_CI
+  - name: vibecraft-preview-proxy:local
+    newName: ghcr.io/divyanshu2805/vibecraft-preview-proxy
+    newTag: REPLACED_BY_CI
+
+patches:
+  - path: app-config.yaml
+    target:
+      kind: ConfigMap
+      name: app-config

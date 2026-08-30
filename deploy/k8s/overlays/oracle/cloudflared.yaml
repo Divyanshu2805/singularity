@@ -1,0 +1,95 @@
+# The only public entry point into the whole deployment - the VM itself has zero open inbound ports
+# (docs/deployment/'s architecture diagram). Oracle-only: kind reaches everything through kubectl
+# port-forward instead, so this file lives in the oracle overlay, not base.
+#
+# The tunnel is created once, out-of-band, in the Cloudflare dashboard (docs/deployment/phase-0-accounts-setup.md Phase 0 - already
+# done) - this Deployment just runs the daemon that connects to it. Credentials come from a Secret, never baked in:
+#   kubectl create secret generic cloudflared-credentials -n vibecraft \
+#     --from-literal=credentials.json='<the tunnel credentials JSON - CLOUDFLARE_TUNNEL_CREDENTIALS in the plan>'
+#
+# The live tunnel currently routes to a throwaway `hello-test` nginx pod (proven end-to-end in Phase 0/1, per its
+# own memory note) - that pod is NOT part of this repo, it was a manual, out-of-band check that HTTPS-in/zero-
+# open-ports actually works end to end before any of this existed. Applying this ConfigMap in Phase 6 replaces that
+# placeholder routing with the real one below; delete `hello-test` in the same step.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: vibecraft
+data:
+  config.yaml: |
+    tunnel: vibecraft
+    credentials-file: /etc/cloudflared/creds/credentials.json
+    ingress:
+      # Order matters - the Gateway's own routes (api/webhooks) must be checked before the frontend catch-all.
+      - hostname: app.divyanshuagrahari.dev
+        path: /api/.*
+        service: http://gateway-service.vibecraft.svc.cluster.local:8000
+      - hostname: app.divyanshuagrahari.dev
+        path: /webhooks/.*
+        service: http://gateway-service.vibecraft.svc.cluster.local:8000
+      - hostname: app.divyanshuagrahari.dev
+        service: http://frontend.vibecraft.svc.cluster.local:80
+      - hostname: "*.divyanshuagrahari.dev"
+        service: http://vibecraft-proxy-svc.vibecraft-ai.svc.cluster.local:80
+      - service: http_status:404
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: vibecraft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532 # cloudflared's own non-root `nonroot` image user
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2026.9.1
+          args: ["tunnel", "--config", "/etc/cloudflared/config.yaml", "run"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "32Mi"
+            limits:
+              cpu: "200m"
+              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              memory: "128Mi"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared
+              readOnly: true
+            - name: creds
+              mountPath: /etc/cloudflared/creds
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: cloudflared-config
+        - name: creds
+          secret:
+            secretName: cloudflared-credentials
