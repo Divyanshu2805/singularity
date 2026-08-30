@@ -1,0 +1,130 @@
+# In-cluster Postgres for account-service/workspace-service/intelligence-service, one server with three logical
+# databases - the same shape `services.docker-compose.yml` already runs for local dev, just in-cluster instead of
+# on the developer's own machine. Single replica, no HA - same tradeoff already documented for MinIO;
+# Phase 7 adds the nightly pg_dump backup to R2 this depends on for real recovery.
+#
+# Create the credentials once per cluster before applying this file:
+#   kubectl create secret generic db-credentials -n vibecraft \
+#     --from-literal=password='<a long random value - this is DB_PASSWORD in the deployment plan>'
+# The username is not a secret (docs/deployment/phase-0-accounts-setup.md Phase 0's table only lists DB_PASSWORD) - it's the literal
+# `vibecraft` below, matched by each service's SPRING_DATASOURCE_URL/USERNAME env vars in their Deployment.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: vibecraft
+data:
+  01-create-service-databases.sql: |
+    -- Runs once, only against a brand-new PVC (the official Postgres image only executes
+    -- /docker-entrypoint-initdb.d/* the first time it initializes an empty data directory). Creates each
+    -- service's own database; Flyway then creates each schema on that service's first start. Kept identical to
+    -- infra/postgres-init/01-create-service-databases.sql (the docker-compose local-dev equivalent) on purpose.
+    SELECT 'CREATE DATABASE "vibecraft-account-db"'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'vibecraft-account-db')
+    \gexec
+
+    SELECT 'CREATE DATABASE "vibecraft-workspace-db"'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'vibecraft-workspace-db')
+    \gexec
+
+    SELECT 'CREATE DATABASE "vibecraft-intelligence-db"'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'vibecraft-intelligence-db')
+    \gexec
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: vibecraft
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999 # the `postgres` user baked into the official image
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          # Same image services.docker-compose.yml already runs locally - proven, pinned, not `latest`.
+          image: pgvector/pgvector:0.8.1-pg18-trixie
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: POSTGRES_DB
+              value: postgres
+            - name: POSTGRES_USER
+              value: vibecraft
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              memory: "512Mi"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "vibecraft"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "vibecraft"]
+            periodSeconds: 10
+            initialDelaySeconds: 15
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            # docs/deployment/'s architecture table: 10 GB for Postgres on the Oracle machine.
+            storage: 10Gi
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: vibecraft
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP

@@ -1,0 +1,57 @@
+# Preview-routing cache for the live-preview pipeline - pure reconstructible state, so
+# no volume is mounted and no backup is needed. Identical to the repo-root `k8s/infra.yml`'s Redis (same namespace,
+# same image, same non-root user), duplicated here rather than shared so `deploy/k8s/` doesn't depend on files
+# outside its own tree.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-server
+  namespace: vibecraft-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: redis:7.4.11-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: vibecraft-ai
+spec:
+  selector:
+    app: redis
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+  type: ClusterIP

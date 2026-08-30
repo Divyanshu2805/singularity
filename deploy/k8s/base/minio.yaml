@@ -1,0 +1,187 @@
+# A real in-cluster MinIO, adapted from the repo-root `k8s/minio.yml` (which stays as-is for local dev against the
+# vibecraft-ai-only kind cluster). Moved into the `vibecraft` namespace, alongside the trusted services that own
+# project data, per docs/deployment/'s architecture table - `k8s/minio.yml`'s own comment called this move
+# "a non-event, not a migration" once there's a real Phase 3 buildout to do it in. Single replica, no HA - same
+# tradeoff as the rest of this single-machine setup.
+#
+# Create the root credentials once per cluster before applying this file:
+#   kubectl create secret generic minio-root-credentials -n vibecraft \
+#     --from-literal=username=minioadmin \
+#     --from-literal=password='<a long random value - this is MINIO_ROOT_PASSWORD in the deployment plan>'
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: vibecraft
+spec:
+  serviceName: minio-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+          args: ["server", "/data", "--console-address", ":9001"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              # CLAUDE.md's gotchas table: MinIO's admin/IAM code path (mlockall()-ing new user credentials)
+              # silently hangs forever, on both server and client, without this - see k8s/minio.yml for the full
+              # live-verified account.
+              add: ["IPC_LOCK"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: username
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: password
+          ports:
+            - name: api
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              memory: "512Mi"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-service
+  namespace: vibecraft
+spec:
+  # No console port exposed - :9001 stays reachable only via kubectl port-forward.
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+  type: ClusterIP
+
+---
+
+# Same read-only `previewreader` bootstrap as `k8s/minio.yml`, run here since it needs `minio-root-credentials`,
+# which lives in this namespace next to the MinIO server it configures. Its target user is consumed from
+# `vibecraft-ai` (the runner pods' syncer container, in base/runner-pods.yaml) - Kubernetes Secrets don't cross
+# namespaces, so `minio-runner-credentials` needs creating in BOTH namespaces with the same password:
+#   kubectl create secret generic minio-runner-credentials -n vibecraft \
+#     --from-literal=password='<MINIO_RUNNER_SECRET from the deployment plan>' \
+#     --from-literal=host-uri='http://previewreader:<the same value>@minio-service.vibecraft.svc.cluster.local:9000'
+#   kubectl create secret generic minio-runner-credentials -n vibecraft-ai \
+#     --from-literal=password='<the same MINIO_RUNNER_SECRET>' \
+#     --from-literal=host-uri='http://previewreader:<the same value>@minio-service.vibecraft.svc.cluster.local:9000'
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-bootstrap-preview-reader
+  namespace: vibecraft
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mc
+          image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["IPC_LOCK"]
+          env:
+            - name: HOME
+              value: /tmp
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: username
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: password
+            - name: PREVIEW_READER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-runner-credentials
+                  key: password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              mc alias set myminio http://minio-service:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+              cat > /tmp/preview-readonly-policy.json <<'POLICY'
+              {
+                "Version": "2012-10-17",
+                "Statement": [
+                  { "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": ["arn:aws:s3:::projects"] },
+                  { "Effect": "Allow", "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::projects/*"] }
+                ]
+              }
+              POLICY
+              mc admin policy create myminio preview-readonly /tmp/preview-readonly-policy.json
+              mc admin user add myminio previewreader "$PREVIEW_READER_PASSWORD"
+              mc admin policy attach myminio preview-readonly --user previewreader
+              echo "previewreader is ready, read-only on the projects bucket"
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "512Mi"

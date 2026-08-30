@@ -1,0 +1,79 @@
+# Eureka - the registry the other four Java services resolve each other through. Deployed first (deploy order in
+# docs/deployment/phase-3-kubernetes.md Phase 3), reachable in-cluster as `discovery-service:8761`.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discovery-service
+  namespace: vibecraft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: discovery-service
+  template:
+    metadata:
+      labels:
+        app: discovery-service
+    spec:
+      # Kubernetes auto-injects a `<SERVICE-NAME>_PORT` env var (Docker-links-style) for every Service in the
+      # namespace, e.g. `DISCOVERY_SERVICE_PORT=tcp://10.x.x.x:8761` - which collides byte-for-byte with the
+      # `${DISCOVERY_SERVICE_PORT:8761}` override placeholder application.yaml already reserves for the exact same
+      # name. Live-verified: without this, the pod's real OS env var (a URI) wins over the property's own default,
+      # and Spring fails to boot ("Failed to convert to type java.lang.Integer"). Every service Deployment in this
+      # directory needs it - not just this one - since every service's own name collides with its own override var.
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: discovery-service
+          # Overlay-specific: kind uses a locally built/loaded :local tag, oracle uses ghcr.io/.../<sha> - set via
+          # each overlay's kustomization.yaml `images:` transformer, not hardcoded here.
+          image: vibecraft-discovery:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8761
+            - containerPort: 9404
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "192Mi"
+            limits:
+              cpu: "500m"
+              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              memory: "384Mi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9404
+            periodSeconds: 5
+            initialDelaySeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9404
+            periodSeconds: 10
+            initialDelaySeconds: 20
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: discovery-service
+  namespace: vibecraft
+spec:
+  selector:
+    app: discovery-service
+  ports:
+    - name: eureka
+      port: 8761
+      targetPort: 8761
+  type: ClusterIP

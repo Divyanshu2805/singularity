@@ -1,0 +1,46 @@
+# workspace-service's own identity - it's the only one of the five Java services that talks to the Kubernetes API
+# (PreviewRunnerPool, fabric8 client). Lives in `vibecraft`; the pods it manages (base/runner-pods.yaml) live in
+# `vibecraft-ai`, so the Role/RoleBinding below are cross-namespace - a RoleBinding's `subjects` can reference a
+# ServiceAccount from a different namespace than the RoleBinding itself, as long as the Role it binds to lives in
+# the SAME namespace as the RoleBinding (here, vibecraft-ai, where the governed pods actually are).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workspace-service
+  namespace: vibecraft
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workspace-service-runner-manager
+  namespace: vibecraft-ai
+rules:
+  # Matches exactly what PreviewRunnerPool.java calls: list/get to find and check pods, patch to claim one
+  # (the resourceVersion-guarded merge patch), delete to release one. No create - runner pods come from
+  # runner-pods.yaml's Deployment, workspace-service only ever claims/releases existing ones.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "patch", "delete"]
+  # The exec/file-upload subresource PreviewRunnerPool.exec/uploadFile use - a fabric8 exec or tar-upload is a
+  # POST to this subresource, which RBAC models as "create".
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workspace-service-runner-manager
+  namespace: vibecraft-ai
+subjects:
+  - kind: ServiceAccount
+    name: workspace-service
+    namespace: vibecraft
+roleRef:
+  kind: Role
+  name: workspace-service-runner-manager
+  apiGroup: rbac.authorization.k8s.io

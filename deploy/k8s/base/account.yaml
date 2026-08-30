@@ -1,0 +1,142 @@
+# Users, Plans, Subscriptions, Stripe billing, the auth audit trail - its own database, its own full Firebase/
+# session/CSRF chain. Owns /api/auth/**, /api/plans, /api/me/**, /api/payments/**, /webhooks/payment.
+#
+# Secrets needed once per cluster, in this namespace (db-credentials and the firebase-service-account Secret are
+# shared with workspace-service/intelligence-service - create each only once):
+#   kubectl create secret generic db-credentials -n vibecraft --from-literal=password='<DB_PASSWORD>'
+#   kubectl create secret generic firebase-service-account -n vibecraft --from-file=sa.json='<path to the
+#     Firebase Admin service account JSON - FIREBASE_SERVICE_ACCOUNT_JSON in the deployment plan>'
+#   kubectl create secret generic internal-service-secret -n vibecraft \
+#     --from-literal=shared-secret='<INTERNAL_SERVICE_SHARED_SECRET>'
+#   kubectl create secret generic stripe-credentials -n vibecraft \
+#     --from-literal=secret='<STRIPE_SECRET>' --from-literal=webhook-secret='<STRIPE_WEBHOOK_SECRET>' \
+#     --from-literal=price-pro='<STRIPE_PRICE_PRO>' --from-literal=price-business='<STRIPE_PRICE_BUSINESS>'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-service
+  namespace: vibecraft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: account-service
+  template:
+    metadata:
+      labels:
+        app: account-service
+    spec:
+      # Avoids Kubernetes' auto-injected `ACCOUNT_SERVICE_PORT` colliding with this service's own override
+      # placeholder of the same name - see discovery.yaml's comment for the full live-verified account.
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: account-service
+          image: vibecraft-account:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres:5432/vibecraft-account-db"
+            - name: DB_USERNAME
+              value: vibecraft
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+            - name: SPRING_JPA_SHOW_SQL
+              value: "false"
+            - name: EUREKA_SERVER_URL
+              value: "http://discovery-service:8761/eureka/"
+            - name: FIREBASE_PROJECT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: firebase-project-id
+            - name: FIREBASE_CREDENTIALS_PATH
+              value: /var/secrets/firebase/sa.json
+            - name: CLIENT_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: client-url
+            - name: INTERNAL_SERVICE_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: internal-service-secret
+                  key: shared-secret
+            - name: STRIPE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-credentials
+                  key: secret
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-credentials
+                  key: webhook-secret
+            - name: STRIPE_PRICE_PRO
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-credentials
+                  key: price-pro
+            - name: STRIPE_PRICE_BUSINESS
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-credentials
+                  key: price-business
+          volumeMounts:
+            - name: firebase-credentials
+              mountPath: /var/secrets/firebase
+              readOnly: true
+          ports:
+            - containerPort: 8081
+            - containerPort: 9404
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "320Mi"
+            limits:
+              cpu: "750m"
+              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9404
+            periodSeconds: 5
+            initialDelaySeconds: 20
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9404
+            periodSeconds: 10
+            initialDelaySeconds: 40
+      volumes:
+        - name: firebase-credentials
+          secret:
+            secretName: firebase-service-account
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-service
+  namespace: vibecraft
+spec:
+  selector:
+    app: account-service
+  ports:
+    - port: 8081
+      targetPort: 8081
+  type: ClusterIP

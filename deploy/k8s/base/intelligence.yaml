@@ -1,0 +1,122 @@
+# ChatSession/ChatMessage/ChatEvent/CodeNote/UsageEvent/UsageLog, the AI-generation/code-insight/idea/usage
+# pipeline - its own database, its own full security chain. Owns /api/chat/**, /api/ideas/**, /api/usage/**,
+# /api/projects/{id}/code/**.
+#
+# Extra secret beyond the ones shared with account-service/workspace-service (db-credentials/
+# firebase-service-account/internal-service-secret):
+#   kubectl create secret generic openrouter-api-key -n vibecraft --from-literal=api-key='<OPENROUTER_API_KEY -
+#     a separate key with a hard credit limit, per docs/deployment/phase-0-accounts-setup.md Phase 0, never the dev key>'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: intelligence-service
+  namespace: vibecraft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: intelligence-service
+  template:
+    metadata:
+      labels:
+        app: intelligence-service
+    spec:
+      # Avoids Kubernetes' auto-injected `INTELLIGENCE_SERVICE_PORT` colliding with this service's own override
+      # placeholder of the same name - see discovery.yaml's comment for the full live-verified account.
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: intelligence-service
+          image: vibecraft-intelligence:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres:5432/vibecraft-intelligence-db"
+            - name: DB_USERNAME
+              value: vibecraft
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+            - name: SPRING_JPA_SHOW_SQL
+              value: "false"
+            - name: EUREKA_SERVER_URL
+              value: "http://discovery-service:8761/eureka/"
+            - name: FIREBASE_PROJECT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: firebase-project-id
+            - name: FIREBASE_CREDENTIALS_PATH
+              value: /var/secrets/firebase/sa.json
+            - name: INTERNAL_SERVICE_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: internal-service-secret
+                  key: shared-secret
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openrouter-api-key
+                  key: api-key
+            - name: SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ai-model
+          volumeMounts:
+            - name: firebase-credentials
+              mountPath: /var/secrets/firebase
+              readOnly: true
+          ports:
+            - containerPort: 8083
+            - containerPort: 9404
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "384Mi"
+            limits:
+              cpu: "1"
+              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              memory: "640Mi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9404
+            periodSeconds: 5
+            initialDelaySeconds: 20
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9404
+            periodSeconds: 10
+            initialDelaySeconds: 40
+      volumes:
+        - name: firebase-credentials
+          secret:
+            secretName: firebase-service-account
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: intelligence-service
+  namespace: vibecraft
+spec:
+  selector:
+    app: intelligence-service
+  ports:
+    - port: 8083
+      targetPort: 8083
+  type: ClusterIP

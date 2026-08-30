@@ -1,0 +1,30 @@
+# Non-secret, environment-specific settings shared across the five Java services - docs/deployment/phase-0-accounts-setup.md Phase 0
+# classifies FIREBASE_PROJECT_ID and APP_DOMAIN/CLIENT_URL as GitHub "variable" entries, not secrets.
+#
+# Values here are the kind-rehearsal ones (the more frequently-run case) - the oracle overlay patches only what
+# genuinely differs (client-url, preview-public-*). firebase-project-id is the same real project in every
+# environment (matches docs/local-development/'s local dev too), so it's never patched at all.
+#
+# IMPORTANT: every key here is read via configMapKeyRef, which always injects the key's actual value - there is no
+# "unset, fall through to application.yaml's own default" here the way a bare env var with no ConfigMap source
+# would have. A key removed from an overlay's patch keeps whatever base sets, it does NOT go back to the Java
+# default - keep every value here a real, working one, never a placeholder like the old CHANGEME this file used to
+# ship (a Deployment would have received the literal string "CHANGEME" as its actual config).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: vibecraft
+data:
+  firebase-project-id: vibecraftai-5ac98
+  # The kind overlay's port-forward convention (deploy/k8s/overlays/kind/README.md) - a browser on the developer's
+  # own laptop still reaches everything through kubectl port-forward even though the whole app now runs in-cluster.
+  client-url: http://localhost:8080
+  # Matches application.yaml's own literal defaults (http/localhost/8090) exactly - not a coincidence, this is what
+  # lets the kind overlay skip patching these three at all.
+  preview-public-scheme: http
+  preview-public-domain: localhost
+  preview-public-port: "8090"
+  # Optional (docs/deployment/phase-1-repo-readiness.md Phase 1's leftover table): a cheaper model than the code default
+  # (x-ai/grok-4.5) for the demo. Matches the code default here - an overlay only needs to change this one key.
+  ai-model: x-ai/grok-4.5

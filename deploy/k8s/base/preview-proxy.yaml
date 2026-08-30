@@ -1,0 +1,86 @@
+# The wildcard reverse proxy for live previews, adapted from the repo-root `k8s/vibecraft-proxy.yml` (which stays
+# as-is for local dev against the vibecraft-ai-only kind cluster).
+#
+# Secret needed once per cluster, in vibecraft-ai (same value as workspace.yaml's copy in vibecraft):
+#   kubectl create secret generic preview-access-token -n vibecraft-ai --from-literal=secret='<PREVIEW_ACCESS_TOKEN_SECRET>'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vibecraft-proxy
+  namespace: vibecraft-ai
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vibecraft-proxy
+  namespace: vibecraft-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vibecraft-proxy
+  template:
+    metadata:
+      labels:
+        app: vibecraft-proxy
+    spec:
+      serviceAccountName: vibecraft-proxy
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # the `node` user baked into the node:20.20.2-alpine base image (proxy/Dockerfile)
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: proxy
+          image: vibecraft-preview-proxy:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              memory: "256Mi"
+          env:
+            - name: REDIS_URL
+              value: "redis://redis-service:6379"
+            - name: PREVIEW_ACCESS_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: preview-access-token
+                  key: secret
+            # A non-root process can't bind port 80 - listen on an unprivileged port instead and let the Service
+            # below remap its own external port 80 to this one.
+            - name: PORT
+              value: "8080"
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 5
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: vibecraft-proxy-svc
+  namespace: vibecraft-ai
+spec:
+  # ClusterIP - the Cloudflare tunnel (oracle overlay) or kubectl port-forward (kind overlay) is the only entry
+  # point; a LoadBalancer would provision a public, unauthenticated IP the tunnel is meant to be the only front for.
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+  selector:
+    app: vibecraft-proxy

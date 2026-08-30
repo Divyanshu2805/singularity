@@ -1,0 +1,60 @@
+# The static SPA - Firebase config and the preview-frame CSP origins are already baked into the image at build
+# time (frontend/Dockerfile's build args), so this Deployment carries no environment-specific config at all.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: vibecraft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101 # nginx-unprivileged's baked-in `nginx` user (frontend/Dockerfile)
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          image: vibecraft-frontend:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              memory: "256Mi"
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 5
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: vibecraft
+spec:
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP

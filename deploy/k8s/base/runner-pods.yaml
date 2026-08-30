@@ -1,0 +1,170 @@
+# The warm pool of preview runners, adapted from the repo-root `k8s/runner-pods.yml` (which stays as-is for local
+# dev against the vibecraft-ai-only kind cluster). Only real change from that file: MinIO now lives in the
+# `vibecraft` namespace (base/minio.yaml), not here, so the egress NetworkPolicy rule below is cross-namespace -
+# see its own comment.
+#
+# Secret needed once per cluster, in this namespace:
+#   kubectl create secret generic minio-runner-credentials -n vibecraft-ai \
+#     --from-literal=password='<MINIO_RUNNER_SECRET>' \
+#     --from-literal=host-uri='http://previewreader:<the same value>@minio-service.vibecraft.svc.cluster.local:9000'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: preview-runner
+  namespace: vibecraft-ai
+automountServiceAccountToken: false
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner-pool
+  namespace: vibecraft-ai
+spec:
+  replicas: 1 # docs/deployment/'s preview-capacity table: down from 2, saves memory, first start still instant
+  selector:
+    matchLabels:
+      app: runner
+      status: idle
+  template:
+    metadata:
+      labels:
+        app: runner
+        status: idle
+    spec:
+      terminationGracePeriodSeconds: 0
+      enableServiceLinks: false
+      serviceAccountName: preview-runner
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: workspace
+          emptyDir:
+            sizeLimit: 2Gi
+        - name: npm-cache
+          emptyDir:
+            sizeLimit: 512Mi
+      containers:
+        - name: runner
+          image: node:20.20.2-alpine
+          workingDir: /app
+          command: ["/bin/sh", "-c", "sleep infinity"]
+          env:
+            - name: HOME
+              value: /home/node
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: workspace
+              mountPath: /app
+            - name: npm-cache
+              mountPath: /home/node/.npm
+          ports:
+            - containerPort: 5173
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+              ephemeral-storage: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+              ephemeral-storage: "2Gi"
+
+        - name: syncer
+          image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+          command: ["/bin/sh", "-c", "sleep infinity"]
+          env:
+            - name: HOME
+              value: /tmp
+            - name: MC_HOST_myminio
+              valueFrom:
+                secretKeyRef:
+                  name: minio-runner-credentials
+                  key: host-uri
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: workspace
+              mountPath: /app
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "32Mi"
+              ephemeral-storage: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "64Mi"
+              ephemeral-storage: "128Mi"
+
+---
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: runner-pool-policy
+  namespace: vibecraft-ai
+spec:
+  podSelector:
+    matchLabels:
+      app: runner
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: vibecraft-proxy
+      ports:
+        - protocol: TCP
+          port: 5173
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # MinIO now lives in `vibecraft`, not this namespace (base/minio.yaml) - a plain podSelector peer only ever
+    # matches pods in the NetworkPolicy's OWN namespace, so this needs an explicit namespaceSelector alongside it
+    # (combined in one peer entry - an AND, not two separate allowed peers). Kubernetes labels every namespace
+    # with the built-in kubernetes.io/metadata.name key, so no custom label on the vibecraft namespace is needed.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vibecraft
+          podSelector:
+            matchLabels:
+              app: minio
+      ports:
+        - protocol: TCP
+          port: 9000
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.0.0/16
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443

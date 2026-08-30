@@ -1,0 +1,106 @@
+# Two namespaces (docs/deployment/'s architecture table): `vibecraft` holds every trusted workload -
+# Postgres, MinIO, the five Spring Boot services, the frontend, and (oracle overlay only) cloudflared. `vibecraft-ai`
+# holds the untrusted live-preview pipeline - Redis, the preview-proxy, and the runner pod pool that executes
+# arbitrary, AI-generated project code (see CLAUDE.md's guardrail on that boundary). Keeping them apart means a
+# NetworkPolicy in `vibecraft-ai` never has to reason about the trusted services sitting in the same namespace as
+# the pods it's trying to contain.
+#
+# This is a DIFFERENT deployment shape from `k8s/*.yml` at the repo root, which stays as-is for day-to-day local
+# development (backend runs outside the cluster via `mvnw`; only the preview pipeline - Redis, proxy, runner pool -
+# lives in a `vibecraft-ai`-only kind cluster). `deploy/k8s/` is the full-stack topology this phase introduces:
+# every service containerized and running in-cluster, rehearsed on kind before it ever touches a real server. Don't
+# conflate the two - `k8s/` keeps serving docs/local-development/'s existing workflow untouched.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vibecraft
+
+---
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vibecraft-ai
+
+---
+
+# Defense in depth, same rationale as the existing `k8s/infra.yml` LimitRange/ResourceQuota for `vibecraft-ai`
+# (CODE_REVIEW.md SEC-10): stops a manifest that forgets its own resources from shipping unbounded, and caps each
+# namespace's total footprint regardless of replica count. Sized from docs/deployment/phase-3-kubernetes.md Phase 3's memory
+# table - the trusted namespace runs one copy of each service plus the maintenance overhead of a rolling update.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: vibecraft-limits
+  namespace: vibecraft
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+        ephemeral-storage: "512Mi"
+      defaultRequest:
+        cpu: "50m"
+        memory: "128Mi"
+        ephemeral-storage: "128Mi"
+      max:
+        cpu: "2"
+        memory: "2Gi"
+        ephemeral-storage: "4Gi"
+
+---
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: vibecraft-quota
+  namespace: vibecraft
+spec:
+  hard:
+    pods: "20"
+    requests.cpu: "4"
+    requests.memory: "6Gi"
+    limits.cpu: "8"
+    limits.memory: "8Gi"
+
+---
+
+# vibecraft-ai's own LimitRange/ResourceQuota already exist in the repo-root `k8s/infra.yml` for the local-dev kind
+# cluster; this file defines the equivalent pair for THIS topology's `vibecraft-ai` (same numbers - the untrusted
+# preview pipeline's footprint doesn't change based on how the trusted side is deployed).
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: vibecraft-ai-limits
+  namespace: vibecraft-ai
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+        ephemeral-storage: "512Mi"
+      defaultRequest:
+        cpu: "50m"
+        memory: "64Mi"
+        ephemeral-storage: "64Mi"
+      max:
+        cpu: "2"
+        memory: "2Gi"
+        ephemeral-storage: "4Gi"
+
+---
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: vibecraft-ai-quota
+  namespace: vibecraft-ai
+spec:
+  hard:
+    pods: "20"
+    requests.cpu: "4"
+    requests.memory: "4Gi"
+    limits.cpu: "12"
+    limits.memory: "12Gi"

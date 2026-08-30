@@ -1,0 +1,157 @@
+# Project/ProjectMember/ProjectFile/Preview/PreviewSession, the K8s/MinIO/Redis live-preview pipeline - its own
+# database, its own full security chain, calls account-service via Feign. Owns /api/projects/** (except
+# .../code/**) and /api/previews. The only one of the five that talks to the Kubernetes API directly (fabric8
+# client, in-cluster config auto-detected from the mounted ServiceAccount token - KubernetesConfig.java) - runs as
+# the `workspace-service` ServiceAccount (base/rbac.yaml), which is why, alone among the five, it does NOT set
+# automountServiceAccountToken: false.
+#
+# Extra secret needed beyond account-service's (db-credentials/firebase-service-account/internal-service-secret are
+# shared - create each only once):
+#   kubectl create secret generic preview-access-token -n vibecraft \
+#     --from-literal=secret='<PREVIEW_ACCESS_TOKEN_SECRET - byte-for-byte the same value used in vibecraft-ai for
+#     the proxy, and by k8s/vibecraft-proxy.yml's local-dev equivalent>'
+# minio-root-credentials is created once, in base/minio.yaml's comment - this service reads the SAME secret (it
+# needs full read/write on every bucket, unlike the runner pods' scoped previewreader credential).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workspace-service
+  namespace: vibecraft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: workspace-service
+  template:
+    metadata:
+      labels:
+        app: workspace-service
+    spec:
+      serviceAccountName: workspace-service
+      # Avoids Kubernetes' auto-injected `WORKSPACE_SERVICE_PORT` colliding with this service's own override
+      # placeholder of the same name - see discovery.yaml's comment for the full live-verified account.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: workspace-service
+          image: vibecraft-workspace:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres:5432/vibecraft-workspace-db"
+            - name: DB_USERNAME
+              value: vibecraft
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+            - name: SPRING_JPA_SHOW_SQL
+              value: "false"
+            - name: SPRING_DATA_REDIS_HOST
+              value: "redis-service.vibecraft-ai"
+            - name: MINIO_URL
+              value: "http://minio-service:9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: username
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: password
+            - name: EUREKA_SERVER_URL
+              value: "http://discovery-service:8761/eureka/"
+            - name: FIREBASE_PROJECT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: firebase-project-id
+            - name: FIREBASE_CREDENTIALS_PATH
+              value: /var/secrets/firebase/sa.json
+            - name: CLIENT_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: client-url
+            - name: PREVIEW_PUBLIC_SCHEME
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: preview-public-scheme
+            - name: PREVIEW_PUBLIC_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: preview-public-domain
+            - name: PREVIEW_PUBLIC_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: preview-public-port
+            - name: INTERNAL_SERVICE_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: internal-service-secret
+                  key: shared-secret
+            - name: PREVIEW_ACCESS_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: preview-access-token
+                  key: secret
+          volumeMounts:
+            - name: firebase-credentials
+              mountPath: /var/secrets/firebase
+              readOnly: true
+          ports:
+            - containerPort: 8082
+            - containerPort: 9404
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "384Mi"
+            limits:
+              cpu: "1"
+              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              memory: "640Mi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9404
+            periodSeconds: 5
+            initialDelaySeconds: 20
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9404
+            periodSeconds: 10
+            initialDelaySeconds: 40
+      volumes:
+        - name: firebase-credentials
+          secret:
+            secretName: firebase-service-account
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: workspace-service
+  namespace: vibecraft
+spec:
+  selector:
+    app: workspace-service
+  ports:
+    - port: 8082
+      targetPort: 8082
+  type: ClusterIP
