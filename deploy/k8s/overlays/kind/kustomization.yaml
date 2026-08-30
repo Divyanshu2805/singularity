@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - frontend-nginx.yaml
+
+# No `images:` transformer needed - base already references the exact `vibecraft-<name>:local` tags this
+# overlay's README has you build and `kind load docker-image`. A non-`latest` tag already defaults to
+# imagePullPolicy: IfNotPresent, so kind never tries (and fails) to pull these from a registry.
+#
+# No app-config patch needed either - base/app-config.yaml's own defaults already match this overlay (see its
+# comment). Only the oracle overlay patches app-config.
+
+patches:
+  - path: frontend-patch.yaml
+    target:
+      kind: Deployment
+      name: frontend
