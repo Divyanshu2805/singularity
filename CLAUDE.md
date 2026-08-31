@@ -86,7 +86,18 @@ infra/postgres-init/        creates each service's database on a brand-new Postg
   src/main/resources/application.yaml   configuration — every secret is an env-var placeholder, no fallback
 frontend/src/
   pages/, components/, hooks/, lib/   see docs/architecture/'s module map for the boundary between these
-k8s/                        Kubernetes manifests for the live-preview runner pool + proxy
+docker/                     the shared Dockerfile for the 5 Java services (MODULE build-arg) and the preview-runner
+                             image; frontend/Dockerfile and proxy/Dockerfile live with their own service instead
+k8s/                        Kubernetes manifests for LOCAL DEV ONLY - the live-preview runner pool + proxy,
+                             applied against a kind cluster while the backend runs outside it via `mvnw`
+                             (docs/local-development/). Not the deployment topology - see deploy/ for that.
+deploy/k8s/                 The FULL-STACK Kubernetes topology (docs/deployment/phase-3-kubernetes.md Phase 3+) - every service
+                             containerized and running in-cluster: base/ (namespaces vibecraft + vibecraft-ai,
+                             Postgres, MinIO, all 5 Java services, frontend, the preview pipeline, RBAC) plus
+                             overlays/kind/ (local full-stack rehearsal) and overlays/oracle/ (the real domain,
+                             cloudflared, ghcr.io images). Kustomize, not plain manifests - `kubectl apply -k
+                             deploy/k8s/overlays/<kind|oracle>`. Don't conflate this with k8s/ above; they solve
+                             different problems and neither replaces the other.
 proxy/                      standalone Node reverse proxy (routes preview hostnames via Redis)
 docs/                       architecture, data model, API reference, local dev
 TODO.md                     local working reference of known gaps — gitignored, not pushed

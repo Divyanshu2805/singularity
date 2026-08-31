@@ -13,16 +13,16 @@ The code needs about a day of fixes before it can run anywhere but a developer l
 - [x] **Stream keep-alive:** added `SseHeartbeat` (`intelligence-service`), a shared utility both `ChatController` and `CodeInsightController` now wrap every SSE stream in — a bare `: keep-alive` comment line every 20s of silence, via `Flux#publish` so the underlying source (a live, billable AI generation) is subscribed to exactly once, not twice just to watch for its own completion. Proven with `StepVerifier.withVirtualTime`: heartbeats appear during an idle stretch, stop the instant the source completes, and the single-subscription property holds.
 - [x] **Health checks:** added Spring Boot Actuator's `/actuator/health` to all 5 services, on a separate `management.server.port` (default 9404) rather than a Gateway route — verified live that it's reachable with no auth on that port and unreachable on the service's own port, with only `health` exposed (no env/beans). See `docs/local-development/health-checks.md`'s "Health Checks" section.
 - [x] **Preview boot timeout:** raised `preview.boot-timeout` from 2 to 4 minutes in `workspace-service/src/main/resources/application.yaml`, because installs are slower on 2 cores. No test hardcodes the old default — every existing test builds `PreviewProperties` with its own literal `Duration`, independent of this file.
-- [ ] **Production settings, as environment variables only (no code change):**
+- [x] **Production settings, as environment variables only (no code change):** landed as Kubernetes env vars/`app-config` ConfigMap entries in `deploy/k8s/base/*.yaml` (Phase 3) instead of a standalone code change, since these values only meant anything once the manifests holding them existed. Every one of the nine below is wired for real and live-verified booting on kind.
 
 | Setting | Value on the server |
 | --- | --- |
 | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://postgres:5432/vibecraft-<service>-db` |
 | `SPRING_DATA_REDIS_HOST` | `redis-service.vibecraft-ai` |
-| `MINIO_URL` | `http://minio:9000` |
-| `CLIENT_URL` | `https://app.divyanshuagrahari.dev` |
+| `MINIO_URL` | `http://minio-service:9000` (not `minio` - that's the Service's actual name, `deploy/k8s/base/minio.yaml`) |
+| `CLIENT_URL` | `https://app.divyanshuagrahari.dev` (oracle overlay), `http://localhost:8080` (kind overlay) |
 | `EUREKA_SERVER_URL` | `http://discovery-service:8761/eureka/` |
-| `PREVIEW_PUBLIC_SCHEME`, `PREVIEW_PUBLIC_DOMAIN`, `PREVIEW_PUBLIC_PORT` | `https`, `divyanshuagrahari.dev`, `443` |
+| `PREVIEW_PUBLIC_SCHEME`, `PREVIEW_PUBLIC_DOMAIN`, `PREVIEW_PUBLIC_PORT` | `https`, `divyanshuagrahari.dev`, `443` (oracle); `http`, `localhost`, `8090` (kind - matches `application.yaml`'s own literal defaults) |
 | `SPRING_JPA_SHOW_SQL` | `false` |
-| `FIREBASE_CREDENTIALS_PATH` | Mounted secret file, e.g. `/var/secrets/firebase/sa.json` |
-| `SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL` | Optional: a cheaper model than `x-ai/grok-4.5` for the demo |
+| `FIREBASE_CREDENTIALS_PATH` | `/var/secrets/firebase/sa.json`, mounted from the `firebase-service-account` Secret |
+| `SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL` | `x-ai/grok-4.5` by default (`app-config`'s `ai-model` key) - an overlay only needs to change this one key for a cheaper demo model |
