@@ -1,0 +1,96 @@
+# The identity Phase 5's CI pipeline deploys with - no cluster-admin, scoped to only the two app namespaces. Bound
+# to the built-in `admin` ClusterRole (full CRUD on namespaced resources - Deployments, Services, ConfigMaps,
+# Secrets, Jobs, StatefulSets, RBAC objects, NetworkPolicies - but no cluster-scoped power: can't create/delete a
+# namespace, can't touch another namespace, can't grant cluster-wide RBAC), not a hand-rolled Role that would drift
+# from what `kubectl apply -k` actually needs every time a new resource kind shows up in the overlay.
+#
+# Deliberately NOT part of deploy/k8s/base or either overlay's `kustomization.yaml` resources list - the deployer
+# needs to exist and be bound BEFORE the identity that uses it can apply anything, and its own RBAC needs
+# cluster-scoped objects (the ClusterRole/ClusterRoleBinding below) that the `admin` ClusterRole it holds
+# deliberately does NOT grant it permission to manage itself. Apply this once, out-of-band, with a real
+# (cluster-admin) kubeconfig - not from CI:
+#   kubectl apply -f deploy/k8s/overlays/oracle/deployer-bootstrap.yaml
+#
+# Extract its token for the `KUBE_DEPLOYER_TOKEN` GitHub secret (docs/deployment/phase-0-accounts-setup.md Phase 0's table):
+#   kubectl get secret deployer-token -n vibecraft -o jsonpath='{.data.token}' | base64 -d
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer
+  namespace: vibecraft
+
+---
+
+# A ServiceAccount gets no long-lived token Secret by default since Kubernetes 1.24+ (only short-lived, projected
+# ones) - GitHub Actions needs a static bearer token, so this creates one explicitly via the
+# kubernetes.io/service-account-token annotation trick.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: deployer-token
+  namespace: vibecraft
+  annotations:
+    kubernetes.io/service-account.name: deployer
+type: kubernetes.io/service-account-token
+
+---
+
+# Read-only, cluster-scoped, and ONLY for `namespaces` - lets `kubectl apply -k` see that `vibecraft`/`vibecraft-ai`
+# already exist (created once, by hand, as part of this same bootstrap) without erroring, without granting the
+# deployer any power to create, modify or delete a namespace, or to see anything in a namespace it isn't otherwise
+# bound to.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: deployer-namespace-reader
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: deployer-namespace-reader
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: vibecraft
+roleRef:
+  kind: ClusterRole
+  name: deployer-namespace-reader
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployer-admin
+  namespace: vibecraft
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: vibecraft
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployer-admin
+  namespace: vibecraft-ai
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: vibecraft
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io

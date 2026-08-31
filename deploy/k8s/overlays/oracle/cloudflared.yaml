@@ -18,8 +18,15 @@ metadata:
   namespace: vibecraft
 data:
   config.yaml: |
-    tunnel: vibecraft
+    # 7706e071-1bfe-4f7c-88f3-13855db9099c is the tunnel's ID, not a secret (the credentials Secret is what's
+    # actually sensitive) - matches the tunnel created out-of-band in Phase 0 and already live on the real cluster.
+    tunnel: 7706e071-1bfe-4f7c-88f3-13855db9099c
     credentials-file: /etc/cloudflared/creds/credentials.json
+    # cloudflared's metrics/health server defaults to 127.0.0.1:2000 - unreachable to a kubelet readinessProbe,
+    # which connects to the pod's real IP, not its own loopback. Binding it to all interfaces is what makes the
+    # readinessProbe below (GET /ready on :2000) actually work; found by diffing against the tunnel already
+    # proven live in Phase 0/1, which already had this right.
+    metrics: 0.0.0.0:2000
     ingress:
       # Order matters - the Gateway's own routes (api/webhooks) must be checked before the frontend catch-all.
       - hostname: app.divyanshuagrahari.dev
