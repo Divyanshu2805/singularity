@@ -292,33 +292,12 @@ jobs:
         with:
           ref: ${{ env.DEPLOY_SHA }}
 
-      - name: Derive the Oracle host for the tailnet reachability check
-        # Bare host, no scheme/port - tailscale/github-action's `ping` input wants a plain address. Derived from
-        # KUBE_API_SERVER rather than a second secret holding the same value twice. GitHub only auto-masks a log
-        # line that's an exact match for a registered secret's full value, not a substring derived from it -
-        # `::add-mask::` explicitly registers this derived value too, so it (and anything that echoes it, like the
-        # ping step below) stays redacted in this public repo's logs the same way the source secret already is.
-        id: k3s_host
-        run: |
-          HOST=$(echo "$KUBE_API_SERVER" | sed -E 's#^[a-z]+://##; s#:[0-9]+$##')
-          echo "::add-mask::$HOST"
-          echo "host=$HOST" >> "$GITHUB_OUTPUT"
-        env:
-          KUBE_API_SERVER: ${{ secrets.KUBE_API_SERVER }}
-
       - name: Join the tailnet
         uses: tailscale/github-action@v3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
-          # Tailscale's own "eventual consistency": a brand-new ephemeral node joining doesn't mean every existing
-          # peer already knows about it - `vibecraft-k3s` can keep refusing/timing out this node's connections for
-          # a short, variable window right after it joins. `ping` makes the action itself wait (up to 3 minutes,
-          # actively retrying) until that peer relationship is actually established, instead of moving on to a
-          # `kubectl` step that would otherwise hit exactly that window and time out - which is what happened
-          # before this was added (docs/deployment/phase-5-ci-cd.md Phase 5's own note on this).
-          ping: ${{ steps.k3s_host.outputs.host }}
 
       - uses: azure/setup-kubectl@v4
         with:
@@ -336,6 +315,27 @@ jobs:
           kubectl config set-credentials deployer --token="${{ secrets.KUBE_DEPLOYER_TOKEN }}"
           kubectl config set-context oracle --cluster=oracle --user=deployer --namespace=vibecraft
           kubectl config use-context oracle
+
+      - name: Wait for the Oracle API server to become reachable
+        # Tailscale's own "eventual consistency": a brand-new ephemeral node joining the tailnet doesn't mean
+        # every existing peer already knows about it - `vibecraft-k3s` can keep refusing/timing out this node's
+        # connections for a short, variable window right after it joins (live-verified: the very next step used to
+        # fail here with a plain TCP i/o timeout). Retries the cheapest possible real call - `/livez`, which every
+        # authenticated request can reach regardless of RBAC (k3s's default `system:public-info-viewer` binding) -
+        # instead of guessing a fixed sleep or depending on a specific version of tailscale/github-action's own
+        # input schema (an earlier attempt at this used its `ping` input, which the pinned `@v3` tag doesn't
+        # actually have - this direct kubectl retry doesn't depend on that action's interface at all).
+        run: |
+          for i in $(seq 1 20); do
+            if kubectl get --raw=/livez --request-timeout=10s > /dev/null 2>&1; then
+              echo "Oracle API server reachable after attempt $i."
+              exit 0
+            fi
+            echo "Attempt $i: API server not yet reachable, retrying in 5s..."
+            sleep 5
+          done
+          echo "::error::Oracle API server never became reachable over Tailscale after 20 attempts."
+          exit 1
 
       - name: Apply Kubernetes secrets from the production environment
         env:
