@@ -9,18 +9,39 @@ name: CI
 # real Postgres, and a browser-journey smoke test - both need live infrastructure this job doesn't stand up. The
 # backend suite needs neither database nor cluster (CLAUDE.md: "A bare `./mvnw test` passes"), which is exactly why
 # it's safe to run here as-is.
+#
+# docs/deployment/phase-5-ci-cd.md Phase 5: on a push to main, once every test job passes, this also builds all 8 arm64
+# images, pushes them to GHCR tagged with the commit SHA, and deploys to the Oracle cluster over Tailscale - a
+# failed smoke test rolls the affected services back automatically. A pull request only ever runs the test jobs:
+# it never sees a secret and never deploys (every build/deploy job below is gated on `github.event_name != 'pull_request'`).
 
 on:
   workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to (re)deploy. Leave blank to build and deploy the latest main."
+        required: false
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a push-to-main run mid-flight - it may be mid-deploy, and an aborted `kubectl apply`/rollout is
+  # worse than letting a superseded run finish. A pull request's tests are safe to cancel-and-replace as usual.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: divyanshu2805
+  DEPLOY_SHA: ${{ inputs.sha || github.sha }}
 
 jobs:
   backend:
     name: Backend reactor (build + test)
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
@@ -37,9 +58,26 @@ jobs:
         # is the wrong shape even locally.
         run: ./mvnw --batch-mode --no-transfer-progress clean package
 
+      - name: Upload the reactor's jars for the image-build job
+        # docker/java-service.Dockerfile packages a jar it did not build itself (docs/deployment/phase-2-container-images.md Phase 2) -
+        # this is what lets the image job (a separate, arm64 runner) use the exact jar this job just tested, not a
+        # fresh rebuild that could theoretically differ.
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-jars
+          path: |
+            discovery-service/target/discovery-service-*.jar
+            gateway-service/target/gateway-service-*.jar
+            account-service/target/account-service-*.jar
+            workspace-service/target/workspace-service-*.jar
+            intelligence-service/target/intelligence-service-*.jar
+          retention-days: 1
+
   frontend:
     name: Frontend (typecheck + lint + build + test)
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
     defaults:
       run:
         working-directory: frontend
@@ -67,3 +105,273 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+  proxy:
+    name: Preview proxy (test)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
+    defaults:
+      run:
+        working-directory: proxy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: proxy/package-lock.json
+
+      - name: Install dependencies (from the committed lockfile)
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+  build-java-images:
+    name: Build image (${{ matrix.module }})
+    needs: [backend]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        include:
+          - module: discovery-service
+            image: discovery
+          - module: gateway-service
+            image: gateway
+          - module: account-service
+            image: account
+          - module: workspace-service
+            image: workspace
+          - module: intelligence-service
+            image: intelligence
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: service-jars
+          path: .
+          # Every module's jar lands together in the download - upload-artifact flattens the source directory
+          # structure by default, so this brings each one back under its own <module>/target/ the Dockerfile expects.
+          merge-multiple: false
+
+      - name: Restore jar paths after artifact download
+        # actions/upload-artifact@v4 preserves the relative path structure of the glob it was given, so this is
+        # already correct - this step exists only to fail loudly (not silently ship an empty image) if that ever
+        # stops being true.
+        run: test -f "${{ matrix.module }}/target/${{ matrix.module }}-"*.jar
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/java-service.Dockerfile
+          build-args: MODULE=${{ matrix.module }}
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/vibecraft-${{ matrix.image }}:${{ env.DEPLOY_SHA }}
+
+  build-frontend-image:
+    name: Build image (frontend)
+    needs: [frontend]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive the preview root domain
+        # vars.APP_DOMAIN is `app.divyanshuagrahari.dev`; previews live one level up, on the bare root domain
+        # (cloudflared.yaml's `*.divyanshuagrahari.dev` rule) - stripping the fixed `app.` prefix gets there
+        # without a second GitHub variable that could drift out of sync with the first.
+        id: domains
+        run: echo "preview_root=${APP_DOMAIN#app.}" >> "$GITHUB_OUTPUT"
+        env:
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/vibecraft-frontend:${{ env.DEPLOY_SHA }}
+          # docs/deployment/phase-0-accounts-setup.md Phase 0's table: every VITE_FIREBASE_* entry is a GitHub *variable*, not a
+          # secret - none of them are sensitive, they only identify the Firebase project to the browser. Same
+          # names as frontend/.env.example (VITE_FIREBASE_API_KEY/AUTH_DOMAIN/PROJECT_ID/APP_ID) - not derived
+          # from the separate, backend-only `FIREBASE_PROJECT_ID` variable, even though they happen to share a
+          # value today.
+          build-args: |
+            VITE_FIREBASE_API_KEY=${{ vars.VITE_FIREBASE_API_KEY }}
+            VITE_FIREBASE_AUTH_DOMAIN=${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+            VITE_FIREBASE_PROJECT_ID=${{ vars.VITE_FIREBASE_PROJECT_ID }}
+            VITE_FIREBASE_APP_ID=${{ vars.VITE_FIREBASE_APP_ID }}
+            VITE_CSP_FRAME_ORIGINS=https://*.${{ steps.domains.outputs.preview_root }}
+
+  build-proxy-image:
+    name: Build image (preview-proxy)
+    needs: [proxy]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: proxy
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/vibecraft-preview-proxy:${{ env.DEPLOY_SHA }}
+
+  build-preview-runner-image:
+    name: Build image (preview-runner)
+    # No test job of its own to depend on - this image only pre-installs the starter template's own npm packages
+    # (docker/preview-runner.Dockerfile), nothing from this repo's source is compiled into it. Not consumed by any
+    # Deployment yet (docs/deployment/phase-7-hardening.md Phase 7 wires it in) - built anyway so it's never stale when that
+    # phase needs it, and so "8 images, all tagged with the commit SHA" stays true of every push.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: workspace-service/src/main/resources/starter-templates/react-vite-tailwind-daisyui-starter
+          file: docker/preview-runner.Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/vibecraft-preview-runner:${{ env.DEPLOY_SHA }}
+
+  deploy:
+    name: Deploy to Oracle
+    needs: [build-java-images, build-frontend-image, build-proxy-image]
+    # Runs on a normal push AND on a manual redeploy (workflow_dispatch) - but only for the latter does `needs`
+    # resolve to "skipped" rather than "success", since the build jobs are gated to push-only (a redeploy reuses
+    # images already pushed for that SHA, it doesn't rebuild them). `always()` is required so this job is even
+    # considered when its needs were skipped rather than run; the explicit result checks are what stop it running
+    # after a real build failure.
+    if: |
+      always() && github.ref == 'refs/heads/main' &&
+      (needs.build-java-images.result == 'success' || needs.build-java-images.result == 'skipped') &&
+      (needs.build-frontend-image.result == 'success' || needs.build-frontend-image.result == 'skipped') &&
+      (needs.build-proxy-image.result == 'success' || needs.build-proxy-image.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      # Independent of the workflow-level group above - this is what makes "one deploy at a time, queued not
+      # cancelled" true even across two different pushes, not just within one run's own retries.
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Join the tailnet
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.0
+
+      - name: Configure kubectl for the Oracle cluster
+        # The deployer ServiceAccount's own bearer token (deploy/k8s/overlays/oracle/deployer-bootstrap.yaml),
+        # not a full admin kubeconfig - scoped to just the two app namespaces, no cluster-admin. TLS verification
+        # is skipped deliberately: the connection already only exists inside the authenticated, encrypted Tailscale
+        # tunnel (both this runner and the API server must be authorized tailnet members first), which is the real
+        # security boundary here, not the k8s API's own TLS cert - a deliberate simplification for a project this
+        # size, not an oversight.
+        run: |
+          kubectl config set-cluster oracle --server="${{ secrets.KUBE_API_SERVER }}" --insecure-skip-tls-verify=true
+          kubectl config set-credentials deployer --token="${{ secrets.KUBE_DEPLOYER_TOKEN }}"
+          kubectl config set-context oracle --cluster=oracle --user=deployer --namespace=vibecraft
+          kubectl config use-context oracle
+
+      - name: Apply Kubernetes secrets from the production environment
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+          MINIO_RUNNER_SECRET: ${{ secrets.MINIO_RUNNER_SECRET }}
+          INTERNAL_SERVICE_SHARED_SECRET: ${{ secrets.INTERNAL_SERVICE_SHARED_SECRET }}
+          PREVIEW_ACCESS_TOKEN_SECRET: ${{ secrets.PREVIEW_ACCESS_TOKEN_SECRET }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          STRIPE_SECRET: ${{ secrets.STRIPE_SECRET }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_PRO: ${{ secrets.STRIPE_PRICE_PRO }}
+          STRIPE_PRICE_BUSINESS: ${{ secrets.STRIPE_PRICE_BUSINESS }}
+          CLOUDFLARE_TUNNEL_CREDENTIALS: ${{ secrets.CLOUDFLARE_TUNNEL_CREDENTIALS }}
+        run: bash deploy/scripts/apply-secrets.sh
+
+      - name: Set the real image tags and apply the oracle overlay
+        run: |
+          sed -i "s/REPLACED_BY_CI/${{ env.DEPLOY_SHA }}/g" deploy/k8s/overlays/oracle/kustomization.yaml
+          kubectl apply -k deploy/k8s/overlays/oracle
+
+      - name: Wait for each service to become ready
+        # docs/deployment/'s deploy order: Postgres/MinIO/Redis, then discovery, then the three domain
+        # services, then the gateway, frontend and proxy. `kubectl apply -k` doesn't sequence the actual rollout
+        # itself, but checking readiness in this order still gives an early, specific failure (which service, not
+        # just "the deploy is unhealthy") instead of one final timeout with no clue which pod never came up.
+        run: |
+          set -e
+          kubectl -n vibecraft rollout status statefulset/postgres --timeout=5m
+          kubectl -n vibecraft rollout status statefulset/minio --timeout=5m
+          kubectl -n vibecraft-ai rollout status deployment/redis-server --timeout=5m
+          kubectl -n vibecraft rollout status deployment/discovery-service --timeout=5m
+          kubectl -n vibecraft rollout status deployment/account-service --timeout=5m
+          kubectl -n vibecraft rollout status deployment/workspace-service --timeout=5m
+          kubectl -n vibecraft rollout status deployment/intelligence-service --timeout=5m
+          kubectl -n vibecraft rollout status deployment/gateway-service --timeout=5m
+          kubectl -n vibecraft rollout status deployment/frontend --timeout=5m
+          kubectl -n vibecraft-ai rollout status deployment/vibecraft-proxy --timeout=5m
+
+      - name: Smoke test
+        # vars.APP_DOMAIN is `app.divyanshuagrahari.dev`; previews live one level up, on the bare root domain
+        # (cloudflared.yaml's `*.divyanshuagrahari.dev` rule) - stripping the fixed `app.` prefix gets there without
+        # a second GitHub variable that could drift out of sync with the first.
+        run: bash deploy/scripts/smoke-test.sh "$APP_DOMAIN" "${APP_DOMAIN#app.}"
+        env:
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+
+      - name: Roll back on failure
+        # Plain `failure()` - not just a failed smoke test, a rollout that never became Ready (the previous step)
+        # is just as much "a failed rollout" as docs/deployment/'s own Phase 5 spec calls for rolling back.
+        if: failure()
+        run: |
+          kubectl -n vibecraft rollout undo deployment/discovery-service
+          kubectl -n vibecraft rollout undo deployment/account-service
+          kubectl -n vibecraft rollout undo deployment/workspace-service
+          kubectl -n vibecraft rollout undo deployment/intelligence-service
+          kubectl -n vibecraft rollout undo deployment/gateway-service
+          kubectl -n vibecraft rollout undo deployment/frontend
+          kubectl -n vibecraft-ai rollout undo deployment/vibecraft-proxy
