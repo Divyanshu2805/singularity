@@ -8,7 +8,7 @@ Total effort is 34–54 hours: a first public URL after about 4–6 working days
 | 1: Repo readiness | Owner + assistant | 4–8 h | ✅ Done | The last item (production-settings env vars) landed as part of Phase 3's manifests |
 | 2: Images | Assistant | 3–5 h | ✅ Done | All 8 Dockerfiles written and build-verified locally; registry push is Phase 5's CI job |
 | 3: Kubernetes files + kind rehearsal | Assistant | 8–12 h | ✅ Done | Full stack rehearsed on a dedicated kind cluster; a real bug found and fixed live (`enableServiceLinks`) |
-| 4: Provision the VM | Owner + assistant | 3–4 h | ⏳ Not started | Needs Phase 0 finished |
+| 4: Provision the VM | Owner + assistant | 3–4 h | 🔄 6/7 items — only pasting the deployer token into the `KUBE_DEPLOYER_TOKEN` GitHub secret remains | Tunnel routing deliberately still points at `hello-test`; swaps to real Services in Phase 6 |
 | 5: CI/CD pipeline | Assistant | 4–6 h | ⏳ Not started | |
 | 6: First deploy + verification | Both | 6–10 h | ⏳ Not started | The public URL goes live here |
 | 7: Hardening + polish | Owner + assistant | 4–6 h | ⏳ Not started | Backups, monitoring, demo polish, docs |

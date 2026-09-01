@@ -1,6 +1,6 @@
 # VibeCraft Deployment Plan: Oracle Cloud Free Tier
 
-Prepared 2026-08-24. Status: Phases 0, 1, 2 and 3 complete. Updated 2026-09-04 as steps land — see the checkboxes and the Timeline table's Status column for the current state. Server-specific identifiers (IPs, tunnel/account IDs, private hostnames) are deliberately kept out of this public file; the domain and architecture below are real.
+Prepared 2026-08-24. Status: Phases 0, 1, 2 and 3 complete; Phase 4 6/7 (only the `KUBE_DEPLOYER_TOKEN` GitHub secret paste remains, an owner action). Updated 2026-09-04 as steps land — see the checkboxes and the Timeline table's Status column for the current state. Server-specific identifiers (IPs, tunnel/account IDs, private hostnames) are deliberately kept out of this public file; the domain and architecture below are real.
 
 ## Contents
 
