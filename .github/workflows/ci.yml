@@ -299,6 +299,33 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
+      - name: Diagnose Tailscale connectivity
+        # Two attempts at a fix already failed here (an "eventual consistency" retry loop still saw 20/20
+        # timeouts over 4+ minutes - too long and too consistent for that explanation alone). Rather than guess a
+        # third time, gather real evidence: does this ephemeral node get a real `tailscale0` kernel interface or
+        # only userspace networking (would explain a TCP timeout from tools that don't know to use its SOCKS/HTTP
+        # proxy); does `tailscale status` even list `vibecraft-k3s` as a peer; does a raw `tailscale ping` (ICMP
+        # over WireGuard, nothing to do with port 6443 or Kubernetes) succeed where the TCP connection doesn't.
+        run: |
+          echo "--- tailscale status ---"
+          sudo tailscale status || true
+          echo "--- tailscale ip ---"
+          sudo tailscale ip || true
+          echo "--- tailscale0 interface ---"
+          ip addr show tailscale0 2>&1 || echo "No tailscale0 interface - likely userspace networking, not kernel/TUN"
+          echo "--- netcheck ---"
+          sudo tailscale netcheck || true
+          echo "--- ping the Oracle host (bypasses TCP/6443 entirely) ---"
+          HOST=$(echo "$KUBE_API_SERVER" | sed -E 's#^[a-z]+://##; s#:[0-9]+$##')
+          # Bare host, no scheme/port - `tailscale ping` wants a plain address. GitHub only auto-masks a log line
+          # that's an exact match for a registered secret's full value, not a substring derived from it, and
+          # `tailscale ping`'s own output echoes the target address back - `::add-mask::` explicitly registers
+          # this derived value too, so it stays redacted in this public repo's logs.
+          echo "::add-mask::$HOST"
+          sudo tailscale ping --timeout=10s -c 3 "$HOST" || true
+        env:
+          KUBE_API_SERVER: ${{ secrets.KUBE_API_SERVER }}
+
       - uses: azure/setup-kubectl@v4
         with:
           version: v1.31.0
