@@ -292,12 +292,33 @@ jobs:
         with:
           ref: ${{ env.DEPLOY_SHA }}
 
+      - name: Derive the Oracle host for the tailnet reachability check
+        # Bare host, no scheme/port - tailscale/github-action's `ping` input wants a plain address. Derived from
+        # KUBE_API_SERVER rather than a second secret holding the same value twice. GitHub only auto-masks a log
+        # line that's an exact match for a registered secret's full value, not a substring derived from it -
+        # `::add-mask::` explicitly registers this derived value too, so it (and anything that echoes it, like the
+        # ping step below) stays redacted in this public repo's logs the same way the source secret already is.
+        id: k3s_host
+        run: |
+          HOST=$(echo "$KUBE_API_SERVER" | sed -E 's#^[a-z]+://##; s#:[0-9]+$##')
+          echo "::add-mask::$HOST"
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+        env:
+          KUBE_API_SERVER: ${{ secrets.KUBE_API_SERVER }}
+
       - name: Join the tailnet
         uses: tailscale/github-action@v3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
+          # Tailscale's own "eventual consistency": a brand-new ephemeral node joining doesn't mean every existing
+          # peer already knows about it - `vibecraft-k3s` can keep refusing/timing out this node's connections for
+          # a short, variable window right after it joins. `ping` makes the action itself wait (up to 3 minutes,
+          # actively retrying) until that peer relationship is actually established, instead of moving on to a
+          # `kubectl` step that would otherwise hit exactly that window and time out - which is what happened
+          # before this was added (docs/deployment/phase-5-ci-cd.md Phase 5's own note on this).
+          ping: ${{ steps.k3s_host.outputs.host }}
 
       - uses: azure/setup-kubectl@v4
         with:
