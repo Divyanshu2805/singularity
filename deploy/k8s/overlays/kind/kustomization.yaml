@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - ../../namespaces # excluded from base itself - see its own comment; kind's kubeconfig has full rights
   - frontend-nginx.yaml
 
 # No `images:` transformer needed - base already references the exact `vibecraft-<name>:local` tags this

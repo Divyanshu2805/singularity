@@ -1,8 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# namespaces.yaml is deliberately NOT listed here - see its own comment. It's a one-time cluster bootstrap
+# concern (Namespace/LimitRange/ResourceQuota), applied once with a privileged kubeconfig, the same way
+# deployer-bootstrap.yaml is - not part of the regular apply loop the (deliberately unprivileged) `deployer`
+# ServiceAccount runs on every deploy. The kind overlay adds it back directly, since kind's own kubeconfig has
+# no such restriction.
 resources:
-  - namespaces.yaml
   - app-config.yaml
   - postgres.yaml
   - minio.yaml

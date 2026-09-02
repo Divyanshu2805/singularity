@@ -10,6 +10,20 @@
 # lives in a `vibecraft-ai`-only kind cluster). `deploy/k8s/` is the full-stack topology this phase introduces:
 # every service containerized and running in-cluster, rehearsed on kind before it ever touches a real server. Don't
 # conflate the two - `k8s/` keeps serving docs/local-development/'s existing workflow untouched.
+#
+# Lives in its own directory, a sibling of base/ - not inside base/ itself, and not in base/kustomization.yaml's
+# resources - deliberately, same reasoning as overlays/oracle/deployer-bootstrap.yaml. Kubernetes' built-in `admin`
+# ClusterRole (what the `deployer` ServiceAccount is bound to - deployer-bootstrap.yaml) intentionally excludes
+# Namespace/LimitRange/ResourceQuota: a namespace "admin" shouldn't be able to raise the resource ceiling a cluster
+# admin imposed on it. Live-verified the hard way: every one of these three object types 403'd when they were part
+# of the regular CI-driven `kubectl apply -k deploy/k8s/overlays/oracle` run. Apply this file once, out-of-band,
+# with a privileged kubeconfig, before the deployer identity ever runs against a fresh cluster:
+#   kubectl apply -k deploy/k8s/namespaces
+# The kind overlay references this directory directly in its own kustomization.yaml instead, since kind's
+# kubeconfig has no such restriction and Phase 3's rehearsal already depends on one `kubectl apply -k` creating
+# everything in one shot. (It has to be a sibling directory with its own kustomization.yaml, not a bare file
+# referenced across directories - Kustomize's security model forbids a raw file path from escaping the referencing
+# kustomization's own root, but exempts references to another directory's self-contained kustomization.)
 apiVersion: v1
 kind: Namespace
 metadata:
