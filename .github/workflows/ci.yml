@@ -187,6 +187,12 @@ jobs:
     needs: [frontend]
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04-arm
+    # Every VITE_FIREBASE_*/APP_DOMAIN value this job's build-args need is a *production environment* variable
+    # (GitHub Settings -> Environments -> production -> Variables), not a repository-wide one - without this key,
+    # `vars.*` resolves to an empty string here with no error, and the frontend image silently bakes in a broken
+    # Firebase config (live-verified: the deployed site's sign-in page failed with "Firebase sign-in isn't
+    # configured" even though every variable was correctly named and set - just not visible to this job).
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
