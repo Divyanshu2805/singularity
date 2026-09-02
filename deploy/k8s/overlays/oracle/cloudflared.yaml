@@ -7,10 +7,9 @@
 #   kubectl create secret generic cloudflared-credentials -n vibecraft \
 #     --from-literal=credentials.json='<the tunnel credentials JSON - CLOUDFLARE_TUNNEL_CREDENTIALS in the plan>'
 #
-# The live tunnel currently routes to a throwaway `hello-test` nginx pod (proven end-to-end in Phase 0/1, per its
-# own memory note) - that pod is NOT part of this repo, it was a manual, out-of-band check that HTTPS-in/zero-
-# open-ports actually works end to end before any of this existed. Applying this ConfigMap in Phase 6 replaces that
-# placeholder routing with the real one below; delete `hello-test` in the same step.
+# A throwaway `hello-test` nginx pod (not part of this repo) proved HTTPS-in/zero-open-ports end to end in Phase
+# 0/1, before any of this existed - superseded and deleted once Phase 5's CI/CD pipeline applied this ConfigMap for
+# real (this file is part of the oracle overlay's regular resources, so every deploy reconciles it).
 apiVersion: v1
 kind: ConfigMap
 metadata:

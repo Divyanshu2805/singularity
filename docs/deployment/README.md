@@ -1,6 +1,6 @@
 # VibeCraft Deployment Plan: Oracle Cloud Free Tier
 
-Prepared 2026-08-24. Status: Phases 0–4 complete; Phase 5 built and locally verified, pending two owner-side checks (a new `KUBE_API_SERVER` secret, the Tailscale OAuth client's tag) before its first real run. Updated 2026-09-04 as steps land — see the checkboxes and the Timeline table's Status column for the current state. Server-specific identifiers (IPs, tunnel/account IDs, private hostnames) are deliberately kept out of this public file; the domain and architecture below are real.
+Prepared 2026-08-24. Status: Phases 0–5 complete. `https://app.divyanshuagrahari.dev` is live on the real Oracle cluster as of the first successful CI/CD deploy - Phase 6's full verification checklist hasn't been walked yet, but the site itself is up. Updated 2026-09-04 as steps land — see the checkboxes and the Timeline table's Status column for the current state. Server-specific identifiers (IPs, tunnel/account IDs, private hostnames) are deliberately kept out of this public file; the domain and architecture below are real.
 
 ## Contents
 

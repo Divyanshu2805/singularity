@@ -9,8 +9,8 @@ Total effort is 34–54 hours: a first public URL after about 4–6 working days
 | 2: Images | Assistant | 3–5 h | ✅ Done | All 8 Dockerfiles written and build-verified locally; registry push is Phase 5's CI job |
 | 3: Kubernetes files + kind rehearsal | Assistant | 8–12 h | ✅ Done | Full stack rehearsed on a dedicated kind cluster; a real bug found and fixed live (`enableServiceLinks`) |
 | 4: Provision the VM | Owner + assistant | 3–4 h | ✅ Done | Tunnel routing deliberately still points at `hello-test`; swaps to real Services in Phase 6 |
-| 5: CI/CD pipeline | Assistant | 4–6 h | 🔄 Built + locally verified | Blocked on the owner adding `KUBE_API_SERVER` and confirming the Tailscale OAuth client's tag before its first real run |
-| 6: First deploy + verification | Both | 6–10 h | ⏳ Not started | The public URL goes live here |
+| 5: CI/CD pipeline | Assistant | 4–6 h | ✅ Done | First real run succeeded after 5 bugs found and fixed live - see this phase's own notes above |
+| 6: First deploy + verification | Both | 6–10 h | 🔄 The public URL is live; the checklist below hasn't been walked yet | cloudflared's routing swapped off `hello-test` automatically (it's part of the oracle overlay Phase 5's pipeline applies) - the now-orphaned `hello-test` Deployment/Service just need deleting |
 | 7: Hardening + polish | Owner + assistant | 4–6 h | ⏳ Not started | Backups, monitoring, demo polish, docs |
 | **Total** | | **34–54 h** | | |
 
