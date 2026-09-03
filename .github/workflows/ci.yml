@@ -196,15 +196,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Derive the preview root domain
-        # vars.APP_DOMAIN is `app.divyanshuagrahari.dev`; previews live one level up, on the bare root domain
-        # (cloudflared.yaml's `*.divyanshuagrahari.dev` rule) - stripping the fixed `app.` prefix gets there
-        # without a second GitHub variable that could drift out of sync with the first.
-        id: domains
-        run: echo "preview_root=${APP_DOMAIN#app.}" >> "$GITHUB_OUTPUT"
-        env:
-          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
-
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -227,7 +218,7 @@ jobs:
             VITE_FIREBASE_AUTH_DOMAIN=${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
             VITE_FIREBASE_PROJECT_ID=${{ vars.VITE_FIREBASE_PROJECT_ID }}
             VITE_FIREBASE_APP_ID=${{ vars.VITE_FIREBASE_APP_ID }}
-            VITE_CSP_FRAME_ORIGINS=https://*.${{ steps.domains.outputs.preview_root }}
+            VITE_CSP_FRAME_ORIGINS=https://*.${{ vars.PREVIEW_ROOT_DOMAIN }}
 
   build-proxy-image:
     name: Build image (preview-proxy)
@@ -410,12 +401,11 @@ jobs:
           kubectl -n vibecraft-ai rollout status deployment/vibecraft-proxy --timeout=5m
 
       - name: Smoke test
-        # vars.APP_DOMAIN is `app.divyanshuagrahari.dev`; previews live one level up, on the bare root domain
-        # (cloudflared.yaml's `*.divyanshuagrahari.dev` rule) - stripping the fixed `app.` prefix gets there without
-        # a second GitHub variable that could drift out of sync with the first.
-        run: bash deploy/scripts/smoke-test.sh "$APP_DOMAIN" "${APP_DOMAIN#app.}"
-        env:
-          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+        # app and preview no longer share a domain suffix (vars.APP_DOMAIN is `vibecraft.divyanshuagrahari.dev`,
+        # a single-level subdomain - Cloudflare's free wildcard cert only covers one level, so previews stayed on
+        # the pre-existing `*.divyanshuagrahari.dev`), so each is its own explicit GitHub variable now rather than
+        # one derived from the other.
+        run: bash deploy/scripts/smoke-test.sh "${{ vars.APP_DOMAIN }}" "${{ vars.PREVIEW_ROOT_DOMAIN }}"
 
       - name: Roll back on failure
         # Plain `failure()` - not just a failed smoke test, a rollout that never became Ready (the previous step)

@@ -28,13 +28,18 @@ data:
     metrics: 0.0.0.0:2000
     ingress:
       # Order matters - the Gateway's own routes (api/webhooks) must be checked before the frontend catch-all.
-      - hostname: app.divyanshuagrahari.dev
+      # App URL is a single-level subdomain (`vibecraft.divyanshuagrahari.dev`) deliberately - Cloudflare's free
+      # wildcard certificate (`*.divyanshuagrahari.dev`) only covers one subdomain level; a two-level one (the
+      # first attempt, `vibecraft.app.divyanshuagrahari.dev`) showed as uncovered/insecure in the dashboard before
+      # this was ever deployed. Previews stay on the pre-existing `*.divyanshuagrahari.dev` wildcard below,
+      # unchanged - moving them under `vibecraft.` too would hit the exact same two-level problem.
+      - hostname: vibecraft.divyanshuagrahari.dev
         path: /api/.*
         service: http://gateway-service.vibecraft.svc.cluster.local:8000
-      - hostname: app.divyanshuagrahari.dev
+      - hostname: vibecraft.divyanshuagrahari.dev
         path: /webhooks/.*
         service: http://gateway-service.vibecraft.svc.cluster.local:8000
-      - hostname: app.divyanshuagrahari.dev
+      - hostname: vibecraft.divyanshuagrahari.dev
         service: http://frontend.vibecraft.svc.cluster.local:80
       - hostname: "*.divyanshuagrahari.dev"
         service: http://vibecraft-proxy-svc.vibecraft-ai.svc.cluster.local:80
