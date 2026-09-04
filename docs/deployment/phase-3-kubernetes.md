@@ -27,7 +27,7 @@ deploy/
 
 - **Deploy order:** Postgres, MinIO and Redis, then discovery, then the three domain services, then the gateway, frontend and proxy.
 - **Rolling updates one service at a time:** only one extra Java copy exists during a deploy, which keeps memory inside 12 GB.
-- **Permissions:** workspace-service keeps its narrow Role in `vibecraft-ai` (pods get/list/patch/delete, pods/exec create), bound to its service account in `vibecraft`.
+- **Permissions:** workspace-service keeps its narrow Role in `vibecraft-ai` (pods get/list/patch/delete, pods/exec get+create - WebSocket exec is a GET), bound to its service account in `vibecraft`.
 - **Rehearsal pass mark:** on kind, a fresh account signs in, creates a project from the seeded template, runs an AI build, and opens a working preview.
 
 - [x] **`deploy/k8s/base/`** — namespaces (`vibecraft`, `vibecraft-ai`) with their own LimitRange/ResourceQuota, `app-config` ConfigMap for the non-secret settings that differ per overlay, Postgres (StatefulSet, one server/three logical databases, the same `infra/postgres-init` SQL mounted via ConfigMap), MinIO (moved in from the repo-root `k8s/minio.yml`, now in `vibecraft`), Redis, RBAC (workspace-service's cross-namespace Role/RoleBinding into `vibecraft-ai`), all five Java services, the frontend, the preview-proxy and runner pool (moved in from `k8s/vibecraft-proxy.yml`/`k8s/runner-pods.yml`). `deploy/k8s/overlays/kind/` (local rehearsal, no patches needed beyond what's below) and `deploy/k8s/overlays/oracle/` (the real domain, `ghcr.io` images via Kustomize's `images:` transformer with a `REPLACED_BY_CI` placeholder tag Phase 5 sets, `cloudflared` - see below) both build cleanly with `kubectl kustomize`.

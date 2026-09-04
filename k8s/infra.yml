@@ -145,11 +145,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "patch", "delete"]
-  # The exec/file-upload subresource PreviewRunnerPool.exec/uploadFile use - a fabric8 exec or tar-upload is a
-  # POST to this subresource, which RBAC models as "create".
+  # The exec/file-upload subresource PreviewRunnerPool.exec/uploadFile use. fabric8 opens it as a WebSocket, which
+  # is an HTTP GET, so RBAC checks "get" - "create" alone only covers the older SPDY transport (a POST).
+  # Keep both: newer API servers can also require "create" for the WebSocket upgrade.
   - apiGroups: [""]
     resources: ["pods/exec"]
-    verbs: ["create"]
+    verbs: ["get", "create"]
 
 ---
 
