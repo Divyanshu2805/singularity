@@ -5,6 +5,19 @@ resources:
   - ../../base
   - cloudflared.yaml
 
+# Generates `cloudflared-config` from cloudflared-config.yaml's raw content, with a content-hash suffix on the
+# ConfigMap's name - unlike the five Java services (whose Deployments always get a new image tag, and therefore a
+# real rollout, on every deploy regardless), cloudflared's own image never changes between deploys, so a plain
+# same-named ConfigMap update would leave its pod running with stale, already-loaded config indefinitely. The hash
+# suffix changes the Deployment's volume reference whenever this file's content changes, which is what actually
+# forces a rollout - live-verified the hard way: the first domain-rename deploy updated the ConfigMap correctly and
+# the smoke test still 404'd, because the already-running pod had never restarted to read it.
+configMapGenerator:
+  - name: cloudflared-config
+    namespace: vibecraft
+    files:
+      - config.yaml=cloudflared-config.yaml
+
 # Phase 5's CI job runs `kustomize edit set image vibecraft-discovery=ghcr.io/divyanshu2805/vibecraft-discovery:$SHA`
 # (one per image) before `kubectl apply -k .`, replacing the placeholder tag below with the real commit SHA Phase 2's
 # build just pushed. `REPLACED_BY_CI` is deliberately not a valid tag - applying this overlay unmodified fails loudly

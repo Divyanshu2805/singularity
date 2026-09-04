@@ -1,0 +1,38 @@
+# The raw cloudflared tunnel config - fed into the `cloudflared-config` ConfigMap via kustomization.yaml's
+# `configMapGenerator`, not a plain ConfigMap resource here. That's deliberate, not a style choice: a
+# configMapGenerator renames the ConfigMap by a hash of this file's content and rewrites every reference to it
+# (the cloudflared Deployment's volume, in cloudflared.yaml) to match - so editing this file actually forces a real
+# pod rollout. A plain ConfigMap object with the same name every time does NOT: `kubectl apply` updates its content
+# in place, but the Deployment's own pod spec never changes, so Kubernetes has no reason to recreate the pod -
+# cloudflared keeps running with whatever config it read at its OWN last startup. Hit live: this repo's first
+# domain-rename deploy updated the ConfigMap correctly and the smoke test still got a 404, because the already-
+# running cloudflared pod had never restarted to pick it up. `kubectl rollout restart deployment/cloudflared`
+# fixed it manually that one time; this restructuring is what makes every future change automatic instead.
+#
+# 7706e071-1bfe-4f7c-88f3-13855db9099c is the tunnel's ID, not a secret (the credentials Secret is what's
+# actually sensitive) - matches the tunnel created out-of-band in Phase 0 and already live on the real cluster.
+tunnel: 7706e071-1bfe-4f7c-88f3-13855db9099c
+credentials-file: /etc/cloudflared/creds/credentials.json
+# cloudflared's metrics/health server defaults to 127.0.0.1:2000 - unreachable to a kubelet readinessProbe, which
+# connects to the pod's real IP, not its own loopback. Binding it to all interfaces is what makes the readinessProbe
+# in cloudflared.yaml (GET /ready on :2000) actually work; found by diffing against the tunnel already proven live
+# in Phase 0/1, which already had this right.
+metrics: 0.0.0.0:2000
+ingress:
+  # Order matters - the Gateway's own routes (api/webhooks) must be checked before the frontend catch-all. App URL
+  # is a single-level subdomain (`vibecraft.divyanshuagrahari.dev`) deliberately - Cloudflare's free wildcard
+  # certificate (`*.divyanshuagrahari.dev`) only covers one subdomain level; a two-level one (the first attempt,
+  # `vibecraft.app.divyanshuagrahari.dev`) showed as uncovered/insecure in the dashboard before this was ever
+  # deployed. Previews stay on the pre-existing `*.divyanshuagrahari.dev` wildcard below, unchanged - moving them
+  # under `vibecraft.` too would hit the exact same two-level problem.
+  - hostname: vibecraft.divyanshuagrahari.dev
+    path: /api/.*
+    service: http://gateway-service.vibecraft.svc.cluster.local:8000
+  - hostname: vibecraft.divyanshuagrahari.dev
+    path: /webhooks/.*
+    service: http://gateway-service.vibecraft.svc.cluster.local:8000
+  - hostname: vibecraft.divyanshuagrahari.dev
+    service: http://frontend.vibecraft.svc.cluster.local:80
+  - hostname: "*.divyanshuagrahari.dev"
+    service: http://vibecraft-proxy-svc.vibecraft-ai.svc.cluster.local:80
+  - service: http_status:404
