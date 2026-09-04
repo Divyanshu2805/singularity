@@ -34,12 +34,13 @@ import java.time.ZoneId;
  * <p>Both the reservation and the plain record path update the counter with a single atomic UPDATE rather than a
  * read-modify-write - see {@link UsageLogRepository} - because a check-then-write on the same row is exactly how two
  * concurrent calls each pass a budget check that only one of them should have, or how one call's increment overwrites
- * another's. The reservation is deliberately sized off {@code spring.ai.openai.chat.options.max-tokens}, the model's
- * own hard output ceiling, capped at the plan's entire daily allowance so a plan smaller than that ceiling (the free
- * tier's 5,000 tokens/day is well under the model's 32,000-token cap) can still make its one call rather than being
- * permanently refused. The true cost - almost always far less than the reservation - is trued up afterward by
- * {@code reconcileBudget}, which also accepts a null actual usage: that releases the reservation in full, for a call
- * that produced nothing chargeable.
+ * another's. The reservation is sized off {@code usage.build-reservation-tokens} - a conservative estimate of a whole
+ * build turn's cost, not {@code spring.ai.openai.chat.options.max-tokens} (the model's output ceiling alone, which
+ * left an ordinary two-file build under-reserved by more than 2x since a tool-calling turn's cost is dominated by
+ * input, not output) - capped at the plan's entire daily allowance so a plan smaller than that reservation (the free
+ * tier's 5,000 tokens/day is well under it) can still make its one call rather than being permanently refused. The
+ * true cost is trued up afterward by {@code reconcileBudget}, which also accepts a null actual usage: that releases
+ * the reservation in full, for a call that produced nothing chargeable.
  *
  * <p>A plan flagged as unlimited is let through before the numeric check, which still records for display - without
  * that, an unlimited plan would be throttled like any other. The refusal is a 402 carrying the limit, the amount used
@@ -60,7 +61,7 @@ public class UsageServiceImpl implements UsageService {
 
     public UsageServiceImpl(UsageLogRepository usageLogRepository, UsageEventRepository usageEventRepository,
                              AccountServiceClient accountServiceClient, WorkspaceServiceClient workspaceServiceClient,
-                             AuthUtil authUtil, @Value("${spring.ai.openai.chat.options.max-tokens}") int reservationTokens) {
+                             AuthUtil authUtil, @Value("${usage.build-reservation-tokens}") int reservationTokens) {
         this.usageLogRepository = usageLogRepository;
         this.usageEventRepository = usageEventRepository;
         this.accountServiceClient = accountServiceClient;

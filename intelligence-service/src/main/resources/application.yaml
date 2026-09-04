@@ -37,6 +37,15 @@ spring:
           stream-usage: true
           max-tokens: 32000
 
+usage:
+  # What reserveBudget() claims against the daily counter before a build turn starts (UsageServiceImpl). Sized off
+  # a real turn's total cost - input included - not spring.ai.openai.chat.options.max-tokens, which is only the
+  # model's output ceiling and left an ordinary two-file build (70,294 tokens observed in production) under-
+  # reserved by more than 2x. A tool-calling turn resends its whole growing conversation on every round, so input
+  # dominates; this is a conservative ceiling for a turn that reads several files across a few rounds, not a tight
+  # estimate - the true cost is still trued up afterward by reconcileBudget.
+  build-reservation-tokens: 150000
+
 internal-service:
   shared-secret: ${INTERNAL_SERVICE_SHARED_SECRET}
 
