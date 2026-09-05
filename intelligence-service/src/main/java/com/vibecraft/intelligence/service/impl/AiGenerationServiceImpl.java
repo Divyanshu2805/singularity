@@ -70,10 +70,14 @@ import java.util.stream.Collectors;
  * real 402 with the quota numbers on it rather than a generic error event the client could not tell from a provider
  * failure - see {@code reserveBudget}/{@code recentHistory} for what each actually does.
  *
- * <p>Two failure modes are handled rather than hidden. A turn that announced an edit - through a tool log or a
+ * <p>Three failure modes are handled rather than hidden. A turn that announced an edit - through a tool log or a
  * checklist - and produced none is retried once to completion, and flagged in the transcript if the retry also
- * produces nothing, instead of looking like a silent success. A turn that ran out of output budget, or that wrote
- * only some of the files it listed, gets a note saying so next to the unticked steps.
+ * produces nothing, instead of looking like a silent success. So is a turn whose answer parsed to no events at all:
+ * with no text and no unrecognized text either, the provider handed back an empty completion (seen in production
+ * from {@code x-ai/grok-4.5} on a brand-new project's first build), which used to be saved as nothing but a
+ * "Worked for Ns" line, exactly as a successful no-op would look. Its finish reason and token counts are logged so
+ * the cause is visible next time. A turn that ran out of output budget, or that wrote only some of the files it
+ * listed, gets a note saying so next to the unticked steps.
  *
  * <p>A turn's file changes publish as one atomic revision (CODE_REVIEW.md AI-05) - all of them, or none, via
  * {@code commitFileChanges}. A failed publish is never recorded as if it had succeeded: every changed path's event
@@ -100,6 +104,11 @@ import java.util.stream.Collectors;
 public class AiGenerationServiceImpl implements AiGenerationService {
 
     private static final int MAX_REPLAYED_TURNS = 10;
+
+    static final String EMPTY_ANSWER_NOTICE =
+            "The model didn't return an answer for this request, so nothing was changed. Please try sending it again.";
+    static final String ABANDONED_EDIT_NOTICE =
+            "I started making this change but wasn't able to finish it. Please try sending your request again.";
 
     private final ChatClient chatClient;
     private final AuthUtil authUtil;
@@ -405,8 +414,8 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         return announcedEdit && !producedFileEdit;
     }
 
-    private void finalizeChats(String userMessage, ChatSession chatSession, String fullText, Long duration, Usage usage,
-                               TeachingMode teaching, String finishReason, UsageReservation reservation, List<Message> history) {
+    void finalizeChats(String userMessage, ChatSession chatSession, String fullText, Long duration, Usage usage,
+                       TeachingMode teaching, String finishReason, UsageReservation reservation, List<Message> history) {
         Long projectId = chatSession.getId().getProjectId();
 
         // Reconciled first, before anything else here has a chance to throw: once this runs, the reservation is
@@ -436,9 +445,17 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         List<ChatEvent> chatEventList = llmResponseParser.parseChatEvents(fullText, assistantChatMessage);
         logParsedEvents("Parsed", chatEventList, projectId, teaching);
 
-        boolean retried = false;
-        if (looksLikeAbandonedEdit(chatEventList)) {
+        boolean emptyAnswer = chatEventList.isEmpty();
+        boolean abandonedEdit = looksLikeAbandonedEdit(chatEventList);
+        if (emptyAnswer) {
+            log.warn("Turn for projectId: {} came back with no text at all (finishReason: {}, promptTokens: {}, " +
+                    "completionTokens: {}) — retrying once.", projectId, finishReason, promptTokens, completionTokens);
+        } else if (abandonedEdit) {
             log.warn("Turn for projectId: {} announced a file read/edit but produced no FILE_EDIT — retrying once.", projectId);
+        }
+
+        boolean retried = false;
+        if (emptyAnswer || abandonedEdit) {
             retried = true;
 
             Map<String, Object> advisorParams = Map.of(
@@ -462,7 +479,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 chatEventList.add(ChatEvent.builder()
                         .type(ChatEventType.MESSAGE)
                         .chatMessage(assistantChatMessage)
-                        .content("I started making this change but wasn't able to finish it. Please try sending your request again.")
+                        .content(chatEventList.isEmpty() ? EMPTY_ANSWER_NOTICE : ABANDONED_EDIT_NOTICE)
                         .sequenceOrder(chatEventList.size() + 1)
                         .build());
             }
