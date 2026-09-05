@@ -8,6 +8,11 @@
  *
  * An assistant turn carries no text of its own once saved - its events are the record - so the raw text is only used
  * while one is still streaming.
+ *
+ * A finished turn with nothing to show is one of two different things, told apart by thoughtSeconds, which only a live
+ * turn carries (a reloaded one gets its "Worked for" line from a saved event instead): a live turn is the model
+ * returning an empty completion - offered a Retry, since nothing was written - while a reloaded one means its events
+ * failed to save even though any files it wrote did.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, CodeXml, Eye, Loader2, Lock, PenLine, RotateCcw, Sparkles, Square, Terminal, Zap } from "lucide-react";
@@ -632,9 +637,11 @@ function AssistantMessage({
   const hasSavedEvents = !!message.events?.length;
   const events = hasSavedEvents ? message.events! : liveEvents;
   const isDone = !isActive && !message.isStreaming;
-  const isUnrecorded = isDone && !hasSavedEvents && events.length === 0 && !message.error;
+  const hasNothingToShow = isDone && !hasSavedEvents && events.length === 0 && !message.error;
+  const isEmptyAnswer = hasNothingToShow && message.thoughtSeconds !== undefined;
+  const isUnrecorded = hasNothingToShow && !isEmptyAnswer;
   const unfinished = message.unfinishedSteps ?? 0;
-  const canRetry = isDone && !!onRetry && (unfinished > 0 || !!message.error || !!message.wasStopped);
+  const canRetry = isDone && !!onRetry && (unfinished > 0 || !!message.error || !!message.wasStopped || isEmptyAnswer);
 
   return (
     <div className="group/message flex min-w-0 flex-col gap-3">
@@ -646,6 +653,7 @@ function AssistantMessage({
         onOpenFile={onOpenFile}
       />
       {message.error && <AssistantError message={message.error} />}
+      {isEmptyAnswer && <AssistantError message="The model returned no answer, so nothing was changed" />}
       {isUnrecorded && <AssistantError message="Its chat record wasn't saved, though any files it wrote were" />}
       {canRetry && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
