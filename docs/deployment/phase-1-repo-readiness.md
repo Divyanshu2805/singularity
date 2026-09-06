@@ -20,7 +20,7 @@ The code needs about a day of fixes before it can run anywhere but a developer l
 | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://postgres:5432/vibecraft-<service>-db` |
 | `SPRING_DATA_REDIS_HOST` | `redis-service.vibecraft-ai` |
 | `MINIO_URL` | `http://minio-service:9000` (not `minio` - that's the Service's actual name, `deploy/k8s/base/minio.yaml`) |
-| `CLIENT_URL` | `https://app.divyanshuagrahari.dev` (oracle overlay), `http://localhost:8080` (kind overlay) |
+| `CLIENT_URL` | `https://vibecraft.divyanshuagrahari.dev` (oracle overlay), `http://localhost:8080` (kind overlay) |
 | `EUREKA_SERVER_URL` | `http://discovery-service:8761/eureka/` |
 | `PREVIEW_PUBLIC_SCHEME`, `PREVIEW_PUBLIC_DOMAIN`, `PREVIEW_PUBLIC_PORT` | `https`, `divyanshuagrahari.dev`, `443` (oracle); `http`, `localhost`, `8090` (kind - matches `application.yaml`'s own literal defaults) |
 | `SPRING_JPA_SHOW_SQL` | `false` |

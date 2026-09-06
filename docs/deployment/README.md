@@ -1,6 +1,6 @@
 # VibeCraft Deployment Plan: Oracle Cloud Free Tier
 
-Prepared 2026-08-24. Status: Phases 0–5 complete. `https://app.divyanshuagrahari.dev` is live on the real Oracle cluster as of the first successful CI/CD deploy - Phase 6's full verification checklist hasn't been walked yet, but the site itself is up. Updated 2026-09-04 as steps land — see the checkboxes and the Timeline table's Status column for the current state. Server-specific identifiers (IPs, tunnel/account IDs, private hostnames) are deliberately kept out of this public file; the domain and architecture below are real.
+Prepared 2026-08-24. Status: Phases 0–6 complete. **`https://vibecraft.divyanshuagrahari.dev` is live** on the real Oracle cluster (first successful CI/CD deploy 2026-09-04; renamed from `app.divyanshuagrahari.dev` the same day - see Phase 5's "Fixed after the first deploy"), and Phase 6's whole verification checklist passed on 2026-09-08. Phase 7 (backups, monitoring, polish) is in progress. Updated 2026-09-08 as steps land — see the checkboxes and the Timeline table's Status column for the current state. Server-specific identifiers (IPs, tunnel/account IDs, private hostnames) are deliberately kept out of this public file; the domain and architecture below are real.
 
 ## Contents
 

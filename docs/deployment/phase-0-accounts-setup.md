@@ -9,8 +9,8 @@ These steps need the owner's identity, card or dashboard logins. About 2–3 hou
 - [x] **Cloudflare tunnel:** create a tunnel and keep its credentials file. Its routing rules will live in the repo, not the dashboard.
 - [x] **Cloudflare R2:** create a `vibecraft-backups` bucket and an API token scoped to it.
 - [x] **Tailscale:** create a free account, an auth key for the VM, and an OAuth client for GitHub Actions.
-- [x] **Firebase:** add `app.divyanshuagrahari.dev` to Authentication → Authorized domains.
-- [x] **Stripe (test mode):** add a webhook endpoint `https://app.divyanshuagrahari.dev/webhooks/payment` and copy its signing secret.
+- [x] **Firebase:** add the app's hostname to Authentication → Authorized domains. Done for the original `app.divyanshuagrahari.dev`; **the app has since moved to `vibecraft.divyanshuagrahari.dev`, so re-verify it lists that one** (tracked in Phase 6).
+- [x] **Stripe (test mode):** add a webhook endpoint `https://<app hostname>/webhooks/payment` and copy its signing secret. Done for the original `app.divyanshuagrahari.dev`; **re-verify the endpoint URL now reads `https://vibecraft.divyanshuagrahari.dev/webhooks/payment`** (tracked in Phase 6) - a webhook pointing at the old host fails silently, plan upgrades just never arrive.
 - [x] **OpenRouter:** create a key used only by the deployed app, with a hard credit limit.
 - [x] **GitHub:** create a `production` environment. Its secrets and variables are listed below.
 
@@ -27,7 +27,9 @@ These steps need the owner's identity, card or dashboard logins. About 2–3 hou
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | secret | Backup bucket token | ✅ Done |
 | `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` | secret | Lets the pipeline join the tailnet briefly | ✅ Done |
 | `KUBE_DEPLOYER_TOKEN` | secret | Namespace-scoped deploy token, created in Phase 4 | ✅ Done |
-| `KUBE_API_SERVER` | secret | The Oracle k3s API's Tailscale URL (`https://<tailscale-name>:6443`) - not anticipated when this table was first written, added in Phase 5 for the deploy job's kubeconfig. Kept as a secret rather than a variable, matching this file's own policy of keeping private hostnames out of committed files. Live-verified from a laptop already on the tailnet: this exact URL + the deployer token authenticates correctly and is scoped exactly as expected. | ⏳ Owner: paste into the `production` environment |
-| `APP_DOMAIN`, `FIREBASE_PROJECT_ID`, `VITE_FIREBASE_*` | variable | Public values, safe to show | ✅ Done |
+| `KUBE_API_SERVER` | secret | The Oracle k3s API's Tailscale URL (`https://<tailscale-name>:6443`) - not anticipated when this table was first written, added in Phase 5 for the deploy job's kubeconfig. Kept as a secret rather than a variable, matching this file's own policy of keeping private hostnames out of committed files. Live-verified from a laptop already on the tailnet: this exact URL + the deployer token authenticates correctly and is scoped exactly as expected. | ✅ Done |
+| `APP_DOMAIN` | variable | The app's hostname: `vibecraft.divyanshuagrahari.dev` (originally `app.…`, renamed 2026-09-04) | ✅ Done |
+| `PREVIEW_ROOT_DOMAIN` | variable | The preview wildcard's parent domain: `divyanshuagrahari.dev`. Added with the rename - the app and preview hostnames no longer share a suffix, so the old "strip `app.` off `APP_DOMAIN`" derivation in `ci.yml` was replaced by this explicit variable. Live-confirmed set: the deployed frontend's CSP `frame-src` carries `https://*.divyanshuagrahari.dev`. | ✅ Done |
+| `FIREBASE_PROJECT_ID`, `VITE_FIREBASE_*` | variable | Public values, safe to show | ✅ Done |
 
-Every secret and variable Phase 0 asked for is set in the `production` environment, restricted to deploys from `main`. `KUBE_DEPLOYER_TOKEN` (needed the deploy identity Phase 4 creates) is now set too; `KUBE_API_SERVER` (added in Phase 5, see above) still needs the owner to paste it in.
+Every secret and variable listed here is set in the `production` environment, restricted to deploys from `main`, including `KUBE_DEPLOYER_TOKEN` (the deploy identity Phase 4 creates) and `KUBE_API_SERVER` and `PREVIEW_ROOT_DOMAIN` (both added after this table's first draft, in Phase 5 and the rename).

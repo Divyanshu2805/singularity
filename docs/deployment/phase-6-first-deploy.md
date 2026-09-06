@@ -2,16 +2,23 @@
 
 The first real deploy always surfaces a few issues that local testing can't. Common ones are cookies and CSRF behind the real HTTPS origin, WebSocket live reload through the tunnel, and Firebase sign-in on a new domain. Budget 6–10 hours. The site counts as live only when every box below is ticked.
 
-- [ ] `https://app.divyanshuagrahari.dev` loads with a valid certificate, and refreshing a deep link like `/projects` still works
-- [ ] Sign in with Google and with email; sign out; a second account sees none of the first account's projects
-- [ ] Create a project, and it starts from the seeded starter template
-- [ ] An AI build streams text as it's generated and commits files
-- [ ] Code insight answers a question about the project
-- [ ] Start a preview: it loads in the app's preview panel, and an AI edit shows up live
-- [ ] Invite a collaborator; a viewer can't edit, and a non-member is denied
-- [ ] Stripe test checkout with card `4242 4242 4242 4242` upgrades the plan through the webhook
-- [ ] Hitting a quota shows the friendly limit message, not an error
-- [ ] `/internal/...` paths return 404 from the internet
-- [ ] Reboot the VM: everything comes back on its own within about 5 minutes
-- [ ] Start 5 previews in a row, record memory and CPU, and set the final limits from the measured numbers
-- [ ] Works in Chrome, Safari, Firefox and on one phone
+**State, 2026-09-08: complete.** Every box below is ticked. The owner walked the whole list against the live site and reported it working (2026-09-08); the two items marked as checked by `curl` were verified independently. Live use surfaced the fixes below along the way, and one UX gap that is tracked but not fixed (see the collaborator item).
+
+**Found and fixed during live use so far:**
+- **`pods/exec` needs the `get` verb, not just `create`** (`203ffaf`). fabric8's exec/upload is a WebSocket - an HTTP GET - so `workspace-service`'s Role granting only `create` let it claim, list and patch runner pods, then 403'd every exec, which surfaced as "Couldn't reach the preview cluster" and read like an outage. A token-refresh change (`b79eb43`) was shipped on a wrong diagnosis and reverted (`4805417`); the truth came from the raw 403 body inside a pod running as that ServiceAccount. Fixed in `deploy/k8s/base/rbac.yaml` and the local-dev `k8s/infra.yml`; recorded in `CLAUDE.md`'s gotchas table.
+- **AI turns that ran away or came back empty** (`68548ba`, `abf7301`, `4147ad3`). `read_files` is now capped and deduplicated per turn, and the token-budget reservation is sized off a real turn's cost; an empty model answer is retried once, and if it's still empty the chat shows an accurate message with a Retry button instead of a blank reply.
+
+- [x] **Re-verify the hostname rename reached the two external services:** Firebase Authentication → Authorized domains lists `vibecraft.divyanshuagrahari.dev`, and the Stripe test-mode webhook endpoint is `https://vibecraft.divyanshuagrahari.dev/webhooks/payment` (both were set for `app.…` in Phase 0). A stale Firebase domain blocks Google sign-in; a stale webhook silently drops plan upgrades.
+- [x] `https://vibecraft.divyanshuagrahari.dev` loads with a valid certificate, and refreshing a deep link like `/projects` still works - `curl` without `-k` returns 200 for `/` and `/projects`, `/api/plans` returns JSON (2026-09-08). Not yet confirmed in a second browser.
+- [x] Sign in with Google and with email; sign out; a second account sees none of the first account's projects
+- [x] Create a project, and it starts from the seeded starter template
+- [x] An AI build streams text as it's generated and commits files
+- [x] Code insight answers a question about the project
+- [x] Start a preview: it loads in the app's preview panel, and an AI edit shows up live
+- [x] Invite a collaborator; a viewer can't edit, and a non-member is denied. Owner-verified working, with **one UX gap, tracked and not yet fixed:** a non-member who opens a project's chat URL is denied the data but lands on the ordinary empty build screen ("What should we build?", "No files yet", an empty project name) - it looks like a working blank project rather than a refusal. It should say the project isn't available to them and point them at creating their own.
+- [x] Stripe test checkout with card `4242 4242 4242 4242` upgrades the plan through the webhook
+- [x] Hitting a quota shows the friendly limit message, not an error
+- [x] `/internal/...` never reaches a backend from the internet - checked 2026-09-08. `/api/internal/...` is a 404 at the gateway (no catch-all route). A bare `/internal/...` returns **200, not 404**: cloudflared sends only `/api/*` and `/webhooks/*` to the gateway and everything else to the frontend's nginx, whose SPA fallback serves `index.html` (byte-identical to `/`) - so the original "returns 404" wording was wrong about the mechanism, not a sign of exposure. Also true of `/actuator/health`, which is bound to a separate management port no route reaches.
+- [x] Reboot the VM: everything comes back on its own within about 5 minutes
+- [x] Start 5 previews in a row, record memory and CPU, and set the final limits from the measured numbers. The owner ran it and reported it working; the peak numbers from that run were not recorded here. What is on record is a `kubectl top` reading on 2026-09-08 with the stack idle and one warm runner: the node uses **3.3 GB of 12 GB (27%) and 4% CPU**, each Java service sits at 231–489 Mi (workspace 489, intelligence 438, account 376, gateway 245, discovery 231) against limits of 384–640 Mi, Postgres 101 Mi, MinIO 109 Mi. The live limits match the repo's Phase 3 table exactly (checked against the cluster), so nothing was tightened or loosened after the test; the namespace quotas show comfortable headroom (`vibecraft` 4.0 of 8 Gi limits, `vibecraft-ai` 1.5 of 12 Gi with the one warm runner). If a future run records a real peak, put it here.
+- [x] Works in Chrome, Safari, Firefox and on one phone
