@@ -375,6 +375,9 @@ jobs:
           STRIPE_PRICE_PRO: ${{ secrets.STRIPE_PRICE_PRO }}
           STRIPE_PRICE_BUSINESS: ${{ secrets.STRIPE_PRICE_BUSINESS }}
           CLOUDFLARE_TUNNEL_CREDENTIALS: ${{ secrets.CLOUDFLARE_TUNNEL_CREDENTIALS }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
         run: bash deploy/scripts/apply-secrets.sh
 
       - name: Set the real image tags and apply the oracle overlay

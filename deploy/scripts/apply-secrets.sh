@@ -16,7 +16,8 @@ set -euo pipefail
 
 for var in DB_PASSWORD MINIO_ROOT_PASSWORD MINIO_RUNNER_SECRET INTERNAL_SERVICE_SHARED_SECRET \
            PREVIEW_ACCESS_TOKEN_SECRET FIREBASE_SERVICE_ACCOUNT_JSON OPENROUTER_API_KEY STRIPE_SECRET \
-           STRIPE_WEBHOOK_SECRET STRIPE_PRICE_PRO STRIPE_PRICE_BUSINESS CLOUDFLARE_TUNNEL_CREDENTIALS; do
+           STRIPE_WEBHOOK_SECRET STRIPE_PRICE_PRO STRIPE_PRICE_BUSINESS CLOUDFLARE_TUNNEL_CREDENTIALS \
+           R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_ENDPOINT; do
   if [ -z "${!var:-}" ]; then
     echo "Missing required env var: $var" >&2
     exit 1
@@ -63,5 +64,15 @@ CLOUDFLARE_CREDS_FILE="$(mktemp)"
 trap 'rm -f "$FIREBASE_SA_FILE" "$CLOUDFLARE_CREDS_FILE"' EXIT
 printf '%s' "$CLOUDFLARE_TUNNEL_CREDENTIALS" > "$CLOUDFLARE_CREDS_FILE"
 apply cloudflared-credentials -n vibecraft --from-file=credentials.json="$CLOUDFLARE_CREDS_FILE"
+
+# The nightly backup job's target (deploy/k8s/base/backup.yaml). R2_ENDPOINT is the bucket's S3 API URL,
+# `https://<cloudflare account id>.r2.cloudflarestorage.com` - it embeds the account id, so like the other private
+# identifiers it lives in the GitHub environment as a secret, not in a committed file. The bucket name is not
+# sensitive and defaults to the one Phase 0 created; export R2_BUCKET to override it.
+apply r2-backup-credentials -n vibecraft \
+  --from-literal=endpoint="$R2_ENDPOINT" \
+  --from-literal=access-key-id="$R2_ACCESS_KEY_ID" \
+  --from-literal=secret-access-key="$R2_SECRET_ACCESS_KEY" \
+  --from-literal=bucket="${R2_BUCKET:-vibecraft-backups}"
 
 echo "All secrets reconciled."
