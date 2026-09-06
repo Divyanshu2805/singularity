@@ -20,3 +20,4 @@ resources:
   - frontend.yaml
   - preview-proxy.yaml
   - runner-pods.yaml
+  - backup.yaml

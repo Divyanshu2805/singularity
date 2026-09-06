@@ -1,0 +1,214 @@
+# Nightly off-machine backup - docs/deployment/phase-7-hardening.md Phase 7's first item.
+# Everything this app owns lives on the one VM's boot disk (Postgres
+# 10 GB and MinIO 20 GB, both k3s local-path volumes), so without this a lost disk is a lost app.
+#
+# What one run does, in order:
+#   1. init container `pg-dump`: `pg_dump -F c` of each of the three service databases, back to back in one
+#      container so the three snapshots are seconds apart (the
+#      databases have no cross-database transactions, so the closer together they are taken the smaller the
+#      window in which a restored workspace and a restored intelligence disagree about which projects exist). Each
+#      archive is then read back with `pg_restore --list` so a truncated or corrupt dump fails the run instead of
+#      being uploaded and trusted.
+#   2. main container `upload`: copies the dumps to R2 under `postgres/<UTC date>/`, mirrors EVERY MinIO bucket to
+#      `minio/<UTC date>/<bucket>/` (discovered with `mc ls`, so a bucket added later is covered without touching
+#      this file), deletes anything under those two prefixes older than 7 days, and only then writes `LATEST`.
+#
+# `LATEST` is written last and only on full success, so it is an honest "the newest complete backup" marker:
+# deploy/scripts/check-backup-freshness.sh (run by .github/workflows/uptime.yml) alerts when it goes stale, which is
+# what turns a silently-failing CronJob into an email. A dated prefix per night, rather than one mirrored copy,
+# is deliberate: a mirror with `--remove` would faithfully propagate an accidental delete into the backup, and a
+# mirror without it keeps deleted files forever. A full copy a night is affordable because this data is small.
+#
+# Restoring is deploy/scripts/restore-backup.sh - it scales the three domain services down, runs a one-off Job that
+# does the inverse of this file, and scales them back up.
+#
+# The credentials Secret is created by deploy/scripts/apply-secrets.sh on every deploy (from the R2_* entries in the
+# GitHub `production` environment). On the kind rehearsal cluster there is no R2, so create it by hand pointing at
+# the in-cluster MinIO instead, which speaks the same S3 API:
+#   kubectl create secret generic r2-backup-credentials -n vibecraft \
+#     --from-literal=endpoint=http://minio-service:9000 \
+#     --from-literal=access-key-id=minioadmin --from-literal=secret-access-key='<minio root password>' \
+#     --from-literal=bucket=vibecraft-backups
+# and `mc mb` that bucket first. Without the Secret the CronJob still applies fine; its pods just fail to start.
+#
+# Non-root and capability-free like every other workload here. `HOME=/tmp` for `mc`, for the same reason as
+# runner-pods.yaml's syncer: an image with no home directory for the UID makes `mc` fail with "mkdir /.mc". No
+# IPC_LOCK is needed - that was only for `mc admin user add` (CLAUDE.md's MinIO gotcha); plain `mc cp`/`mirror`
+# never touch that code path.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-backup
+  namespace: vibecraft
+spec:
+  # 02:30 India time, the quietest hour for this app's audience. `timeZone` needs Kubernetes 1.27+; k3s here is 1.36.
+  schedule: "30 2 * * *"
+  timeZone: Asia/Kolkata
+  # Never two at once: a slow run overlapping the next night's would dump a database twice concurrently.
+  concurrencyPolicy: Forbid
+  # If the node was down at 02:30 (a reboot), still run once it's back, but not if it's already hours late.
+  startingDeadlineSeconds: 7200
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: nightly-backup
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999 # the `postgres` user baked into the pgvector image; harmless for the mc container
+            runAsGroup: 999
+            fsGroup: 999
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: work
+              emptyDir:
+                sizeLimit: 1Gi
+          initContainers:
+            - name: pg-dump
+              # The same image the Postgres StatefulSet runs, so pg_dump's major version can never be older than the
+              # server it dumps (pg_dump refuses a newer server).
+              image: pgvector/pgvector:0.8.1-pg18-trixie
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              env:
+                - name: HOME
+                  value: /tmp
+                - name: PGHOST
+                  value: postgres
+                - name: PGUSER
+                  value: vibecraft
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: password
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  mkdir -p /work/pg
+                  for db in vibecraft-account-db vibecraft-workspace-db vibecraft-intelligence-db; do
+                    echo "Dumping $db"
+                    pg_dump -d "$db" -F c -f "/work/pg/$db.dump"
+                    pg_restore --list "/work/pg/$db.dump" > /dev/null
+                  done
+                  ls -l /work/pg
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "128Mi"
+                  ephemeral-storage: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+                  ephemeral-storage: "1Gi"
+          containers:
+            - name: upload
+              image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              env:
+                - name: HOME
+                  value: /tmp
+                - name: MINIO_ROOT_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-root-credentials
+                      key: username
+                - name: MINIO_ROOT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-root-credentials
+                      key: password
+                - name: R2_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: r2-backup-credentials
+                      key: endpoint
+                - name: R2_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: r2-backup-credentials
+                      key: access-key-id
+                - name: R2_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: r2-backup-credentials
+                      key: secret-access-key
+                - name: R2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: r2-backup-credentials
+                      key: bucket
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  DATE="$(date -u +%Y-%m-%d)"
+                  STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                  mc alias set minio http://minio-service:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" > /dev/null
+                  mc alias set r2 "$R2_ENDPOINT" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY" > /dev/null
+
+                  echo "Uploading Postgres dumps to postgres/$DATE/"
+                  mc cp --quiet --recursive /work/pg/ "r2/$R2_BUCKET/postgres/$DATE/"
+                  [ -n "$(mc ls "r2/$R2_BUCKET/postgres/$DATE/")" ] || { echo "no Postgres dumps landed in R2" >&2; exit 1; }
+
+                  # `mc ls` prints `[date time zone]  size name/`, so the bucket name is the fifth field. The listing
+                  # is captured first, not piped straight into the loop: a pipeline reports only its LAST command's
+                  # status, so a failing `mc ls` would otherwise look like "no buckets" and the run would report
+                  # success with no MinIO data backed up. MinIO always has buckets (workspace-service creates them
+                  # at startup), so an empty listing is itself an error.
+                  BUCKETS="$(mc ls minio)"
+                  [ -n "$BUCKETS" ] || { echo "MinIO listed no buckets" >&2; exit 1; }
+                  printf '%s\n' "$BUCKETS" | while read -r _ _ _ _ name; do
+                    bucket="${name%/}"
+                    [ -n "$bucket" ] || continue
+                    # Never mirror the backup bucket into itself. Impossible with real R2 (a different service), but
+                    # the kind rehearsal points R2_ENDPOINT at this same MinIO, where `mc ls` lists the backup bucket
+                    # and the run recursed into `minio/<date>/<backup bucket>/minio/<date>/...` on its first test.
+                    [ "$bucket" != "$R2_BUCKET" ] || continue
+                    echo "Mirroring MinIO bucket $bucket to minio/$DATE/$bucket/"
+                    mc mirror --quiet "minio/$bucket" "r2/$R2_BUCKET/minio/$DATE/$bucket"
+                  done
+
+                  # Retention. Non-fatal: a failed prune must not turn a good backup into a failed run, it only
+                  # means storage grows until someone looks at the warning.
+                  for prefix in postgres minio; do
+                    mc rm --recursive --force --older-than 7d "r2/$R2_BUCKET/$prefix/" \
+                      || echo "WARNING: pruning $prefix/ failed" >&2
+                  done
+
+                  printf '%s\n' "$STAMP" | mc pipe "r2/$R2_BUCKET/LATEST"
+                  echo "Backup $STAMP complete."
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                  ephemeral-storage: "64Mi"
+                limits:
+                  cpu: "500m"
+                  # mc reserves more address space than it touches; 64Mi is not enough for a bulk mirror.
+                  memory: "512Mi"
+                  ephemeral-storage: "1Gi"
