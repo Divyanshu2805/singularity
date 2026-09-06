@@ -2,8 +2,9 @@
 # Docs/deployment-plan.md Phase 5's smoke test: three checks that prove the site, the API and the preview route are
 # all actually serving traffic through the real public path (Cloudflare -> tunnel -> Service), not just that the
 # pods are Ready. Takes the app domain as $1 (docs/deployment/phase-0-accounts-setup.md Phase 0's APP_DOMAIN variable) and the
-# preview-hosting root domain as $2 (the same domain, minus the `app.` prefix). Exits non-zero on the first failure
-# so the workflow step it's called from can trigger a rollback.
+# preview-hosting root domain as $2 (PREVIEW_ROOT_DOMAIN - the parent of the `*.` wildcard previews live under; the
+# app and the previews no longer share a suffix). Exits non-zero on the first failure so the workflow step it's
+# called from can trigger a rollback, and so .github/workflows/uptime.yml can send an alert.
 set -euo pipefail
 
 APP_DOMAIN="${1:?usage: smoke-test.sh <app-domain> <preview-root-domain>}"

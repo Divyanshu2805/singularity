@@ -1,0 +1,73 @@
+# Uptime and backup monitoring - docs/deployment/phase-7-hardening.md Phase 7's "uptime monitor" item, done with the tools the
+# repo already runs on rather than a second account: a scheduled workflow that fails, and GitHub emails the person
+# who owns the schedule when a scheduled run fails. Two independent jobs on two schedules:
+#
+#   site   every 15 minutes: the same three checks the deploy pipeline's smoke test makes (the app answers 200,
+#          /api/plans returns the plan catalogue, and a preview hostname reaches the proxy), retried three times
+#          30 seconds apart so one network blip does not send an email.
+#   backup once a morning: deploy/scripts/check-backup-freshness.sh - the newest complete backup in R2 must be less
+#          than 30 hours old. This is the check that matters more: a failing CronJob emails nobody.
+#
+# Limits worth knowing about, since a monitor that quietly stops is worse than none: GitHub may delay a scheduled run
+# by many minutes under load and can drop one, so 15 minutes is "roughly", not a guarantee; and GitHub disables
+# scheduled workflows in a repository with no activity for 60 days (a push, or re-enabling it under the Actions tab,
+# turns it back on). If minute-level alerting ever matters, add a dedicated monitor (UptimeRobot, Better Stack) on
+# the same two URLs - this file does not need to change.
+#
+# The two domains are written out here, not read from the `production` environment's variables: a job that names an
+# environment records a deployment on every run, which for a 15-minute schedule would bury the real deploy history.
+# They are public values. If the app moves to another hostname, change them here and in the GitHub environment.
+name: Uptime
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime-${{ github.event.schedule || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  site:
+    name: Site is up
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_DOMAIN: vibecraft.divyanshuagrahari.dev
+      PREVIEW_ROOT_DOMAIN: divyanshuagrahari.dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: deploy/scripts
+      - name: Check the app, the API and the preview route
+        run: |
+          for attempt in 1 2 3; do
+            if bash deploy/scripts/smoke-test.sh "$APP_DOMAIN" "$PREVIEW_ROOT_DOMAIN"; then
+              exit 0
+            fi
+            echo "Attempt $attempt failed." >&2
+            [ "$attempt" = 3 ] || sleep 30
+          done
+          echo "The site failed three checks in a row." >&2
+          exit 1
+
+  backup:
+    name: Latest backup is fresh
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 4 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The R2 credentials are `production` environment secrets. Once a day, so one deployment record a day.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: deploy/scripts
+      - name: Check the newest complete backup
+        run: bash deploy/scripts/check-backup-freshness.sh
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
