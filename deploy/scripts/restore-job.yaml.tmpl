@@ -1,0 +1,189 @@
+# The one-off restore Job that deploy/scripts/restore-backup.sh renders (the __PLACEHOLDERS__ below are filled in
+# with sed) and applies. It is the inverse of deploy/k8s/base/backup.yaml and shares its shape on purpose: an init
+# container with mc pulls the chosen night's backup out of R2 and puts MinIO back, then the pgvector image restores
+# the three databases.
+#
+# This is DESTRUCTIVE by design - a restore replaces the live state with the backup's, everything written since is
+# lost. That is why it is a template the script renders after the operator has passed --yes and named the kube
+# context explicitly, and not a manifest anyone would `kubectl apply` by accident. The script also scales the three
+# domain services to zero first; `DROP DATABASE ... WITH (FORCE)` would kick their connections anyway, but a service
+# that keeps running against a database that is being swapped underneath it is a worse failure than a short outage.
+#
+# Postgres: each database is dropped and recreated, then `pg_restore`d, rather than `pg_restore --clean` into the
+# existing one. --clean only drops the objects the dump knows about, so a table created after the backup would
+# survive a "restore" and leave a schema the restored Flyway history doesn't describe.
+#
+# MinIO: every bucket in the backup is mirrored back with --remove (so objects created since are deleted, i.e. a true
+# point-in-time state), and every LIVE bucket that is absent from the backup is emptied - a bucket that was empty
+# when the backup ran leaves no prefix in R2 (S3 has no empty directories), so absence means "was empty".
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __NAME__
+  namespace: vibecraft
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: restore-backup
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: work
+          emptyDir:
+            sizeLimit: 1Gi
+      initContainers:
+        - name: fetch
+          image: __MC_IMAGE__
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: HOME
+              value: /tmp
+            - name: RESTORE_DATE
+              value: "__DATE__"
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: username
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: password
+            - name: R2_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: r2-backup-credentials
+                  key: endpoint
+            - name: R2_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: r2-backup-credentials
+                  key: access-key-id
+            - name: R2_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: r2-backup-credentials
+                  key: secret-access-key
+            - name: R2_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: r2-backup-credentials
+                  key: bucket
+          volumeMounts:
+            - name: work
+              mountPath: /work
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              mc alias set minio http://minio-service:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" > /dev/null
+              mc alias set r2 "$R2_ENDPOINT" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY" > /dev/null
+
+              D="$RESTORE_DATE"
+              if [ "$D" = latest ]; then
+                D="$(mc cat "r2/$R2_BUCKET/LATEST")"
+                D="${D%%T*}"
+              fi
+              echo "Restoring the backup dated $D"
+
+              mkdir -p /work/pg
+              mc cp --quiet --recursive "r2/$R2_BUCKET/postgres/$D/" /work/pg/
+              set -- /work/pg/*.dump
+              [ -e "$1" ] || { echo "no Postgres dumps found for $D - refusing to touch MinIO either" >&2; exit 1; }
+
+              # Buckets present in the backup (an empty bucket leaves no prefix, see the header comment).
+              BACKED_UP=" "
+              if LISTING="$(mc ls "r2/$R2_BUCKET/minio/$D/" 2> /dev/null)" && [ -n "$LISTING" ]; then
+                for name in $(printf '%s\n' "$LISTING" | while read -r _ _ _ _ n; do echo "${n%/}"; done); do
+                  BACKED_UP="$BACKED_UP$name "
+                  echo "Restoring MinIO bucket $name"
+                  mc mb --ignore-existing "minio/$name" > /dev/null
+                  mc mirror --quiet --overwrite --remove "r2/$R2_BUCKET/minio/$D/$name" "minio/$name"
+                done
+              fi
+
+              # Live buckets the backup does not contain were empty then: empty them now.
+              # Never the backup bucket itself. With real R2 it isn't in MinIO at all, but the kind rehearsal points
+              # R2_ENDPOINT at this same MinIO, and its first restore emptied the very bucket it was restoring
+              # from (harmlessly, the copy had already been read - but it destroyed every other night's backup).
+              for name in $(mc ls minio | while read -r _ _ _ _ n; do echo "${n%/}"; done); do
+                [ "$name" != "$R2_BUCKET" ] || continue
+                case "$BACKED_UP" in
+                  *" $name "*) ;;
+                  *) echo "Emptying MinIO bucket $name (it was empty in the backup)"
+                     mc rm --recursive --force "minio/$name" > /dev/null 2>&1 || true ;;
+                esac
+              done
+              echo "MinIO restored."
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+              ephemeral-storage: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+              ephemeral-storage: "1Gi"
+      containers:
+        - name: restore
+          image: __PG_IMAGE__
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: HOME
+              value: /tmp
+            - name: PGHOST
+              value: postgres
+            - name: PGUSER
+              value: vibecraft
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+          volumeMounts:
+            - name: work
+              mountPath: /work
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              for f in /work/pg/*.dump; do
+                db="$(basename "$f" .dump)"
+                echo "Restoring database $db"
+                psql -d postgres -v ON_ERROR_STOP=1 \
+                  -c "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" \
+                  -c "CREATE DATABASE \"$db\""
+                pg_restore --no-owner --no-acl --exit-on-error -d "$db" "$f"
+              done
+              echo "Postgres restored."
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+              ephemeral-storage: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+              ephemeral-storage: "1Gi"
