@@ -26,6 +26,8 @@ for m in discovery gateway account workspace intelligence; do
   docker build -f docker/java-service.Dockerfile --build-arg MODULE=${m}-service -t vibecraft-${m}:local .
 done
 docker build -t vibecraft-preview-proxy:local proxy/
+docker build -f docker/preview-runner.Dockerfile -t vibecraft-preview-runner:local \
+  workspace-service/src/main/resources/starter-templates/react-vite-tailwind-daisyui-starter
 docker build \
   --build-arg VITE_FIREBASE_API_KEY=<from Firebase console> \
   --build-arg VITE_FIREBASE_AUTH_DOMAIN=vibecraftai-5ac98.firebaseapp.com \
@@ -34,7 +36,7 @@ docker build \
   --build-arg VITE_CSP_FRAME_ORIGINS="http://localhost:*" \
   -t vibecraft-frontend:local frontend/
 
-for img in discovery gateway account workspace intelligence preview-proxy frontend; do
+for img in discovery gateway account workspace intelligence preview-proxy preview-runner frontend; do
   kind load docker-image vibecraft-${img}:local --name vibecraft-rehearsal
 done
 ```

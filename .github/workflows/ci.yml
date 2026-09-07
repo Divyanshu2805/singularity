@@ -243,9 +243,8 @@ jobs:
   build-preview-runner-image:
     name: Build image (preview-runner)
     # No test job of its own to depend on - this image only pre-installs the starter template's own npm packages
-    # (docker/preview-runner.Dockerfile), nothing from this repo's source is compiled into it. Not consumed by any
-    # Deployment yet (docs/deployment/phase-7-hardening.md Phase 7 wires it in) - built anyway so it's never stale when that
-    # phase needs it, and so "8 images, all tagged with the commit SHA" stays true of every push.
+    # (docker/preview-runner.Dockerfile), nothing from this repo's source is compiled into it. Consumed by the warm
+    # runner pool's seed-node-modules init container (deploy/k8s/base/runner-pods.yaml), so `deploy` waits for it.
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04-arm
     steps:
@@ -266,7 +265,7 @@ jobs:
 
   deploy:
     name: Deploy to Oracle
-    needs: [build-java-images, build-frontend-image, build-proxy-image]
+    needs: [build-java-images, build-frontend-image, build-proxy-image, build-preview-runner-image]
     # Runs on a normal push AND on a manual redeploy (workflow_dispatch) - but only for the latter does `needs`
     # resolve to "skipped" rather than "success", since the build jobs are gated to push-only (a redeploy reuses
     # images already pushed for that SHA, it doesn't rebuild them). `always()` is required so this job is even
@@ -276,7 +275,8 @@ jobs:
       always() && github.ref == 'refs/heads/main' &&
       (needs.build-java-images.result == 'success' || needs.build-java-images.result == 'skipped') &&
       (needs.build-frontend-image.result == 'success' || needs.build-frontend-image.result == 'skipped') &&
-      (needs.build-proxy-image.result == 'success' || needs.build-proxy-image.result == 'skipped')
+      (needs.build-proxy-image.result == 'success' || needs.build-proxy-image.result == 'skipped') &&
+      (needs.build-preview-runner-image.result == 'success' || needs.build-preview-runner-image.result == 'skipped')
     runs-on: ubuntu-latest
     environment: production
     concurrency:
@@ -402,6 +402,7 @@ jobs:
           kubectl -n vibecraft rollout status deployment/gateway-service --timeout=5m
           kubectl -n vibecraft rollout status deployment/frontend --timeout=5m
           kubectl -n vibecraft-ai rollout status deployment/vibecraft-proxy --timeout=5m
+          kubectl -n vibecraft-ai rollout status deployment/runner-pool --timeout=5m
 
       - name: Smoke test
         # app and preview no longer share a domain suffix (vars.APP_DOMAIN is `vibecraft.divyanshuagrahari.dev`,
@@ -422,3 +423,4 @@ jobs:
           kubectl -n vibecraft rollout undo deployment/gateway-service
           kubectl -n vibecraft rollout undo deployment/frontend
           kubectl -n vibecraft-ai rollout undo deployment/vibecraft-proxy
+          kubectl -n vibecraft-ai rollout undo deployment/runner-pool

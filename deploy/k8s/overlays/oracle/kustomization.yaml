@@ -44,6 +44,9 @@ images:
   - name: vibecraft-preview-proxy:local
     newName: ghcr.io/divyanshu2805/vibecraft-preview-proxy
     newTag: REPLACED_BY_CI
+  - name: vibecraft-preview-runner:local
+    newName: ghcr.io/divyanshu2805/vibecraft-preview-runner
+    newTag: REPLACED_BY_CI
 
 patches:
   - path: app-config.yaml
