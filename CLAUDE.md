@@ -22,9 +22,10 @@ Don't guess at structure or reconstruct decisions from scratch — these are aut
 | Entities, relationships, enum/schema conventions | [`docs/schema/`](docs/schema/README.md) |
 | Every endpoint, request/response shapes, SSE stream formats, error taxonomy | [`docs/api/`](docs/api/README.md) |
 | Setup, running live previews locally, troubleshooting | [`docs/local-development/`](docs/local-development/README.md) |
+| Running the live deployment: deploys and rollback, monitoring, backup and restore, routine upkeep | [`docs/operations/`](docs/operations/README.md) |
 | Known gaps, deferred features, open product/design questions | [`TODO.md`](TODO.md) *(local, gitignored — not on GitHub)* |
 
-If a change you're making would make any of the four tracked docs above inaccurate, **update that doc in the same change**. Don't leave it for later — "later" is how the previous docs on this project drifted enough to need this rewrite.
+If a change you're making would make any of the tracked docs above inaccurate, **update that doc in the same change**. Don't leave it for later — "later" is how the previous docs on this project drifted enough to need this rewrite.
 
 ## Tech Stack
 
@@ -93,11 +94,17 @@ k8s/                        Kubernetes manifests for LOCAL DEV ONLY - the live-p
                              (docs/local-development/). Not the deployment topology - see deploy/ for that.
 deploy/k8s/                 The FULL-STACK Kubernetes topology (docs/deployment/phase-3-kubernetes.md Phase 3+) - every service
                              containerized and running in-cluster: base/ (namespaces vibecraft + vibecraft-ai,
-                             Postgres, MinIO, all 5 Java services, frontend, the preview pipeline, RBAC) plus
+                             Postgres, MinIO, all 5 Java services, frontend, the preview pipeline, RBAC, the
+                             nightly backup CronJob) plus
                              overlays/kind/ (local full-stack rehearsal) and overlays/oracle/ (the real domain,
                              cloudflared, ghcr.io images). Kustomize, not plain manifests - `kubectl apply -k
                              deploy/k8s/overlays/<kind|oracle>`. Don't conflate this with k8s/ above; they solve
                              different problems and neither replaces the other.
+deploy/scripts/             apply-secrets.sh (GitHub environment -> Kubernetes Secrets, every deploy), smoke-test.sh,
+                             restore-backup.sh + restore-job.yaml.tmpl, check-backup-freshness.sh. Bash, run by CI
+                             or by hand; restore-backup.sh is destructive and guards itself (docs/operations/).
+.github/workflows/          ci.yml (test -> build 8 images -> deploy to Oracle -> smoke test -> rollback) and
+                             uptime.yml (15-minute site check, daily backup-freshness check)
 proxy/                      standalone Node reverse proxy (routes preview hostnames via Redis)
 docs/                       architecture, data model, API reference, local dev
 TODO.md                     local working reference of known gaps — gitignored, not pushed
@@ -128,7 +135,7 @@ A bare `./mvnw test` passes: the service tests are plain JUnit (no Spring contex
 cd frontend
 npm run dev      # dev server, :5173
 npm run build    # production build
-npm test         # vitest, 281 tests
+npm test         # vitest, 298 tests
 npx tsc --noEmit # typecheck only
 ```
 

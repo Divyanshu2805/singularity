@@ -4,6 +4,8 @@
 
 **VibeCraft** is an AI-assisted project-building platform in the Lovable/Bolt/v0 category: a user types a one-line idea, a short adaptive interview turns it into a spec, an AI chat conversation writes the actual project file by file, and a live preview shows the running result in a real Kubernetes pod while it's being built. Collaborators work on the same project with `OWNER`/`EDITOR`/`VIEWER` roles, and usage is metered against daily token and project quotas billed through Stripe.
 
+**Live demo: <https://vibecraft.divyanshuagrahari.dev>** — sign in with Google or email and build something. Payments run in Stripe **test mode**, so no real money moves (use card `4242 4242 4242 4242`). It runs on a single free-tier Oracle Arm VM and redeploys itself from GitHub Actions on every push to `main` — see [Deployment](#deployment).
+
 This README is the entry point. Deeper, accurate reference material lives in [`docs/`](docs) — see the [Documentation Map](#documentation-map) below.
 
 ---
@@ -13,6 +15,7 @@ This README is the entry point. Deeper, accurate reference material lives in [`d
 - [Features](#features)
 - [How It Works](#how-it-works)
 - [Architecture](#architecture)
+- [Deployment](#deployment)
 - [Tech Stack](#tech-stack)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
@@ -85,6 +88,33 @@ flowchart TD
 Services find each other by name through Eureka (`discovery-service`, `:8761`, not drawn). The full picture, with the internal API each arrow stands for: [`docs/architecture/`](docs/architecture/README.md).
 
 **Key boundary:** AI-generated/user code executes **only** inside a live-preview Kubernetes pod — never in-process in the backend. Full reasoning and the exact isolation mechanism: [`docs/architecture/`](docs/architecture/README.md) §4.3.
+
+## Deployment
+
+The live demo runs entirely on one free Oracle Cloud Arm machine (2 cores, 12 GB) as single-node k3s, for about $0 a month plus the domain and a capped AI key. The machine has **no open inbound ports**: visitors arrive through a Cloudflare tunnel, and deploys and admin access arrive over Tailscale.
+
+```mermaid
+flowchart LR
+  U[Visitors] --> CF["Cloudflare<br/>DNS + HTTPS"]
+  CF -->|tunnel| CD[cloudflared]
+  GH["GitHub Actions<br/>test, build, deploy"] -->|Tailscale| K3S
+  subgraph K3S["Oracle Arm VM, k3s"]
+    CD -->|"/api, /webhooks"| GW[gateway-service]
+    CD -->|everything else| FE[frontend nginx]
+    CD -->|"preview hostnames"| PX[preview-proxy]
+    GW --> SVC["account, workspace,<br/>intelligence"]
+    SVC --> DATA["Postgres, MinIO, Redis"]
+    PX --> RUN[preview pods]
+    BK[nightly backup] --> DATA
+  end
+  BK -->|"pg_dump + bucket mirror"| R2[("Cloudflare R2")]
+```
+
+- **Continuous deployment.** Every push to `main` runs the tests, builds eight arm64 images, deploys them over Tailscale, smoke-tests the live site, and rolls back automatically if anything fails. Nothing is hand-deployed and no secret lives on the server: every Kubernetes Secret is rebuilt from a GitHub environment on each deploy.
+- **Kept safe.** A nightly job backs Postgres and the object store up to Cloudflare R2, with a guarded, drilled restore; a scheduled workflow checks the site every 15 minutes and that the newest backup is fresh, and emails on failure.
+- **Portable by design.** Nothing depends on Oracle: the same Kustomize manifests run on a local kind cluster (`deploy/k8s/overlays/kind`), so moving to another host is a settings change plus a restore.
+
+The design and the record of how it was built: [`docs/deployment/`](docs/deployment/README.md). Running it day to day: [`docs/operations/`](docs/operations/README.md).
 
 ## Tech Stack
 
@@ -163,7 +193,7 @@ Full per-module responsibilities and a "where do I change X" table: [`docs/archi
 
 ```bash
 ./mvnw test                          # backend — every module's tests (132); needs no database or cluster
-cd frontend && npm test              # frontend — 281 tests
+cd frontend && npm test              # frontend — 298 tests
 ```
 
 The service tests are plain JUnit with no Spring context, deliberately — see `docs/local-development/troubleshooting.md`'s troubleshooting table for the Windows timezone problem a Spring-context test would hit. Neither the Kubernetes/Redis-backed live-preview pipeline nor Stripe billing has end-to-end automated coverage; both are verified by hand.
@@ -177,6 +207,8 @@ The service tests are plain JUnit with no Spring context, deliberately — see `
 | [`docs/schema/`](docs/schema/README.md) | Entities, ER diagram, enum/schema conventions |
 | [`docs/api/`](docs/api/README.md) | Every endpoint, SSE stream formats, the full error taxonomy |
 | [`docs/local-development/`](docs/local-development/README.md) | Setup, running live previews locally, a troubleshooting table |
+| [`docs/deployment/`](docs/deployment/README.md) | The production deployment's design, phase-by-phase build record, and the bugs found live |
+| [`docs/operations/`](docs/operations/README.md) | Running the live deployment: deploys and rollback, monitoring, backup and restore, routine upkeep |
 | [`TODO.md`](TODO.md) | Known gaps, deferred features, open questions — local only, not pushed to GitHub |
 
 ## Status & Roadmap
@@ -189,7 +221,7 @@ This repository used to be a **single Spring Boot application** (one deployable,
 
 | To see | Commit | How |
 |---|---|---|
-| **The monolith backend**, exactly as it was before the split began — one Spring Boot app at the repo root (`src/main/java/com/java/vibecraft/`) | `2ce163c` | `git switch --detach 2ce163c`, or keep both checked out side by side with `git worktree add ../vibecraft-monolith 2ce163c` |
-| The record of how it was split into services: what moved where, the cutover, the lessons learned (`docs/migration/`) | `f61ac89` | `git show f61ac89:docs/migration/` |
+| **The monolith backend**, exactly as it was before the split began — one Spring Boot app at the repo root (`src/main/java/com/java/vibecraft/`) | `a0c9214` | `git switch --detach a0c9214`, or keep both checked out side by side with `git worktree add ../vibecraft-monolith a0c9214` |
+| The record of how it was split into services: what moved where, the cutover, the lessons learned (`docs/migration/`) | `3257326` | `git show 3257326:docs/migration/` |
 
-`2ce163c` is the last commit before the microservices work started; from `13ab563` onward the repository is the multi-module reactor.
+`a0c9214` is the last commit before the microservices work started; from `1371db5` onward the repository is the multi-module reactor.
