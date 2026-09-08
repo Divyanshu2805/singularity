@@ -13,4 +13,4 @@ With the settings below, up to 6 previews can run at once, and 1–2 can start a
 | CPU priority | Java services above previews | The site stays responsive while previews start |
 | `preview.boot-timeout` | 4 min, up from 2 | Slow installs on 2 cores don't fail |
 | `preview.idle-timeout` | 10 min (unchanged) | Frees slots quickly |
-| Pre-baked runner image | Phase 7 | Starts drop from about a minute to seconds |
+| Pre-baked runner image | Built and rehearsed in Phase 7, live with the next deploy | `npm install` 41 s → 1 s on the kind rehearsal |

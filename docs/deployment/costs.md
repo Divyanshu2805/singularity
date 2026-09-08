@@ -11,7 +11,7 @@ Everything except the domain and the AI key is on a permanent free tier: $0 a mo
 | Image registry | GitHub Container Registry, public images | $0 |
 | Private deploy and admin access | Tailscale free plan | $0 |
 | Off-machine backups | [Cloudflare R2](https://developers.cloudflare.com/r2/pricing/): 10 GB-month storage free, free egress | $0 |
-| Uptime alerts | A free uptime monitor (e.g. UptimeRobot) | $0 |
+| Uptime alerts | A scheduled GitHub Actions workflow (a dedicated monitor such as UptimeRobot can be added alongside) | $0 |
 | Auth | Firebase Auth | $0 |
 | Payments | Stripe test mode | $0 |
 | Domain | Any registrar, DNS moved to Cloudflare | ~$10–12/year |

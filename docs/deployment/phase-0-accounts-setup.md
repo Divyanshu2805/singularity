@@ -25,6 +25,7 @@ These steps need the owner's identity, card or dashboard logins. About 2–3 hou
 | `STRIPE_SECRET`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS` | secret | Test-mode values | ✅ Done |
 | `CLOUDFLARE_TUNNEL_CREDENTIALS` | secret | The tunnel credentials JSON | ✅ Done |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | secret | Backup bucket token | ✅ Done |
+| `R2_ENDPOINT` | secret | The bucket's S3 API URL, `https://<cloudflare account id>.r2.cloudflarestorage.com` (on the R2 bucket's page). Not anticipated when this table was first written; added in Phase 7 because the backup job cannot reach R2 without it. It embeds the account id, so it is a secret like the other private identifiers. `deploy/scripts/apply-secrets.sh` requires it, so a deploy fails loudly, before applying anything, if it is missing. | ⏳ Owner: add before the next push |
 | `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` | secret | Lets the pipeline join the tailnet briefly | ✅ Done |
 | `KUBE_DEPLOYER_TOKEN` | secret | Namespace-scoped deploy token, created in Phase 4 | ✅ Done |
 | `KUBE_API_SERVER` | secret | The Oracle k3s API's Tailscale URL (`https://<tailscale-name>:6443`) - not anticipated when this table was first written, added in Phase 5 for the deploy job's kubeconfig. Kept as a secret rather than a variable, matching this file's own policy of keeping private hostnames out of committed files. Live-verified from a laptop already on the tailnet: this exact URL + the deployer token authenticates correctly and is scoped exactly as expected. | ✅ Done |

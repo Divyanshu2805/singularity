@@ -11,7 +11,7 @@ Total effort is 34–54 hours: a first public URL after about 4–6 working days
 | 4: Provision the VM | Owner + assistant | 3–4 h | ✅ Done | Tunnel routing swapped to the real Services on Phase 5's first deploy; `hello-test` deleted |
 | 5: CI/CD pipeline | Assistant | 4–6 h | ✅ Done | First real run succeeded after 5 bugs found and fixed live, plus 3 more after it (frontend build environment, the `vibecraft.` rename, cloudflared rollout) - see this phase's own notes above |
 | 6: First deploy + verification | Both | 6–10 h | ✅ Done | Every checklist item passed 2026-09-08, including the Firebase/Stripe hostname re-check, reboot and the 5-preview run. One UX gap tracked, not fixed: a non-member opening a project's chat sees a blank build screen instead of a "not available" message |
-| 7: Hardening + polish | Owner + assistant | 4–6 h | ⏳ Not started | Backups (nothing is backed up yet - all data is on the VM's one boot disk), monitoring, demo polish, docs |
+| 7: Hardening + polish | Owner + assistant | 4–6 h | 🔄 Built and committed locally, not pushed | Backup + restore drilled on kind; monitor, faster previews and the test-mode banner built. Still nothing backed up on the live VM until it deploys. Open for the owner: the `R2_ENDPOINT` secret, example projects, the walkthrough video. Then: after the first deploy, run one backup by hand to prove real R2 |
 | **Total** | | **34–54 h** | | |
 
 Status is updated in this file as each phase's checklist items land — check back here rather than the chat history for current progress.
