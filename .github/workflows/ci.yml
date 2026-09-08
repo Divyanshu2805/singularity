@@ -219,6 +219,7 @@ jobs:
             VITE_FIREBASE_PROJECT_ID=${{ vars.VITE_FIREBASE_PROJECT_ID }}
             VITE_FIREBASE_APP_ID=${{ vars.VITE_FIREBASE_APP_ID }}
             VITE_CSP_FRAME_ORIGINS=https://*.${{ vars.PREVIEW_ROOT_DOMAIN }}
+            VITE_PAYMENTS_TEST_MODE=true
 
   build-proxy-image:
     name: Build image (preview-proxy)

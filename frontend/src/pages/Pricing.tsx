@@ -19,6 +19,7 @@ import { useBilling, usePlans } from "@/hooks/use-billing";
 import { api, isAuthenticated } from "@/lib/api";
 import { cardPrice, formatTokens, hasPaidSubscription, planAction, planActionLabel, planPriceLabel, type PlanAction } from "@/lib/billing";
 import { PlanChangeDialog } from "@/components/PlanChangeDialog";
+import { PaymentsTestModeNotice } from "@/components/PaymentsTestModeNotice";
 import { Logo } from "@/components/VibeCraftLogo";
 import type { Plan } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -136,6 +137,7 @@ export function Pricing() {
                                 Every plan includes the whole editor - the AI chat, teaching mode, ExplainLLM and live
                                 previews. What changes is how many projects you keep and how much you can build each day.
                             </p>
+                            <PaymentsTestModeNotice className="mx-auto mt-5 max-w-lg" />
                         </div>
 
                         {isLoading ? (

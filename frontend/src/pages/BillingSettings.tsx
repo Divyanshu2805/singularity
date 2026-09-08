@@ -15,6 +15,7 @@ import { useSidebar } from "@/hooks/use-sidebar";
 import { useToast } from "@/hooks/use-toast";
 import { useBilling, usePlans } from "@/hooks/use-billing";
 import { PlanChangeDialog } from "@/components/PlanChangeDialog";
+import { PaymentsTestModeNotice } from "@/components/PaymentsTestModeNotice";
 import { api, isAuthenticated, loginRedirectPath } from "@/lib/api";
 import type { Plan } from "@/lib/types";
 import {
@@ -144,6 +145,7 @@ export function BillingSettings() {
                             <p className="mt-1 text-sm text-muted-foreground">
                                 What you're on, what you've used, and how to change it.
                             </p>
+                            <PaymentsTestModeNotice className="mt-4" />
                         </div>
 
                         {busy ? (
