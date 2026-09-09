@@ -1,4 +1,6 @@
-# intelligence-service
+# intelligence-service data model
+
+Chat history, code notes, and AI usage. Database: `vibecraft-intelligence-db`.
 
 ```mermaid
 erDiagram
@@ -95,13 +97,13 @@ One step of an assistant's response.
 | `type` | `ChatEventType` — see below. |
 | `sequenceOrder` | Render/fetch order. |
 | `content` | Markdown for `MESSAGE`; the file's full content for `FILE_EDIT`; the raw walkthrough body for `LEARN`. |
-| `filePath` | Always set for `FILE_EDIT`/`FILE_DELETE`. For `TODO`, the file that step writes (when it has one). For `LEARN`, the file the walkthrough explains. **This string must match byte-for-byte between a `TODO` and its `FILE_EDIT`** — see `docs/architecture/request-flows.md` §4.2 for why. |
+| `filePath` | Always set for `FILE_EDIT`/`FILE_DELETE`. For `TODO`, the file that step writes (when it has one). For `LEARN`, the file the walkthrough explains. **This string must match byte-for-byte between a `TODO` and its `FILE_EDIT`** — see the [AI generation flow](../architecture/flows/ai-generation.md) for why. |
 | `metadata` | Free text — the tool-args string for `TOOL_LOG`; the comma-joined concepts introduced, for `LEARN`. |
 | `previousContent` | For `FILE_EDIT`/`FILE_DELETE`: the file as it was just before this turn wrote it (`""` for a new file, `null` if it couldn't be read). What lets the editor show a turn's diff (`GET /api/chat/projects/{id}/last-turn-changes`). |
 
 ## CODE_NOTE
 
-One saved question+answer exchange from the code-notes feature (`docs/api/`'s `CodeInsightController` section).
+One saved question+answer exchange from the code-notes feature (see the [code insight API](../api/code-insight.md)).
 
 | Field | Meaning |
 |---|---|

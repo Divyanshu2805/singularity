@@ -1,15 +1,22 @@
 # Data Model
 
-Entities, relationships, and the conventions that keep them consistent. Update this in the same change as any schema edit — a mismatch between this file and a service's `entity/`, `enums/` and `db/migration/` is worse than no doc at all.
+The entities, tables and conventions behind VibeCraft's three databases.
 
-The data is split across **three databases, one per service**, and each service owns its schema through Flyway migrations. Hibernate only *validates* (`ddl-auto: validate`); it never creates or alters anything. Two consequences run through this page: a service can only join its own tables (a reference into another service's data is a plain id, never a foreign key — see [Cross-service references](cross-service-references.md#cross-service-references)), and adding a column or an enum value is a new migration, not just an entity edit (see [Changing the schema](conventions.md#changing-the-schema)).
+Data is split across **three PostgreSQL databases, one per service**, and each service owns its schema through Flyway migrations; Hibernate only validates it. Two consequences run through every page here:
+
+- A service can only join its own tables. A reference into another service's data is a plain id column, never a foreign key.
+- Adding a column or table is a new migration, not just an entity change.
 
 ## Contents
 
-- [The Three Databases](databases.md)
-- [Cross-service references](cross-service-references.md)
-- [account-service](account-service.md)
-- [workspace-service](workspace-service.md)
-- [intelligence-service](intelligence-service.md)
-- [Domain Vocabulary (Enums)](enums.md)
-- [Design Conventions Worth Knowing](conventions.md)
+| Page | Covers |
+|---|---|
+| [Databases](databases.md) | Which service owns which tables, ids and timestamps |
+| [account-service](account-service.md) | Users, plans, subscriptions, checkout intents, webhook events, the auth audit trail, revoked sessions |
+| [workspace-service](workspace-service.md) | Projects, members, files, file revisions, previews and preview sessions |
+| [intelligence-service](intelligence-service.md) | Chat sessions, messages and events, code notes, usage counters and ledger |
+| [Cross-service references](cross-service-references.md) | Every column that points into another service's database |
+| [Enums](enums.md) | Roles, permissions, and every status and type value |
+| [Conventions](conventions.md) | Ownership, soft delete, composite keys, enum columns, and how to change the schema |
+
+Keep these pages in step with each service's `entity/`, `enums/` and `db/migration/` directories: update them in the same change as any schema edit.

@@ -1,47 +1,46 @@
-# Design Conventions Worth Knowing
+# Conventions
 
-## Ownership lives on the join row, not a FK
+Rules the schema follows, and how to change it safely.
 
-`Project` has no `owner` column. Ownership is just `PROJECT_MEMBER.projectRole == OWNER` — the owner is not a special entity, just a row with a particular role value, created in the same transaction as the project itself (`ProjectServiceImpl.createProject`). This schema went back and forth twice during early development (a direct `Project.owner` FK, then back to the join-row model) before settling here; there's no FK to migrate if you're extending this.
+## Ownership lives on the join row, not a foreign key
+
+`Project` has no `owner` column. Ownership is a `PROJECT_MEMBER` row with `projectRole = OWNER`, created in the same transaction as the project (`ProjectServiceImpl.createProject`). The owner isn't a special entity — just a member with a particular role.
 
 ## Soft delete is a plain column, not a framework filter
 
-`User`, `Project`, and `ChatSession` carry a nullable `deletedAt`. There is **no** `@SQLDelete`/`@Where` annotation wired up — a soft-deleted row is not automatically excluded from any query. Every repository method that must exclude deleted rows does so explicitly (`WHERE p.deletedAt IS NULL` in the JPQL). If you add a new query against one of these three entities, you're responsible for that filter; nothing will add it for you, and nothing will warn you if you forget. Soft deletes are also **local to the service that owns the row**: deleting a project in workspace does not touch the chat, notes or usage rows about it in intelligence.
+`User`, `Project` and `ChatSession` have a nullable `deletedAt`. There is **no** `@SQLDelete` or `@Where` annotation, so a soft-deleted row is not excluded from any query automatically. Every repository method that must exclude deleted rows does so explicitly (`WHERE p.deletedAt IS NULL`). A new query against one of these entities must add the filter itself; nothing will warn you if it's missing.
 
-## Enum columns carry no `CHECK` constraint — by design
-
-Every enum-backed column (`project_role`, `status`, `role`, `type`, `feature`, …) is a plain `VARCHAR`, and none of the baseline migrations declare a `CHECK (col IN (...))`. That is deliberate. Under Hibernate's `ddl-auto: update`, the schema gets a `CHECK` listing an `@Enumerated(STRING)` column's values *as they were when the column was first created*, and `update` never widens it: adding a new enum constant then fails every insert of it at runtime, with no compile error and no startup warning (`ChatEventType.TODO` hit exactly this). The services' Flyway baselines carry no such constraint, and `validate` never generates one.
-
-So adding an enum constant needs **no migration**. Don't add a hand-written `CHECK` "for safety" — it would recreate exactly the trap the baseline avoids, and this time Hibernate would not even be to blame.
+Soft deletes are local to the owning service: deleting a project in workspace-service doesn't touch the chat, note or usage rows about it in intelligence-service.
 
 ## Composite keys
 
-`ProjectMember` and `ChatSession` both use `@EmbeddedId` + `@MapsId`, backed by a small dedicated `@Embeddable, Serializable` ID class (`ProjectMemberId`, `ChatSessionId`) with `equals()`/`hashCode()` over both fields — required by the JPA spec for a composite key to behave correctly in the persistence context (entity identity, collection lookups, `@MapsId`).
+`ProjectMember` and `ChatSession` use `@EmbeddedId` with `@MapsId`, backed by a small `@Embeddable`, `Serializable` id class (`ProjectMemberId`, `ChatSessionId`) with `equals()` and `hashCode()` over both fields, as the JPA specification requires for composite keys.
+
+## Enum columns carry no `CHECK` constraint
+
+Every enum-backed column (`project_role`, `status`, `role`, `type`, `feature`, …) is a plain `VARCHAR`, and no migration declares a `CHECK (col IN (...))`. This is deliberate: Hibernate-generated `CHECK` constraints list only the values that existed when the column was created and are never widened, so a new enum value would fail every insert at runtime. See [ADR 0006](../architecture/decisions/0006-flyway-owned-schemas.md).
+
+Adding an enum value therefore needs **no migration**. Don't add a hand-written `CHECK` constraint — it would recreate the same trap.
+
+## Upserts need native SQL
+
+`save()` on an entity with a manually assigned id (no `@GeneratedValue`) calls `merge()`, which silently updates or inserts and never fails on a duplicate. Where an insert must detect a conflict — claiming a webhook event, claiming a checkout intent — the repository uses a native `INSERT … ON CONFLICT … DO UPDATE … WHERE …` instead (`WebhookEventRepository.tryClaim`, `CheckoutIntentRepository.claimOrRefresh`).
 
 ## Changing the schema
 
-Each service's schema lives in `src/main/resources/db/migration/`: a baseline `V1__init.sql` per service, written to match the entities exactly, plus account-service's `V2__drop_user_password.sql`, which removed the vestigial `users.password` column left over from the pre-Firebase local login. The rules:
+Each service's migrations live in `src/main/resources/db/migration/`:
 
-1. **A schema change is a new migration** — `V2__short_description.sql` in that service — never an edit to `V1`, and never something Hibernate does for you. Flyway refuses to start against a database whose applied migrations don't match the files.
-2. **The entity changes in the same commit.** With `ddl-auto: validate`, a service will not boot if an entity has a column or type the database doesn't — which is the check that catches an entity edited without its migration.
-3. **Another service's data is never joined.** A new reference to a user or project is a plain id column (see above), not a foreign key.
-4. Update this file in the same change.
-## Revision manifests
+| Service | Migrations |
+|---|---|
+| account-service | `V1__init`, `V2__drop_user_password`, `V3__checkout_intents`, `V4__subscription_uniqueness`, `V5__webhook_events_and_event_ordering`, `V6__subscription_sync_and_grace_state` |
+| workspace-service | `V1__init`, `V2__unique_project_file_path`, `V3__preview_bootstrap_heartbeat`, `V4__revision_manifests` |
+| intelligence-service | `V1__init` |
 
-CODE_REVIEW.md AI-05 / CODE_TODO.md GATE-02: every file write publishes through `RevisionPublisherImpl` as one atomic, immutable revision — replacing what used to be a direct MinIO overwrite with no history at all. The design, in order:
+The rules:
 
-1. **Stage** — every changed path's new content is uploaded to a second, dedicated MinIO bucket (`project-blobs`, configured via `minio.blob-bucket`), keyed purely by `sha256(content)` hex (`blob/<hash>`) — content-addressed and immutable, never overwritten or deleted. The same bytes written twice, even across projects, land at the same key (free dedup). A failure here leaves the live `project-bucket` layout and every table untouched, since nothing yet references the new content.
-2. **Manifest** — one short Postgres transaction inserts a `PROJECT_FILE_REVISION` row (`STAGING`) and one `PROJECT_FILE_REVISION_ENTRY` per changed path, carrying both the new hash and the path's previous hash (the rollback data).
-3. **Apply** — each entry is server-side copied from its blob key onto the project's existing live path key (`{bucket}/{projectId}/{path}` — the layout every other reader, and the K8s preview syncer's `mc mirror`, already depends on; this migration does not touch it) or removed, for a delete. Any failure rolls back every entry already applied *in that same call* using its captured previous hash, and marks the revision `FAILED`.
-4. **Publish** — a single-statement compare-and-swap, `ProjectRepository.casAdvanceCurrentRevision`, atomically advances `PROJECT.currentFileRevisionId` only if it still matches the revision this publish was staged against. Losing the race rolls back the same way and marks the revision `CONFLICT`.
+1. **A schema change is a new migration** — `V<n>__short_description.sql` in the owning service. Never edit an applied migration: Flyway checksums the whole file, comments included, and refuses to start on a mismatch.
+2. **Change the entity in the same commit.** With `ddl-auto: validate`, a service won't boot if an entity and the schema disagree — the check that catches one without the other.
+3. **Never join another service's data.** A new reference to a user or project is a plain id column.
+4. **Update these docs** in the same change.
 
-**Restore is not a special code path** — `RevisionServiceImpl.restore` reconstructs a target revision's snapshot, diffs it against the project's current live state, and publishes that diff through the exact same mechanism (`source = RESTORE`), which is what makes "restore reproduces exact files" (GATE-02's accept condition) provable with the same fault-injection tests as any other write, and guarantees a restore always creates a new forward-only revision rather than rewriting history.
-
-**A legacy file** (any `ProjectFile` row with `contentHash IS NULL` — everything that existed before this shipped) is lazily adopted the first time it's next touched: its current live bytes are read once, hashed, and staged into `project-blobs` as-is, becoming that write's `previousContentHash`. No bulk backfill migration runs — Flyway SQL cannot hash MinIO bytes, and a file never touched again simply never gains revision history.
-
-**Validation before publish (CODE_REVIEW.md AI-09).** `RevisionBuildValidator` is the first real `RevisionValidator`: it claims a fresh, disposable runner pod (never an already-serving preview's — that pod's `runner` container has no per-process resource isolation, so a concurrent build could starve or OOM-kill a live dev server), materializes the staged revision's full snapshot into it via fabric8's tar-based file upload (`PreviewRunnerPool.uploadFile`, not a shell heredoc — robust for arbitrary/binary content), runs `npm install` then a configurable check command, and always releases (deletes) the pod afterward, even on an exception. Gated behind `revision-validation.enabled` (default `false` — a cold validation cycle is real added latency on every AI turn, not yet worth paying unconditionally) and fails open if the warm pool has no idle pod to give it (matches `stillAuthorizedToCommit`'s existing fail-open-on-infra-unreachability precedent elsewhere in this codebase). The default check is `npx tsc --noEmit`, not `npm run build` — confirmed by reading the real starter template's `package.json`/`tsconfig.json` live: its `build` script is a plain `vite build`, which strips TypeScript types without checking them, so it would miss most type errors an AI model might introduce; `tsc --noEmit` catches that class of error and is faster (skips bundling). Live-verified against the real `vibecraft` cluster: a minimal valid TypeScript snapshot passes, a deliberately broken one (wrong return type) fails with a readable diagnostic (`src/math.ts(1,53): error TS2322: Type 'string' is not assignable to type 'number'.`), and a crashed/never-released validation pod is still caught by `PreviewReaper`'s existing orphan sweep with no new code — that sweep is purely label-based (`PreviewRunnerPool.claimedPods()`), not tied to a `Preview` DB row, so a validation pod (which has neither) is swept the same as any other orphan after its 2-minute grace period. **Not built**: a bounded repair-attempt loop (the finding marks it optional), structured/categorized diagnostics by failure type (ADDITIONALS.md IMP-19 — one flat string today), and reusing a warm `node_modules`/npm cache across runs (every run is a cold install — the single biggest cost in this design, and the direct reason `enabled` defaults to `false`).
-
-**What this deliberately does not do yet**, so the scope stays honest:
-- **No blob garbage collection.** Blobs are never deleted, so storage grows monotonically — correct today (it's what makes rollback and restore always possible), but a refcount/reaper is future work once real usage shows it's needed.
-- **No crash recovery mid-apply.** The rollback above handles an in-request failure; a process crash between two apply steps would leave a revision stuck `STAGING` with no automatic reconciliation — a startup job in the shape of `PREVIEW.bootstrapHeartbeatAt`'s stale-row pattern is the natural future fix.
-- **No frontend surface.** `ProjectRevisionController`'s list/preview/restore endpoints exist and are tested but unconsumed by `frontend/` — ADDITIONALS.md MID-03's checkpoint list and preview-before-restore screen are what will eventually call them.
+On Spring Boot 4, Flyway's auto-configuration lives in `spring-boot-starter-flyway`. With only `flyway-core` on the classpath, Flyway silently never runs and validation fails with "missing table".

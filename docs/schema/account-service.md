@@ -1,4 +1,6 @@
-# account-service
+# account-service data model
+
+Users, plans and billing, and the sign-in audit trail. Database: `vibecraft-account-db`.
 
 ```mermaid
 erDiagram
@@ -111,7 +113,7 @@ Entitlement is not a flat status set: ACTIVE and TRIALING always entitle, PAST_D
 
 ## CHECKOUT_INTENT
 
-At most one outstanding Stripe Checkout attempt per user, keyed on `userId` itself. `CheckoutIntentRepository.claimOrRefresh` is a native `INSERT ... ON CONFLICT (user_id) DO UPDATE ... WHERE ...` upsert rather than a JPA `save()` — this entity's manually-assigned id would otherwise route `save()` through `entityManager.merge()`, which upserts silently instead of ever failing on conflict, so two concurrent requests could mint two different idempotency keys instead of converging on one (see CLAUDE.md's gotchas table). Carries the Stripe idempotency key and (once minted) the Stripe Checkout Session id, both reused across a double click or a parallel tab until the intent goes stale (older than a Checkout Session's own ~24h expiry) or targets a different plan. Cleared once the checkout activates a subscription.
+At most one outstanding Stripe Checkout attempt per user, keyed on `userId` itself. `CheckoutIntentRepository.claimOrRefresh` is a native `INSERT ... ON CONFLICT (user_id) DO UPDATE ... WHERE ...` upsert rather than a JPA `save()` — this entity's manually-assigned id would otherwise route `save()` through `entityManager.merge()`, which upserts silently instead of ever failing on conflict, so two concurrent requests could mint two different idempotency keys instead of converging on one (see [upserts](conventions.md#upserts-need-native-sql)). Carries the Stripe idempotency key and (once minted) the Stripe Checkout Session id, both reused across a double click or a parallel tab until the intent goes stale (older than a Checkout Session's own ~24h expiry) or targets a different plan. Cleared once the checkout activates a subscription.
 
 ## WEBHOOK_EVENT
 
@@ -119,7 +121,7 @@ A durable inbox of Stripe webhook deliveries, keyed on Stripe's own event id —
 
 ## AUTH_AUDIT_EVENT / REVOKED_SESSION
 
-Two small tables backing the Firebase-session auth model (`docs/architecture/request-flows.md` §4.1):
+Two small tables backing the Firebase-session auth model (see the [authentication flow](../architecture/flows/authentication.md)):
 
 - **`AUTH_AUDIT_EVENT`** — append-only sign-in history (`AuthAuditEventType`). `userId` is a plain nullable column, not a relation — a rejected sign-in often has no matched user yet.
 - **`REVOKED_SESSION`** — a session cookie that's been signed out of but hasn't naturally expired. Firebase can only revoke *every* session for a user at once; single-device sign-out is enforced here. Only the cookie's SHA-256 is stored, as the primary key itself. It lives only in this database: workspace and intelligence check it through `GET /internal/v1/sessions/revoked`.
