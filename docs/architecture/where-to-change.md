@@ -1,23 +1,55 @@
-# 6. Where Do I Change…?
+# Where Do I Change…?
+
+A task-oriented index into the code. Paths are relative to each service's `src/main/java/com/vibecraft/<service>/` unless they start with a module name.
+
+## AI and generation
 
 | I want to… | Look at |
 |---|---|
-| Change what the AI is instructed to do/how it writes code | `intelligence-service` `llm/PromptUtils.java` (code generation), `llm/CodeInsightPrompts.java` (read-only code insight — kept separate on purpose) |
-| Add a new AI-callable tool | `llm/tools/CodeGenerationTools.java` — and think hard before adding a write-capable tool to anything but the generation path |
-| Change how a generated file gets persisted | `workspace-service` `service/impl/RevisionPublisherImpl.java`/`RevisionManifestStore.java` (the stage→manifest→apply→CAS pipeline, CODE_REVIEW.md AI-05) and `InternalWorkspaceController`'s `publishRevision` endpoint in front of it; `intelligence-service` `AiGenerationServiceImpl.commitFileChanges`. Reading a file's tree/content is still `ProjectFileServiceImpl.java`. |
-| Add another pre-publish validation check (lint, tests, …) | `workspace-service` `service/RevisionValidator.java` — implement it and register it as a `@Component`, the same way `service/impl/RevisionBuildValidator.java` (CODE_REVIEW.md AI-09's typecheck check) already does; `RevisionPublisherImpl` invokes every bean of that type between the manifest commit and apply |
-| Change what AI-09's build validation runs, or turn it on | `revision-validation.*` in `workspace-service`'s `application.yaml` (`enabled`, `command`, timeouts) — no code change needed for a different check command |
-| Add a REST endpoint | the owning service's `controller/`, its request/response DTOs, `docs/api/` — **and** the Gateway route if the path prefix is new, with `RoutingTableTest` updated in the same change (a path no route owns is a 404) |
-| Add a service-to-service call | an `Internal*Controller` endpoint under `/internal/v1` in the owner, a method on the caller's `feign/` client (no `@FeignClient(path = …)`), `common-lib` `dto/` if the payload is shared — and the table in §3 |
-| Add a DB column or table | the entity, **and a new Flyway migration** `V<n>__….sql` in that service's `src/main/resources/db/migration/` (Hibernate only validates), then `docs/schema/` |
-| Change a permission/role rule | workspace `enums/ProjectRole.java` (the permission-set mapping) **and** common-lib's wire `dto/ProjectRole` (must agree), `security/SecurityExpressions.java` in workspace and intelligence |
-| Change quota/plan limits | account `service/SubscriptionService.java` (the `FREE_TIER_*` constants) and `config/PlanSeeder.java` (paid-plan seeding) — these two must never disagree, see `docs/schema/`'s `PLAN` entity |
+| Change what the AI is instructed to do or how it writes code | intelligence `llm/PromptUtils.java` (code generation); `llm/CodeInsightPrompts.java` (read-only code insight — kept separate on purpose) |
+| Add an AI-callable tool | intelligence `llm/tools/CodeGenerationTools.java`. Think hard before giving anything but the generation path a write-capable tool — see [AI prompt boundaries](security-model.md#ai-prompt-boundaries) |
 | Change what counts as billable AI usage | intelligence `enums/UsageFeature.java`, `llm/AiUsageRecorder.java`, and tag the new call site |
-| Change how sessions or rate limits work | `account-service` `service/impl/SessionServiceImpl.java` and `security/`; then the **same** change in workspace's and intelligence's `security/` (three copies) |
-| Change the error shape or a status mapping | `common-lib` `error/GlobalExceptionHandler.java` (all three services pick it up) |
-| Change how live previews are provisioned | workspace `service/impl/PreviewRunnerPool.java`/`PreviewBootstrapper.java`, `k8s/runner-pods.yml` (the pod spec itself) |
-| Change preview routing/proxying | workspace `service/impl/PreviewRouter.java`, `proxy/index.js`, `k8s/vibecraft-proxy.yml` |
-| Change the preview access-token scheme | workspace `util/PreviewAccessToken.java` **and** `proxy/auth.js` (must stay byte-for-byte identical - see `PreviewAccessTokenTest`'s and `proxy/auth.test.js`'s matching known-good HMAC value), `preview.access-token-secret`/`-ttl` in `application.yaml` |
-| Change frontend chat rendering | `frontend/src/components/ChatEventRenderer.tsx` (the block/checklist builder), `frontend/src/lib/project-chat-store.ts` (the module-level state) |
-| Change frontend auth/session handling | `frontend/src/lib/firebase-auth.ts`, `frontend/src/lib/session.ts` (the sign-out teardown registry — see §7) |
-| Add a new client-side module-level store | Register it with `frontend/src/lib/session.ts`'s `onSignOut(...)` — see §7, this is not optional |
+
+## Files and revisions
+
+| I want to… | Look at |
+|---|---|
+| Change how generated files are persisted | workspace `service/impl/RevisionPublisherImpl.java` and `RevisionManifestStore.java`, the `publishRevision` endpoint on `InternalWorkspaceController`; intelligence `AiGenerationServiceImpl.commitFileChanges` |
+| Change how files are read | workspace `service/impl/ProjectFileServiceImpl.java` |
+| Add a pre-publish check (lint, tests, …) | Implement workspace `service/RevisionValidator.java` as a `@Component`, like `service/impl/RevisionBuildValidator.java` |
+| Change or enable the build validation | `revision-validation.*` in workspace-service's `application.yaml` — no code change needed for a different check command |
+| Change which file paths are allowed | workspace `util/ProjectFilePath.java` |
+
+## API, data and permissions
+
+| I want to… | Look at |
+|---|---|
+| Add a REST endpoint | The owning service's `controller/` and DTOs, the [API reference](../api/README.md) — and, if the path prefix is new, the Gateway route plus `RoutingTableTest` in the same change (an unrouted path is a 404) |
+| Add a service-to-service call | An `Internal*Controller` endpoint in the owner, a method on the caller's `feign/` client (no `@FeignClient(path = …)`), a `common-lib` DTO if the payload is shared, and the table in [service communication](service-communication.md#internal-api) |
+| Add a column or table | The entity **and** a new Flyway migration `V<n>__….sql` in that service's `src/main/resources/db/migration/`, then the [data model](../schema/README.md) |
+| Change a permission or role rule | workspace `enums/ProjectRole.java` (the permission mapping) **and** `common-lib`'s wire `dto/ProjectRole` (they must agree); `security/SecurityExpressions.java` in workspace and intelligence |
+| Change quota or plan limits | account `service/SubscriptionService.java` (the `FREE_TIER_*` constants) and `config/PlanSeeder.java` (paid plans). They must never disagree — see [`PLAN`](../schema/account-service.md#subscription--plan) |
+| Change the error shape or a status mapping | `common-lib` `error/GlobalExceptionHandler.java` — all three services pick it up |
+
+## Sessions and security
+
+| I want to… | Look at |
+|---|---|
+| Change how sessions or rate limits work | `common-lib` `security/` (shared by every service); account-service's `service/impl/SessionServiceImpl.java` and `security/LocalSessionAuthenticator.java` for sign-in and sign-out |
+| Change the internal-API guard | `common-lib` `security/InternalServiceAuthFilter.java`, `ServiceSecurityConfig`, and account-service's `WebSecurityConfig` |
+
+## Live previews
+
+| I want to… | Look at |
+|---|---|
+| Change how previews are provisioned | workspace `service/impl/PreviewRunnerPool.java`, `PreviewBootstrapper.java`; the pod spec in `k8s/runner-pods.yml` (local) and `deploy/k8s/base/runner-pods.yaml` (deployed) |
+| Change preview routing or proxying | workspace `service/impl/PreviewRouter.java`, `proxy/index.js`, `proxy/routing.js` |
+| Change the preview access-token scheme | workspace `util/PreviewAccessToken.java` **and** `proxy/auth.js` — they must stay byte-for-byte compatible (`PreviewAccessTokenTest` and `proxy/auth.test.js` pin the same value); `preview.access-token-*` in `application.yaml` |
+
+## Frontend
+
+| I want to… | Look at |
+|---|---|
+| Change chat rendering | `frontend/src/components/ChatEventRenderer.tsx` (blocks and checklist), `frontend/src/lib/project-chat-store.ts` (state) |
+| Change auth or session handling | `frontend/src/lib/firebase-auth.ts`, `frontend/src/lib/session.ts` |
+| Add a module-level store | Register it with `onSignOut(...)` in `frontend/src/lib/session.ts` — required, see [sign-out data isolation](security-model.md#sign-out-data-isolation-frontend) |

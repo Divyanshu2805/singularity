@@ -1,14 +1,54 @@
-# 7. Cross-Cutting Concerns
+# Cross-Cutting Concerns
 
-- **Auth & tenancy** — see §4.1. Every project-scoped operation is gated by `@PreAuthorize` calling into `SecurityExpressions`, which resolves the caller's `ProjectRole` for that specific project. There is no platform-wide role — a user is only ever `OWNER`/`EDITOR`/`VIEWER` *of a particular project*. A guard belongs where the *caller* is a user: `InternalWorkspaceController` calls `ProjectFileService` as a machine principal (no `UserPrincipal`), so the file-tree and content guards sit on `FileController`, not on that service. The flip side is silent: a browser endpoint that reaches an *unguarded* service method is open to every signed-in user (`FileReadAuthorizationTest` pins this for the file reads).
-- **CSRF** — the session is a cookie the browser attaches on its own, so every write needs a matching `X-XSRF-TOKEN` header (Spring Security's `csrf().spa()` double-submit cookie; the `XSRF-TOKEN` cookie is re-issued on each response). It cannot be disabled for that path. The only exemptions are ones whose caller structurally cannot carry the header: Stripe's webhook, and `/internal/v1/**` (guarded by the shared secret instead).
-- **Streaming** — two SSE shapes exist and they are **not** the same contract: `/api/chat/stream` sends JSON-wrapped `{text}` events; `/code/*/stream` sends raw plain-text chunks with different marker-stripping rules. See `docs/api/` for both. The Gateway passes them through without buffering.
-- **Sign-out data isolation (frontend)** — a client-side route change after sign-out is **not** sufficient to clear a previous account's cached state, because module-level stores (`project-chat-store.ts`, `code-lens-store.ts`) live for the page's lifetime, and `sessionStorage` survives a reload. `frontend/src/lib/session.ts` is the one place this is solved: `onSignOut(reset)` registers a store's teardown, and `signOut()` leaves via a full document reload (`window.location.assign`) so anything that forgot to register is discarded anyway. **If you add a module-level cache of anything project- or user-specific on the frontend, register it here.**
-- **Rate limiting & cost control** — each service's `security/RateLimiter` (sliding window) sits in its filter chain after authentication: 600 requests/min per signed-in user (per IP when anonymous), plus 10/min per IP on `POST /api/auth/session` in account. Separately, every AI call path checks the caller's daily token budget *before* doing any expensive work (`UsageService.assertWithinDailyTokenBudget`) — see `docs/api/`'s 402 behavior.
-- **Error taxonomy** — one shape for every error response (`ApiError`), handled in one place: `common-lib`'s `GlobalExceptionHandler`. See `docs/api/`'s full table. New business-logic failures should throw (or let bubble) an existing typed exception rather than a bare `RuntimeException`. The two 503s — a full pool and a failed dependency — carry a `code` so a client can tell them apart.
-- **The code-insight boundary** — `CodeInsightController`'s endpoints must stay read-only *structurally*, not just by prompt instruction: the model is handed exactly one tool (`read_files`), its prompts never mention the write protocol, and `CodeGenerationTools` is typed against `ProjectFileReader` (`getFileTree`/`getFileContent` only), not the write-capable Feign client. Don't widen `ProjectFileReader` to make a future addition more convenient.
-- **Schema ownership** — each service's schema is owned by its Flyway migrations (`db/migration/V1__init.sql`, then `V2…`) and Hibernate runs with `ddl-auto: validate`. That is what removed the persisted-enum `CHECK`-constraint trap (`docs/schema/`).
-- **Startup** — every service's `main()` calls `common-lib`'s `WindowsTimezoneWorkaround.apply()` before `SpringApplication.run(...)`: on Windows the JDK default zone (`Asia/Calcutta`) is one Postgres rejects on the first connection, and it is a JVM default, so each service has to set it itself.
-- **Secrets** — every secret is a bare env-var placeholder in `application.yaml` with no committed fallback; a missing one fails startup loudly.
-- **Observability** — no service sets a prompt-logging level today; `logging.level.org.springframework.ai.chat.client: DEBUG` would log every AI prompt/response in full, whatever the user typed included, so set it only locally and be mindful sharing those logs. SQL logging is on by default in each `application.yaml` and turned off in the deployed manifests (`SPRING_JPA_SHOW_SQL=false`). There is no distributed tracing or structured metrics pipeline; the live deployment is watched by a scheduled uptime and backup-freshness workflow (`docs/operations/`).
-- **Deployment topology** — `deploy/k8s/` (Kustomize: `base/` + `overlays/{kind,oracle}/`) is the full-stack Kubernetes shape every service actually runs as: two namespaces, `vibecraft` (Postgres, MinIO, the five Java services, the frontend, cloudflared) and `vibecraft-ai` (Redis, the preview proxy, the untrusted runner pod pool) — split so a `vibecraft-ai` NetworkPolicy never has to reason about trusted workloads sharing its namespace. Every Java service's Deployment sets `enableServiceLinks: false`; without it, Kubernetes' auto-injected `<SERVICE-NAME>_PORT` env var collides with that same service's own manually-named port-override placeholder (CLAUDE.md's gotchas table has the full account). The `vibecraft` namespace also runs a `nightly-backup` CronJob (`base/backup.yaml`: Postgres dumps and every MinIO bucket to Cloudflare R2, restored by `deploy/scripts/restore-backup.sh`), and the runner pool's init container seeds each warm preview pod's `node_modules` from a pre-baked image (`base/runner-pods.yaml`, `docker/preview-runner.Dockerfile`) so a preview's `npm install` finds everything already present. Full spec, secrets, and the CI/CD pipeline that deploys this: `docs/deployment/`; running it day to day - deploys and rollback, monitoring, backup and restore, upkeep: `docs/operations/`.
+Concerns that span every service. Security has its own page: see the [security model](security-model.md).
+
+## Streaming
+
+Two server-sent-event formats exist, and they are **not** the same contract:
+
+- `/api/chat/stream` sends JSON-wrapped `{ "text": ... }` events.
+- The code-insight `/code/*/stream` endpoints send raw plain-text chunks, with different whitespace and multi-line rules.
+
+Both send a `: keep-alive` comment every ~20 seconds of silence (`SseHeartbeat`), which keeps long generations alive through Cloudflare's idle-connection timeout. The Gateway passes streams through without buffering. Details: [streaming formats](../api/streaming.md).
+
+## Errors
+
+Every error response has one shape (`ApiError`), produced in one place: `common-lib`'s `GlobalExceptionHandler`. Business-logic failures throw an existing typed exception rather than a bare `RuntimeException`, so they map to a specific status. The two kinds of 503 — no free capacity, and a failed dependency — carry a `code` so clients can tell them apart. Full table: [error reference](../api/errors.md).
+
+## Quotas and cost control
+
+Plan limits (daily AI tokens, owned projects, concurrent previews) are enforced before any expensive work starts, as a `402` with a structured `quota` body. Every AI call path checks the caller's daily token budget first (`UsageService.assertWithinDailyTokenBudget`), so a user who is out of budget never pays for a partial attempt. Limits come from account-service; see [billing](../api/billing.md) and [usage](../api/usage.md).
+
+## Schema ownership
+
+Each service's schema is owned by its Flyway migrations (`db/migration/V1__init.sql`, then `V2…`), and Hibernate runs with `ddl-auto: validate`. Enum columns are plain `VARCHAR`s with no `CHECK` constraint, so adding an enum value needs no migration. See [ADR 0006](decisions/0006-flyway-owned-schemas.md) and [changing the schema](../schema/conventions.md#changing-the-schema).
+
+## Configuration
+
+- Every secret is an environment-variable placeholder in `application.yaml` with no committed default; a missing one fails startup.
+- Locally, each service loads a repo-root `.env` file (`spring.config.import: optional:file:.env[.properties]`). The full list is in [configuration](../local-development/configuration.md).
+- In production, non-secret settings come from the `app-config` ConfigMap and secrets from Kubernetes Secrets built on every deploy. See [deployment configuration](../deployment/configuration.md).
+
+## Startup
+
+Every service's `main()` calls `common-lib`'s `WindowsTimezoneWorkaround.apply()` before `SpringApplication.run(...)`. On Windows the JVM's default zone (`Asia/Calcutta`) is an alias PostgreSQL rejects on the first connection, and because it is a JVM default, each service must set it itself.
+
+## Health checks
+
+Every service exposes Spring Boot Actuator's `/actuator/health` on a separate management port (`9404` by default), never on its main port. It is unreachable through the Gateway or the public tunnel, answers without authentication, and exposes only `UP`/`DOWN` with no details. Kubernetes liveness and readiness probes target that port directly. See [health checks](../local-development/health-checks.md).
+
+## Observability
+
+- Logs go to standard output and are read with `kubectl logs`; there is no log shipping, distributed tracing or metrics pipeline.
+- Every error response carries a random `requestId`, and `GlobalExceptionHandler` logs the full `ApiError` on every failure, so a user can quote one opaque value that matches a log line.
+- SQL logging is on in each `application.yaml` for local development and off in the deployed manifests (`SPRING_JPA_SHOW_SQL=false`).
+- The live deployment is watched by a scheduled uptime and backup-freshness workflow. See [monitoring](../operations/monitoring.md).
+
+## Deployment topology
+
+`deploy/k8s/` (Kustomize: `base/` plus `overlays/kind` and `overlays/oracle`) is the full-stack shape every service runs as in production:
+
+- namespace `vibecraft` — Postgres, MinIO, the five Java services, the frontend, cloudflared, and the nightly backup CronJob;
+- namespace `vibecraft-ai` — Redis, the preview proxy, and the untrusted runner-pod pool.
+
+Every Java service Deployment sets `enableServiceLinks: false`, because Kubernetes' auto-injected `<SERVICE>_PORT` variables collide with each service's own port-override property. The runner pool's init container seeds each warm pod's `node_modules` from a pre-built image. See [Deployment](../deployment/README.md) and [Operations](../operations/README.md).
