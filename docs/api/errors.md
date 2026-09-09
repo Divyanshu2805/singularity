@@ -1,34 +1,58 @@
-# Error Taxonomy
+# Errors
 
-Every error response is the same JSON shape (`ApiError`): `{ status, message, timestamp, requestId, errors?, quota?, code? }`. `requestId` is a fresh random id on every error, present unconditionally (not a correlation id threaded from a header or a distributed trace — this codebase has neither); it exists so a user can quote one opaque, non-sensitive value to support, and `GlobalExceptionHandler` logs the whole `ApiError` on every failure, so the same id is already in the server log with no separate wiring (CODE_REVIEW.md API-QA-14's "safe trace ID"). `errors` (a list of `{ field, message }`) appears only on a validation failure; `quota` (`{ reason, limit, used, resetsAt?, planName }`) appears only on a 402; `code` appears only on a 503 that a client has to tell apart from another 503 — `CAPACITY_UNAVAILABLE` (nothing free right now, try again shortly; the message is specific) or `UPSTREAM_UNAVAILABLE` (something the request depends on failed; the message is deliberately generic and the cause stays in the server log). A client should branch on `status` and on the presence of `quota` or `code`, never on parsing `message` text — a bare 503 with neither comes from the Gateway or a dev proxy, not from a service.
+Every error response from every service has the same JSON shape, produced by one handler: `common-lib`'s `GlobalExceptionHandler`. For example, a Free-plan user who has spent the day's AI budget receives:
 
-The shape is the same from every service because there is one handler: `common-lib`'s `GlobalExceptionHandler` (`error/`), one method per exception type. Logging follows the status code, not a blanket policy: client-fault 4xx logs at WARN with the message only (two exceptions carry a `(cause: ...)` suffix in the log because their user-facing message is deliberately vague — see below); only genuine server faults log at ERROR with a full stack trace.
+```json
+{
+  "status": 402,
+  "message": "You've used today's AI allowance on the Free plan. It refills at midnight, or you can upgrade for a bigger daily budget.",
+  "timestamp": "2026-09-08T10:15:30",
+  "requestId": "3f6c2a1e-8b1d-4f0e-9a52-7d4f7c1e2b90",
+  "quota": { "reason": "DAILY_TOKENS", "limit": 5000, "used": 5000, "resetsAt": "2026-09-09T00:00:00Z", "planName": "Free" }
+}
+```
+
+| Field | Present | Meaning |
+|---|---|---|
+| `status`, `message`, `timestamp` | Always | The HTTP status, a human-readable message, and when it happened. |
+| `requestId` | Always | A random id, unique per error. The full error is logged with it, so a user can quote one opaque value that matches a server log line. |
+| `errors` | Validation failures (`400`) | `[{ field, message }]` for every invalid field. |
+| `quota` | `402` only | `{ reason, limit, used, resetsAt?, planName }`. `reason` is `DAILY_TOKENS`, `PROJECT_LIMIT` or `PREVIEW_LIMIT`. |
+| `code` | Some `503`s | `CAPACITY_UNAVAILABLE` (nothing free right now, retry shortly — the message is specific) or `UPSTREAM_UNAVAILABLE` (a dependency failed — the message is deliberately generic and the cause is in the server log). |
+
+**Client guidance:** branch on `status` and on the presence of `quota` or `code`; never parse `message`. A bare `503` with neither comes from the Gateway or a development proxy, not from a service.
+
+## Exception mapping
+
+Client-fault statuses log at `WARN` with the message only. Only genuine server faults log at `ERROR` with a stack trace, so real failures aren't buried.
 
 | Exception | Status | Meaning | Log |
 |---|---|---|---|
-| `ResourceNotFoundException` | 404 | Entity not found (or, for a project, not accessible to the caller — see [Known Behavior](../known-gaps/api-behavior.md#known-behavior-worth-knowing-about)). | WARN |
+| `ResourceNotFoundException` | 404 | Entity not found. For projects, see [403 vs 404](../known-gaps/api-behavior.md). | WARN |
 | `ForbiddenException` | 403 | An explicit business-rule refusal (e.g. forking your own project). | WARN |
-| `MethodArgumentNotValidException` | 400 | `@Valid` failed — `errors[]` lists every field. | WARN |
-| `QuotaExceededException` | **402** | A plan limit was hit — carries `quota`. Not a 400 (the request was well-formed) and not a 403 (not a permission problem). | WARN, with the numbers |
-| `ConflictException` | 409 | A generic state conflict, distinct from a DB constraint violation (e.g. a second generation for the same project). | WARN |
-| `BadRequestException` | 400 | A generic client-fault business rule. | WARN |
-| `AuthorizationDeniedException` | 403 | Spring Security's own `@PreAuthorize` denial. | WARN |
-| `CsrfException` | 403 | Missing/mismatched `X-XSRF-TOKEN` on a write. | WARN + cause |
-| `AccessDeniedException` | 403 | Any other security-chain denial — without this handler it fell through to the catch-all 500. | WARN |
-| `RateLimitExceededException` | 429 | Sliding-window rate limit exceeded — response carries `Retry-After`. | WARN |
-| `AuthenticationException` | 401 | Spring Security auth failure. | WARN |
-| `JwtException` | 401 | An internal-JWT failure ("Invalid or expired token"). | WARN + cause |
-| `MethodArgumentTypeMismatchException` | 400 | A path/query param couldn't bind to its declared type. | WARN |
-| `MissingServletRequestParameterException` | 400 | A required `@RequestParam` was absent (e.g. `files/content` with no `path`). | WARN |
-| `MissingRequestHeaderException` | 400 | A required header was absent (e.g. `Stripe-Signature` on `/webhooks/payment`); the message names it. | WARN |
-| `NoResourceFoundException` | 404 | A URL the service doesn't serve. The path is deliberately not echoed back. | WARN |
-| `HttpRequestMethodNotSupportedException` | 405 | Right URL, wrong verb; carries the required `Allow` header. | WARN |
-| `HttpMediaTypeNotSupportedException` | 415 | A body in a content type the endpoint doesn't read. | WARN |
-| `HttpMessageNotReadableException` | 400 | Malformed request body (bad JSON). | WARN + cause |
-| `DataIntegrityViolationException` | 409 | A DB constraint violation (duplicate, dangling reference). Keeps its stack trace even at WARN — the violated constraint lives in the cause chain, not the generic message. | WARN + trace |
-| `FileStorageException` | 503 | MinIO unreachable or failed. `code: UPSTREAM_UNAVAILABLE`. | **ERROR + trace** |
-| `ExternalServiceException` | 503 | A dependency failed or was unreachable: Firebase, Stripe, OpenRouter, another service over Feign, the Kubernetes cluster. The message is generic on purpose. `code: UPSTREAM_UNAVAILABLE`. | **ERROR + trace** |
-| `CapacityUnavailableException` | 503 | Nothing wrong with the request, no free capacity right now (every preview runner busy). Keeps its own message. `code: CAPACITY_UNAVAILABLE`. | WARN |
-| `Exception` (catch-all) | 500 | Anything genuinely unexpected. | **ERROR + trace** |
+| `AuthorizationDeniedException` | 403 | A `@PreAuthorize` denial. | WARN |
+| `CsrfException` | 403 | Missing or mismatched `X-XSRF-TOKEN` on a write. | WARN + cause |
+| `AccessDeniedException` | 403 | Any other security-chain denial. | WARN |
+| `AuthenticationException` | 401 | Not signed in, or the session is invalid. | WARN |
+| `JwtException` | 401 | An invalid or expired internal token. | WARN + cause |
+| `MethodArgumentNotValidException` | 400 | Validation failed — `errors[]` lists every field. | WARN |
+| `BadRequestException` | 400 | A client-fault business rule. | WARN |
+| `MethodArgumentTypeMismatchException` | 400 | A path or query parameter couldn't be converted to its type. | WARN |
+| `MissingServletRequestParameterException` | 400 | A required query parameter was absent. | WARN |
+| `MissingRequestHeaderException` | 400 | A required header was absent (e.g. `Stripe-Signature`). | WARN |
+| `HttpMessageNotReadableException` | 400 | Malformed request body. | WARN + cause |
+| `QuotaExceededException` | **402** | A plan limit was reached — carries `quota`. Not a `400` (the request was valid) nor a `403` (not a permission problem). | WARN |
+| `NoResourceFoundException` | 404 | A URL the service doesn't serve. The path is not echoed back. | WARN |
+| `HttpRequestMethodNotSupportedException` | 405 | Right URL, wrong method; includes the `Allow` header. | WARN |
+| `ConflictException` | 409 | A state conflict (e.g. a second generation for the same project). | WARN |
+| `DataIntegrityViolationException` | 409 | A database constraint violation. Logged with its cause chain, which names the constraint. | WARN + trace |
+| `HttpMediaTypeNotSupportedException` | 415 | A body in a content type the endpoint doesn't accept. | WARN |
+| `RateLimitExceededException` | 429 | Rate limit exceeded; includes `Retry-After`. | WARN |
+| `CapacityUnavailableException` | 503 | No free capacity right now (every preview runner is busy). `code: CAPACITY_UNAVAILABLE`. | WARN |
+| `FileStorageException` | 503 | Object storage failed. `code: UPSTREAM_UNAVAILABLE`. | **ERROR + trace** |
+| `ExternalServiceException` | 503 | A dependency failed: Firebase, Stripe, OpenRouter, another service, or the Kubernetes cluster. `code: UPSTREAM_UNAVAILABLE`. | **ERROR + trace** |
+| `Exception` (anything else) | 500 | Unexpected. | **ERROR + trace** |
 
-Only `FileStorageException` and `ExternalServiceException` (503) and the catch-all (500) log at ERROR — every other status is a client-fault or an expected refusal, not a platform failure, so it doesn't deserve a stack trace burying the genuine 500s in the logs.
+## Errors inside a stream
+
+Once a server-sent-event stream has started, a failure can't change the status code; it arrives as an SSE `error` event instead. See [Streaming](streaming.md#errors-after-the-stream-starts).

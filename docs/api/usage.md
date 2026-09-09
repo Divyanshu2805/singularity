@@ -1,13 +1,18 @@
 # Usage
 
-## `UsageController` (`/api/usage`)
+The usage meter, insights and export. **Service:** intelligence-service · **Controller:** `UsageController` (`/api/usage`)
 
-*Owner: `intelligence-service`.* The plan allowance in every response comes from account-service; the project count from workspace-service.
+Plan allowances come from account-service; project and preview counts from workspace-service.
 
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
-| GET | `/today?projectId=` | — | `UsageTodayResponse` | The one answer to "how much is left" — tokens, previews, projects, `resetsAt` (next midnight in the **server's** zone). With `projectId`, also this project's tokens today and the caller's most recent AI call. `previewsRunning` comes from workspace-service over `GET /internal/v1/previews/running-count` — the same count the preview quota itself is checked against, so the meter and a 402 on start can't disagree. |
-| GET | `/insights?range=today\|7d\|30d\|90d` | — | `UsageInsightsResponse` | Daily/hourly bars stacked by feature, by-feature/by-project breakdowns, days-at-limit. Bucketed in the server's timezone. 400 on an unrecognized range. |
-| GET | `/events?page&size` | — | `UsageEventPage` | Recent AI requests, newest first. `size` capped at 100. |
-| GET | `/events/export?range=` | — | `text/csv` | RFC 4180 quoting; a project name starting with `=+-@` is prefixed with `'` so a spreadsheet can't execute it as a formula. |
-| GET | `/limits` | — | `PlanLimitsResponse { planName, maxTokensPerDay, maxProjects, unlimitedAi }` | Same active-plan lookup as the others. |
+| `GET` | `/api/usage/today?projectId=` | — | `UsageTodayResponse` | The single answer to "how much is left": tokens, previews and projects, plus `resetsAt` (the next midnight in the **server's** time zone). With `projectId`, also that project's tokens today and the caller's most recent AI call. `previewsRunning` is the same count the preview quota is checked against, so the meter and a `402` can't disagree. |
+| `GET` | `/api/usage/insights?range=` | — | `UsageInsightsResponse` | `range` is `today`, `7d`, `30d` or `90d`. Daily or hourly totals stacked by feature, breakdowns by feature and by project, and days spent at the limit. Bucketed in the server's time zone. `400` for any other range. |
+| `GET` | `/api/usage/events?page=&size=` | — | `UsageEventPage` | Recent AI requests, newest first. `size` is capped at 100. |
+| `GET` | `/api/usage/events/export?range=` | — | `text/csv` | RFC 4180 quoting. A project name starting with `=`, `+`, `-` or `@` is prefixed with `'` so a spreadsheet can't evaluate it as a formula. |
+| `GET` | `/api/usage/limits` | — | `PlanLimitsResponse { planName, maxTokensPerDay, maxProjects, unlimitedAi }` | The caller's effective plan limits. |
+
+## Related
+
+- [`USAGE_LOG` and `USAGE_EVENT`](../schema/intelligence-service.md#usage_log--usage_event) — why usage is recorded twice.
+- [Billing](billing.md) — plans and subscriptions.

@@ -1,20 +1,25 @@
-# Code Insight (Code Lens / Code Notes)
+# Code Insight
 
-## `CodeInsightController` (`/api/projects/{projectId}/code`)
+Explanations of selected code, questions about a project, and each user's saved notes. **Service:** intelligence-service · **Controller:** `CodeInsightController` (`/api/projects/{projectId}/code`)
 
-*Owner: `intelligence-service`* — which is why these paths sit under `/api/projects/**` yet are routed to it, not to workspace (the Gateway's `order` makes `/api/projects/*/code/**` win). Every endpoint needs project `VIEW`.
+These paths sit under `/api/projects/**` but are routed to intelligence-service, not workspace-service: the Gateway gives `/api/projects/*/code/**` a higher priority. Every endpoint requires project `VIEW`.
 
-Read-only by construction: the model is handed exactly one tool (`read_files`, nothing that writes), and its prompts (`CodeInsightPrompts`, kept apart from the code-generation `PromptUtils`) never mention the file-writing protocol — there is no way for it to emit an edit here.
+**Read-only by construction.** The model is given exactly one tool (`read_files`) and its prompts never mention the file-writing protocol, so nothing on this path can edit a project. See [AI prompt boundaries](../architecture/security-model.md#ai-prompt-boundaries).
 
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
-| POST | `/code/explain` | `ExplainCodeRequest { path, code, startLine, endLine }` | `{ answer }` | One-shot explanation of a selected block. Checks the daily token budget (402). |
-| POST | `/code/ask` | `AskCodeRequest { path?, code?, question, history }` | `{ answer }` | Selection is optional — omit it to ask about the project generally; the project's file paths (no contents) are always sent as context. `history` (client-replayed, ≤ 40 turns) has each `role` validated by value, not trusted — anything but `"assistant"` becomes a user message, closing an instruction-injection path. Same budget check. |
-| POST | `/code/explain/stream` | same as `/explain` | SSE, plain-text chunks | The endpoint the UI actually calls. |
-| POST | `/code/ask/stream` | same as `/ask` | SSE, plain-text chunks | Same. |
-| GET | `/code/notes` | — | `CodeNoteResponse[]` | The caller's own saved thread, oldest first. |
-| POST | `/code/notes` | `SaveCodeNoteRequest { question, answer, selection? }` | `CodeNoteResponse` | Saves one finished exchange — called by the client after a stream finishes, never from the stream's own completion (which runs with no security context). |
-| DELETE | `/code/notes/{noteId}` | — | 204 | Another member's note id is a **404, not a 403** — the lookup is `findByIdAndProjectIdAndUserId`, so it simply isn't found rather than confirming it exists. |
-| DELETE | `/code/notes` | — | 204 | Clears the caller's whole thread for this project. |
+| `POST` | `/code/explain` | `ExplainCodeRequest { path, code, startLine, endLine }` | `{ answer }` | One-shot explanation of a selected block. `402` if the daily token budget is spent. |
+| `POST` | `/code/ask` | `AskCodeRequest { path?, code?, question, history }` | `{ answer }` | The selection is optional — omit it to ask about the project in general. The project's file paths (not contents) are always sent as context. `history` is replayed by the client (at most 40 turns); each turn's `role` is validated by value, and anything other than `"assistant"` is treated as a user message. Same budget check. |
+| `POST` | `/code/explain/stream` | as `/code/explain` | SSE, plain text | The endpoint the UI uses. |
+| `POST` | `/code/ask/stream` | as `/code/ask` | SSE, plain text | The endpoint the UI uses. |
+| `GET` | `/code/notes` | — | `CodeNoteResponse[]` | The caller's own saved notes for this project, oldest first. |
+| `POST` | `/code/notes` | `SaveCodeNoteRequest { question, answer, selection? }` | `CodeNoteResponse` | Saves one finished exchange. The client calls this after a stream finishes. |
+| `DELETE` | `/code/notes/{noteId}` | — | `204` | Another member's note id is a `404`, not a `403` — the lookup is scoped to the caller, so it simply isn't found. |
+| `DELETE` | `/code/notes` | — | `204` | Clears the caller's notes for this project. |
 
-**Stream format quirk:** unlike `/api/chat/stream`, this SSE payload is **plain text, not JSON** — a client must strip only the `data:` marker, not the space after it (Spring writes no padding; a leading space belongs to the model's own output). Consecutive `data:` lines belonging to one event must be re-joined with `\n` — Spring splits a multi-line chunk across several `data:` lines, and emitting them separately silently deletes every newline. Both streams also carry the same `: keep-alive` comment line every ~20s that `/api/chat/stream` does (`SseHeartbeat`) — same reason, same "ignore anything that isn't a `data:` line" handling.
+Notes are private: every query filters on both the project and the caller, so members of the same project never see each other's notes.
+
+## Related
+
+- [Streaming](streaming.md#code-insight-stream) — the plain-text SSE format, which differs from the chat stream.
+- [`CODE_NOTE`](../schema/intelligence-service.md#code_note) — how notes are stored.
