@@ -1,41 +1,65 @@
 # First-Time Setup
 
+Assumes the [prerequisites](prerequisites.md) are installed and [`.env`](configuration.md) is filled in.
+
+## 1. Start PostgreSQL and MinIO
+
 ```bash
-# 1. Backend infra
-docker compose -f services.docker-compose.yml up -d   # Postgres :9010, MinIO :9000/:9001
-cp .env.example .env                                    # fill in real values — see .env.example's comments
+docker compose -f services.docker-compose.yml up -d
+```
 
-# 2. Backend services, in this order (each blocks its terminal — one terminal per service, or background them)
-./mvnw -pl common-lib install                              # once per change to common-lib - see below
-./mvnw -pl discovery-service spring-boot:run                # Eureka — the others register with it on boot
-./mvnw -pl account-service spring-boot:run                    # :8081
-./mvnw -pl workspace-service spring-boot:run                   # :8082
-./mvnw -pl intelligence-service spring-boot:run                 # :8083
-./mvnw -pl gateway-service spring-boot:run                       # LAST: the browser's single origin; resolves the three services from Eureka
+This starts PostgreSQL on port `9010` and MinIO on `9000` (API) and `9001` (console). On a brand-new volume, `infra/postgres-init/` creates the three service databases.
 
-# 3. Frontend, in a sixth terminal
+## 2. Start the backend
+
+Each command blocks its terminal, so use one terminal per service (or run them in the background).
+
+```bash
+./mvnw -pl common-lib install                                                # once, and whenever common-lib changes
+MANAGEMENT_SERVER_PORT=9401 ./mvnw -pl discovery-service spring-boot:run      # Eureka :8761 — start first
+MANAGEMENT_SERVER_PORT=9402 ./mvnw -pl account-service spring-boot:run        # :8081
+MANAGEMENT_SERVER_PORT=9403 ./mvnw -pl workspace-service spring-boot:run      # :8082
+MANAGEMENT_SERVER_PORT=9404 ./mvnw -pl intelligence-service spring-boot:run   # :8083
+MANAGEMENT_SERVER_PORT=9405 ./mvnw -pl gateway-service spring-boot:run        # :8000 — start last
+```
+
+Every service's health endpoint defaults to management port `9404`, so on one machine each needs its own `MANAGEMENT_SERVER_PORT` — otherwise the second service to start fails with "Port 9404 was already in use". On Windows PowerShell, set it with `$env:MANAGEMENT_SERVER_PORT=9401; .\mvnw.cmd -pl discovery-service spring-boot:run`.
+
+Start the Gateway last so the three services are already registered with Eureka when its first request arrives.
+
+On first start, each service's Flyway migrations create its schema; account-service seeds the Free, Pro and Business plans; and workspace-service creates its MinIO buckets and uploads the starter template.
+
+> A bare `./mvnw spring-boot:run` at the repository root fails: the root `pom.xml` is an aggregator with no main class. Always pick a module with `-pl`.
+
+## 3. Start the frontend
+
+```bash
 cd frontend
 npm install
-cp .env.example .env.local                              # Firebase web config — see frontend/.env.example
+cp .env.example .env.local   # then fill in the Firebase web config
 npm run dev
 ```
 
-Start the Gateway after the three services so they're already registered when its first request arrives. `.claude/launch.json` has every process pre-configured if you're driving this through Claude Code's preview tools instead of raw terminals — **but that tool caps a worktree at 5 running servers**, and the backend alone needs 5, so run the frontend (`npm run dev`) from your own terminal. `common-lib` only needs re-installing when you actually change it, not on every normal startup — but if you're actively editing `common-lib` itself, note that `mvn compile` alone is **not** enough for a dependent service's `spring-boot:run` to see the change; see [Common Problems](troubleshooting.md#common-problems).
+## 4. Sign in
 
-| Service | URL |
+Open <http://localhost:5173> and create an account through the normal sign-in flow. There is no seed data and no demo login.
+
+## Local URLs
+
+| Process | URL |
 |---|---|
-| Frontend | http://localhost:5173 |
-| Gateway (the browser's actual API origin; routes each URL to the owning service) | http://localhost:8000 |
-| Eureka dashboard | http://localhost:8761 |
-| account-service (also reachable directly — useful for isolating a proxy bug from an app bug) | http://localhost:8081 |
-| workspace-service (same) | http://localhost:8082 |
-| intelligence-service (same) | http://localhost:8083 |
-| MinIO console | http://localhost:9001 (`minioadmin` / `minioadmin123` by default) |
+| Frontend | <http://localhost:5173> |
+| Gateway (the browser's API origin) | <http://localhost:8000> |
+| Eureka dashboard | <http://localhost:8761> |
+| account-service (direct) | <http://localhost:8081> |
+| workspace-service (direct) | <http://localhost:8082> |
+| intelligence-service (direct) | <http://localhost:8083> |
+| MinIO console | <http://localhost:9001> (`minioadmin` / `minioadmin123` by default) |
 
-**account-service, workspace-service, and intelligence-service each use their own Postgres database** (`vibecraft-account-db`, `vibecraft-workspace-db`, `vibecraft-intelligence-db`; same server, same credentials — no shared tables/FKs with each other). `infra/postgres-init/` creates all three automatically on a brand-new `services.docker-compose.yml` volume, and each service's Flyway creates its schema on first start. The MinIO bucket `projects` is created by workspace-service on startup if it is missing. To start over from nothing, see [Resetting Local Data](resetting-data.md#resetting-local-data).
+Calling a service directly is useful for telling a routing problem from an application problem: `curl http://localhost:8081/api/plans` and `curl http://localhost:8000/api/plans` should return identical JSON. A path no service owns is a `404` from the Gateway itself.
 
-**Running workspace-service's live-preview pipeline locally**: it runs against the `kind` namespace `vibecraft-ai`, the Redis behind it, and the MinIO bucket `projects` (see [Running Live Previews Locally](live-previews.md#running-live-previews-locally)). `workspace-service`'s `application.yaml` ships with `preview.port-forward.enabled: false`, so the local port-forwards into the cluster's Redis and preview-proxy pods come from the standalone `k8s/dev-port-forward.ps1` (or `.sh`) script, left running in its own terminal. Only one process should hold those forwards at a time. **Worth knowing: starting a preview used to fail with a 503.** `kubernetes-client 6.13.4` can't serialize a Pod it fetched back under Boot 4.1.0's Jackson 2.21.4 (`NullPointerException: "keySerializer" is null`). `PreviewRunnerPool.claim()` now sends a minimal JSON merge patch (the two labels, the annotation and the listed `resourceVersion` as the precondition) instead of an `update` of the fetched Pod, so nothing read from the cluster is ever serialized. Keep it that way: any new code that writes an object it just read back with this client should patch, not `update`.
+## Running two stacks at once
 
-**Verifying the Gateway is actually transparent**: `curl http://localhost:8081/api/plans` (account-service directly) and `curl http://localhost:8000/api/plans` (through the Gateway) should return byte-identical JSON. If they don't, something in the proxy path changed behavior it shouldn't have. To check *which* service owns a URL, don't guess — `gateway-service`'s `RoutingTableTest` (`./mvnw.cmd -pl gateway-service test -Dtest=RoutingTableTest`) evaluates the real route table against every endpoint. A path no service owns (`/`, `/nope`, anything under `/internal/`) is a `404` from the Gateway itself — it has no catch-all route.
+Every process binds a fixed default port, so a second checkout's stack collides with the first. To run both, give the second stack its own ports with a small properties file per service (`server.port=180xx` and `eureka.client.service-url.defaultZone=http://localhost:18761/eureka/`), passed with `-Dspring-boot.run.jvmArguments=-Dspring.config.additional-location=file:///path/to/file.properties`. The stacks can share Postgres, MinIO and Redis.
 
-There is no seed script and no demo login. Create an account through the frontend's normal sign-in flow (Firebase).
+Next: [live previews](live-previews.md) (optional).
