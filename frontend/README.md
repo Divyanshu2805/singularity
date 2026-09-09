@@ -1,73 +1,59 @@
-# Welcome to your Lovable project
+# VibeCraft Frontend
 
-## Project info
+The React single-page app for VibeCraft: sign-in, the project dashboard, the build chat with its live checklist, the code editor and diff view, live previews, code insight, billing and usage.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Stack
 
-## How can I edit this code?
+React 18 and TypeScript, built with Vite 5. Styling is Tailwind CSS with shadcn/ui (Radix UI) components; server state uses TanStack Query; the editor is CodeMirror 6; sign-in uses the Firebase JS SDK. Tests run on Vitest with Testing Library.
 
-There are several ways of editing your application.
+## Getting started
 
-**Use Lovable**
+The frontend expects the backend to be running — see [local development](../docs/local-development/README.md).
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+npm install
+cp .env.example .env.local   # fill in the Firebase web config
+npm run dev                   # http://localhost:5173
 ```
 
-**Edit a file directly in GitHub**
+In development, Vite proxies `/api` to the Gateway on `http://localhost:8000`, so every API call is same-origin and the session cookie is always sent.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Scripts
 
-**Use GitHub Codespaces**
+| Script | Does |
+|---|---|
+| `npm run dev` | Development server with hot reload |
+| `npm test` | Run the test suite once |
+| `npm run test:watch` | Run tests in watch mode |
+| `npm run lint` | ESLint |
+| `npm run build` | Production build (type-check separately with `npx tsc --noEmit`) |
+| `npm run preview` | Serve the production build locally |
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Configuration
 
-## What technologies are used for this project?
+| Variable | Purpose |
+|---|---|
+| `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID` | Firebase web config (required) |
+| `VITE_CSP_FRAME_ORIGINS` | Production builds: origins previews are served from, allowed in the CSP's `frame-src` |
+| `VITE_PAYMENTS_TEST_MODE` | Production builds: `true` shows the Stripe test-mode notice |
 
-This project is built with:
+Values are inlined at build time. Production builds also inject a Content Security Policy (`csp.ts`).
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Structure
 
-## How can I deploy this project?
+```
+src/
+  pages/        routed views (ProjectView, ProjectsDashboard, BillingSettings, …)
+  components/   feature components; components/ui/ is the vendored shadcn/ui set
+  hooks/        React hooks, mostly thin wrappers around lib/
+  lib/          the API client, SSE parsing, module-level stores, and framework-free logic
+```
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Two rules keep the code manageable:
 
-## Can I connect a custom domain to my Lovable project?
+- **Logic lives in `lib/`** and is tested there without rendering. `lib/` never imports from `components/` or `pages/`.
+- **Module-level stores register with `onSignOut(...)`** in `lib/session.ts`, so no project or user data survives a sign-out. See [sign-out data isolation](../docs/architecture/security-model.md#sign-out-data-isolation-frontend).
 
-Yes, you can!
+## Production image
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+`Dockerfile` builds the app and serves it from unprivileged nginx (`nginx.conf`): hashed assets are cached for a year, and every other path falls back to `index.html` with `no-cache`. See [container images](../docs/deployment/container-images.md).
