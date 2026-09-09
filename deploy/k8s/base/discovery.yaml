@@ -1,5 +1,5 @@
 # Eureka - the registry the other four Java services resolve each other through. Deployed first (deploy order in
-# docs/deployment/phase-3-kubernetes.md Phase 3), reachable in-cluster as `discovery-service:8761`.
+# docs/deployment/kubernetes.md), reachable in-cluster as `discovery-service:8761`.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -47,7 +47,7 @@ spec:
               memory: "192Mi"
             limits:
               cpu: "500m"
-              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              # docs/deployment/kubernetes.md's resource-limits table.
               memory: "384Mi"
           readinessProbe:
             httpGet:

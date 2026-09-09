@@ -65,7 +65,7 @@ spec:
               memory: "128Mi"
             limits:
               cpu: "500m"
-              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              # docs/deployment/kubernetes.md's resource-limits table.
               memory: "512Mi"
           volumeMounts:
             - name: data

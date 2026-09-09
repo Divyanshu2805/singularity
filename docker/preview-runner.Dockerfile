@@ -1,6 +1,6 @@
 # Pre-installs the starter template's npm packages, so a fresh preview pod's first `npm install` finds every package
 # already in node_modules and has nothing to download - the difference between a ~30-90s install and a preview
-# starting in seconds (docs/deployment/phase-2-container-images.md Phase 2's spec for this image, Phase 7's "Faster previews").
+# starting in seconds (docs/deployment/container-images.md).
 #
 # Wired in by deploy/k8s/base/runner-pods.yaml: an initContainer running THIS image copies /opt/template-node-modules
 # into the pod's (still-empty) workspace volume as /app/node_modules before the runner container starts. A plain

@@ -6,7 +6,7 @@
 # Create the credentials once per cluster before applying this file:
 #   kubectl create secret generic db-credentials -n vibecraft \
 #     --from-literal=password='<a long random value - this is DB_PASSWORD in the deployment plan>'
-# The username is not a secret (docs/deployment/phase-0-accounts-setup.md Phase 0's table only lists DB_PASSWORD) - it's the literal
+# The username is not a secret (docs/deployment/configuration.md only lists DB_PASSWORD) - it's the literal
 # `vibecraft` below, matched by each service's SPRING_DATASOURCE_URL/USERNAME env vars in their Deployment.
 apiVersion: v1
 kind: ConfigMap
@@ -84,7 +84,7 @@ spec:
               memory: "256Mi"
             limits:
               cpu: "1"
-              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              # docs/deployment/kubernetes.md's resource-limits table.
               memory: "512Mi"
           volumeMounts:
             - name: data

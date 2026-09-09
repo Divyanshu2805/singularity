@@ -1,4 +1,4 @@
-# Uptime and backup monitoring - docs/deployment/phase-7-hardening.md Phase 7's "uptime monitor" item, done with the tools the
+# Uptime and backup monitoring - docs/operations/monitoring.md, done with the tools the
 # repo already runs on rather than a second account: a scheduled workflow that fails, and GitHub emails the person
 # who owns the schedule when a scheduled run fails. Two independent jobs on two schedules:
 #

@@ -11,7 +11,7 @@
 # (cluster-admin) kubeconfig - not from CI:
 #   kubectl apply -f deploy/k8s/overlays/oracle/deployer-bootstrap.yaml
 #
-# Extract its token for the `KUBE_DEPLOYER_TOKEN` GitHub secret (docs/deployment/phase-0-accounts-setup.md Phase 0's table):
+# Extract its token for the `KUBE_DEPLOYER_TOKEN` GitHub secret (docs/deployment/configuration.md):
 #   kubectl get secret deployer-token -n vibecraft -o jsonpath='{.data.token}' | base64 -d
 apiVersion: v1
 kind: ServiceAccount

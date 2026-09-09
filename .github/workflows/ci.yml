@@ -10,7 +10,7 @@ name: CI
 # backend suite needs neither database nor cluster (CLAUDE.md: "A bare `./mvnw test` passes"), which is exactly why
 # it's safe to run here as-is.
 #
-# docs/deployment/phase-5-ci-cd.md Phase 5: on a push to main, once every test job passes, this also builds all 8 arm64
+# docs/deployment/ci-cd.md: on a push to main, once every test job passes, this also builds all 8 arm64
 # images, pushes them to GHCR tagged with the commit SHA, and deploys to the Oracle cluster over Tailscale - a
 # failed smoke test rolls the affected services back automatically. A pull request only ever runs the test jobs:
 # it never sees a secret and never deploys (every build/deploy job below is gated on `github.event_name != 'pull_request'`).
@@ -59,7 +59,7 @@ jobs:
         run: ./mvnw --batch-mode --no-transfer-progress clean package
 
       - name: Upload the reactor's jars for the image-build job
-        # docker/java-service.Dockerfile packages a jar it did not build itself (docs/deployment/phase-2-container-images.md Phase 2) -
+        # docker/java-service.Dockerfile packages a jar it did not build itself (docs/deployment/container-images.md) -
         # this is what lets the image job (a separate, arm64 runner) use the exact jar this job just tested, not a
         # fresh rebuild that could theoretically differ.
         if: github.event_name == 'push'
@@ -208,7 +208,7 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/vibecraft-frontend:${{ env.DEPLOY_SHA }}
-          # docs/deployment/phase-0-accounts-setup.md Phase 0's table: every VITE_FIREBASE_* entry is a GitHub *variable*, not a
+          # docs/deployment/configuration.md: every VITE_FIREBASE_* entry is a GitHub *variable*, not a
           # secret - none of them are sensitive, they only identify the Firebase project to the browser. Same
           # names as frontend/.env.example (VITE_FIREBASE_API_KEY/AUTH_DOMAIN/PROJECT_ID/APP_ID) - not derived
           # from the separate, backend-only `FIREBASE_PROJECT_ID` variable, even though they happen to share a

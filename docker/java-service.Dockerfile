@@ -2,7 +2,7 @@
 #
 # Handles: extracting the Spring Boot layered jar into separate Docker layers (dependencies change far less often
 # than application code, so a redeploy only pushes/pulls the small `application` layer) and running it as a
-# non-root user with the JVM memory flags docs/deployment/phase-2-container-images.md's Phase 2 specifies.
+# non-root user with the JVM memory flags docs/deployment/container-images.md specifies.
 #
 # Build from the repo root (`docker build -f docker/java-service.Dockerfile --build-arg MODULE=<module-dir> .`)
 # AFTER `./mvnw clean package` has already produced that module's jar under `<module>/target/` - the CI pipeline

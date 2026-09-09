@@ -1,4 +1,4 @@
-# Non-secret, environment-specific settings shared across the five Java services - docs/deployment/phase-0-accounts-setup.md Phase 0
+# Non-secret, environment-specific settings shared across the five Java services - docs/deployment/configuration.md
 # classifies FIREBASE_PROJECT_ID and APP_DOMAIN/CLIENT_URL as GitHub "variable" entries, not secrets.
 #
 # Values here are the kind-rehearsal ones (the more frequently-run case) - the oracle overlay patches only what
@@ -25,6 +25,6 @@ data:
   preview-public-scheme: http
   preview-public-domain: localhost
   preview-public-port: "8090"
-  # Optional (docs/deployment/phase-1-repo-readiness.md Phase 1's leftover table): a cheaper model than the code default
+  # Optional (docs/deployment/configuration.md): a cheaper model than the code default
   # (x-ai/grok-4.5) for the demo. Matches the code default here - an overlay only needs to change this one key.
   ai-model: x-ai/grok-4.5

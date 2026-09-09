@@ -1,10 +1,11 @@
 # Kind rehearsal overlay
 
-The **full-stack** rehearsal for docs/deployment/phase-3-kubernetes.md Phase 3 - every service (Postgres, MinIO, the five Java
-services, frontend, preview pipeline) running in-cluster on `kind`, proving the production topology before it ever
-touches the Oracle machine. This is a *different* exercise from `k8s/*.yml` at the repo root + `docs/local-
-development.md`'s day-to-day dev loop, where the backend runs outside the cluster via `mvnw` and only the preview
-pipeline lives in kind - don't run both against the same cluster.
+The **full-stack rehearsal** of the production topology: every component (Postgres, MinIO, the five Java services,
+the frontend and the preview pipeline) running in-cluster on `kind`, using the same `deploy/k8s/base` the production
+overlay uses. See [Kubernetes manifests](../../../../docs/deployment/kubernetes.md) for how the manifests fit together.
+
+This is a different exercise from the day-to-day loop in [live previews](../../../../docs/local-development/live-previews.md),
+where the backend runs on your machine and only the preview pipeline lives in kind. Don't run both against the same cluster.
 
 ## 1. Create a dedicated cluster
 
@@ -58,8 +59,8 @@ kubectl -n vibecraft get pods -w    # wait for everything Ready
 kubectl -n vibecraft-ai get pods -w
 ```
 
-Then port-forward the three entry points a real browser needs and walk through Phase 6's checklist against
-`http://localhost:8080`:
+Then port-forward the three entry points a browser needs and walk through the
+[release checklist](../../../../docs/deployment/release-checklist.md) against `http://localhost:8080`:
 
 ```bash
 kubectl -n vibecraft port-forward svc/frontend 8080:80

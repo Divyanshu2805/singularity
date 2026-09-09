@@ -1,22 +1,42 @@
-# VibeCraft Deployment Plan: Oracle Cloud Free Tier
+# Deployment
 
-Prepared 2026-08-24. Status: Phases 0–6 complete. **`https://vibecraft.divyanshuagrahari.dev` is live** on the real Oracle cluster (first successful CI/CD deploy 2026-09-04; renamed from `app.divyanshuagrahari.dev` the same day - see Phase 5's "Fixed after the first deploy"), and Phase 6's whole verification checklist passed on 2026-09-08. Phase 7 (backups, monitoring, polish) is built and committed locally but not pushed, so it is not live; it waits on one owner step, the `R2_ENDPOINT` secret, and then a push. Updated 2026-09-08 as steps land — see the checkboxes and the Timeline table's Status column for the current state. Server-specific identifiers (IPs, tunnel/account IDs, private hostnames) are deliberately kept out of this public file; the domain and architecture below are real.
+How VibeCraft runs in production: a single free-tier Arm VM running single-node k3s, behind a Cloudflare tunnel, deployed by GitHub Actions. The design rationale is in [ADR 0007](../architecture/decisions/0007-single-node-k3s-deployment.md); day-to-day running is covered in [Operations](../operations/README.md).
+
+```mermaid
+flowchart LR
+  U[Visitors] --> CF["Cloudflare<br/>DNS + HTTPS"]
+  CF -->|tunnel| CD[cloudflared]
+  GH["GitHub Actions<br/>test, build, deploy"] -->|Tailscale| K3S
+  subgraph K3S["Oracle Arm VM · k3s"]
+    CD -->|"app host: /api, /webhooks"| GW[gateway-service]
+    CD -->|"app host: everything else"| FE[frontend nginx]
+    CD -->|"preview hostnames"| PX[preview-proxy]
+    GW --> SVC["account · workspace · intelligence"]
+    SVC --> DATA["Postgres · MinIO · Redis"]
+    PX --> RUN[preview pods]
+    BK[nightly backup] --> DATA
+  end
+  BK -->|"pg_dump + bucket mirror"| R2[("Cloudflare R2")]
+```
+
+**Key properties**
+
+- **No open inbound ports.** Web traffic arrives through the Cloudflare tunnel; deploys and administration arrive over Tailscale.
+- **Continuous deployment** with tests, a smoke test and automatic rollback. No secret lives on the server: every Kubernetes Secret is rebuilt from a GitHub environment on each deploy.
+- **Portable.** Nothing depends on Oracle. The same Kustomize manifests run on a local kind cluster, so moving hosts is a settings change plus a restore.
+- **About $0 a month**, plus a domain and a capped AI key.
 
 ## Contents
 
-- [Summary](summary.md)
-- [Architecture](architecture.md)
-- [Costs](costs.md)
-- [Phase 0: Accounts and one-time setup (owner)](phase-0-accounts-setup.md)
-- [Phase 1: Repo readiness](phase-1-repo-readiness.md)
-- [Phase 2: Container images](phase-2-container-images.md)
-- [Phase 3: Kubernetes files and local rehearsal](phase-3-kubernetes.md)
-- [Phase 4: Provision the Oracle machine](phase-4-oracle-machine.md)
-- [Phase 5: CI/CD pipeline](phase-5-ci-cd.md)
-- [Phase 6: First deploy and verification](phase-6-first-deploy.md)
-- [Phase 7: Hardening, backups, monitoring, polish](phase-7-hardening.md)
-- [Preview capacity](preview-capacity.md)
-- [Risks and fallback](risks.md)
-- [Growth path](growth-path.md)
-- [Timeline](timeline.md)
-- [Sources](sources.md)
+| Page | Covers |
+|---|---|
+| [Infrastructure](infrastructure.md) | The machine, network, hostnames, namespaces, storage and external services |
+| [Kubernetes manifests](kubernetes.md) | `deploy/k8s/` layout, overlays, resource limits, RBAC, the kind rehearsal |
+| [Container images](container-images.md) | The eight images and how each is built |
+| [CI/CD pipeline](ci-cd.md) | Tests, image builds, deploy, smoke test, rollback, manual redeploys |
+| [Configuration and secrets](configuration.md) | The GitHub `production` environment and the settings each service receives |
+| [Provisioning a new environment](provisioning.md) | Accounts, the VM, k3s, the deploy identity and the tunnel, from scratch |
+| [Release checklist](release-checklist.md) | What to verify on a new environment before calling it live |
+| [Capacity](capacity.md) | Memory and CPU budgets, and how many previews fit |
+| [Costs](costs.md) | What each component costs |
+| [Risks and growth](risks-and-growth.md) | What could go wrong, the fallbacks, and how to scale |

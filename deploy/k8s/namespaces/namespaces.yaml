@@ -40,7 +40,7 @@ metadata:
 
 # Defense in depth, same rationale as the existing `k8s/infra.yml` LimitRange/ResourceQuota for `vibecraft-ai`
 # (CODE_REVIEW.md SEC-10): stops a manifest that forgets its own resources from shipping unbounded, and caps each
-# namespace's total footprint regardless of replica count. Sized from docs/deployment/phase-3-kubernetes.md Phase 3's memory
+# namespace's total footprint regardless of replica count. Sized from docs/deployment/kubernetes.md's memory
 # table - the trusted namespace runs one copy of each service plus the maintenance overhead of a rolling update.
 apiVersion: v1
 kind: LimitRange

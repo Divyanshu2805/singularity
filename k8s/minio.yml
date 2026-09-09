@@ -1,4 +1,4 @@
-# A real in-cluster MinIO, for an actual deployment (docs/deployment/phase-1-repo-readiness.md Phase 1) - the alternative to
+# A real in-cluster MinIO, for an actual deployment (docs/deployment/kubernetes.md) - the alternative to
 # k8s/minio-hostbridge.yml (local kind dev only, bridges to the laptop's own docker-compose MinIO). Apply EXACTLY
 # ONE of these two files, never both: both define a Service named minio-service in this namespace, and applying
 # the second silently overwrites whatever the first created.
@@ -119,7 +119,7 @@ spec:
 
 ---
 
-# CODE_REVIEW.md / docs/deployment/phase-1-repo-readiness.md Phase 1: preview pods used to get the MinIO admin credentials outright
+# docs/architecture/security-model.md: preview pods used to get the MinIO admin credentials outright
 # (minio-runner-credentials' host-uri embedded minioadmin's own password). This Job creates a read-only user
 # instead, scoped to the project bucket only, so a compromised runner pod's syncer container can list and read
 # project files but can never write, delete, or touch any other bucket (starter-projects, project-blobs) or the

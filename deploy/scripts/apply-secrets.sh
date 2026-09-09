@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Recreates every Kubernetes Secret the oracle overlay's Deployments reference, from the GitHub `production`
-# environment's own secrets (docs/deployment/phase-0-accounts-setup.md Phase 0's table) - run on every deploy, so the server itself
+# environment's own secrets (docs/deployment/configuration.md) - run on every deploy, so the server itself
 # never needs a hand-edited secret file (Phase 5's own spec). Idempotent: `--dry-run=client -o yaml | kubectl apply`
 # creates a Secret that doesn't exist yet and reconciles one that does, without ever needing to know which case
 # it's in.

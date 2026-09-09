@@ -1,4 +1,4 @@
-# Nightly off-machine backup - docs/deployment/phase-7-hardening.md Phase 7's first item.
+# Nightly off-machine backup - docs/operations/backups.md.
 # Everything this app owns lives on the one VM's boot disk (Postgres
 # 10 GB and MinIO 20 GB, both k3s local-path volumes), so without this a lost disk is a lost app.
 #

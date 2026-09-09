@@ -44,7 +44,7 @@ spec:
               memory: "256Mi"
             limits:
               cpu: "500m"
-              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              # docs/deployment/kubernetes.md's resource-limits table.
               memory: "448Mi"
           readinessProbe:
             httpGet:

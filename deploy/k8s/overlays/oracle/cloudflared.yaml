@@ -2,7 +2,7 @@
 # (docs/deployment/'s architecture diagram). Oracle-only: kind reaches everything through kubectl
 # port-forward instead, so this file lives in the oracle overlay, not base.
 #
-# The tunnel is created once, out-of-band, in the Cloudflare dashboard (docs/deployment/phase-0-accounts-setup.md Phase 0 - already
+# The tunnel is created once, out-of-band, in the Cloudflare dashboard (docs/deployment/provisioning.md - already
 # done) - this Deployment just runs the daemon that connects to it. Credentials come from a Secret, never baked in:
 #   kubectl create secret generic cloudflared-credentials -n vibecraft \
 #     --from-literal=credentials.json='<the tunnel credentials JSON - CLOUDFLARE_TUNNEL_CREDENTIALS in the plan>'
@@ -48,7 +48,7 @@ spec:
               memory: "32Mi"
             limits:
               cpu: "200m"
-              # docs/deployment/phase-3-kubernetes.md Phase 3's memory table.
+              # docs/deployment/kubernetes.md's resource-limits table.
               memory: "128Mi"
           volumeMounts:
             - name: config
