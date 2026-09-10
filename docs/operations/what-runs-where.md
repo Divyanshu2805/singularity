@@ -13,6 +13,6 @@
 
 ## Admin access
 
-Administration uses a kubeconfig whose server is the k3s API over Tailscale. Server-specific identifiers — IP addresses, the tailnet hostname, account and tunnel ids — are deliberately not in the repository; they live in the GitHub environment and the operator's own kubeconfig.
+Administration uses a kubeconfig whose server is the k3s API over Tailscale. Credentials and private hostnames — the tailnet hostname, the tunnel credentials, account-scoped endpoints — are not in the repository; they live in the GitHub environment and the operator's own kubeconfig.
 
 Keep the production kubeconfig separate from any local kind cluster's, and always pass `--context` explicitly. Several scripts act on whatever context is current.

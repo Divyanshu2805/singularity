@@ -2,7 +2,7 @@
 
 All production configuration lives in the GitHub **`production` environment**, restricted to deploys from `main`. On every deploy, `deploy/scripts/apply-secrets.sh` turns its secrets into Kubernetes Secrets, and the workflow passes its variables into image builds and manifests. Nothing is hand-edited on the server.
 
-Server-specific identifiers — IP addresses, the tailnet hostname, account and tunnel ids — are deliberately kept out of the repository and live only in this environment.
+Credentials and private hostnames — the tailnet hostname, the tunnel's credentials, account-scoped endpoints — are kept out of the repository and live only in this environment. The tunnel's id and public hostnames are not secret and appear in `deploy/k8s/overlays/oracle/cloudflared-config.yaml`.
 
 ## Secrets
 

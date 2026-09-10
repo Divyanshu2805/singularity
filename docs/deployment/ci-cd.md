@@ -2,19 +2,7 @@
 
 Everything is one workflow, `.github/workflows/ci.yml`.
 
-```mermaid
-flowchart LR
-  P[Push to main] --> T1[Backend tests]
-  P --> T2[Frontend checks]
-  P --> T3[Proxy tests]
-  T1 --> IMG[Build 8 arm64 images<br/>push to GHCR]
-  T2 --> IMG
-  T3 --> IMG
-  IMG --> D[Deploy over Tailscale]
-  D --> S{Smoke test}
-  S -->|pass| L[Live]
-  S -->|fail| R[Automatic rollback]
-```
+![CI/CD pipeline](../assets/diagrams/ci-cd-pipeline.png)
 
 > **Current status:** the `push` and `pull_request` triggers are disabled until the repository's `production` environment is configured, so the workflow only runs manually. Restore them by adding the following under `on:` in `ci.yml` (and the `schedule:` block in `uptime.yml`):
 >
@@ -32,9 +20,13 @@ flowchart LR
 | `backend` | push, pull request | Builds and tests the Maven reactor; uploads the tested jars for the image build |
 | `frontend` | push, pull request | Type-check, lint, tests and production build |
 | `proxy` | push, pull request | The preview proxy's `node --test` suite |
-| `build-java-images` | push | Five images from the tested jars (a matrix over the services) |
-| `build-frontend-image`, `build-proxy-image`, `build-preview-runner-image` | push | The other three images |
-| `deploy` | push, manual | Deploys, smoke-tests and, on failure, rolls back |
+| `build-java-images` | push, after `backend` | Five images from the tested jars (a matrix over the services) |
+| `build-frontend-image` | push, after `frontend` | The frontend image, with the public `VITE_*` values as build arguments |
+| `build-proxy-image` | push, after `proxy` | The preview-proxy image |
+| `build-preview-runner-image` | push | The preview-runner image (starter-template `node_modules`); no test gate |
+| `deploy` | push, manual; after all four image jobs | Deploys, smoke-tests and, on failure, rolls back |
+
+Each test job gates only its own image, so a frontend failure never blocks the Java images from building — but the deploy waits for all four image jobs.
 
 A pull request runs only the three test jobs; it never sees a secret and never deploys.
 

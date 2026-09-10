@@ -2,22 +2,7 @@
 
 How VibeCraft runs in production: a single free-tier Arm VM running single-node k3s, behind a Cloudflare tunnel, deployed by GitHub Actions. The design rationale is in [ADR 0007](../architecture/decisions/0007-single-node-k3s-deployment.md); day-to-day running is covered in [Operations](../operations/README.md).
 
-```mermaid
-flowchart LR
-  U[Visitors] --> CF["Cloudflare<br/>DNS + HTTPS"]
-  CF -->|tunnel| CD[cloudflared]
-  GH["GitHub Actions<br/>test, build, deploy"] -->|Tailscale| K3S
-  subgraph K3S["Oracle Arm VM · k3s"]
-    CD -->|"app host: /api, /webhooks"| GW[gateway-service]
-    CD -->|"app host: everything else"| FE[frontend nginx]
-    CD -->|"preview hostnames"| PX[preview-proxy]
-    GW --> SVC["account · workspace · intelligence"]
-    SVC --> DATA["Postgres · MinIO · Redis"]
-    PX --> RUN[preview pods]
-    BK[nightly backup] --> DATA
-  end
-  BK -->|"pg_dump + bucket mirror"| R2[("Cloudflare R2")]
-```
+![Production deployment topology](../assets/diagrams/deployment-topology.png)
 
 **Key properties**
 
