@@ -52,3 +52,7 @@ frontend/.vite/
 frontend/bun.lockb
 frontend/*.local
 !frontend/.env.example
+
+# Diagram generator scratch output
+docs/assets/diagrams/src/out/
+__pycache__/

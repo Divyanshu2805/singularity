@@ -1,0 +1,282 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="1000" viewBox="0 0 1560 1000"><defs><filter id="sh" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.45"/></filter><pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1.2" cy="1.2" r="1.1" fill="#1a2232"/></pattern></defs><rect width="1560" height="1000" rx="18" fill="#0b0f17"/><rect width="1560" height="1000" fill="url(#dots)"/><text x="36" y="46" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="#e6edf3">workspace-service database — vibecraft-workspace-db</text><text x="36" y="70" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="13" fill="#8b98a9">Projects, members, files, revisions and previews · V1–V4 migrations · user ids point into account-service</text>
+<path d="M860.0,580.0 L900.0,580.0 L900.0,630.0 L860.0,630.0" fill="none" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M770.0,366.0 L770.0,520.0" fill="none" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M560.0,720.0 L340.0,720.0" fill="none" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M1210.0,542.0 L1210.0,640.0" fill="none" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M860.0,183.0 L1060.0,183.0" fill="none" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M710.0,766.0 L710.0,800.0" fill="none" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M650.0,366.0 L650.0,520.0" fill="none" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M560.0,303.0 L470.0,303.0 L470.0,520.0 L340.0,520.0" fill="none" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M560.0,183.0 L340.0,183.0" fill="none" stroke="#8b98a9" stroke-width="1.6"/>
+<rect x="560" y="120" width="300" height="246" rx="11" fill="#121826" stroke="rgba(88,166,255,0.6)" stroke-width="1.3" filter="url(#sh)"/>
+<path d="M560,131 a11,11 0 0 1 11,-11 h278 a11,11 0 0 1 11,11 v27 h-300 z" fill="rgba(88,166,255,0.16)"/>
+<g transform="translate(572.0,130.0) scale(0.7500)"><ellipse cx="12" cy="5.5" rx="8" ry="3" fill="none" stroke="#58a6ff" stroke-width="1.8"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" fill="none" stroke="#58a6ff" stroke-width="1.8"/></g>
+<text x="598" y="144" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="13" font-weight="700" fill="#e6edf3">projects</text>
+<rect x="574" y="163" width="18" height="14" rx="4" fill="rgba(227,179,65,0.18)"/>
+<text x="582.9" y="173" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#e3b341">PK</text>
+<text x="610" y="174" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">id</text>
+<text x="848" y="174" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="561" y="181" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="610" y="196" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">name</text>
+<text x="848" y="196" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<text x="610" y="218" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">is_public</text>
+<text x="848" y="218" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">boolean</text>
+<rect x="561" y="225" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="610" y="240" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">template_init_issue</text>
+<text x="848" y="240" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<rect x="574" y="251" width="18" height="14" rx="4" fill="rgba(188,140,255,0.18)"/>
+<text x="582.9" y="261" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#bc8cff">ID</text>
+<text x="610" y="262" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">forked_from_project_id</text>
+<text x="848" y="262" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="561" y="269" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<rect x="574" y="273" width="18" height="14" rx="4" fill="rgba(88,166,255,0.18)"/>
+<text x="582.9" y="283" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#58a6ff">FK</text>
+<text x="610" y="284" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">current_file_revision_id</text>
+<text x="848" y="284" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<text x="610" y="306" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">created_at</text>
+<text x="848" y="306" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<rect x="561" y="313" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="610" y="328" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">updated_at</text>
+<text x="848" y="328" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<text x="610" y="350" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">deleted_at</text>
+<text x="848" y="350" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<rect x="60" y="120" width="280" height="222" rx="11" fill="#121826" stroke="rgba(63,185,80,0.6)" stroke-width="1.3" filter="url(#sh)"/>
+<path d="M60,131 a11,11 0 0 1 11,-11 h258 a11,11 0 0 1 11,11 v27 h-280 z" fill="rgba(63,185,80,0.16)"/>
+<g transform="translate(72.0,130.0) scale(0.7500)"><ellipse cx="12" cy="5.5" rx="8" ry="3" fill="none" stroke="#3fb950" stroke-width="1.8"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" fill="none" stroke="#3fb950" stroke-width="1.8"/></g>
+<text x="98" y="144" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="13" font-weight="700" fill="#e6edf3">project_members</text>
+<rect x="74" y="163" width="32" height="14" rx="4" fill="rgba(227,179,65,0.18)"/>
+<text x="90.2" y="173" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#e3b341">PK FK</text>
+<text x="110" y="174" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">project_id</text>
+<text x="328" y="174" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="61" y="181" width="278" height="22" fill="#ffffff" opacity="0.025"/>
+<rect x="74" y="185" width="18" height="14" rx="4" fill="rgba(227,179,65,0.18)"/>
+<text x="82.9" y="195" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#e3b341">PK</text>
+<text x="110" y="196" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">user_id</text>
+<text x="328" y="196" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<text x="110" y="218" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">project_role</text>
+<text x="328" y="218" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<rect x="61" y="225" width="278" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="110" y="240" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">invited_at</text>
+<text x="328" y="240" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<text x="110" y="262" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">accepted_at</text>
+<text x="328" y="262" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<rect x="61" y="269" width="278" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="110" y="284" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">pinned_at</text>
+<text x="328" y="284" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<text x="110" y="306" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">starred_at</text>
+<text x="328" y="306" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<text x="74" y="332" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" font-style="italic" fill="#8b98a9">user_id → account-service users.id</text>
+<rect x="60" y="480" width="280" height="288" rx="11" fill="#121826" stroke="rgba(57,197,207,0.6)" stroke-width="1.3" filter="url(#sh)"/>
+<path d="M60,491 a11,11 0 0 1 11,-11 h258 a11,11 0 0 1 11,11 v27 h-280 z" fill="rgba(57,197,207,0.16)"/>
+<g transform="translate(72.0,490.0) scale(0.7500)"><ellipse cx="12" cy="5.5" rx="8" ry="3" fill="none" stroke="#39c5cf" stroke-width="1.8"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" fill="none" stroke="#39c5cf" stroke-width="1.8"/></g>
+<text x="98" y="504" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="13" font-weight="700" fill="#e6edf3">project_files</text>
+<rect x="74" y="523" width="18" height="14" rx="4" fill="rgba(227,179,65,0.18)"/>
+<text x="82.9" y="533" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#e3b341">PK</text>
+<text x="110" y="534" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">id</text>
+<text x="328" y="534" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="61" y="541" width="278" height="22" fill="#ffffff" opacity="0.025"/>
+<rect x="74" y="545" width="18" height="14" rx="4" fill="rgba(88,166,255,0.18)"/>
+<text x="82.9" y="555" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#58a6ff">FK</text>
+<text x="110" y="556" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">project_id</text>
+<text x="328" y="556" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="74" y="567" width="18" height="14" rx="4" fill="rgba(57,197,207,0.18)"/>
+<text x="82.9" y="577" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#39c5cf">UK</text>
+<text x="110" y="578" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">path</text>
+<text x="328" y="578" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<rect x="61" y="585" width="278" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="110" y="600" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">minio_object_key</text>
+<text x="328" y="600" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<text x="110" y="622" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">size</text>
+<text x="328" y="622" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="61" y="629" width="278" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="110" y="644" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">type</text>
+<text x="328" y="644" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<text x="110" y="666" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">content_hash</text>
+<text x="328" y="666" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<rect x="61" y="673" width="278" height="22" fill="#ffffff" opacity="0.025"/>
+<rect x="74" y="677" width="18" height="14" rx="4" fill="rgba(88,166,255,0.18)"/>
+<text x="82.9" y="687" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#58a6ff">FK</text>
+<text x="110" y="688" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">current_revision_id</text>
+<text x="328" y="688" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<text x="110" y="710" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">created_at</text>
+<text x="328" y="710" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<rect x="61" y="717" width="278" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="110" y="732" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">updated_at</text>
+<text x="328" y="732" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<text x="74" y="758" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" font-style="italic" fill="#8b98a9">unique (project_id, path)</text>
+<rect x="560" y="520" width="300" height="246" rx="11" fill="#121826" stroke="rgba(240,136,62,0.6)" stroke-width="1.3" filter="url(#sh)"/>
+<path d="M560,531 a11,11 0 0 1 11,-11 h278 a11,11 0 0 1 11,11 v27 h-300 z" fill="rgba(240,136,62,0.16)"/>
+<g transform="translate(572.0,530.0) scale(0.7500)"><ellipse cx="12" cy="5.5" rx="8" ry="3" fill="none" stroke="#f0883e" stroke-width="1.8"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" fill="none" stroke="#f0883e" stroke-width="1.8"/></g>
+<text x="598" y="544" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="13" font-weight="700" fill="#e6edf3">project_file_revisions</text>
+<rect x="574" y="563" width="18" height="14" rx="4" fill="rgba(227,179,65,0.18)"/>
+<text x="582.9" y="573" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#e3b341">PK</text>
+<text x="610" y="574" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">id</text>
+<text x="848" y="574" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="561" y="581" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<rect x="574" y="585" width="18" height="14" rx="4" fill="rgba(88,166,255,0.18)"/>
+<text x="582.9" y="595" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#58a6ff">FK</text>
+<text x="610" y="596" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">project_id</text>
+<text x="848" y="596" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="574" y="607" width="18" height="14" rx="4" fill="rgba(88,166,255,0.18)"/>
+<text x="582.9" y="617" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#58a6ff">FK</text>
+<text x="610" y="618" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">parent_revision_id</text>
+<text x="848" y="618" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="561" y="625" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="610" y="640" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">status</text>
+<text x="848" y="640" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<text x="610" y="662" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">source</text>
+<text x="848" y="662" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<rect x="561" y="669" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<rect x="574" y="673" width="18" height="14" rx="4" fill="rgba(188,140,255,0.18)"/>
+<text x="582.9" y="683" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#bc8cff">ID</text>
+<text x="610" y="684" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">created_by_user_id</text>
+<text x="848" y="684" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<text x="610" y="706" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">failure_detail</text>
+<text x="848" y="706" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<rect x="561" y="713" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="610" y="728" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">created_at</text>
+<text x="848" y="728" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<text x="610" y="750" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">applied_at</text>
+<text x="848" y="750" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<rect x="560" y="800" width="300" height="156" rx="11" fill="#121826" stroke="rgba(227,179,65,0.6)" stroke-width="1.3" filter="url(#sh)"/>
+<path d="M560,811 a11,11 0 0 1 11,-11 h278 a11,11 0 0 1 11,11 v27 h-300 z" fill="rgba(227,179,65,0.16)"/>
+<g transform="translate(572.0,810.0) scale(0.7500)"><ellipse cx="12" cy="5.5" rx="8" ry="3" fill="none" stroke="#e3b341" stroke-width="1.8"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" fill="none" stroke="#e3b341" stroke-width="1.8"/></g>
+<text x="598" y="824" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="13" font-weight="700" fill="#e6edf3">project_file_revision_entries</text>
+<rect x="574" y="843" width="18" height="14" rx="4" fill="rgba(227,179,65,0.18)"/>
+<text x="582.9" y="853" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#e3b341">PK</text>
+<text x="610" y="854" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">id</text>
+<text x="848" y="854" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="561" y="861" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<rect x="574" y="865" width="18" height="14" rx="4" fill="rgba(88,166,255,0.18)"/>
+<text x="582.9" y="875" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#58a6ff">FK</text>
+<text x="610" y="876" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">revision_id</text>
+<text x="848" y="876" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<text x="610" y="898" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">path</text>
+<text x="848" y="898" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar(400)</text>
+<rect x="561" y="905" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="610" y="920" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">change_type</text>
+<text x="848" y="920" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<text x="574" y="946" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" font-style="italic" fill="#8b98a9">+ content_hash, previous_content_hash, size, content_type</text>
+<rect x="1060" y="120" width="300" height="422" rx="11" fill="#121826" stroke="rgba(188,140,255,0.6)" stroke-width="1.3" filter="url(#sh)"/>
+<path d="M1060,131 a11,11 0 0 1 11,-11 h278 a11,11 0 0 1 11,11 v27 h-300 z" fill="rgba(188,140,255,0.16)"/>
+<g transform="translate(1072.0,130.0) scale(0.7500)"><ellipse cx="12" cy="5.5" rx="8" ry="3" fill="none" stroke="#bc8cff" stroke-width="1.8"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" fill="none" stroke="#bc8cff" stroke-width="1.8"/></g>
+<text x="1098" y="144" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="13" font-weight="700" fill="#e6edf3">previews</text>
+<rect x="1074" y="163" width="18" height="14" rx="4" fill="rgba(227,179,65,0.18)"/>
+<text x="1082.9" y="173" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#e3b341">PK</text>
+<text x="1110" y="174" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">id</text>
+<text x="1348" y="174" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="1061" y="181" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<rect x="1074" y="185" width="18" height="14" rx="4" fill="rgba(88,166,255,0.18)"/>
+<text x="1082.9" y="195" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#58a6ff">FK</text>
+<text x="1110" y="196" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">project_id</text>
+<text x="1348" y="196" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="1074" y="207" width="18" height="14" rx="4" fill="rgba(188,140,255,0.18)"/>
+<text x="1082.9" y="217" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#bc8cff">ID</text>
+<text x="1110" y="218" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">started_by_user_id</text>
+<text x="1348" y="218" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="1061" y="225" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="1110" y="240" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">namespace</text>
+<text x="1348" y="240" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<text x="1110" y="262" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">pod_name</text>
+<text x="1348" y="262" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<rect x="1061" y="269" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="1110" y="284" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">hostname</text>
+<text x="1348" y="284" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<text x="1110" y="306" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">preview_url</text>
+<text x="1348" y="306" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<rect x="1061" y="313" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="1110" y="328" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">status</text>
+<text x="1348" y="328" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<text x="1110" y="350" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">detail</text>
+<text x="1348" y="350" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<rect x="1061" y="357" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="1110" y="372" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">failure_log</text>
+<text x="1348" y="372" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">text</text>
+<text x="1110" y="394" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">started_at</text>
+<text x="1348" y="394" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<rect x="1061" y="401" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="1110" y="416" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">ready_at</text>
+<text x="1348" y="416" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<text x="1110" y="438" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">last_accessed_at</text>
+<text x="1348" y="438" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<rect x="1061" y="445" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="1110" y="460" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">terminated_at</text>
+<text x="1348" y="460" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<text x="1110" y="482" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">bootstrap_owner</text>
+<text x="1348" y="482" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<rect x="1061" y="489" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="1110" y="504" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">bootstrap_heartbeat_at</text>
+<text x="1348" y="504" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<text x="1110" y="526" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">created_at</text>
+<text x="1348" y="526" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<rect x="1060" y="640" width="300" height="266" rx="11" fill="#121826" stroke="rgba(255,123,114,0.6)" stroke-width="1.3" filter="url(#sh)"/>
+<path d="M1060,651 a11,11 0 0 1 11,-11 h278 a11,11 0 0 1 11,11 v27 h-300 z" fill="rgba(255,123,114,0.16)"/>
+<g transform="translate(1072.0,650.0) scale(0.7500)"><ellipse cx="12" cy="5.5" rx="8" ry="3" fill="none" stroke="#ff7b72" stroke-width="1.8"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" fill="none" stroke="#ff7b72" stroke-width="1.8"/></g>
+<text x="1098" y="664" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="13" font-weight="700" fill="#e6edf3">preview_sessions</text>
+<rect x="1074" y="683" width="18" height="14" rx="4" fill="rgba(227,179,65,0.18)"/>
+<text x="1082.9" y="693" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#e3b341">PK</text>
+<text x="1110" y="694" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">id</text>
+<text x="1348" y="694" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="1061" y="701" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<rect x="1074" y="705" width="18" height="14" rx="4" fill="rgba(88,166,255,0.18)"/>
+<text x="1082.9" y="715" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#58a6ff">FK</text>
+<text x="1110" y="716" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">preview_id</text>
+<text x="1348" y="716" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="1074" y="727" width="18" height="14" rx="4" fill="rgba(188,140,255,0.18)"/>
+<text x="1082.9" y="737" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#bc8cff">ID</text>
+<text x="1110" y="738" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">project_id</text>
+<text x="1348" y="738" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<rect x="1061" y="745" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<rect x="1074" y="749" width="18" height="14" rx="4" fill="rgba(188,140,255,0.18)"/>
+<text x="1082.9" y="759" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#bc8cff">ID</text>
+<text x="1110" y="760" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">user_id</text>
+<text x="1348" y="760" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">bigint</text>
+<text x="1110" y="782" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">started_at</text>
+<text x="1348" y="782" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<rect x="1061" y="789" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="1110" y="804" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">last_seen_at</text>
+<text x="1348" y="804" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<text x="1110" y="826" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">ended_at</text>
+<text x="1348" y="826" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">timestamp</text>
+<rect x="1061" y="833" width="298" height="22" fill="#ffffff" opacity="0.025"/>
+<text x="1110" y="848" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">end_reason</text>
+<text x="1348" y="848" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">varchar</text>
+<text x="1110" y="870" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="11.5" fill="#e6edf3">failed</text>
+<text x="1348" y="870" text-anchor="end" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">boolean</text>
+<text x="1074" y="896" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" font-style="italic" fill="#8b98a9">one per collaborator on a shared runner</text>
+<path d="M552.0,190.0 L552.0,176.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M547.0,190.0 L547.0,176.0" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M354.0,183.0 L340.0,175.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M354.0,183.0 L340.0,191.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M354.0,183.0 L340.0,183.0" stroke="#8b98a9" stroke-width="1.6"/>
+<rect x="423.2" y="174.0" width="53.7" height="18" rx="9" fill="#0b0f17" stroke="rgba(139,152,169,0.35)" stroke-width="1"/>
+<text x="450.0" y="186.6" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" fill="#8b98a9">members</text>
+<path d="M552.0,310.0 L552.0,296.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M547.0,310.0 L547.0,296.0" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M354.0,520.0 L340.0,512.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M354.0,520.0 L340.0,528.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M354.0,520.0 L340.0,520.0" stroke="#8b98a9" stroke-width="1.6"/><circle cx="362.0" cy="520.0" r="4.5" fill="#0b0f17" stroke="#8b98a9" stroke-width="1.5"/>
+<rect x="448.8" y="402.5" width="42.4" height="18" rx="9" fill="#0b0f17" stroke="rgba(139,152,169,0.35)" stroke-width="1"/>
+<text x="470.0" y="415.1" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" fill="#8b98a9">files</text>
+<path d="M657.0,374.0 L643.0,374.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M657.0,379.0 L643.0,379.0" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M650.0,506.0 L642.0,520.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M650.0,506.0 L658.0,520.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M650.0,506.0 L650.0,520.0" stroke="#8b98a9" stroke-width="1.6"/><circle cx="650.0" cy="498.0" r="4.5" fill="#0b0f17" stroke="#8b98a9" stroke-width="1.5"/>
+<rect x="617.5" y="434.0" width="65.0" height="18" rx="9" fill="#0b0f17" stroke="rgba(139,152,169,0.35)" stroke-width="1"/>
+<text x="650.0" y="446.6" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" fill="#8b98a9">revisions</text>
+<path d="M717.0,774.0 L703.0,774.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M717.0,779.0 L703.0,779.0" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M710.0,786.0 L702.0,800.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M710.0,786.0 L718.0,800.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M710.0,786.0 L710.0,800.0" stroke="#8b98a9" stroke-width="1.6"/>
+<rect x="666.1" y="774.0" width="87.7" height="18" rx="9" fill="#0b0f17" stroke="rgba(139,152,169,0.35)" stroke-width="1"/>
+<text x="710.0" y="786.6" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" fill="#8b98a9">changed paths</text>
+<path d="M868.0,176.0 L868.0,190.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M873.0,176.0 L873.0,190.0" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M1046.0,183.0 L1060.0,191.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M1046.0,183.0 L1060.0,175.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M1046.0,183.0 L1060.0,183.0" stroke="#8b98a9" stroke-width="1.6"/><circle cx="1038.0" cy="183.0" r="4.5" fill="#0b0f17" stroke="#8b98a9" stroke-width="1.5"/>
+<rect x="930.3" y="174.0" width="59.4" height="18" rx="9" fill="#0b0f17" stroke="rgba(139,152,169,0.35)" stroke-width="1"/>
+<text x="960.0" y="186.6" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" fill="#8b98a9">previews</text>
+<path d="M1217.0,550.0 L1203.0,550.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M1217.0,555.0 L1203.0,555.0" stroke="#8b98a9" stroke-width="1.6"/>
+<path d="M1210.0,626.0 L1202.0,640.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M1210.0,626.0 L1218.0,640.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M1210.0,626.0 L1210.0,640.0" stroke="#8b98a9" stroke-width="1.6"/><circle cx="1210.0" cy="618.0" r="4.5" fill="#0b0f17" stroke="#8b98a9" stroke-width="1.5"/>
+<rect x="1174.7" y="582.0" width="70.7" height="18" rx="9" fill="#0b0f17" stroke="rgba(139,152,169,0.35)" stroke-width="1"/>
+<text x="1210.0" y="594.6" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" fill="#8b98a9">watched by</text>
+<path d="M552.0,727.0 L552.0,713.0" stroke="#8b98a9" stroke-width="1.6"/><circle cx="538.0" cy="720.0" r="4.5" fill="#0b0f17" stroke="#8b98a9" stroke-width="1.5"/>
+<path d="M354.0,720.0 L340.0,712.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M354.0,720.0 L340.0,728.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M354.0,720.0 L340.0,720.0" stroke="#8b98a9" stroke-width="1.6"/><circle cx="362.0" cy="720.0" r="4.5" fill="#0b0f17" stroke="#8b98a9" stroke-width="1.5"/>
+<rect x="439.1" y="711.0" width="121.7" height="18" rx="9" fill="#0b0f17" stroke="rgba(139,152,169,0.35)" stroke-width="1"/>
+<text x="500.0" y="723.6" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" fill="#8b98a9">current_revision_id</text>
+<path d="M770.0,380.0 L778.0,366.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M770.0,380.0 L762.0,366.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M770.0,380.0 L770.0,366.0" stroke="#8b98a9" stroke-width="1.6"/><circle cx="770.0" cy="388.0" r="4.5" fill="#0b0f17" stroke="#8b98a9" stroke-width="1.5"/>
+<path d="M763.0,512.0 L777.0,512.0" stroke="#8b98a9" stroke-width="1.6"/><circle cx="770.0" cy="498.0" r="4.5" fill="#0b0f17" stroke="#8b98a9" stroke-width="1.5"/>
+<rect x="687.4" y="461.0" width="165.2" height="18" rx="9" fill="#0b0f17" stroke="rgba(139,152,169,0.35)" stroke-width="1"/>
+<text x="770.0" y="473.6" text-anchor="middle" font-family="'Cascadia Code', 'JetBrains Mono', Consolas, 'SFMono-Regular', monospace" font-size="10.5" fill="#8b98a9">current_file_revision_id</text>
+<path d="M868.0,573.0 L868.0,587.0" stroke="#8b98a9" stroke-width="1.6"/><circle cx="882.0" cy="580.0" r="4.5" fill="#0b0f17" stroke="#8b98a9" stroke-width="1.5"/>
+<path d="M874.0,630.0 L860.0,622.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M874.0,630.0 L860.0,638.0" stroke="#8b98a9" stroke-width="1.6"/><path d="M874.0,630.0 L860.0,630.0" stroke="#8b98a9" stroke-width="1.6"/><circle cx="882.0" cy="630.0" r="4.5" fill="#0b0f17" stroke="#8b98a9" stroke-width="1.5"/>
+<rect x="876.0" y="596.0" width="48.0" height="18" rx="9" fill="#0b0f17" stroke="rgba(139,152,169,0.35)" stroke-width="1"/>
+<text x="900.0" y="608.6" text-anchor="middle" font-family="'Segoe UI', 'Inter', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="10.5" fill="#8b98a9">parent</text></svg>
