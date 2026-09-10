@@ -32,24 +32,7 @@ VibeCraft is an AI-assisted project builder. You type a one-line idea; a short, 
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    Browser --> Gateway["gateway-service<br/>single origin"]
-    Gateway --> Account["account-service<br/>users · billing · sessions"]
-    Gateway --> Workspace["workspace-service<br/>projects · files · previews"]
-    Gateway --> Intel["intelligence-service<br/>AI generation · usage"]
-    Workspace -. internal API .-> Account
-    Intel -. internal API .-> Account
-    Intel -. internal API .-> Workspace
-    Account --> DB[("PostgreSQL<br/>one DB per service")]
-    Workspace --> DB
-    Intel --> DB
-    Workspace --> MinIO[("MinIO")]
-    Workspace --> K8s["Kubernetes<br/>preview pods"]
-    Intel --> AI["OpenRouter"]
-    Account --> Stripe
-    Browser --> Proxy["preview proxy"] --> K8s
-```
+![VibeCraft system architecture](docs/assets/diagrams/system-architecture.png)
 
 A Spring Cloud Gateway routes each URL to one of three domain services, each with its own database. Services find each other through Eureka and call each other over a private, secret-authenticated internal API. Sign-in is Firebase-only; each service verifies the session itself. **Generated code runs only inside isolated preview pods**, never in the backend.
 
@@ -125,6 +108,8 @@ docs/                   documentation
 ## Deployment
 
 The live demo runs on a single free-tier Oracle Cloud Arm VM as single-node k3s, with no open inbound ports: visitors arrive through a Cloudflare tunnel, and deploys arrive over Tailscale. GitHub Actions tests every change, builds eight arm64 images, deploys them, smoke-tests the site and rolls back automatically on failure. A nightly job backs up the databases and object storage to Cloudflare R2.
+
+![Production deployment topology](docs/assets/diagrams/deployment-topology.png)
 
 See [deployment](docs/deployment/README.md) and [operations](docs/operations/README.md).
 

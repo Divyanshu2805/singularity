@@ -4,16 +4,7 @@ Every change to a project's files — an AI turn or a restore — is published a
 
 ## Publishing a revision
 
-```mermaid
-flowchart LR
-    S[1. Stage<br/>upload blobs by sha256] --> M[2. Manifest<br/>revision + entries, STAGING]
-    M --> V{validators}
-    V --> A[3. Apply<br/>copy blobs onto live keys]
-    A --> P[4. Publish<br/>CAS current revision]
-    P --> OK[APPLIED]
-    A -- failure --> RB[roll back applied entries] --> F[FAILED]
-    P -- lost race --> RB2[roll back] --> C[CONFLICT]
-```
+![The revision publish pipeline](../assets/diagrams/file-revisions.png)
 
 1. **Stage.** Every changed path's new content is uploaded to a dedicated MinIO bucket (`project-blobs`, `minio.blob-bucket`) under `blob/<sha256>`. Blobs are content-addressed and immutable: the same bytes written twice, even across projects, land at the same key. A failure here leaves the live file layout and every table untouched, because nothing references the new content yet.
 2. **Manifest.** One short Postgres transaction inserts a `PROJECT_FILE_REVISION` row in `STAGING` and one `PROJECT_FILE_REVISION_ENTRY` per changed path, recording both the new hash and the path's previous hash (the rollback data).

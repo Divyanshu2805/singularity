@@ -2,6 +2,8 @@
 
 The browser talks to one origin, the Gateway. The services talk to each other over a private internal API that the Gateway never exposes.
 
+![Service-to-service communication](../assets/diagrams/service-communication.png)
+
 ## The Gateway
 
 `gateway-service` matches each request path against an ordered route table (`gateway-service/src/main/resources/application.yaml`) and forwards it, unmodified, to the service that owns it.

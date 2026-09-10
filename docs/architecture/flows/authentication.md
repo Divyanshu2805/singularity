@@ -2,28 +2,7 @@
 
 How a user signs in, and how every service trusts the resulting session. Firebase is the only sign-in method; the backend never sees a password.
 
-```mermaid
-sequenceDiagram
-    participant B as Browser
-    participant F as Firebase Auth
-    participant A as account-service
-    participant S as workspace / intelligence
-
-    B->>F: sign in (password, Google, second factor)
-    F-->>B: Firebase ID token
-    B->>A: POST /api/auth/session { idToken } + X-XSRF-TOKEN
-    A->>F: verify ID token
-    A->>A: find or create User by firebaseUid, audit SIGN_IN
-    A-->>B: Set-Cookie: vc_session (httpOnly, 5 days)
-    B->>S: any request, cookie attached
-    S->>S: SessionCache hit? (≤ 60 s old)
-    alt cache miss
-        S->>A: GET /internal/v1/sessions/revoked?cookieHash=
-        S->>F: verify session cookie
-        S->>A: GET /internal/v1/users/by-firebase-uid
-    end
-    S-->>B: response, as UserPrincipal
-```
+![Sign-in and session sequence](../../assets/diagrams/flow-authentication.png)
 
 ## Steps
 

@@ -2,37 +2,7 @@
 
 Starting a preview claims a warm Kubernetes pod, syncs the project's files into it, runs the Vite dev server there, and routes a hostname to it through Redis and a small reverse proxy. This runs entirely in workspace-service.
 
-```mermaid
-sequenceDiagram
-    participant FE as Frontend (PreviewPanel.tsx)
-    participant PC as PreviewController
-    participant PD as PreviewDeploymentServiceImpl
-    participant Pool as PreviewRunnerPool
-    participant Boot as PreviewBootstrapper
-    participant K8s as Kubernetes API (fabric8)
-    participant Redis as Redis
-    participant Proxy as proxy/index.js
-
-    FE->>PC: POST /api/projects/{id}/preview
-    PC->>PD: startPreview() [canViewProject, per-project lock, 402 PREVIEW_LIMIT]
-    PD->>Pool: claim(projectId)
-    Pool->>K8s: merge patch (status idle→busy, project-id, claimed-at) + resourceVersion
-    PD->>Boot: start(previewId, projectId) [async]
-    Boot->>K8s: exec syncer container: mc mirror (MinIO → /app)
-    Boot->>K8s: exec runner container: npm install && vite dev
-    loop every few seconds
-        Boot->>K8s: exec probe (wget /@vite/client)
-    end
-    Boot->>PD: markRunning()
-    PD->>Redis: route:<hostname> → podIp:port
-    PD-->>FE: previewUrl = https://<hostname>/?pvt=<signed, expiring token>
-    FE->>Proxy: load previewUrl
-    Proxy->>Proxy: verify token (HMAC-SHA256), 401 if invalid or expired
-    Proxy-->>FE: 302 without ?pvt=, Set-Cookie: pv_auth
-    FE->>Proxy: follow redirect with cookie
-    Proxy->>Redis: GET route:<hostname>
-    Proxy-->>FE: reverse-proxied to the pod's dev server
-```
+![Live preview start sequence](../../assets/diagrams/flow-live-preview.png)
 
 ## Steps
 

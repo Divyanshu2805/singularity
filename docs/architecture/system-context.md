@@ -32,58 +32,6 @@ It never executes AI-generated or user-authored code anywhere except inside a li
 
 ## Diagram
 
-```mermaid
-flowchart TD
-    Browser["Browser"]
-    Vite["React SPA<br/>(frontend/)"]
-    Gateway["gateway-service :8000"]
-    Eureka["discovery-service :8761<br/>(Eureka)"]
-    Account["account-service :8081"]
-    Workspace["workspace-service :8082"]
-    Intel["intelligence-service :8083"]
-    AccDB[("account DB")]
-    WsDB[("workspace DB")]
-    IntDB[("intelligence DB")]
-    MinIO[("MinIO<br/>file content")]
-    Firebase["Firebase"]
-    OpenRouter["OpenRouter"]
-    Stripe["Stripe"]
-
-    Browser -- "HTTPS, session cookie" --> Vite
-    Vite -- "/api" --> Gateway
-    Gateway -- "/api/auth, /api/plans, /api/me, /api/payments, /webhooks" --> Account
-    Gateway -- "/api/projects, /api/previews" --> Workspace
-    Gateway -- "/api/chat, /api/ideas, /api/usage, /api/projects/*/code" --> Intel
-    Gateway -. resolves lb:// .-> Eureka
-    Account -. registers .-> Eureka
-    Workspace -. registers .-> Eureka
-    Intel -. registers .-> Eureka
-
-    Workspace -- "/internal/v1 (users, plan limits, revoked sessions)" --> Account
-    Intel -- "/internal/v1 (users, plan limits, revoked sessions)" --> Account
-    Intel -- "/internal/v1 (membership, files, revisions, project summaries)" --> Workspace
-    Workspace -- "/internal/v1 (stop generation)" --> Intel
-    Account -- "/internal/v1/sessions/evict" --> Workspace
-    Account -- "/internal/v1/sessions/evict" --> Intel
-
-    Account --> AccDB
-    Workspace --> WsDB
-    Intel --> IntDB
-    Workspace --> MinIO
-    Account --> Firebase
-    Workspace --> Firebase
-    Intel --> Firebase
-    Intel --> OpenRouter
-    Account --> Stripe
-
-    subgraph K8s["Kubernetes + Redis"]
-        RunnerPods["runner pods"]
-        Proxy["preview proxy (proxy/)"]
-    end
-
-    Workspace -- "fabric8 kubernetes-client / Redis" --> K8s
-    Proxy -- routes to --> RunnerPods
-    Browser -- "direct, once routed via Redis" --> Proxy
-```
+![VibeCraft system architecture](../assets/diagrams/system-architecture.png)
 
 In production the same services run in-cluster on a single k3s node behind a Cloudflare tunnel; see [Deployment](../deployment/README.md) for that topology.

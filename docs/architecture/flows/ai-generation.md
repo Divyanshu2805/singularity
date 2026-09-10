@@ -2,30 +2,7 @@
 
 The platform's core loop: a user asks for something in the project chat, and files actually get written. It runs in intelligence-service, which reaches workspace-service over the internal API for anything about the project.
 
-```mermaid
-sequenceDiagram
-    participant FE as Frontend (ChatPanel.tsx)
-    participant CC as ChatController
-    participant AG as AiGenerationServiceImpl
-    participant AI as OpenRouter (Spring AI ChatClient)
-    participant WS as workspace-service (internal API)
-    participant DB as intelligence DB
-
-    FE->>CC: POST /api/chat/stream {message, projectId}
-    CC->>AG: streamResponse() [canEditProject via workspace, 402 if over the daily budget]
-    AG->>WS: file tree (ProjectFileReader) for the FileTreeContextAdvisor
-    AG->>AI: Flux.defer(chatClient.prompt()...)
-    Note over AI: system prompt: <message>/<todo>/<file>/<tool>/<learn> tags
-    AI->>WS: read_files tool call → file content
-    AI-->>CC: streamed raw text chunks
-    CC-->>FE: SSE {text} chunks (parsed live by use-stream-parser.ts)
-    AI-->>AG: stream completes
-    AG->>AG: LlmResponseParser turns tags into ChatEvent rows
-    AG->>WS: POST /internal/v1/projects/{id}/revisions — the whole turn, one call
-    Note over WS: stage → manifest → apply → publish<br/>all-or-nothing (see File revisions)
-    AG->>DB: save ChatMessage + ChatEvent rows
-    AG->>DB: record token usage (UsageLog counter + UsageEvent ledger)
-```
+![AI generation sequence](../../assets/diagrams/flow-ai-generation.png)
 
 ## Steps
 
