@@ -16,10 +16,11 @@ A column that names something in another service's database is a **plain id**: n
 
 ## Plain ids within one database
 
-A few same-database references are plain columns too, on purpose:
+Two same-database references are plain columns with no foreign key, on purpose:
 
 | Column | Why it isn't a foreign key |
 |---|---|
 | `projects.forked_from_project_id` | A fork keeps working after its source project is deleted. |
 | `preview_sessions.project_id` | Denormalised from its preview, so "this user's session on this project" is a single-table lookup. |
-| `projects.current_file_revision_id`, `project_files.current_revision_id`, `project_file_revisions.parent_revision_id` | The revision chain is walked by id with a recursive query, not loaded as an object graph. |
+
+The revision columns — `projects.current_file_revision_id`, `project_files.current_revision_id`, `project_file_revisions.project_id` and `.parent_revision_id` — are real foreign keys in the database, but the entities map them as plain `Long`s rather than JPA relations: the revision chain is walked by id with a recursive query, not loaded as an object graph.

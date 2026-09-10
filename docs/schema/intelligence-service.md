@@ -2,71 +2,7 @@
 
 Chat history, code notes, and AI usage. Database: `vibecraft-intelligence-db`.
 
-```mermaid
-erDiagram
-    CHAT_SESSION ||--o{ CHAT_MESSAGE : contains
-    CHAT_MESSAGE ||--o{ CHAT_EVENT : "made up of"
-
-    CHAT_SESSION {
-        bigint projectId PK "plain id, workspace-service"
-        bigint userId PK "plain id, account-service"
-        timestamp createdAt
-        timestamp updatedAt
-        timestamp deletedAt
-    }
-
-    CHAT_MESSAGE {
-        bigint id PK
-        bigint projectId FK
-        bigint userId FK
-        text content "placeholder for ASSISTANT rows"
-        string role "USER, ASSISTANT, SYSTEM, TOOL"
-        int tokensUsed "nullable"
-        timestamp createdAt
-    }
-
-    CHAT_EVENT {
-        bigint id PK
-        bigint chatMessageId FK
-        string type "THOUGHT, MESSAGE, TODO, FILE_EDIT, FILE_DELETE, LEARN, TOOL_LOG"
-        int sequenceOrder
-        text content
-        string filePath "nullable"
-        text metadata "nullable"
-        text previousContent "nullable"
-    }
-
-    CODE_NOTE {
-        bigint id PK
-        bigint projectId "plain id"
-        bigint userId "plain id"
-        text question
-        text answer
-        string selectionPath "nullable"
-        text selectionCode "nullable"
-        int selectionStartLine "nullable"
-        int selectionEndLine "nullable"
-        timestamp createdAt
-    }
-
-    USAGE_LOG {
-        bigint id PK
-        bigint userId "plain id"
-        date date
-        int tokensUsed
-    }
-
-    USAGE_EVENT {
-        bigint id PK
-        bigint userId "plain id"
-        bigint projectId "nullable, plain id"
-        string feature "plain string, not @Enumerated"
-        int inputTokens
-        int outputTokens
-        int totalTokens
-        timestamp createdAt "set explicitly"
-    }
-```
+![intelligence-service entity-relationship diagram](../assets/diagrams/er-intelligence.png)
 
 ## CHAT_SESSION
 
