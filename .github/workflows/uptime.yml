@@ -20,6 +20,9 @@
 name: Uptime
 
 on:
+  schedule:
+    - cron: "*/15 * * * *"
+    - cron: "30 4 * * *" # 10:00 India time, ~13h after the 02:30 backup, and 30h+ stale after a missed night
   workflow_dispatch:
 
 permissions:

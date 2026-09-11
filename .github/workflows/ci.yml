@@ -16,6 +16,10 @@ name: CI
 # it never sees a secret and never deploys (every build/deploy job below is gated on `github.event_name != 'pull_request'`).
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       sha:
