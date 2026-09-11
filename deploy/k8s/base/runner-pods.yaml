@@ -109,7 +109,7 @@ spec:
               ephemeral-storage: "2Gi"
 
         - name: syncer
-          image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+          image: ghcr.io/divyanshu2805/mc:RELEASE.2025-08-13T08-35-41Z
           command: ["/bin/sh", "-c", "sleep infinity"]
           env:
             - name: HOME

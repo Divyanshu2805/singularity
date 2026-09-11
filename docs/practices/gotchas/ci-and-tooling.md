@@ -18,6 +18,12 @@
 - **Cause:** GitHub Container Registry can create a new package as private even when the repository is public.
 - **Fix:** in the package's settings, change its visibility to public (once per image).
 
+## MinIO's own images are no longer public
+
+- **Symptom:** `RevisionPublisherIntegrationTest` fails in CI with `unauthorized: access to the requested resource is not authorized` while pulling MinIO, and a fresh node or kind cluster can't start MinIO or any `mc` container.
+- **Cause:** MinIO stopped serving its images anonymously from both `quay.io/minio/*` and Docker Hub's `minio/*`. A node that pulled them earlier keeps working from its cache, which hides the problem until something needs a fresh pull.
+- **Fix:** every reference uses this repo's public GHCR mirror, `ghcr.io/divyanshu2805/minio` and `ghcr.io/divyanshu2805/mc`, with the upstream tags and both `linux/amd64` and `linux/arm64`. The images are unmodified upstream builds (AGPL-3.0; source at github.com/minio/minio and github.com/minio/mc). To move to a newer MinIO release, build it from that source for both platforms and push it to the mirror first.
+
 ## Operator scripts act on the current `kubectl` context
 
 - **Symptom:** a script meant for one cluster changes another.

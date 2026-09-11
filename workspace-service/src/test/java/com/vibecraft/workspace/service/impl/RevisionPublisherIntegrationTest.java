@@ -73,11 +73,11 @@ class RevisionPublisherIntegrationTest {
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
-    // quay.io, not Docker Hub's minio/minio - this repo's own k8s/runner-pods.yml and services.docker-compose.yml
-    // already pull MinIO from quay.io, since MinIO stopped publishing images to Docker Hub.
+    // This repo's own GHCR mirror of MinIO, the same image k8s/runner-pods.yml and services.docker-compose.yml use:
+    // MinIO no longer serves its images anonymously from quay.io or Docker Hub.
     @Container
     static final MinIOContainer MINIO = new MinIOContainer(
-            DockerImageName.parse("quay.io/minio/minio:RELEASE.2024-01-16T16-07-38Z").asCompatibleSubstituteFor("minio/minio"));
+            DockerImageName.parse("ghcr.io/divyanshu2805/minio:RELEASE.2025-09-07T16-13-09Z").asCompatibleSubstituteFor("minio/minio"));
 
     private static final String PROJECT_BUCKET = "projects";
     private static final String BLOB_BUCKET = "project-blobs";

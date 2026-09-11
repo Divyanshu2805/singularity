@@ -33,7 +33,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: minio
-          image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+          image: ghcr.io/divyanshu2805/minio:RELEASE.2025-09-07T16-13-09Z
           args: ["server", "/data", "--console-address", ":9001"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -135,7 +135,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: mc
-          image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+          image: ghcr.io/divyanshu2805/mc:RELEASE.2025-08-13T08-35-41Z
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

@@ -22,7 +22,7 @@ services:
     # CODE_REVIEW.md OPS-01: pinned to the version actually running when this was checked, not `latest` - a
     # floating tag means a plain `docker compose pull` silently changes what every local dev and CI run is
     # actually testing against.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: ghcr.io/divyanshu2805/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: minio-vibecraft
     command: server /data --console-address ":9001"
     environment:

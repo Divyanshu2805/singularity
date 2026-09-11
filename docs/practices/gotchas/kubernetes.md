@@ -15,7 +15,7 @@
 ## A non-root user needs a writable `$HOME` in each image
 
 - **Symptom:** every preview start fails; the syncer container logs `mkdir /.mc: permission denied`.
-- **Cause:** `quay.io/minio/mc` has no home directory for uid 1000, so with `runAsUser: 1000` `$HOME` defaults to `/`. (`node:20-alpine` does have `/home/node`, so the runner container was fine.)
+- **Cause:** the `mc` image has no home directory for uid 1000, so with `runAsUser: 1000` `$HOME` defaults to `/`. (`node:20-alpine` does have `/home/node`, so the runner container was fine.)
 - **Fix:** set `HOME=/tmp` on containers whose image has no home for the configured user. Test the actual code path in every container, not just one.
 
 ## Kubernetes service links collide with port properties

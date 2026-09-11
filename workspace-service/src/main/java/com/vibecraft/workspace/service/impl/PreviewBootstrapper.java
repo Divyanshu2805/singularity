@@ -193,7 +193,7 @@ public class PreviewBootstrapper {
     }
 
     /**
-     * Scans /proc by hand rather than using pgrep, ps, or grep: quay.io/minio/mc is a minimal image with none of
+     * Scans /proc by hand rather than using pgrep, ps, or grep: the mc image is a minimal image with none of
      * them (only GNU coreutils and mc itself) - caught live re-testing this exact check (CODE_REVIEW.md PRE-06)
      * when the missing binary's "command not found" made every watcher look dead on every single preview. The
      * first, grep-free rewrite had the opposite bug just as badly: matching the shell's own command line, since a

@@ -120,7 +120,7 @@ spec:
                   ephemeral-storage: "1Gi"
           containers:
             - name: upload
-              image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+              image: ghcr.io/divyanshu2805/mc:RELEASE.2025-08-13T08-35-41Z
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities:

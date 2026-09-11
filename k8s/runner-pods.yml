@@ -97,10 +97,10 @@ spec:
         - name: syncer
           # CODE_REVIEW.md OPS-01/OPS-02: pinned to the version actually running when this was checked, not
           # `latest` - closes OPS-02's specific image-pinning complaint (its lockfile/SBOM/CI-scan asks stay open).
-          image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+          image: ghcr.io/divyanshu2805/mc:RELEASE.2025-08-13T08-35-41Z
           command: ["/bin/sh", "-c", "sleep infinity"]
           env:
-            # quay.io/minio/mc has no home directory for uid 1000 the way node:20-alpine's `node` user does, so
+            # the `mc` image has no home directory for uid 1000 the way node:20-alpine's `node` user does, so
             # HOME defaults to / under runAsUser: 1000 below - every mc command, even one whose alias comes entirely
             # from MC_HOST_myminio, still tries to write its own state under $HOME/.mc and fails outright
             # ("mkdir /.mc: permission denied"). This is what made every preview start fail after SEC-08 added

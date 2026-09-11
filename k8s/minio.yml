@@ -39,7 +39,7 @@ spec:
       containers:
         - name: minio
           # Pinned to the same version services.docker-compose.yml uses locally, not `latest`.
-          image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+          image: ghcr.io/divyanshu2805/minio:RELEASE.2025-09-07T16-13-09Z
           args: ["server", "/data", "--console-address", ":9001"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -151,7 +151,7 @@ spec:
       containers:
         - name: mc
           # Same pinned version the syncer container already uses.
-          image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+          image: ghcr.io/divyanshu2805/mc:RELEASE.2025-08-13T08-35-41Z
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -164,7 +164,7 @@ spec:
               # new password.
               add: ["IPC_LOCK"]
           env:
-            # quay.io/minio/mc has no home directory baked in for uid 1000 - see k8s/runner-pods.yml's syncer
+            # the `mc` image has no home directory baked in for uid 1000 - see k8s/runner-pods.yml's syncer
             # container for the same gotcha, hit live there first.
             - name: HOME
               value: /tmp
