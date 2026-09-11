@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300" role="img" aria-label="VibeCraft - Describe it. Watch it get built, live.">
+  <defs>
+    <linearGradient id="mark" x1="3" y1="2" x2="29" y2="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F4AE4D"/>
+      <stop offset="1" stop-color="#CE4822"/>
+    </linearGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F4AE4D"/>
+      <stop offset="1" stop-color="#D9572B"/>
+    </linearGradient>
+    <linearGradient id="tag" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F7C27A"/>
+      <stop offset="1" stop-color="#E0764A"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0" r="0.75">
+      <stop offset="0" stop-color="#F4AE4D" stop-opacity="0.22"/>
+      <stop offset="0.55" stop-color="#CE4822" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#14110F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#F0EBE4" stroke-opacity="0.045" stroke-width="1"/>
+    </pattern>
+    <clipPath id="card">
+      <rect width="1000" height="300" rx="22"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#card)">
+    <rect width="1000" height="300" fill="#14110F"/>
+    <rect width="1000" height="300" fill="url(#grid)"/>
+    <rect width="1000" height="300" fill="url(#glow)"/>
+  </g>
+  <rect x="0.5" y="0.5" width="999" height="299" rx="21.5" fill="none" stroke="#F0EBE4" stroke-opacity="0.08"/>
+
+  <g transform="translate(88 78) scale(4.5)">
+    <rect x="1" y="1" width="30" height="30" rx="8" fill="url(#mark)"/>
+    <path d="M8.5 11 L16 23.5 L20.4 16" fill="none" stroke="#201810" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M23.4 6.6 Q23.9 9.7 27 10.2 Q23.9 10.7 23.4 13.8 Q22.9 10.7 19.8 10.2 Q22.9 9.7 23.4 6.6 Z" fill="#201810"/>
+  </g>
+
+  <g font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <text x="264" y="150" font-size="76" font-weight="700" letter-spacing="-1.5">
+      <tspan fill="#F0EBE4">Vibe</tspan><tspan fill="url(#word)">Craft</tspan>
+    </text>
+    <text x="266" y="196" font-size="26" font-weight="600" fill="url(#tag)">Describe it. Watch it get built, live.</text>
+  </g>
+  <text x="267" y="232" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" fill="#9E958A" letter-spacing="0.3">idea · interview · spec · live code · live preview · teams · plans</text>
+</svg>

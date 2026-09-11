@@ -1,11 +1,26 @@
-# VibeCraft
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="VibeCraft: describe it, watch it get built, live" width="100%">
+</p>
 
-**Describe an idea, answer a few questions, and watch a real project get built — live.**
+<p align="center">
+  <b>Describe an idea, answer a few questions, and watch a real project get built — live.</b><br>
+  An AI project builder with live previews, real-time collaboration and metered plans.
+</p>
 
-![Java 25](https://img.shields.io/badge/Java-25-orange)
-![Spring Boot 4.1](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)
-![React 18](https://img.shields.io/badge/React-18-61DAFB)
-![Kubernetes](https://img.shields.io/badge/Kubernetes-k3s-326CE5)
+<p align="center">
+  <img src="https://img.shields.io/badge/Java-25-1f2328?logo=openjdk&amp;logoColor=white&amp;labelColor=555" alt="Java 25">
+  <img src="https://img.shields.io/badge/Spring%20Boot-4.1-1f2328?logo=springboot&amp;logoColor=white&amp;labelColor=555" alt="Spring Boot 4.1">
+  <img src="https://img.shields.io/badge/React-18-1f2328?logo=react&amp;logoColor=white&amp;labelColor=555" alt="React 18">
+  <img src="https://img.shields.io/badge/TypeScript-5-1f2328?logo=typescript&amp;logoColor=white&amp;labelColor=555" alt="TypeScript 5">
+  <img src="https://img.shields.io/badge/PostgreSQL-18-1f2328?logo=postgresql&amp;logoColor=white&amp;labelColor=555" alt="PostgreSQL 18">
+  <img src="https://img.shields.io/badge/Kubernetes-k3s-1f2328?logo=kubernetes&amp;logoColor=white&amp;labelColor=555" alt="Kubernetes k3s">
+</p>
+
+<p align="center">
+  <a href="https://vibecraft.divyanshuagrahari.dev"><b>vibecraft.divyanshuagrahari.dev</b></a>
+</p>
+
+---
 
 VibeCraft is an AI-assisted project builder. You type a one-line idea; a short, AI-written interview turns it into a spec; an AI chat writes the project file by file while a checklist ticks off each step; and a live preview runs the result in its own Kubernetes pod as it's being built. Teammates collaborate with owner, editor and viewer roles, and usage is metered against plans billed through Stripe.
 
