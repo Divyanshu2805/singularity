@@ -4,15 +4,6 @@ Everything is one workflow, `.github/workflows/ci.yml`.
 
 ![CI/CD pipeline](../assets/diagrams/ci-cd-pipeline.png)
 
-> **Current status:** the `push` and `pull_request` triggers are disabled until the repository's `production` environment is configured, so the workflow only runs manually. Restore them by adding the following under `on:` in `ci.yml` (and the `schedule:` block in `uptime.yml`):
->
-> ```yaml
-> push:
->   branches: [main]
-> pull_request:
->   branches: [main]
-> ```
-
 ## Jobs
 
 | Job | Runs on | Does |
@@ -39,6 +30,8 @@ A pull request runs only the three test jobs; it never sees a secret and never d
 5. **Wait.** Each workload's rollout is awaited in dependency order, up to five minutes each.
 6. **Smoke test.** `deploy/scripts/smoke-test.sh` checks that the app answers `200`, `/api/plans` returns JSON, and a random preview hostname reaches the proxy's "not running" page.
 7. **Roll back** on any failure after the apply: `kubectl rollout undo` on every workload the deploy changed, including the runner pool.
+
+The smoke test runs as soon as the last rollout finishes, and the gateway finds services through Eureka, which can take up to about 30 seconds to register one. After a cold start, when every service has just started, `/api/plans` can fail for that window alone. Recovering from a failed deploy: [deploys](../operations/deploys.md#when-a-deploy-fails).
 
 ## Manual redeploy
 

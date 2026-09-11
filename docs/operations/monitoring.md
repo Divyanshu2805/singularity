@@ -7,7 +7,7 @@
 | Site | Every 15 minutes | Runs the deploy smoke test against the live domain, retrying three times 30 seconds apart so a single blip doesn't alert |
 | Backup freshness | Daily, 10:00 IST (04:30 UTC) | Runs `deploy/scripts/check-backup-freshness.sh`: the newest complete backup in R2 must be under 30 hours old |
 
-> The `schedule:` triggers are currently disabled along with CI's push trigger; both checks can still be run by hand from the Actions tab. Restore the schedule (`*/15 * * * *` and `30 4 * * *`) when the deployment is live.
+Both checks can also be run by hand from the Actions tab.
 
 A failed scheduled run emails the person who last edited the workflow's schedule — that is how GitHub chooses the recipient.
 

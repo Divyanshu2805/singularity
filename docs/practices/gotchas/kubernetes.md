@@ -54,6 +54,18 @@
 - **Cause:** Postgres and MinIO read their initial password once, when their volume is created, and keep it there.
 - **Fix:** rotate on the server first (`ALTER USER …`; restart MinIO with the new value), then change the Secret. See [deploys](../../operations/deploys.md#secrets).
 
+## A Job's pod template is immutable
+
+- **Symptom:** a deploy fails at the apply with `The Job "minio-bootstrap-preview-reader" is invalid: spec.template: … field is immutable`.
+- **Cause:** unlike a Deployment, a Job can't be updated in place, so a manifest change to its image (or anything else in its template) can't be applied over an existing Job.
+- **Fix:** delete the completed Job and apply again. Keep one-time Jobs safe to re-run for exactly this reason. See [deploys](../../operations/deploys.md#when-a-deploy-fails).
+
+## A rollout can deadlock on the namespace quota
+
+- **Symptom:** the deploy waits on `statefulset/postgres` until it times out; `postgres-0` doesn't exist and events show `exceeded quota: vibecraft-quota … limits.cpu`.
+- **Cause:** a rolling update keeps each old pod until its replacement is ready. After a broken deploy, both old (crash-looping) and new pods count against the `vibecraft` CPU limit (8; about 5.7 in steady state). The new pods can't become ready without Postgres, and Postgres can't be created while the old pods hold the quota.
+- **Fix:** scale the app Deployments to 0 to free the quota, then deploy. See [deploys](../../operations/deploys.md#when-a-deploy-fails).
+
 ## A failing CronJob notifies nobody
 
 - **Symptom:** backups silently stop while every service stays healthy.

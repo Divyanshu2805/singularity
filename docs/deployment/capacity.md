@@ -11,7 +11,7 @@ With the stack idle and one warm runner pod, `kubectl top` reports:
 | Node | about 3.3 GB of 12 GB (27%), 4% CPU |
 | Java services | 231–489 Mi each (workspace 489, intelligence 438, account 376, gateway 245, discovery 231), against limits of 384–640 Mi |
 | Postgres / MinIO | about 101 Mi / 109 Mi |
-| Namespace quotas | `vibecraft` 4.0 of 8 Gi limits; `vibecraft-ai` 1.5 of 12 Gi with one warm runner |
+| Namespace quotas | `vibecraft` 4.0 of 8 Gi memory and 5.7 of 8 CPU limits; `vibecraft-ai` 1.5 of 12 Gi with one warm runner |
 
 ## Previews
 
