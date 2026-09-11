@@ -26,7 +26,7 @@ Everything is one workflow, `.github/workflows/ci.yml`.
 | `build-preview-runner-image` | push | The preview-runner image (starter-template `node_modules`); no test gate |
 | `deploy` | push, manual; after all four image jobs | Deploys, smoke-tests and, on failure, rolls back |
 
-Each test job gates only its own image, so a frontend failure never blocks the Java images from building — but the deploy waits for all four image jobs.
+Each test job gates only its own image, so a frontend failure never blocks the Java images from building — but the deploy waits for all four image jobs. On a push it runs only if all four succeeded; on a manual run only if all four were skipped, as they are by design there. A failed test also leaves its image job skipped, so accepting "skipped" on a push would deploy image tags that were never built.
 
 A pull request runs only the three test jobs; it never sees a secret and never deploys.
 

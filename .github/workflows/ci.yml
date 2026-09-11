@@ -271,17 +271,25 @@ jobs:
   deploy:
     name: Deploy to Oracle
     needs: [build-java-images, build-frontend-image, build-proxy-image, build-preview-runner-image]
-    # Runs on a normal push AND on a manual redeploy (workflow_dispatch) - but only for the latter does `needs`
-    # resolve to "skipped" rather than "success", since the build jobs are gated to push-only (a redeploy reuses
-    # images already pushed for that SHA, it doesn't rebuild them). `always()` is required so this job is even
-    # considered when its needs were skipped rather than run; the explicit result checks are what stop it running
-    # after a real build failure.
+    # Runs on a normal push AND on a manual redeploy (workflow_dispatch). On a push every build job must have
+    # succeeded. On a manual redeploy every build job is skipped by design (they're gated to push-only - a redeploy
+    # reuses images already pushed for that SHA), so there "skipped" is the expected result. The two cases are kept
+    # apart on purpose: a push whose test job failed also leaves its build job "skipped" (a job whose `needs` failed
+    # is skipped, not failed), and accepting "skipped" on a push once deployed image tags that were never built.
+    # `always()` is required so this job is even considered when its needs were skipped rather than run.
     if: |
-      always() && github.ref == 'refs/heads/main' &&
-      (needs.build-java-images.result == 'success' || needs.build-java-images.result == 'skipped') &&
-      (needs.build-frontend-image.result == 'success' || needs.build-frontend-image.result == 'skipped') &&
-      (needs.build-proxy-image.result == 'success' || needs.build-proxy-image.result == 'skipped') &&
-      (needs.build-preview-runner-image.result == 'success' || needs.build-preview-runner-image.result == 'skipped')
+      always() && github.ref == 'refs/heads/main' && (
+        (github.event_name == 'push' &&
+          needs.build-java-images.result == 'success' &&
+          needs.build-frontend-image.result == 'success' &&
+          needs.build-proxy-image.result == 'success' &&
+          needs.build-preview-runner-image.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' &&
+          needs.build-java-images.result == 'skipped' &&
+          needs.build-frontend-image.result == 'skipped' &&
+          needs.build-proxy-image.result == 'skipped' &&
+          needs.build-preview-runner-image.result == 'skipped')
+      )
     runs-on: ubuntu-latest
     environment: production
     concurrency:
