@@ -15,11 +15,18 @@ Everything is one workflow, `.github/workflows/ci.yml`.
 | `build-frontend-image` | push, after `frontend` | The frontend image, with the public `VITE_*` values as build arguments |
 | `build-proxy-image` | push, after `proxy` | The preview-proxy image |
 | `build-preview-runner-image` | push | The preview-runner image (starter-template `node_modules`); no test gate |
-| `deploy` | push, manual; after all four image jobs | Deploys, smoke-tests and, on failure, rolls back |
+| `approve` | push, manual; after all four image jobs | The release gate: waits for the owner to approve in the Actions UI |
+| `deploy` | push, manual; after `approve` | Deploys, smoke-tests and, on failure, rolls back |
 
-Each test job gates only its own image, so a frontend failure never blocks the Java images from building — but the deploy waits for all four image jobs. On a push it runs only if all four succeeded; on a manual run only if all four were skipped, as they are by design there. A failed test also leaves its image job skipped, so accepting "skipped" on a push would deploy image tags that were never built.
+Each test job gates only its own image, so a frontend failure never blocks the Java images from building — but the approval, and so the deploy, waits for all four image jobs. On a push it runs only if all four succeeded; on a manual run only if all four were skipped, as they are by design there. A failed test also leaves its image job skipped, so accepting "skipped" on a push would deploy image tags that were never built.
 
 A pull request runs only the three test jobs; it never sees a secret and never deploys.
+
+## The release gate
+
+Nothing reaches production without an explicit approval. The `approve` job uses the `release` environment, whose protection rule lists the owner as a required reviewer, so a merged change builds its images and then pauses with "Review deployments" in the run. Approving starts the deploy; rejecting, or leaving it for 30 days, ends the run with nothing deployed. Manual redeploys pass through the same gate.
+
+The gate is a separate environment on purpose. `production` holds the secrets and is also used by the frontend image build and the daily backup-freshness check; a reviewer rule there would make both of those wait for a person too. `release` holds nothing.
 
 ## Deploy
 
@@ -35,7 +42,7 @@ The smoke test runs as soon as the last rollout finishes, and the gateway finds 
 
 ## Manual redeploy
 
-**Actions → CI → Run workflow**, optionally with a commit SHA, redeploys that version using the images already pushed for it. A manual run skips the test and build jobs.
+**Actions → CI → Run workflow**, optionally with a commit SHA, redeploys that version using the images already pushed for it, after the same approval. A manual run skips the test and build jobs.
 
 ## Database migrations
 
