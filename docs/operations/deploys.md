@@ -2,19 +2,20 @@
 
 ## How a change reaches production
 
-A push to `main` runs `.github/workflows/ci.yml`:
+Every change goes through a pull request into `main`; `main` is never pushed to directly. Merging runs `.github/workflows/ci.yml`:
 
 1. **Tests** — the backend reactor, the frontend (type-check, lint, tests, build) and the preview proxy.
 2. **Images** — eight arm64 images built on GitHub's Arm runners, pushed to GHCR, tagged with the commit SHA.
-3. **Deploy** — one at a time (a second push queues; it never cancels a deploy in progress). The job joins the tailnet, rebuilds every Secret, applies the `oracle` overlay with the new tag, and waits for each workload in dependency order.
-4. **Smoke test** — the app answers `200`, `/api/plans` returns the plan catalogue, and a preview hostname reaches the proxy.
-5. **Rollback** — any failure after the apply runs `kubectl rollout undo` on every workload the deploy changed.
+3. **Approval** — the run pauses at "Approve the production deploy". Open the run, choose **Review deployments**, tick `release` and approve. Nothing is deployed until then. See [the release gate](../deployment/ci-cd.md#the-release-gate).
+4. **Deploy** — one at a time (a second push queues; it never cancels a deploy in progress). The job joins the tailnet, rebuilds every Secret, applies the `oracle` overlay with the new tag, and waits for each workload in dependency order.
+5. **Smoke test** — the app answers `200`, `/api/plans` returns the plan catalogue, and a preview hostname reaches the proxy.
+6. **Rollback** — any failure after the apply runs `kubectl rollout undo` on every workload the deploy changed.
 
 A pull request runs only the tests. Full details: [CI/CD pipeline](../deployment/ci-cd.md).
 
 ## Redeploying or rolling back a version
 
-**Actions → CI → Run workflow**, with a commit SHA. The build jobs are skipped; the run deploys the images already pushed for that SHA.
+**Actions → CI → Run workflow**, with a commit SHA. The build jobs are skipped; after the approval, the run deploys the images already pushed for that SHA.
 
 To roll back a single workload by hand:
 

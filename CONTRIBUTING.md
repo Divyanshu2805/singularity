@@ -8,10 +8,11 @@
 
 ## Workflow
 
-1. Branch from `main`.
-2. Make the change, with tests (see [testing](docs/practices/testing.md)).
+1. Branch from `main`, one short-lived branch per change (`feat/…`, `fix/…`, `docs/…`).
+2. Make the change, with tests (see [testing](docs/practices/testing.md)), and try it locally ([local development](docs/local-development/README.md)).
 3. Run the checks below.
-4. Open a pull request against `main`. CI runs the backend, frontend and proxy test suites on every pull request; pull requests never deploy and never see secrets.
+4. Open a pull request against `main`. CI runs the backend, frontend and proxy test suites on every pull request; pull requests never deploy and never see secrets. `main` accepts changes only through a pull request whose checks pass.
+5. Merge. The merge builds the images, then waits for the owner to approve the production deploy ([the release gate](docs/deployment/ci-cd.md#the-release-gate)).
 
 ## Checks
 
