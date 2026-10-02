@@ -163,12 +163,12 @@ describe("describePreviewStartFailure", () => {
 
   it("treats a 502/503/504 with no code as unreachable: the Gateway or dev proxy had nobody to ask", () => {
     for (const status of [502, 503, 504]) {
-      expect(describePreviewStartFailure(apiError("Can't reach the VibeCraft server.", status)).kind).toBe("unreachable");
+      expect(describePreviewStartFailure(apiError("Can't reach the Singularity server.", status)).kind).toBe("unreachable");
     }
   });
 
   it("treats a request that got no response at all as unreachable", () => {
-    const failure = describePreviewStartFailure(new Error("Can't reach the VibeCraft server."));
+    const failure = describePreviewStartFailure(new Error("Can't reach the Singularity server."));
 
     expect(failure.kind).toBe("unreachable");
     expect(failure.title).toBe("The preview service isn't reachable");

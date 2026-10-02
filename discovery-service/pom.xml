@@ -3,15 +3,15 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
-		<groupId>com.vibecraft</groupId>
-		<artifactId>vibecraft-parent</artifactId>
+		<groupId>com.singularity</groupId>
+		<artifactId>singularity-parent</artifactId>
 		<version>0.0.1-SNAPSHOT</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<artifactId>discovery-service</artifactId>
 	<name>discovery-service</name>
 	<description>
-		Eureka server. Every other vibecraft service (gateway-service and account/workspace/intelligence-
+		Eureka server. Every other Singularity service (gateway-service and account/workspace/intelligence-
 		service) registers here and discovers each other's addresses through it instead of hardcoded URLs —
 		the mechanism Feign clients and the Gateway's lb:// routes resolve against.
 	</description>

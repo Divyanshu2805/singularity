@@ -481,7 +481,7 @@ export const CodePanel = memo(function CodePanel({
               {isAwaitingNewFile ? (
                 <div className="flex h-full items-center justify-center px-6 text-center">
                   <p className="max-w-xs text-xs text-muted-foreground">
-                    VibeCraft is writing this file. It will appear here once it&rsquo;s finished.
+                    Singularity is writing this file. It will appear here once it&rsquo;s finished.
                   </p>
                 </div>
               ) : (

@@ -11,7 +11,7 @@
 import { useRef } from "react";
 import { PanelLeft, PanelLeftClose } from "lucide-react";
 import { SidebarPanel } from "@/components/ProjectSidebar";
-import { Logo } from "@/components/VibeCraftLogo";
+import { Logo } from "@/components/SingularityLogo";
 import type { SidebarController, SidebarState } from "@/hooks/use-sidebar";
 import { cn } from "@/lib/utils";
 

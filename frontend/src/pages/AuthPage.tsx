@@ -51,7 +51,7 @@ const COPY: Record<AuthMode, { title: string; subtitle: string; submit: string; 
         subtitle: "Sign in to continue building.",
         submit: "Sign in",
         loading: "Signing you in…",
-        switchPrompt: "New to VibeCraft?",
+        switchPrompt: "New to Singularity?",
         switchAction: "Create an account",
     },
     signup: {
@@ -137,7 +137,7 @@ export default function AuthPage() {
         toast(
             isNew
                 ? {
-                      title: firstName ? `Welcome to VibeCraft, ${firstName}` : "Welcome to VibeCraft",
+                      title: firstName ? `Welcome to Singularity, ${firstName}` : "Welcome to Singularity",
                       description: "Your account is ready. Let's build something.",
                   }
                 : {
@@ -251,11 +251,11 @@ export default function AuthPage() {
 
     if (step === "second-factor") {
         return (
-            <AuthLayout windowTitle="VibeCraft — two-step verification">
+            <AuthLayout windowTitle="Singularity — two-step verification">
                 <div className="mb-6 text-center animate-fade-in">
                     <ShieldCheck aria-hidden="true" className="mx-auto h-10 w-10 text-primary" />
                     <h2 className="mt-4 text-lg font-semibold tracking-tight text-foreground">Enter your code</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">Open your authenticator app and enter the 6-digit code for VibeCraft.</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Open your authenticator app and enter the 6-digit code for Singularity.</p>
                 </div>
                 <form onSubmit={handleSecondFactor} noValidate>
                     {formError && (
@@ -295,7 +295,7 @@ export default function AuthPage() {
 
     if (step === "check-inbox" && inbox) {
         return (
-            <AuthLayout windowTitle="VibeCraft — verify your email">
+            <AuthLayout windowTitle="Singularity — verify your email">
                 <div className="text-center animate-fade-in">
                     <MailCheck aria-hidden="true" className="mx-auto h-10 w-10 text-primary" />
                     <h2 className="mt-4 text-lg font-semibold tracking-tight text-foreground">
@@ -318,7 +318,7 @@ export default function AuthPage() {
 
     return (
         <AuthLayout
-            windowTitle={isSignup ? "VibeCraft — create account" : "VibeCraft — sign in"}
+            windowTitle={isSignup ? "Singularity — create account" : "Singularity — sign in"}
             raiseBy={isSignup ? nameHeight : 0}
             extendBelow={isSignup ? STRENGTH_ROW_HEIGHT : 0}
             animateRaise={canAnimate}

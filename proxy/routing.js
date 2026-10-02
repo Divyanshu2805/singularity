@@ -21,7 +21,7 @@ function classifyMissingRoute(target) {
     return {
         status: 404,
         title: "This preview isn't running",
-        message: 'Open the project in VibeCraft and switch to Preview to start it.',
+        message: 'Open the project in Singularity and switch to Preview to start it.',
     };
 }
 

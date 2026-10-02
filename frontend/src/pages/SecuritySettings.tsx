@@ -213,7 +213,7 @@ function TotpSetup({ user, onDone, onCancel }: { user: User; onDone: () => void;
         e.preventDefault();
         if (!secret) return;
         if (!/^\d{6}$/.test(code.replace(/\s+/g, ""))) {
-            setError("Enter the 6-digit code your app shows for VibeCraft.");
+            setError("Enter the 6-digit code your app shows for Singularity.");
             return;
         }
         setError(null);

@@ -55,14 +55,14 @@ export default function AuthAction() {
                 await applyActionCode(auth, oobCode);
                 setView({ kind: "recovered", email: info.data.email ?? "" });
             } else {
-                setView({ kind: "error", message: "This link isn't one VibeCraft recognises." });
+                setView({ kind: "error", message: "This link isn't one Singularity recognises." });
             }
         };
         run().catch((error) => setView({ kind: "error", message: friendlyFirebaseError(error, "This link didn't work. Request a new one.") }));
     }, [mode, oobCode]);
 
     return (
-        <AuthLayout windowTitle="VibeCraft — account">
+        <AuthLayout windowTitle="Singularity — account">
             {view.kind === "loading" && (
                 <p role="status" className="py-6 text-center text-sm text-muted-foreground animate-fade-in">
                     Checking your link…

@@ -1,5 +1,5 @@
 {
-  "name": "vibecraft-proxy",
+  "name": "singularity-proxy",
   "version": "1.0.0",
   "description": "Wildcard Proxy for Project Previews",
   "main": "index.js",

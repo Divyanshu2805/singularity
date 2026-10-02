@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { ProjectCard } from "@/components/ProjectCard";
 import { ProjectFilterTabs } from "@/components/ProjectFilterTabs";
-import { AnimatedLogoMark } from "@/components/VibeCraftLogo";
+import { AnimatedLogoMark } from "@/components/SingularityLogo";
 import { IdeaClarifier } from "@/components/IdeaClarifier";
 import { TeachingModeToggle } from "@/components/TeachingModeToggle";
 import { useProjectActions } from "@/hooks/use-project-actions";
@@ -352,7 +352,7 @@ export function ProjectsDashboard() {
                                                     value={prompt}
                                                     rows={2}
                                                     aria-label="Describe the project you want to build"
-                                                    placeholder={`Ask VibeCraft to build ${ideaPlaceholder}`}
+                                                    placeholder={`Ask Singularity to build ${ideaPlaceholder}`}
                                                     onChange={(e) => {
                                                         setPrompt(e.target.value);
                                                         resizePrompt(e.target);

@@ -8,7 +8,7 @@
  */
 import { useEffect, useState, type CSSProperties, type InputHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowRight, CircleAlert, Eye, EyeOff, Info } from "lucide-react";
-import { AnimatedLogo } from "@/components/VibeCraftLogo";
+import { AnimatedLogo } from "@/components/SingularityLogo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MIN_PASSWORD_LENGTH, passwordStrength } from "@/lib/auth-form";
 import { cn } from "@/lib/utils";
@@ -66,7 +66,7 @@ export function AuthLayout({ windowTitle, raiseBy = 0, extendBelow = 0, animateR
                         </span>
                     </h1>
                     <p className="mt-5 max-w-md text-[15px] leading-7 text-muted-foreground sm:text-base">
-                        Describe what you want to build. VibeCraft writes the code, and you shape it through conversation.
+                        Describe what you want to build. Singularity writes the code, and you shape it through conversation.
                     </p>
                 </header>
 

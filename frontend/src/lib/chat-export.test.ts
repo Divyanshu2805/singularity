@@ -27,7 +27,7 @@ describe("buildChatMarkdown", () => {
 
     expect(markdown).toContain("# My App - chat");
     expect(markdown).toContain("## You\n\nAdd a navbar");
-    expect(markdown).toContain("## VibeCraft\n\nDone - added the navbar.");
+    expect(markdown).toContain("## Singularity\n\nDone - added the navbar.");
   });
 
   it("rebuilds an assistant turn from its events, not the placeholder content the backend stores", () => {
@@ -147,7 +147,7 @@ describe("buildLensMarkdown", () => {
       { role: "user", content: "What does the 0 do?" },
     ], "App");
 
-    expect(markdown).toContain("## VibeCraft\n\nIt stores the count.");
+    expect(markdown).toContain("## Singularity\n\nIt stores the count.");
     expect(markdown).toContain("## You\n\nWhat does the 0 do?");
   });
 

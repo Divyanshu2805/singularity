@@ -47,7 +47,7 @@ export default function ForgotPassword() {
     };
 
     return (
-        <AuthLayout windowTitle="VibeCraft — reset password">
+        <AuthLayout windowTitle="Singularity — reset password">
             {sentTo ? (
                 <div className="text-center animate-fade-in">
                     <MailCheck aria-hidden="true" className="mx-auto h-10 w-10 text-primary" />

@@ -8,13 +8,13 @@
 		<version>4.1.0</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.vibecraft</groupId>
-	<artifactId>vibecraft-parent</artifactId>
+	<groupId>com.singularity</groupId>
+	<artifactId>singularity-parent</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<packaging>pom</packaging>
-	<name>vibecraft-parent</name>
+	<name>singularity-parent</name>
 	<description>
-		Reactor parent for the vibecraft backend: a Gateway and Eureka in front of three domain services
+		Reactor parent for the Singularity backend: a Gateway and Eureka in front of three domain services
 		(account, workspace, intelligence) that share common-lib. See docs/architecture/ for the shape.
 	</description>
 
