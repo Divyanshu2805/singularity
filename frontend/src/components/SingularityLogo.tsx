@@ -4,7 +4,7 @@
  * Handles: the build-up - tile, then mark, then spark, then name - played forwards on open and backwards and quicker
  * on close, so it finishes before the sidebar has slid away. It respects a reduced-motion preference.
  */
-import { useEffect, useId, useState, type CSSProperties } from "react";
+import { useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const EASE_OUT = "cubic-bezier(0.32, 0.72, 0, 1)";
@@ -94,7 +94,7 @@ export function LogoMark({ className, title, drawn }: LogoMarkProps) {
   );
 }
 
-function Wordmark({ drawn, className }: { drawn?: boolean; className?: string }) {
+export function Wordmark({ drawn, className, children = "Singularity" }: { drawn?: boolean; className?: string; children?: ReactNode }) {
   const isAnimated = drawn !== undefined;
   const isDrawn = drawn ?? true;
   const name = timing(isDrawn, { delay: 220, duration: 420 }, { delay: 0, duration: 180 });
@@ -112,7 +112,7 @@ function Wordmark({ drawn, className }: { drawn?: boolean; className?: string })
           : undefined
       }
     >
-      Singularity
+      {children}
     </span>
   );
 }

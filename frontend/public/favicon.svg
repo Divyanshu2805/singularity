@@ -1,11 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
   <defs>
-    <linearGradient id="vc" x1="3" y1="2" x2="29" y2="30" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="hsl(36 90% 62%)" />
-      <stop offset="1" stop-color="hsl(12 72% 47%)" />
+    <linearGradient id="line" x1="2.5" y1="0" x2="45.5" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="hsl(41.4 99.7% 79.8%)" stop-opacity="0" />
+      <stop offset="0.14" stop-color="hsl(41.9 99.8% 82.1%)" stop-opacity="0.5" />
+      <stop offset="0.31" stop-color="hsl(40 40% 95%)" />
+      <stop offset="0.69" stop-color="hsl(40 40% 95%)" />
+      <stop offset="0.86" stop-color="hsl(41.9 99.8% 82.1%)" stop-opacity="0.5" />
+      <stop offset="1" stop-color="hsl(41.4 99.7% 79.8%)" stop-opacity="0" />
+    </linearGradient>
+    <radialGradient id="dome" cx="24" cy="26" r="17.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0.5" stop-color="hsl(40 40% 90%)" stop-opacity="0" />
+      <stop offset="0.57" stop-color="hsl(40 40% 90%)" stop-opacity="0.95" />
+      <stop offset="0.72" stop-color="hsl(46 100% 82%)" stop-opacity="0.55" />
+      <stop offset="1" stop-color="hsl(40.6 100% 74%)" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="ring" x1="0" y1="16.5" x2="0" y2="35.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="hsl(40 40% 95%)" />
+      <stop offset="0.5" stop-color="hsl(46 100% 84%)" />
+      <stop offset="1" stop-color="hsl(37.6 100% 68%)" />
     </linearGradient>
   </defs>
-  <rect x="1" y="1" width="30" height="30" rx="8" fill="url(#vc)" />
-  <path d="M8.5 11 L16 23.5 L20.4 16" fill="none" stroke="hsl(25 40% 9%)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M23.4 6.6 Q23.9 9.7 27 10.2 Q23.9 10.7 23.4 13.8 Q22.9 10.7 19.8 10.2 Q22.9 9.7 23.4 6.6 Z" fill="hsl(25 40% 9%)" />
+  <rect x="1" y="1" width="46" height="46" rx="12" fill="hsl(30 11% 3.7%)" />
+  <g transform="translate(0 -1)">
+    <path d="M 6.5 26 A 17.5 17.5 0 0 1 41.5 26 Z" fill="url(#dome)" />
+    <path d="M 4 26 H 44" stroke="url(#line)" stroke-width="2" stroke-linecap="round" />
+    <circle cx="24" cy="26" r="9.5" fill="hsl(30 11% 2.7%)" stroke="url(#ring)" stroke-width="2" />
+  </g>
 </svg>
