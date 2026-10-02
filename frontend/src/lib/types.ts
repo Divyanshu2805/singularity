@@ -35,13 +35,6 @@ export interface PreviewLogs {
   live: boolean;
 }
 
-export interface ChatHistoryMessage {
-  id: number;
-  role: "USER" | "ASSISTANT";
-  content: string;
-  createdAt: string;
-}
-
 export enum ChatEventType {
   THOUGHT = 'THOUGHT',
   MESSAGE = 'MESSAGE',
@@ -92,10 +85,6 @@ export interface ProjectResponse {
   forkedFromProjectId?: number | null;
 }
 
-export interface ProjectRequest {
-  name: string;
-}
-
 export type ProjectRole = 'OWNER' | 'EDITOR' | 'VIEWER';
 
 export interface ClarifyingQuestion {
@@ -118,11 +107,6 @@ export interface ProjectMember {
   name?: string;
   role: ProjectRole;
   invitedAt?: string;
-}
-
-export interface InviteMemberRequest {
-  username: string;
-  role: ProjectRole;
 }
 
 export interface CodeSearchMatch {
