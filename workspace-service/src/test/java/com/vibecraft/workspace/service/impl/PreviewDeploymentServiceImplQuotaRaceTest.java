@@ -8,7 +8,6 @@ import com.vibecraft.workspace.config.PreviewProperties;
 import com.vibecraft.workspace.entity.Preview;
 import com.vibecraft.workspace.entity.PreviewSession;
 import com.vibecraft.workspace.entity.Project;
-import com.vibecraft.workspace.enums.PreviewStatus;
 import com.vibecraft.workspace.repository.PreviewRepository;
 import com.vibecraft.workspace.repository.PreviewSessionRepository;
 import com.vibecraft.workspace.repository.ProjectRepository;
@@ -17,7 +16,6 @@ import io.fabric8.kubernetes.api.model.PodBuilder;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -27,7 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;

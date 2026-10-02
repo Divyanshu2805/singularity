@@ -33,8 +33,6 @@ public interface PreviewSessionRepository extends JpaRepository<PreviewSession, 
 
     int countByPreviewIdAndEndedAtIsNull(Long previewId);
 
-    List<PreviewSession> findByPreviewIdAndEndedAtIsNull(Long previewId);
-
     List<PreviewSession> findByEndedAtIsNullAndLastSeenAtBefore(Instant cutoff);
 
     @Query("""

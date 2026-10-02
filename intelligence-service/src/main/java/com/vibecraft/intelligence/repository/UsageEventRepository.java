@@ -14,7 +14,7 @@ import java.util.Optional;
  * Reads and writes the usage ledger.
  *
  * <p>Handles: appending an event, listing a user's events in a window or most-recent-first for the activity table,
- * counting them, summing a project's usage for a window, and the grouped aggregation the insights page is built from.
+ * summing a project's usage for a window, and the grouped aggregation the insights page is built from.
  *
  * <p>Every read takes the user: insights are only ever about the caller's own spending, so there is deliberately no
  * query across users.
@@ -25,8 +25,6 @@ public interface UsageEventRepository extends JpaRepository<UsageEvent, Long> {
             Long userId, Instant from, Instant to);
 
     List<UsageEvent> findByUserIdOrderByCreatedAtDescIdDesc(Long userId, Pageable pageable);
-
-    long countByUserId(Long userId);
 
     Optional<UsageEvent> findFirstByUserIdOrderByCreatedAtDescIdDesc(Long userId);
 
