@@ -59,15 +59,6 @@ export default {
         },
         panel: {
           DEFAULT: "hsl(var(--panel))",
-          hover: "hsl(var(--panel-hover))",
-          active: "hsl(var(--panel-active))",
-        },
-        chat: {
-          user: "hsl(var(--chat-user))",
-          ai: "hsl(var(--chat-ai))",
-        },
-        file: {
-          active: "hsl(var(--file-active))",
         },
         syntax: {
           keyword: "hsl(var(--syntax-keyword))",
@@ -91,18 +82,18 @@ export default {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0" },
         },
-        "aurora-drift": {
-          "0%, 100%": { transform: "translate3d(0, 0, 0) scale(1)" },
-          "50%": { transform: "translate3d(4%, -3%, 0) scale(1.08)" },
-        },
         "slide-peek": {
           "0%, 15%": { transform: "translateX(0)" },
           "45%, 60%": { transform: "translateX(var(--slide-by))" },
           "90%, 100%": { transform: "translateX(0)" },
         },
+        "heat-sweep": {
+          "0%": { backgroundPosition: "120% 0" },
+          "100%": { backgroundPosition: "-120% 0" },
+        },
       },
       animation: {
-        "aurora-drift": "aurora-drift 18s ease-in-out infinite",
+        "heat-sweep": "heat-sweep 7s ease-in-out infinite",
         "slide-peek": "slide-peek var(--slide-duration) ease-in-out 250ms infinite",
         pulse: "pulse 1s ease-in-out infinite",
         "cursor-blink": "cursor-blink 1s step-end infinite",

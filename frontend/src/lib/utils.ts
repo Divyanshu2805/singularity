@@ -4,8 +4,9 @@
  * Handles: merging Tailwind class names without conflicts, deriving a project's gradient deterministically from its
  * name, and formatting how long a turn took.
  *
- * The gradient stays within the warm palette the rest of the UI is built from, so the dashboard reads as one designed
- * thing rather than a random rainbow. The duration format mirrors the backend's, which writes the same figure into
+ * The gradient takes its hue from anywhere on the colour wheel, with its two companions close on either side of it,
+ * so every project has a colour of its own while a single thumbnail never turns into a rainbow. It was held to the
+ * black hole's violet range (hues 236 to 290) until every project on the dashboard looked alike. The duration format mirrors the backend's, which writes the same figure into
  * the saved turn; keep the two in step.
  */
 import { clsx, type ClassValue } from "clsx";
@@ -21,22 +22,20 @@ export const generateGradient = (name: string) => {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
 
-  const warmHue = (offset: number) => 8 + (Math.abs(hash >> offset) % 55);
+  const h1 = Math.abs(hash) % 360;
+  const h2 = (h1 + 26 + (Math.abs(hash >> 8) % 22)) % 360;
+  const h3 = (h1 + 340 - (Math.abs(hash >> 16) % 20)) % 360;
 
-  const h1 = warmHue(0);
-  const h2 = warmHue(8);
-  const h3 = warmHue(16);
-
-  const c1 = `hsl(${h1}, 68%, 52%)`;
-  const c2 = `hsl(${h2}, 72%, 42%)`;
-  const c3 = `hsl(${h3}, 55%, 62%)`;
+  const c1 = `hsl(${h1}, 78%, 52%)`;
+  const c2 = `hsl(${h2}, 76%, 36%)`;
+  const c3 = `hsl(${h3}, 70%, 60%)`;
 
   return {
     background: `
       radial-gradient(at top left, ${c1}, transparent 70%),
       radial-gradient(at bottom right, ${c2}, transparent 70%),
       radial-gradient(at center, ${c3}, transparent 50%),
-      hsl(30, 15%, 9%)
+      hsl(30, 11%, 6%)
     `,
     backgroundSize: '150% 150%',
   };
