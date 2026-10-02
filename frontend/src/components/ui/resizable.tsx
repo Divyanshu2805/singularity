@@ -1,8 +1,9 @@
 /**
  * Panels a person can resize by dragging the divider between them.
  *
- * Handles: the panel group, each panel, and the drag handle. Used for the chat-against-workspace split on a project's
- * page.
+ * Handles: the panel group, each panel, the drag handle, and the gutter - a handle that is a narrow gap between two
+ * rounded windows rather than a line, showing a gold line down its middle only while hovered or dragged. Used for
+ * the splits on a project's page, where every pane is its own window (index.css, .ws-window).
  */
 import { GripVertical } from "lucide-react";
 import * as ResizablePrimitive from "react-resizable-panels";
@@ -40,4 +41,14 @@ const ResizableHandle = ({
   </ResizablePrimitive.PanelResizeHandle>
 );
 
-export { ResizablePanelGroup, ResizablePanel, ResizableHandle };
+const ResizableGutter = ({ className, ...props }: React.ComponentProps<typeof ResizablePrimitive.PanelResizeHandle>) => (
+  <ResizableHandle
+    className={cn(
+      "w-2 bg-transparent after:inset-y-[22%] after:w-0.5 after:rounded-full after:bg-[hsl(42.4_100%_78%)] after:opacity-0 after:transition-opacity after:duration-300 hover:after:opacity-70 data-[resize-handle-state=drag]:after:opacity-80 focus-visible:ring-0 focus-visible:after:opacity-70",
+      className,
+    )}
+    {...props}
+  />
+);
+
+export { ResizablePanelGroup, ResizablePanel, ResizableHandle, ResizableGutter };
