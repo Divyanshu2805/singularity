@@ -18,15 +18,15 @@ export interface FeatureMeta {
 }
 
 export const FEATURES: Record<UsageFeature, FeatureMeta> = {
-  BUILD: { label: "Build", description: "Messages in the project chat", color: "hsl(22 90% 55%)" },
-  BUILD_RETRY: { label: "Build retry", description: "Automatic second attempts at an unfinished build", color: "hsl(38 95% 60%)" },
-  EXPLAIN: { label: "ExplainLLM", description: "Explaining and answering questions about code", color: "hsl(199 80% 58%)" },
-  IDEA_INTERVIEW: { label: "Idea interview", description: "Questions and the brief before a project starts", color: "hsl(275 65% 68%)" },
-  PROJECT_NAMING: { label: "Project naming", description: "Naming a new project from its idea", color: "hsl(152 55% 50%)" },
+  BUILD: { label: "Build", description: "Messages in the project chat", color: "hsl(40 100% 64%)" },
+  BUILD_RETRY: { label: "Build retry", description: "Automatic second attempts at an unfinished build", color: "hsl(338 90% 72%)" },
+  EXPLAIN: { label: "ExplainLLM", description: "Explaining and answering questions about code", color: "hsl(212 90% 70%)" },
+  IDEA_INTERVIEW: { label: "Idea interview", description: "Questions and the brief before a project starts", color: "hsl(268 80% 78%)" },
+  PROJECT_NAMING: { label: "Project naming", description: "Naming a new project from its idea", color: "hsl(151 80% 66%)" },
   UNATTRIBUTED: {
     label: "Earlier activity",
     description: "Usage from before per-request tracking, which can't be split by feature",
-    color: "hsl(220 8% 48%)",
+    color: "hsl(30 6% 48%)",
   },
 };
 
