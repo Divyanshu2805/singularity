@@ -58,7 +58,7 @@ describe("ApiRequestError.code", () => {
 
     expect(error.status).toBe(502);
     expect(error.code).toBeUndefined();
-    expect(error.message).toMatch(/Can't reach the VibeCraft server/);
+    expect(error.message).toMatch(/Can't reach the Singularity server/);
     expect(error.message).toMatch(/port 8000/);
   });
 });

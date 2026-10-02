@@ -11,7 +11,7 @@
  */
 import { Fragment, useId, useState } from 'react';
 import { ArrowUpRight, Check, ChevronDown, Circle, CircleAlert, Clock, FilePen, FileSearch, GraduationCap, ListChecks, Loader2, Trash2 } from 'lucide-react';
-import { LogoMark } from '@/components/VibeCraftLogo';
+import { LogoMark } from '@/components/SingularityLogo';
 import { ChatMarkdown } from '@/components/ChatMarkdown';
 import { ChatEvent, ChatEventType } from '@/lib/types';
 import { getFileColor, getFileIcon, splitPath } from '@/lib/file-icons';
@@ -617,7 +617,7 @@ export function AssistantEvents({ events, isStreaming, isIdle, fallbackThought, 
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <LogoMark className="h-5 w-5" title="VibeCraft" />
+        <LogoMark className="h-5 w-5" title="Singularity" />
         {thought && (
           <span className="flex items-center gap-1">
             <Clock className="h-3 w-3" />

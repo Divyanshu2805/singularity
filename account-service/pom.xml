@@ -3,8 +3,8 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
-		<groupId>com.vibecraft</groupId>
-		<artifactId>vibecraft-parent</artifactId>
+		<groupId>com.singularity</groupId>
+		<artifactId>singularity-parent</artifactId>
 		<version>0.0.1-SNAPSHOT</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
@@ -27,7 +27,7 @@
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>com.vibecraft</groupId>
+			<groupId>com.singularity</groupId>
 			<artifactId>common-lib</artifactId>
 			<version>0.0.1-SNAPSHOT</version>
 		</dependency>

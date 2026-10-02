@@ -1,0 +1,137 @@
+package com.singularity.workspace.service.impl;
+
+import com.singularity.common.dto.FileChangeDto;
+import com.singularity.common.dto.PublishRevisionRequest;
+import com.singularity.common.dto.PublishRevisionResponse;
+import com.singularity.common.error.ResourceNotFoundException;
+import com.singularity.workspace.dto.revision.RevisionFileChange;
+import com.singularity.workspace.dto.revision.RevisionPreviewResponse;
+import com.singularity.workspace.dto.revision.RevisionSummaryResponse;
+import com.singularity.workspace.entity.ProjectFile;
+import com.singularity.workspace.entity.ProjectFileRevision;
+import com.singularity.workspace.enums.RevisionSource;
+import com.singularity.workspace.enums.RevisionStatus;
+import com.singularity.workspace.repository.ProjectFileRepository;
+import com.singularity.workspace.repository.ProjectFileRevisionRepository;
+import com.singularity.workspace.repository.ProjectRepository;
+import com.singularity.workspace.service.BlobStore;
+import com.singularity.workspace.service.RevisionPublisher;
+import com.singularity.workspace.service.RevisionService;
+import lombok.RequiredArgsConstructor;
+
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * A project's revision history: listing it, previewing a restore, and restoring (CODE_REVIEW.md AI-05).
+ *
+ * <p>Handles: listing a project's revisions newest first; reconstructing any revision's path/content-hash snapshot
+ * and diffing it against the project's current files; and restoring by publishing that diff as a new forward-only
+ * {@code RESTORE} revision through {@link RevisionPublisher}, the same pipeline as every other write.
+ *
+ * <p>Invariant: {@code preview} and {@code restore} only accept a revision that belongs to the given project and is
+ * {@code APPLIED}; anything else is a 404. The controller's {@code @PreAuthorize} only proves access to
+ * {@code projectId}, and revision ids are sequential, so without this check an editor of their own project could
+ * pass another project's revision id and restore that project's files into theirs, then read them - a cross-tenant
+ * read of private source. A {@code FAILED}/{@code CONFLICT}/{@code STAGING} revision never became a project state,
+ * so it is not a restore point either. {@code snapshot} stays unchecked: its only caller is the internal build
+ * validator, handing it a revision it just staged itself.
+ *
+ * <p>The actual snapshot reconstruction lives in {@link RevisionSnapshotReader}, a separate leaf bean with no
+ * dependency on {@link RevisionPublisher} - this class depends on {@code RevisionPublisher} itself (for
+ * {@code restore}), and {@code RevisionPublisherImpl} depends on every {@code RevisionValidator}, including the one
+ * that needs a snapshot; folding reconstruction into this class instead closed a real Spring bean-wiring cycle
+ * that only surfaced on an actual boot, since no test here boots a real context.
+ */
+@org.springframework.stereotype.Service
+@RequiredArgsConstructor
+public class RevisionServiceImpl implements RevisionService {
+
+    private final ProjectRepository projectRepository;
+    private final ProjectFileRepository projectFileRepository;
+    private final ProjectFileRevisionRepository revisionRepository;
+    private final BlobStore blobStore;
+    private final RevisionPublisher revisionPublisher;
+    private final RevisionSnapshotReader snapshotReader;
+
+    @Override
+    public List<RevisionSummaryResponse> listRevisions(Long projectId) {
+        return revisionRepository.findByProjectIdOrderByIdDesc(projectId).stream()
+                .map(this::toSummary)
+                .toList();
+    }
+
+    @Override
+    public RevisionPreviewResponse preview(Long projectId, Long revisionId) {
+        requireRestorePoint(projectId, revisionId);
+        return new RevisionPreviewResponse(revisionId, diffAgainstCurrent(projectId, snapshotReader.snapshot(revisionId)));
+    }
+
+    @Override
+    public Map<String, String> snapshot(Long revisionId) {
+        return snapshotReader.snapshot(revisionId);
+    }
+
+    @Override
+    public PublishRevisionResponse restore(Long projectId, Long revisionId, Long userId) {
+        var project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project", projectId.toString()));
+        requireRestorePoint(projectId, revisionId);
+        Map<String, String> target = snapshotReader.snapshot(revisionId);
+        List<RevisionFileChange> diff = diffAgainstCurrent(projectId, target);
+
+        List<FileChangeDto> changes = new ArrayList<>();
+        for (RevisionFileChange change : diff) {
+            if (change.kind() == RevisionFileChange.ChangeKind.DELETED) {
+                changes.add(new FileChangeDto(change.path(), FileChangeDto.ChangeType.DELETE, null));
+            } else {
+                String content = new String(blobStore.read(target.get(change.path())), StandardCharsets.UTF_8);
+                changes.add(new FileChangeDto(change.path(), FileChangeDto.ChangeType.EDIT, content));
+            }
+        }
+
+        PublishRevisionRequest request = new PublishRevisionRequest(
+                project.getCurrentFileRevisionId(), userId, RevisionSource.RESTORE.name(), changes);
+        return revisionPublisher.publish(projectId, request);
+    }
+
+    private void requireRestorePoint(Long projectId, Long revisionId) {
+        revisionRepository.findById(revisionId)
+                .filter(revision -> projectId.equals(revision.getProjectId()))
+                .filter(revision -> revision.getStatus() == RevisionStatus.APPLIED)
+                .orElseThrow(() -> new ResourceNotFoundException("Revision", revisionId.toString()));
+    }
+
+    /**
+     * A current file with no tracked hash (never touched since GATE-02 shipped) is conservatively reported
+     * MODIFIED rather than silently treated as unchanged - a real hash comparison isn't possible for it yet, and
+     * overstating a diff is far safer than a preview or restore that misses a real difference.
+     */
+    private List<RevisionFileChange> diffAgainstCurrent(Long projectId, Map<String, String> target) {
+        Map<String, String> current = new LinkedHashMap<>();
+        for (ProjectFile file : projectFileRepository.findByProjectId(projectId)) {
+            current.put(file.getPath(), file.getContentHash());
+        }
+
+        List<RevisionFileChange> changes = new ArrayList<>();
+        target.forEach((path, hash) -> {
+            if (!current.containsKey(path)) {
+                changes.add(new RevisionFileChange(path, RevisionFileChange.ChangeKind.ADDED));
+            } else if (current.get(path) == null || !current.get(path).equals(hash)) {
+                changes.add(new RevisionFileChange(path, RevisionFileChange.ChangeKind.MODIFIED));
+            }
+        });
+        current.keySet().stream()
+                .filter(path -> !target.containsKey(path))
+                .forEach(path -> changes.add(new RevisionFileChange(path, RevisionFileChange.ChangeKind.DELETED)));
+        return changes;
+    }
+
+    private RevisionSummaryResponse toSummary(ProjectFileRevision revision) {
+        return new RevisionSummaryResponse(revision.getId(), revision.getParentRevisionId(), revision.getStatus(),
+                revision.getSource(), revision.getCreatedByUserId(), revision.getCreatedAt(), revision.getAppliedAt());
+    }
+}

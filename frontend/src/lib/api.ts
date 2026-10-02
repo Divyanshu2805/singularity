@@ -20,7 +20,7 @@ import { clearSignedInState, signOutRedirect } from "./session";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
-const SERVER_UNREACHABLE = "Can't reach the VibeCraft server. Make sure the backend is running (the Gateway listens on port 8000).";
+const SERVER_UNREACHABLE = "Can't reach the Singularity server. Make sure the backend is running (the Gateway listens on port 8000).";
 
 const rawFetch = (input: string, init?: RequestInit) =>
   fetch(input, { credentials: "same-origin", ...init }).catch((error: unknown) => {

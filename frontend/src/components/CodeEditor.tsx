@@ -18,7 +18,7 @@ import { unifiedMergeView } from '@codemirror/merge';
 import { StateEffect } from '@codemirror/state';
 
 import { FileCode, Loader2, MessagesSquare, Sparkles } from "lucide-react";
-import { vibecraftTheme, diffViewTheme, referencedLineTheme } from '@/lib/editor-theme';
+import { singularityTheme, diffViewTheme, referencedLineTheme } from '@/lib/editor-theme';
 import { findCodeLine, type CodeTarget } from '@/lib/lesson';
 import { referencedLineField, setReferencedLines } from '@/lib/referenced-lines';
 import type { CodeSelection } from '@/lib/types';
@@ -204,7 +204,7 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
       <CodeMirror
         value={content}
         height="100%"
-        theme={vibecraftTheme}
+        theme={singularityTheme}
         editable={false}
         extensions={extensions}
         basicSetup={BASIC_SETUP}

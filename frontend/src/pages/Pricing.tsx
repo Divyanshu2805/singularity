@@ -20,7 +20,7 @@ import { api, isAuthenticated } from "@/lib/api";
 import { cardPrice, formatTokens, hasPaidSubscription, planAction, planActionLabel, planPriceLabel, type PlanAction } from "@/lib/billing";
 import { PlanChangeDialog } from "@/components/PlanChangeDialog";
 import { PaymentsTestModeNotice } from "@/components/PaymentsTestModeNotice";
-import { Logo } from "@/components/VibeCraftLogo";
+import { Logo } from "@/components/SingularityLogo";
 import type { Plan } from "@/lib/types";
 import { cn } from "@/lib/utils";
 

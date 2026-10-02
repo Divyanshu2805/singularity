@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
-import { LogoMark } from "@/components/VibeCraftLogo";
+import { LogoMark } from "@/components/SingularityLogo";
 import { ChatMarkdown } from "@/components/ChatMarkdown";
 import { MessageActions } from "@/components/MessageActions";
 import { highlightCode } from "@/lib/highlight-code";
@@ -115,7 +115,7 @@ function Turn({ turn, onOpenSelection, onDelete }: {
     <div className="group/message">
       {quote}
       <div className="flex gap-2">
-        <LogoMark className="mt-0.5 h-4 w-4 shrink-0" title="VibeCraft" />
+        <LogoMark className="mt-0.5 h-4 w-4 shrink-0" title="Singularity" />
         <div className="min-w-0 flex-1">
           {turn.isStreaming && !turn.content ? (
             <span className="text-shimmer text-xs font-medium">Reading the code&hellip;</span>

@@ -11,7 +11,7 @@ import { createTheme } from '@uiw/codemirror-themes';
 import { tags as t } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
 
-export const vibecraftTheme = createTheme({
+export const singularityTheme = createTheme({
   theme: 'dark',
   settings: {
     background: 'hsl(var(--panel))',

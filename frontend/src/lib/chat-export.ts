@@ -46,7 +46,7 @@ export function buildChatMarkdown(messages: ChatMessage[], projectName: string):
     }
 
     const body = assistantBody(message);
-    if (body) parts.push(`## VibeCraft\n\n${body}`);
+    if (body) parts.push(`## Singularity\n\n${body}`);
   }
 
   if (parts.length === 1) parts.push("_This chat is empty._");
@@ -106,7 +106,7 @@ export function buildLensMarkdown(turns: ExportableLensTurn[], projectName: stri
       const range = startLine === endLine ? `line ${startLine}` : `lines ${startLine}-${endLine}`;
       parts.push(`### \`${path}\` · ${range}\n\n${fencedCode(code, path)}`);
     }
-    parts.push(`## ${turn.role === "user" ? "You" : "VibeCraft"}\n\n${turn.content.trim()}`);
+    parts.push(`## ${turn.role === "user" ? "You" : "Singularity"}\n\n${turn.content.trim()}`);
   }
 
   if (turns.length === 0) parts.push("_Nothing discussed yet._");

@@ -82,7 +82,7 @@ describe("code notes header", () => {
     expect(written[0]).toContain("# Demo - ExplainLLM notes");
     expect(written[0]).toContain("## You");
     expect(written[0]).toContain("Explain this");
-    expect(written[0]).toContain("## VibeCraft");
+    expect(written[0]).toContain("## Singularity");
     expect(written[0]).toContain("It stores the count.");
     expect(written[0]).toContain("src/App.tsx");
   });

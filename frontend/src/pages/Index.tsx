@@ -6,7 +6,7 @@
  */
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { AnimatedLogo } from "@/components/VibeCraftLogo";
+import { AnimatedLogo } from "@/components/SingularityLogo";
 import { isAuthenticated } from "@/lib/api";
 
 const Index = () => {

@@ -56,7 +56,7 @@ export function friendlyAuthError(error: unknown, mode: AuthMode): FriendlyAuthE
     const raw = error instanceof Error ? error.message : "";
 
     if (/can't reach/i.test(raw)) {
-        return { message: "We can't reach VibeCraft right now. Check that the server is running, then try again." };
+        return { message: "We can't reach Singularity right now. Check that the server is running, then try again." };
     }
     if (/already exists/i.test(raw)) {
         return { message: "An account with this email already exists.", suggestSignIn: true };

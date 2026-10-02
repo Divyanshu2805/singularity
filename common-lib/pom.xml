@@ -3,15 +3,15 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
-		<groupId>com.vibecraft</groupId>
-		<artifactId>vibecraft-parent</artifactId>
+		<groupId>com.singularity</groupId>
+		<artifactId>singularity-parent</artifactId>
 		<version>0.0.1-SNAPSHOT</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<artifactId>common-lib</artifactId>
 	<name>common-lib</name>
 	<description>
-		Shared library consumed by every vibecraft microservice: the internal-JWT issuer/verifier and its
+		Shared library consumed by every Singularity microservice: the internal-JWT issuer/verifier and its
 		servlet filter, the Feign interceptor that forwards that JWT on outbound service-to-service calls,
 		wire DTOs that stand in for entities crossing a service boundary, the common ApiError/exception
 		taxonomy, and small domain-agnostic config (AsyncConfig, ClockConfig, Hashing). NOT a Spring Boot

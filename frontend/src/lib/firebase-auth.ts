@@ -41,7 +41,7 @@ export type SignInOutcome =
   | { kind: "second-factor"; resolver: MultiFactorResolver }
   | { kind: "verify-email"; email: string };
 
-const ISSUER = "VibeCraft";
+const ISSUER = "Singularity";
 
 const continueUrl = () => ({ url: `${window.location.origin}/login` });
 

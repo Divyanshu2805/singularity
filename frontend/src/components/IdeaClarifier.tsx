@@ -357,8 +357,8 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
                 <h2 className="mt-4 text-lg font-semibold tracking-tight text-foreground">Here&rsquo;s the plan</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {answeredCount > 0
-                    ? "VibeCraft will turn this into a project brief and start building."
-                    : "You skipped the questions, so VibeCraft will make sensible choices for you."}
+                    ? "Singularity will turn this into a project brief and start building."
+                    : "You skipped the questions, so Singularity will make sensible choices for you."}
                 </p>
 
                 <dl className="mt-4 divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-background/40">
@@ -367,7 +367,7 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
                       <div className="min-w-0 flex-1">
                         <dt className="text-xs text-muted-foreground">{answer.question}</dt>
                         <dd className={cn("mt-0.5 text-sm", answer.answers.length > 0 ? "text-foreground" : "italic text-muted-foreground/80")}>
-                          {answer.answers.length > 0 ? answer.answers.join(", ") : "Skipped - VibeCraft will decide"}
+                          {answer.answers.length > 0 ? answer.answers.join(", ") : "Skipped - Singularity will decide"}
                         </dd>
                       </div>
                       <button

@@ -426,9 +426,9 @@ export function ChatPanel({
                 onChange={handleChange}
                 onKeyDown={handleKeyDown}
                 rows={2}
-                aria-label="Message VibeCraft"
+                aria-label="Message Singularity"
                 placeholder={
-                  isStreaming ? "Draft your next message while VibeCraft works…" : "Ask VibeCraft to build or change something…"
+                  isStreaming ? "Draft your next message while Singularity works…" : "Ask Singularity to build or change something…"
                 }
                 className="min-h-[52px] flex-1 resize-none rounded-none border-0 bg-transparent px-0 py-1 text-sm leading-6 caret-primary shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
               />
