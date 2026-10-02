@@ -1,23 +1,17 @@
 package com.vibecraft.workspace.enums;
 
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-
 /**
  * The individual capabilities a project role grants.
  *
- * <p>Handles: naming each one, and carrying the string form used in authorization expressions.
+ * <p>Handles: naming each one. Roles map to sets of these (ProjectRole), and SecurityExpressions asks for them by
+ * constant; nothing reads a string form of a permission.
  */
-@RequiredArgsConstructor
-@Getter
 public enum ProjectPermission {
 
-    VIEW("project:view"),
-    EDIT("project:edit"),
-    DELETE("project:delete"),
+    VIEW,
+    EDIT,
+    DELETE,
 
-    MANAGE_MEMBERS("project_members:manage"),
-    VIEW_MEMBERS("project_members:view");
-
-    private final String value;
+    MANAGE_MEMBERS,
+    VIEW_MEMBERS
 }

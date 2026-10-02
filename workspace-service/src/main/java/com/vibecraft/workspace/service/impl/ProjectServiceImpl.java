@@ -17,7 +17,6 @@ import com.vibecraft.workspace.entity.Project;
 import com.vibecraft.workspace.entity.ProjectMember;
 import com.vibecraft.workspace.entity.ProjectMemberId;
 import com.vibecraft.workspace.enums.ProjectRole;
-import com.vibecraft.common.error.BadRequestException;
 import com.vibecraft.common.error.QuotaExceededException;
 import com.vibecraft.common.error.ResourceNotFoundException;
 import com.vibecraft.workspace.mapper.ProjectMapper;

@@ -22,7 +22,6 @@ import com.vibecraft.common.error.ExternalServiceException;
 import com.vibecraft.common.error.ResourceNotFoundException;
 import com.stripe.exception.CardException;
 import com.stripe.exception.StripeException;
-import com.stripe.model.Customer;
 import com.stripe.model.Invoice;
 import com.stripe.model.Price;
 import com.stripe.model.StripeObject;
