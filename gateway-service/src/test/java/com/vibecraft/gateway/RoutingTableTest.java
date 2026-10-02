@@ -79,7 +79,6 @@ class RoutingTableTest {
                         "/api/projects/7/files/search",
                         "/api/projects/7/files/download-zip",
                         "/api/projects/7/preview",
-                        "/api/projects/7/deploy",
                         "/api/projects/7/preview/restart",
                         "/api/projects/7/preview/logs",
                         "/api/projects/7/revisions",

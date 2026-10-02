@@ -33,7 +33,7 @@ public class PreviewController {
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
-    @PostMapping({"/api/projects/{projectId}/preview", "/api/projects/{projectId}/deploy"})
+    @PostMapping("/api/projects/{projectId}/preview")
     public ResponseEntity<PreviewResponse> startPreview(@PathVariable Long projectId) {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(deploymentService.startPreview(projectId));
     }
