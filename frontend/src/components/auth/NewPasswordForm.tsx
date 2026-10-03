@@ -8,7 +8,7 @@
  * the wording cannot drift between them.
  */
 import { useState, type FormEvent, type ReactNode } from "react";
-import { AuthSubmitButton, FormAlert, PasswordField, PasswordStrength } from "@/components/auth/AuthLayout";
+import { AuthSubmitButton, FormAlert, PasswordField, PasswordStrength } from "@/components/auth/AuthForm";
 import { validateNewPassword, type ResetPasswordErrors } from "@/lib/auth-form";
 
 export function NewPasswordForm({

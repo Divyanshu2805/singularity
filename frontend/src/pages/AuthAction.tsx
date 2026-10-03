@@ -5,16 +5,20 @@
  * Handles: reading the mode and the one-time code, verifying it, and running the matching flow.
  *
  * The one-time code is lifted out of the address bar on load: a single-use credential should not sit in the URL where
- * it can be shared or logged. Wired up by pointing the email templates' custom action URL at this route.
+ * it can be shared or logged. Wired up by pointing the email templates' custom action URL at this route. Each outcome
+ * is its own view of the stage's card, so its rows (data-cascade) come up in turn as the check resolves.
  */
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MailCheck } from "lucide-react";
+import { KeyRound, MailCheck, ShieldAlert } from "lucide-react";
 import { applyActionCode, checkActionCode } from "firebase/auth";
-import { AuthLayout, AuthSubmitButton, AuthTextLink, FormAlert } from "@/components/auth/AuthLayout";
+import { AuthLayout } from "@/components/auth/AuthLayout";
+import { AuthCardHeading, AuthSubmitButton, AuthTextLink, FormAlert } from "@/components/auth/AuthForm";
 import { NewPasswordForm } from "@/components/auth/NewPasswordForm";
 import { friendlyFirebaseError, getFirebaseAuth } from "@/lib/firebase";
 import { applyResetCode, checkResetCode, passwordPolicyProblem, sendResetEmail } from "@/lib/firebase-auth";
+
+const TITLE = "Finish up your account";
 
 type View =
     | { kind: "loading" }
@@ -62,85 +66,97 @@ export default function AuthAction() {
     }, [mode, oobCode]);
 
     return (
-        <AuthLayout windowTitle="Singularity — account">
+        <AuthLayout title={TITLE} view={view.kind}>
             {view.kind === "loading" && (
-                <p role="status" className="py-6 text-center text-sm text-muted-foreground animate-fade-in">
+                <p role="status" className="flex items-center justify-center gap-2.5 py-8 text-[14px] text-muted-foreground">
+                    <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-primary shadow-[0_0_12px_hsl(var(--primary))]" />
                     Checking your link…
                 </p>
             )}
 
             {view.kind === "error" && (
-                <div className="space-y-4 text-center">
-                    <FormAlert title="This link didn't work">{view.message}</FormAlert>
-                    <div className="flex justify-center gap-4">
+                <>
+                    <div data-cascade>
+                        <AuthCardHeading icon={ShieldAlert} title="This link didn't work" />
+                    </div>
+                    <div data-cascade className="mt-6">
+                        <FormAlert title="Couldn't use the link">{view.message}</FormAlert>
+                    </div>
+                    <div data-cascade className="mt-6 flex justify-center gap-5">
                         {mode === "resetPassword" && (
                             <AuthTextLink onClick={() => navigate("/forgot-password", { replace: true })}>Request a new reset link</AuthTextLink>
                         )}
                         <AuthTextLink onClick={() => navigate("/login", { replace: true })}>Back to sign in</AuthTextLink>
                     </div>
-                </div>
+                </>
             )}
 
             {view.kind === "reset" && (
                 <>
-                    <div className="mb-6 text-center animate-fade-in">
-                        <h2 className="text-lg font-semibold tracking-tight text-foreground">Choose a new password</h2>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                    <div data-cascade className="mb-7">
+                        <AuthCardHeading icon={KeyRound} title="Choose a new password">
                             For <span className="font-medium text-foreground">{view.email}</span>. This signs you out everywhere else.
-                        </p>
+                        </AuthCardHeading>
                     </div>
-                    <NewPasswordForm
-                        checkPolicy={passwordPolicyProblem}
-                        onSubmit={async (password) => {
-                            try {
-                                await applyResetCode(oobCode, password);
-                            } catch (error) {
-                                throw new Error(friendlyFirebaseError(error, "Couldn't reset your password. Please try again."));
-                            }
-                            navigate("/login?reset=1", { replace: true });
-                        }}
-                    />
+                    <div data-cascade>
+                        <NewPasswordForm
+                            checkPolicy={passwordPolicyProblem}
+                            onSubmit={async (password) => {
+                                try {
+                                    await applyResetCode(oobCode, password);
+                                } catch (error) {
+                                    throw new Error(friendlyFirebaseError(error, "Couldn't reset your password. Please try again."));
+                                }
+                                navigate("/login?reset=1", { replace: true });
+                            }}
+                        />
+                    </div>
                 </>
             )}
 
             {view.kind === "verified" && (
-                <div className="text-center animate-fade-in">
-                    <MailCheck aria-hidden="true" className="mx-auto h-10 w-10 text-primary" />
-                    <h2 className="mt-4 text-lg font-semibold tracking-tight text-foreground">Email verified</h2>
-                    <p className="mt-2 text-sm text-muted-foreground">Your account is ready. Sign in to get started.</p>
-                    <form className="mt-6" onSubmit={(e) => { e.preventDefault(); navigate("/login?verified=1", { replace: true }); }}>
+                <>
+                    <div data-cascade>
+                        <AuthCardHeading icon={MailCheck} title="Email verified">
+                            Your account is ready. Sign in to get started.
+                        </AuthCardHeading>
+                    </div>
+                    <form data-cascade className="mt-7" onSubmit={(e) => { e.preventDefault(); navigate("/login?verified=1", { replace: true }); }}>
                         <AuthSubmitButton isLoading={false} loadingText="">
                             Sign in
                         </AuthSubmitButton>
                     </form>
-                </div>
+                </>
             )}
 
             {view.kind === "recovered" && (
-                <div className="space-y-4 text-center animate-fade-in">
-                    <h2 className="text-lg font-semibold tracking-tight text-foreground">Your email address was restored</h2>
-                    <p className="text-sm leading-6 text-muted-foreground">
-                        The account's email is <span className="font-medium text-foreground">{view.email}</span> again. If you didn't
-                        change it, someone else may have had access - reset your password now.
-                    </p>
-                    {resent ? (
-                        <FormAlert tone="info" title="Reset link sent">
-                            Check {view.email} for a link to choose a new password.
-                        </FormAlert>
-                    ) : (
-                        <AuthTextLink
-                            disabled={isResending}
-                            onClick={async () => {
-                                setIsResending(true);
-                                await sendResetEmail(view.email).catch(() => undefined);
-                                setResent(true);
-                                setIsResending(false);
-                            }}
-                        >
-                            Send me a password reset link
-                        </AuthTextLink>
-                    )}
-                </div>
+                <>
+                    <div data-cascade>
+                        <AuthCardHeading icon={ShieldAlert} title="Your email address was restored">
+                            The account's email is <span className="font-medium text-foreground">{view.email}</span> again. If you didn't
+                            change it, someone else may have had access - reset your password now.
+                        </AuthCardHeading>
+                    </div>
+                    <div data-cascade className="mt-6 text-center">
+                        {resent ? (
+                            <FormAlert tone="info" title="Reset link sent">
+                                Check {view.email} for a link to choose a new password.
+                            </FormAlert>
+                        ) : (
+                            <AuthTextLink
+                                disabled={isResending}
+                                onClick={async () => {
+                                    setIsResending(true);
+                                    await sendResetEmail(view.email).catch(() => undefined);
+                                    setResent(true);
+                                    setIsResending(false);
+                                }}
+                            >
+                                Send me a password reset link
+                            </AuthTextLink>
+                        )}
+                    </div>
+                </>
             )}
         </AuthLayout>
     );
