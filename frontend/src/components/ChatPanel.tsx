@@ -13,16 +13,33 @@
  * turn carries (a reloaded one gets its "Worked for" line from a saved event instead): a live turn is the model
  * returning an empty completion - offered a Retry, since nothing was written - while a reloaded one means its events
  * failed to save even though any files it wrote did.
+ *
+ * It is set like the dashboard (index.css, under .dash-night): the panel is a rounded window of the workspace with a
+ * low gold glow at its foot, each turn rises in as it arrives (.chat-enter), the person's turns sit in a deeper
+ * gold glass (.chat-user-bubble) in white 14px text, and the composer is the dashboard's prompt - a sparkle badge
+ * that brightens and turns while it has focus, white text, and the Build/Teach mode menu (PromptModeMenu) beside the
+ * send button. While Singularity is
+ * answering, a comet (OrbitSpinner) sits beside "Working on it" and the send button becomes a stop button, so the
+ * wait reads as the app working rather than as a frozen box. The text box is a bare textarea rather than the app's
+ * Textarea: that one is a field well with its own gradient fill, which painted a darker block inside the prompt. An
+ * empty conversation opens on the horizon mark building itself over a soft light (index.css, .empty-glow) and the
+ * dashboard's Fraunces headline (near-white, with a pale gold sweep on "build?"), with the suggestions rising in
+ * turn as one column of equal-width cards (.prompt-card - an icon tile, the prompt, an arrow; well-rounded, and lit on hover by the gold light
+ * that follows the pointer, as the buttons are - lib/button-light.ts) - centred pills of
+ * ragged widths looked uneven, and the explanatory line under the headline was removed, both at the owner's request.
+ * The person's own turns are rendered as markdown too, each single line break kept as a break - the first message of
+ * a new project is the brief the idea interview wrote, and its bold labels and lists showed as raw asterisks before.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, CodeXml, Eye, Loader2, Lock, PenLine, RotateCcw, Sparkles, Square, Terminal, Zap } from "lucide-react";
-import { format } from "date-fns";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, CodeXml, Eye, ListChecks, Lock, Moon, PenLine, Rocket, RotateCcw, Sparkles, Square, Zap, type LucideIcon } from "lucide-react";
+import { HorizonMark } from "@/components/HorizonMark";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { findSafeEnd, findVisibleRanges, useStreamParser } from "@/hooks/use-stream-parser";
 import { useSmoothStream } from "@/hooks/use-smooth-stream";
 import { AssistantError, AssistantEvents } from "./ChatEventRenderer";
-import { TeachingModeToggle } from "./TeachingModeToggle";
+import { ChatMarkdown } from "./ChatMarkdown";
+import { PromptModeMenu } from "./PromptModeMenu";
 import { MessageActions } from "./MessageActions";
 import { assistantTurnText } from "@/lib/chat-export";
 
@@ -32,10 +49,10 @@ import { ChatEvent, ProjectRole } from "@/lib/types";
 import type { CodeTarget } from "@/lib/lesson";
 import { cn, formatWorkedFor, generateGradient } from "@/lib/utils";
 
-const EMPTY_STATE_SUGGESTIONS = [
-  "build a landing page for a SaaS product",
-  "create a todo app with drag and drop",
-  "add a dark mode toggle to the navbar",
+const EMPTY_STATE_SUGGESTIONS: { text: string; Icon: LucideIcon }[] = [
+  { text: "Build a landing page for a SaaS product", Icon: Rocket },
+  { text: "Create a todo app with drag and drop", Icon: ListChecks },
+  { text: "Add a dark mode toggle to the navbar", Icon: Moon },
 ];
 const SHARED_PROJECT_STARTERS = [
   {
@@ -109,7 +126,7 @@ const resizeTextarea = (el: HTMLTextAreaElement) => {
 
 function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex h-4 items-center rounded border border-border/80 bg-muted/40 px-1 font-mono text-[10px] leading-none text-muted-foreground">
+    <kbd className="sidebar-kbd inline-flex h-[18px] items-center px-1 font-sans text-[10px] font-medium leading-none text-foreground/80">
       {children}
     </kbd>
   );
@@ -333,12 +350,13 @@ export function ChatPanel({
   const canSend = input.trim().length > 0 && !isStreaming && !quotaBlock;
 
   return (
-    <div className="flex h-full flex-col bg-background">
+    <div className="app-surface flex h-full flex-col">
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto">
           {isLoading ? (
-            <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <div className="flex h-full flex-col items-center justify-center gap-3">
+              <OrbitSpinner className="h-6 w-6" label="Loading the conversation" />
+              <span aria-hidden="true" className="text-shimmer text-xs">Loading the conversation…</span>
             </div>
           ) : messages.length === 0 ? (
             sharedWith ? (
@@ -377,7 +395,7 @@ export function ChatPanel({
             type="button"
             onClick={scrollToLatest}
             aria-label="Jump to latest message"
-            className="absolute bottom-3 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-lg transition-colors hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
+            className="app-chip chat-enter absolute bottom-3 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center text-muted-foreground"
           >
             <ArrowDown className="h-4 w-4" />
           </button>
@@ -389,12 +407,12 @@ export function ChatPanel({
       <div className="shrink-0 px-3 pb-3 pt-1">
         {!readOnly && usageMeter}
         {readOnly ? (
-          <div className="flex h-12 items-center justify-center gap-2 rounded-xl border border-border/70 bg-muted/30 text-xs text-muted-foreground">
+          <div className="app-glass flex h-12 items-center justify-center gap-2 rounded-[22px] text-xs text-muted-foreground">
             <Lock className="h-3.5 w-3.5" />
             You have view-only access to this project
           </div>
         ) : quotaBlock ? (
-          <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-3">
+          <div className="chat-enter rounded-2xl border border-destructive/40 bg-destructive/10 px-3.5 py-3">
             <div className="flex items-start gap-2.5">
               <Zap className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
               <div className="min-w-0 flex-1">
@@ -409,18 +427,15 @@ export function ChatPanel({
             </div>
           </div>
         ) : (
-          <form
-            onSubmit={handleSubmit}
-            className="group rounded-2xl border border-border bg-card px-2 pb-2 pt-1.5 shadow-[0_10px_30px_-18px_rgb(0_0_0/0.7)] transition-[border-color,box-shadow] duration-150 hover:border-primary/35 focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_hsl(var(--primary)/0.12),0_10px_30px_-18px_rgb(0_0_0/0.7)]"
-          >
-            <div className="flex items-start gap-2 px-1.5">
+          <form onSubmit={handleSubmit} className="app-glass app-prompt group relative rounded-[20px] p-2.5">
+            <div className="flex items-start gap-1">
               <span
                 aria-hidden="true"
-                className="select-none py-1 text-base font-semibold leading-6 text-muted-foreground/50 transition-colors group-focus-within:text-primary"
+                className="prompt-badge mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-white/70"
               >
-                ›
+                <Sparkles className="no-icon-anim h-4 w-4" />
               </span>
-              <Textarea
+              <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={handleChange}
@@ -430,53 +445,39 @@ export function ChatPanel({
                 placeholder={
                   isStreaming ? "Draft your next message while Singularity works…" : "Ask Singularity to build or change something…"
                 }
-                className="min-h-[52px] flex-1 resize-none rounded-none border-0 bg-transparent px-0 py-1 text-sm leading-6 caret-primary shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
+                className="app-prompt-input min-h-[56px] w-full flex-1 resize-none bg-transparent px-2.5 py-1.5 text-[14px] leading-6 text-white caret-white outline-none placeholder:text-white/55"
               />
             </div>
 
             <div className="flex items-center justify-between gap-2 pl-2">
               {isStreaming ? (
                 <span className="flex min-w-0 items-center gap-2 text-xs">
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+                  <OrbitSpinner className="h-3.5 w-3.5" />
                   <span className="text-shimmer truncate">Working on it…</span>
                 </span>
               ) : (
-                <span className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground/80">
-                  <Kbd>↵</Kbd> send
-                  <span aria-hidden="true" className="text-border">·</span>
-                  <Kbd>⇧ ↵</Kbd> new line
+                <span className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground">
+                  <Kbd>Enter</Kbd> send
+                  <span aria-hidden="true" className="text-muted-foreground/50">·</span>
+                  <Kbd>Shift</Kbd> <Kbd>Enter</Kbd> new line
                   {userMessageIds.length > 1 && (
                     <span className="hidden items-center gap-1.5 xl:flex">
-                      <span aria-hidden="true" className="text-border">·</span>
-                      <Kbd>Alt ↑↓</Kbd> jump
+                      <span aria-hidden="true" className="text-muted-foreground/50">·</span>
+                      <Kbd>Alt</Kbd> <Kbd>↑↓</Kbd> jump
                     </span>
                   )}
                 </span>
               )}
               <div className="flex shrink-0 items-center gap-1.5">
-                {onTeachingModeChange && <TeachingModeToggle enabled={!!teachingMode} onChange={onTeachingModeChange} />}
+                {onTeachingModeChange && <PromptModeMenu teaching={!!teachingMode} onChange={onTeachingModeChange} />}
                 {isStreaming && onStop ? (
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    onClick={onStop}
-                    aria-label="Stop generating"
-                    title="Stop generating"
-                    className="h-8 w-8 shrink-0 rounded-lg transition-transform active:scale-95"
-                  >
-                    <Square className="fill-current" />
-                  </Button>
+                  <button type="button" onClick={onStop} aria-label="Stop generating" title="Stop generating" className="app-stop h-9 w-9">
+                    <Square className="h-3.5 w-3.5 fill-current" />
+                  </button>
                 ) : (
-                  <Button
-                    type="submit"
-                    size="icon"
-                    disabled={!canSend}
-                    aria-label="Send message"
-                    className="h-8 w-8 shrink-0 rounded-lg transition-transform active:scale-95 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
-                  >
-                    <ArrowUp />
-                  </Button>
+                  <button type="submit" disabled={!canSend} aria-label="Send message" className="app-send h-9 w-9">
+                    <ArrowUp className="h-4 w-4" />
+                  </button>
                 )}
               </div>
             </div>
@@ -489,36 +490,43 @@ export function ChatPanel({
 
 function EmptyState({ readOnly, onPick }: { readOnly?: boolean; onPick: (text: string) => void }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-primary/25 bg-primary/10">
-        <Terminal className="h-5 w-5 text-primary" />
+    <div className="flex h-full flex-col items-center justify-center px-6 py-8">
+      <div className="flex w-full max-w-[23rem] flex-col items-center text-center">
+        <span className="relative mb-6 inline-flex h-14 w-14">
+          <span aria-hidden="true" className="empty-glow absolute -inset-[110%]" />
+          <HorizonMark drawn className="relative h-full w-full" />
+        </span>
+        <h3 className="dash-headline app-fade font-display text-[30px] font-semibold leading-tight tracking-tight" style={{ "--i": 2 } as CSSProperties}>
+          {readOnly ? (
+            "No conversation yet"
+          ) : (
+            <>
+              What should we <em className="heat-text animate-heat-sweep pr-1 font-medium motion-reduce:animate-none">build?</em>
+            </>
+          )}
+        </h3>
+        {!readOnly && (
+          <ul aria-label="Suggestions" className="mt-8 flex w-full max-w-[20.5rem] flex-col gap-2">
+            {EMPTY_STATE_SUGGESTIONS.map(({ text, Icon }, index) => (
+              <li key={text} className="app-rise" style={{ "--i": index, "--rise-delay": "380ms" } as CSSProperties}>
+                <button type="button" onClick={() => onPick(text)} className="prompt-card">
+                  <span aria-hidden="true" className="prompt-card-icon">
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{text}</span>
+                  <ArrowUpRight aria-hidden="true" className="prompt-card-arrow h-3.5 w-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-      <h3 className="text-sm font-semibold">{readOnly ? "No conversation yet" : "What should we build?"}</h3>
-      <p className="mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
-        {readOnly
-          ? "Changes made by editors of this project will show up here."
-          : "Describe a feature, a fix, or a whole new page."}
-      </p>
-      {!readOnly && (
-        <div className="mt-5 flex max-w-sm flex-wrap justify-center gap-2">
-          {EMPTY_STATE_SUGGESTIONS.map((text) => (
-            <button
-              key={text}
-              type="button"
-              onClick={() => onPick(text)}
-              className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
-            >
-              {text}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
 
 const STARTER_ROW =
-  "group flex w-full items-center gap-2.5 rounded-lg border border-border/80 bg-card/60 px-3 py-2.5 text-left text-xs text-foreground/90 transition-colors hover:border-primary/50 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "app-chip group flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-xs text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function SharedProjectWelcome({ info, readOnly, onPick, onBrowseCode }: {
   info: SharedProjectInfo;
@@ -557,7 +565,7 @@ function SharedProjectWelcome({ info, readOnly, onPick, onBrowseCode }: {
           "This project was shared with you"
         )}
       </p>
-      <h3 className="mt-1 max-w-sm truncate text-base font-semibold">{info.projectName}</h3>
+      <h3 className="mt-1 max-w-sm truncate font-display text-[22px] font-semibold tracking-tight">{info.projectName}</h3>
       <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
         {readOnly ? <Eye className="h-3 w-3" /> : <PenLine className="h-3 w-3" />}
         {readOnly ? "You can view" : "You can edit"}
@@ -572,17 +580,17 @@ function SharedProjectWelcome({ info, readOnly, onPick, onBrowseCode }: {
       <div className="mt-5 flex w-full max-w-xs flex-col gap-2">
         {onBrowseCode && (
           <button type="button" onClick={onBrowseCode} className={STARTER_ROW}>
-            <CodeXml className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+            <CodeXml className="icon-pop h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
             Browse the code
-            <ArrowRight className="ml-auto h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+            <ArrowRight className="ml-auto h-3.5 w-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-300 group-hover:translate-x-0 group-hover:opacity-100" />
           </button>
         )}
         {!readOnly &&
           SHARED_PROJECT_STARTERS.map((starter) => (
             <button key={starter.label} type="button" onClick={() => onPick(starter.prompt)} className={STARTER_ROW}>
-              <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <Sparkles className="icon-pop h-3.5 w-3.5 shrink-0 text-primary" style={{ "--icon-hover": "rotate(18deg) scale(1.2)" } as CSSProperties} />
               {starter.label}
-              <ArrowRight className="ml-auto h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+              <ArrowRight className="ml-auto h-3.5 w-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-300 group-hover:translate-x-0 group-hover:opacity-100" />
             </button>
           ))}
       </div>
@@ -590,21 +598,23 @@ function SharedProjectWelcome({ info, readOnly, onPick, onBrowseCode }: {
   );
 }
 
+const keepLineBreaks = (text: string) => text.replace(/([^\n])\n(?!\n)/g, "$1  \n");
+
 function UserMessage({ message, highlightToken, onEdit }: {
   message: ChatMessage;
   highlightToken: number | null;
   onEdit?: (content: string) => void;
 }) {
   return (
-    <div data-user-message={message.id} className="group/message flex flex-col items-end gap-0">
+    <div data-user-message={message.id} className="chat-enter group/message flex flex-col items-end gap-0">
       <div
         key={highlightToken ?? "idle"}
         className={cn(
-          "max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-primary/30 bg-primary/15 px-3.5 py-2 text-[13px] leading-6 text-foreground transition-[background-color,box-shadow] duration-500",
-          highlightToken !== null && "bg-primary/25 shadow-[0_0_0_2px_hsl(var(--primary)/0.6)]"
+          "chat-user-bubble max-w-[85%] break-words rounded-2xl rounded-br-md px-3.5 py-2 transition-[background-color,box-shadow] duration-500",
+          highlightToken !== null && "shadow-[0_0_0_2px_hsl(var(--primary)/0.6)]"
         )}
       >
-        {message.content}
+        <ChatMarkdown className="text-[14px] leading-6 text-white">{keepLineBreaks(message.content)}</ChatMarkdown>
       </div>
       <MessageActions
         at={message.createdAt}
@@ -644,7 +654,7 @@ function AssistantMessage({
   const canRetry = isDone && !!onRetry && (unfinished > 0 || !!message.error || !!message.wasStopped || isEmptyAnswer);
 
   return (
-    <div className="group/message flex min-w-0 flex-col gap-3">
+    <div className="chat-enter group/message flex min-w-0 flex-col gap-3">
       <AssistantEvents
         events={events}
         isStreaming={!hasSavedEvents && isActive}
@@ -669,9 +679,10 @@ function AssistantMessage({
           <button
             type="button"
             onClick={onRetry}
-            className="inline-flex h-6 items-center gap-1.5 rounded-md border border-border/70 px-2 text-[11.5px] text-foreground/85 transition-colors hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
+            style={{ "--icon-hover": "rotate(-180deg)" } as CSSProperties}
+            className="app-chip group inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-foreground/85"
           >
-            <RotateCcw className="h-3 w-3" />
+            <RotateCcw className="icon-pop h-3 w-3" />
             Retry
           </button>
         </div>

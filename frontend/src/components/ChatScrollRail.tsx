@@ -5,6 +5,9 @@
  * focus, and scrolling to the one picked.
  *
  * Crossing the small gap between the ticks and the list must not close it, hence the short close delay.
+ *
+ * The current message's tick is gold, and the open list is the app's matte menu whose rows take the app's row
+ * highlight (.hl-row) - the gold wash under the pointer, the selected look on the current one.
  */
 import { useEffect, useRef, useState } from "react";
 import { MAX_RAIL_TICKS } from "@/lib/chat-rail";
@@ -69,7 +72,7 @@ export function ChatScrollRail({ items, activeIndex, onSelect }: {
         aria-expanded={isOpen}
         aria-haspopup="menu"
         onClick={() => setIsOpen((value) => !value)}
-        className="flex flex-col gap-[5px] rounded-md py-2 pl-2.5 pr-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
+        className="flex flex-col gap-[5px] rounded-md py-2 pl-2.5 pr-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
       >
         {ticks.map((item, offset) => (
           <span
@@ -77,8 +80,8 @@ export function ChatScrollRail({ items, activeIndex, onSelect }: {
             data-rail-tick=""
             aria-hidden="true"
             className={cn(
-              "block h-[2px] rounded-full transition-all duration-150",
-              start + offset === active ? "w-4 bg-foreground" : "w-2.5 bg-muted-foreground/40"
+              "block h-[2px] rounded-full transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              start + offset === active ? "w-4 bg-primary" : "w-2.5 bg-muted-foreground/55"
             )}
           />
         ))}
@@ -89,7 +92,7 @@ export function ChatScrollRail({ items, activeIndex, onSelect }: {
           ref={listRef}
           role="menu"
           aria-label="Your messages"
-          className="ml-0.5 mt-0.5 max-h-[min(24rem,60vh)] w-72 max-w-[calc(100vw-4rem)] overflow-y-auto rounded-xl border border-border/80 bg-popover/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur animate-in fade-in-0 zoom-in-95 duration-100"
+          className="app-menu ml-0.5 mt-0.5 max-h-[min(24rem,60vh)] w-72 max-w-[calc(100vw-4rem)] overflow-y-auto rounded-xl border p-1.5 animate-in fade-in-0 zoom-in-95 duration-150"
         >
           {items.map((item, index) => {
             const isActive = index === active;
@@ -104,13 +107,13 @@ export function ChatScrollRail({ items, activeIndex, onSelect }: {
                   setIsOpen(false);
                 }}
                 className={cn(
-                  "group/row flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50",
-                  isActive ? "bg-muted/70 text-foreground" : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                  "hl-row group/row flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] focus-visible:outline-none",
+                  !isActive && "text-muted-foreground"
                 )}
               >
                 <span
                   aria-hidden="true"
-                  className={cn("h-[2px] w-2.5 shrink-0 rounded-full", isActive ? "bg-foreground" : "bg-muted-foreground/50")}
+                  className={cn("h-[2px] w-2.5 shrink-0 rounded-full", isActive ? "bg-primary" : "bg-muted-foreground/50")}
                 />
                 <OverflowSlideText text={item.label} />
               </button>

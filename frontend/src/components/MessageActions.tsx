@@ -3,8 +3,10 @@
  *
  * Handles: the copy with its own tick-then-revert state, tangled up with the row's hover reveal, and the timestamp
  * beside them - a time for something today, a date once it is not.
+ *
+ * Its buttons are the app's icon buttons (index.css, .icon-btn), each icon with a small motion of its own.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Check, Copy, Pencil, Trash2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -65,8 +67,8 @@ export function MessageActions({ at, onCopy, onEdit, onDelete, deleteLabel = "De
   return (
     <div
       className={cn(
-        "flex items-center gap-1 pt-1 text-[10px] text-muted-foreground/70",
-        "opacity-0 transition-opacity focus-within:opacity-100 group-hover/message:opacity-100",
+        "flex items-center gap-1 pt-1 text-[10.5px] text-muted-foreground",
+        "opacity-0 transition-opacity duration-300 focus-within:opacity-100 group-hover/message:opacity-100",
         copied && "opacity-100",
         align === "right" && "justify-end",
         className
@@ -80,7 +82,8 @@ export function MessageActions({ at, onCopy, onEdit, onDelete, deleteLabel = "De
               type="button"
               aria-label={copied ? "Copied" : "Copy message"}
               onClick={copy}
-              className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-muted/60 hover:text-primary focus-visible:opacity-100"
+              style={{ "--icon-hover": "translateX(1px)" } as CSSProperties}
+              className="icon-btn h-6 w-6 rounded-md focus-visible:opacity-100"
             >
               {copied ? <Check className="h-3 w-3 text-syntax-string" /> : <Copy className="h-3 w-3" />}
             </button>
@@ -95,7 +98,8 @@ export function MessageActions({ at, onCopy, onEdit, onDelete, deleteLabel = "De
               type="button"
               aria-label="Edit and resend"
               onClick={onEdit}
-              className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-muted/60 hover:text-primary focus-visible:opacity-100"
+              style={{ "--icon-hover": "rotate(-14deg)" } as CSSProperties}
+              className="icon-btn h-6 w-6 rounded-md focus-visible:opacity-100"
             >
               <Pencil className="h-3 w-3" />
             </button>
@@ -110,7 +114,8 @@ export function MessageActions({ at, onCopy, onEdit, onDelete, deleteLabel = "De
               type="button"
               aria-label={deleteLabel}
               onClick={onDelete}
-              className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-destructive/15 hover:text-destructive focus-visible:opacity-100"
+              style={{ "--icon-hover": "rotate(-10deg) scale(1.1)" } as CSSProperties}
+              className="icon-btn icon-btn-danger h-6 w-6 rounded-md focus-visible:opacity-100"
             >
               <Trash2 className="h-3 w-3" />
             </button>
