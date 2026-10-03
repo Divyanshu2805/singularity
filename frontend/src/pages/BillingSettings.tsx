@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowUpRight, CreditCard, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AppSidebar, SidebarSpacer, SidebarToggleSpace } from "@/components/AppSidebar";
+import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useToast } from "@/hooks/use-toast";
 import { useBilling, usePlans } from "@/hooks/use-billing";
@@ -135,7 +135,6 @@ export function BillingSettings() {
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={PAGE_GLOW} />
 
                 <header className="relative flex h-12 shrink-0 items-center gap-2 px-2">
-                    <SidebarToggleSpace sidebar={sidebar} />
                 </header>
 
                 <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">

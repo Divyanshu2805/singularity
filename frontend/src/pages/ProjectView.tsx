@@ -32,7 +32,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AppSidebar, SidebarSpacer, SidebarToggleSpace } from "@/components/AppSidebar";
+import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useProjectPreferences } from "@/hooks/use-project-preferences";
 import { useTeachingMode } from "@/hooks/use-teaching-mode";
@@ -232,7 +232,7 @@ function ProjectWorkspace() {
   const isNotesOpen = !!lensThread?.isOpen;
   const chatPanelPercent = isNotesOpen
     ? CHAT_PANEL_PERCENT_WITH_NOTES
-    : sidebar.isPinned
+    : sidebar.isExpanded
       ? CHAT_PANEL_PERCENT.sidebarPinned
       : CHAT_PANEL_PERCENT.sidebarCollapsed;
   useEffect(() => {
@@ -481,7 +481,6 @@ Please analyze this error and fix the code to resolve it.`;
       <div className="relative flex min-w-0 flex-1 flex-col">
         <header className="grid h-12 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b border-border/60 bg-panel px-2">
           <div className="flex min-w-0 items-center">
-            <SidebarToggleSpace sidebar={sidebar} />
             {project ? (
               <div className="flex min-w-0 items-center gap-1 pl-1">
                 <span className="h-5 w-5 shrink-0 rounded ring-1 ring-inset ring-white/10" style={generateGradient(projectSummary?.name ?? project.name)} />

@@ -12,7 +12,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Check, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AppSidebar, SidebarSpacer, SidebarToggleSpace } from "@/components/AppSidebar";
+import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useToast } from "@/hooks/use-toast";
 import { useBilling, usePlans } from "@/hooks/use-billing";
@@ -112,9 +112,7 @@ export function Pricing() {
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={PAGE_GLOW} />
 
                 <header className="relative flex h-12 shrink-0 items-center gap-2 px-2">
-                    {signedIn ? (
-                        <SidebarToggleSpace sidebar={sidebar} />
-                    ) : (
+                    {signedIn ? null : (
                         <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => navigate("/")}>
                             <ArrowLeft className="h-3.5 w-3.5" />
                             Back
