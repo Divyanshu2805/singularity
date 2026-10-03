@@ -14,7 +14,7 @@ import { formatDistanceToNow } from "date-fns";
 import QRCode from "qrcode";
 import { KeyRound, Loader2, LogOut, ShieldCheck, ShieldOff, Smartphone } from "lucide-react";
 import type { MultiFactorInfo, MultiFactorResolver, TotpSecret, User } from "firebase/auth";
-import { AppSidebar, SidebarSpacer, SidebarToggleSpace } from "@/components/AppSidebar";
+import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { AuthField, AuthSubmitButton, FormAlert, GoogleButton, PasswordField } from "@/components/auth/AuthForm";
 import { NewPasswordForm } from "@/components/auth/NewPasswordForm";
 import {
@@ -358,7 +358,6 @@ export default function SecuritySettings() {
             <div className="relative flex min-w-0 flex-1 flex-col">
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={PAGE_GLOW} />
                 <header className="relative flex h-12 shrink-0 items-center gap-2 px-2">
-                    <SidebarToggleSpace sidebar={sidebar} />
                 </header>
 
                 <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">

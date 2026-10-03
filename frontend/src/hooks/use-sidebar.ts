@@ -1,103 +1,56 @@
 /**
- * Whether the sidebar is pinned, peeking or hidden.
+ * Whether the sidebar is open or closed to its icon rail.
  *
- * Handles: pinning on click (the panel then takes real space) and peeking on hover while unpinned (it floats over the
- * page until the pointer leaves), with a short close delay so crossing the gap between the toggle and the panel does
- * not dismiss it. The pinned choice is remembered in browser storage.
+ * Handles: the open/closed choice and remembering it in browser storage and toggling and closing it. It has no keyboard shortcut.
+ *
+ * The sidebar never disappears: closed, it is a rail of icons, the way BitBin's is, so the toggle always has a home in
+ * its own head and nothing floats over the page. It used to hide entirely and peek out on hover from a floating
+ * toggle; the rail replaced that at the owner's request. With nothing stored yet it starts open on a wide screen and
+ * closed on a narrow one, where an open panel lies over the page rather than beside it.
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
-const SIDEBAR_PINNED_KEY = "sidebar_pinned";
-const PEEK_CLOSE_DELAY_MS = 180;
+const SIDEBAR_COLLAPSED_KEY = "sidebar_collapsed";
+const NARROW_QUERY = "(max-width: 767px)";
 
-export type SidebarState = "pinned" | "peek" | "hidden";
+function readExpanded() {
+  try {
+    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    if (stored !== null) return stored !== "true";
+  } catch {
+    return true;
+  }
+  return !window.matchMedia(NARROW_QUERY).matches;
+}
+
+function storeExpanded(expanded: boolean) {
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(!expanded));
+  } catch {
+    return;
+  }
+}
+
+export const isNarrowScreen = () => window.matchMedia(NARROW_QUERY).matches;
 
 export function useSidebar() {
-  const [isPinned, setIsPinned] = useState(() => localStorage.getItem(SIDEBAR_PINNED_KEY) === "true");
-  const [isPeekOpen, setIsPeekOpen] = useState(false);
-  const closeTimerRef = useRef<number | undefined>(undefined);
-  const isLockedRef = useRef(false);
-  const isPointerInPanelRef = useRef(false);
-  const suppressPeekRef = useRef(false);
+  const [isExpanded, setIsExpanded] = useState(readExpanded);
 
-  const state: SidebarState = isPinned ? "pinned" : isPeekOpen ? "peek" : "hidden";
+  const setExpanded = useCallback((next: boolean) => {
+    setIsExpanded(next);
+    storeExpanded(next);
+  }, []);
 
-  const openPeek = () => {
-    if (isPinned || suppressPeekRef.current) return;
-    window.clearTimeout(closeTimerRef.current);
-    setIsPeekOpen(true);
-  };
+  const toggle = useCallback(() => {
+    setIsExpanded((current) => {
+      storeExpanded(!current);
+      return !current;
+    });
+  }, []);
 
-  const scheduleClose = () => {
-    window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = window.setTimeout(() => {
-      if (!isLockedRef.current) setIsPeekOpen(false);
-    }, PEEK_CLOSE_DELAY_MS);
-  };
+  const collapse = useCallback(() => setExpanded(false), [setExpanded]);
 
-  const closeNow = () => {
-    window.clearTimeout(closeTimerRef.current);
-    isLockedRef.current = false;
-    setIsPeekOpen(false);
-  };
-
-  const togglePin = () => {
-    const next = !isPinned;
-    setIsPinned(next);
-    localStorage.setItem(SIDEBAR_PINNED_KEY, String(next));
-    closeNow();
-    if (!next) suppressPeekRef.current = true;
-  };
-
-  const collapse = () => {
-    if (isPinned) {
-      setIsPinned(false);
-      localStorage.setItem(SIDEBAR_PINNED_KEY, "false");
-    }
-    closeNow();
-    suppressPeekRef.current = true;
-  };
-
-  useEffect(() => {
-    if (!isPeekOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isLockedRef.current) setIsPeekOpen(false);
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPeekOpen]);
-
-  useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
-
-  return {
-    state,
-    isPinned,
-    isPeekOpen,
-    togglePin,
-    collapse,
-    closeNow,
-    toggleHandlers: {
-      onMouseEnter: openPeek,
-      onMouseLeave: () => {
-        suppressPeekRef.current = false;
-        scheduleClose();
-      },
-    },
-    panelHandlers: {
-      onMouseEnter: () => {
-        isPointerInPanelRef.current = true;
-        openPeek();
-      },
-      onMouseLeave: () => {
-        isPointerInPanelRef.current = false;
-        if (!isPinned) scheduleClose();
-      },
-    },
-    onMenuOpenChange: (open: boolean) => {
-      isLockedRef.current = open;
-      if (!open && !isPointerInPanelRef.current) scheduleClose();
-    },
-  };
+  return { isExpanded, toggle, collapse };
 }
 
 export type SidebarController = ReturnType<typeof useSidebar>;

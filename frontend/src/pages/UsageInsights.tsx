@@ -13,7 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
 import { Activity, ArrowUpRight, BarChart3, Download, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AppSidebar, SidebarSpacer, SidebarToggleSpace } from "@/components/AppSidebar";
+import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useToast } from "@/hooks/use-toast";
@@ -206,7 +206,6 @@ export function UsageInsights() {
         <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={PAGE_GLOW} />
 
         <header className="relative flex h-12 shrink-0 items-center gap-2 px-2">
-          <SidebarToggleSpace sidebar={sidebar} />
         </header>
 
         <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">

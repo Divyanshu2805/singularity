@@ -30,7 +30,6 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/components/AppSidebar", () => ({
   AppSidebar: () => null,
   SidebarSpacer: () => null,
-  SidebarToggleSpace: () => null,
 }));
 
 import { api } from "@/lib/api";
