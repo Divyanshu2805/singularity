@@ -8,10 +8,15 @@
  *
  * The checklist has a hard cap matching the parser's, so the live view shows exactly what gets saved. Its real length
  * is set by the work - the model is told to emit one step per file - so the cap only bites when it ignores that.
+ *
+ * The blocks are cards a step lighter than the chat window with a lighter head (index.css, .chat-tile), their rows
+ * and toggles take the app's row highlight (.hl-row) under the pointer, anything under way shows the app's comet
+ * (OrbitSpinner) rather than a spinning icon, and the turn is signed with the horizon mark (HorizonMark).
  */
 import { Fragment, useId, useState } from 'react';
-import { ArrowUpRight, Check, ChevronDown, Circle, CircleAlert, Clock, FilePen, FileSearch, GraduationCap, ListChecks, Loader2, Trash2 } from 'lucide-react';
-import { LogoMark } from '@/components/SingularityLogo';
+import { ArrowUpRight, Check, ChevronDown, Circle, CircleAlert, Clock, FilePen, FileSearch, GraduationCap, ListChecks, Trash2 } from 'lucide-react';
+import { HorizonMark } from '@/components/HorizonMark';
+import { OrbitSpinner } from '@/components/app/OrbitSpinner';
 import { ChatMarkdown } from '@/components/ChatMarkdown';
 import { ChatEvent, ChatEventType } from '@/lib/types';
 import { getFileColor, getFileIcon, splitPath } from '@/lib/file-icons';
@@ -174,7 +179,7 @@ export function buildBlocks(events: ChatEvent[], isStreaming: boolean): Block[] 
 function FileChip({ path, onOpen }: { path: string; onOpen?: (path: string) => void }) {
   const Icon = getFileIcon(path);
   const className =
-    "inline-flex h-6 max-w-[220px] items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2 text-[11.5px] text-foreground/85 transition-colors";
+    "inline-flex h-6 max-w-[220px] items-center gap-1.5 rounded-full border border-white/[0.12] bg-[hsl(var(--ws-card))] px-2 text-[11.5px] text-foreground/90 transition-colors";
   const content = (
     <>
       <Icon className={cn("h-3 w-3 shrink-0", getFileColor(path))} />
@@ -188,7 +193,7 @@ function FileChip({ path, onOpen }: { path: string; onOpen?: (path: string) => v
       type="button"
       title={`Open ${path}`}
       onClick={() => onOpen(path)}
-      className={cn(className, "hover:border-primary/50 hover:bg-primary/10 hover:text-primary")}
+      className={cn(className, "duration-200 hover:border-primary/45 hover:bg-primary/[0.12] hover:text-white")}
     >
       {content}
     </button>
@@ -199,7 +204,7 @@ function ReadsBlock({ files, active, onOpen }: { files: string[]; active: boolea
   return (
     <div className="flex items-start gap-2 text-xs text-muted-foreground">
       <span className="flex h-6 shrink-0 items-center gap-1.5">
-        {active ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : <FileSearch className="h-3.5 w-3.5" />}
+        {active ? <OrbitSpinner className="h-3.5 w-3.5" /> : <FileSearch className="h-3.5 w-3.5" />}
         {active ? "Reading" : "Read"}
       </span>
       <div className="flex min-w-0 flex-wrap gap-1">
@@ -226,10 +231,10 @@ function ChecklistBlock({ items, onOpen }: { items: ChecklistItem[]; onOpen?: Op
     });
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/70 bg-card/60">
-      <div className="flex h-8 items-center gap-2 border-b border-border/60 px-3 text-xs">
+    <div className="chat-tile overflow-hidden rounded-xl">
+      <div className="chat-tile-head flex h-8 items-center gap-2 px-3 text-xs">
         {isRunning
-          ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+          ? <OrbitSpinner className="h-3.5 w-3.5" />
           : <ListChecks className="h-3.5 w-3.5 text-muted-foreground" />}
         <span className="font-medium text-foreground/90">Build steps</span>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -237,7 +242,7 @@ function ChecklistBlock({ items, onOpen }: { items: ChecklistItem[]; onOpen?: Op
             <button
               type="button"
               onClick={() => setOpenItems(isAllOpen ? new Set() : new Set(lessonIndexes))}
-              className="flex h-6 items-center gap-1 rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
+              className="hl-row flex h-6 items-center gap-1 rounded-md px-1.5 text-muted-foreground focus-visible:outline-none"
             >
               <GraduationCap className="h-3.5 w-3.5" />
               {isAllOpen ? "Collapse all" : "Expand all"}
@@ -259,16 +264,16 @@ function ChecklistBlock({ items, onOpen }: { items: ChecklistItem[]; onOpen?: Op
               {status === 'done' ? (
                 <Check className="h-3.5 w-3.5 shrink-0 text-syntax-string" />
               ) : status === 'active' ? (
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+                <OrbitSpinner className="h-3.5 w-3.5" />
               ) : (
-                <Circle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                <Circle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
               )}
               <span
                 className={cn(
                   "min-w-0 truncate text-[12px] transition-colors",
                   status === 'done' && "text-muted-foreground",
                   status === 'active' && "text-foreground",
-                  status === 'pending' && "text-muted-foreground/70"
+                  status === 'pending' && "text-muted-foreground/75"
                 )}
               >
                 {label}
@@ -282,7 +287,7 @@ function ChecklistBlock({ items, onOpen }: { items: ChecklistItem[]; onOpen?: Op
                 <div className="flex min-h-7 min-w-0 flex-1 items-center gap-2 py-0.5 pl-3 pr-2">
                   {row}
                   {fileName && (
-                    <span title={path} className="ml-auto shrink-0 pl-2 font-mono text-[11px] text-muted-foreground/80">
+                    <span title={path} className="ml-auto shrink-0 pl-2 font-mono text-[11px] text-muted-foreground">
                       {fileName}
                     </span>
                   )}
@@ -342,7 +347,7 @@ function CodeReference({ path, part, showFile, onOpen }: {
   onOpen?: OpenFile;
 }) {
   const className =
-    "flex min-w-0 max-w-full items-center gap-2 rounded border border-border/60 bg-panel px-1.5 py-0.5 text-left font-mono text-[11px]";
+    "flex min-w-0 max-w-full items-center gap-2 rounded-md border border-white/[0.1] bg-[hsl(var(--ws-well))] px-1.5 py-0.5 text-left font-mono text-[11px]";
   const content = (
     <>
       {showFile && path && (
@@ -359,7 +364,7 @@ function CodeReference({ path, part, showFile, onOpen }: {
       type="button"
       title={part.line !== undefined ? `Show line ${part.line} of ${path}` : `Find this in ${path}`}
       onClick={() => onOpen(path, { line: part.line, code: part.code })}
-      className={cn(className, "transition-colors hover:border-primary/50 hover:bg-primary/10")}
+      className={cn(className, "transition-colors duration-200 hover:border-primary/40 hover:bg-primary/[0.1]")}
     >
       {content}
     </button>
@@ -377,7 +382,7 @@ function LessonDetails({ id, lesson, path, showFileOnRefs, onOpen, className }: 
   const singleConcept = lesson.parts.length === 0 ? lesson.concepts[0] : undefined;
 
   return (
-    <div id={id} className={cn("rounded-md border border-l-2 border-border/60 border-l-primary/60 bg-muted/20 px-3 py-2.5", className)}>
+    <div id={id} className={cn("relative rounded-lg border border-white/[0.1] bg-black/20 py-2.5 pl-4 pr-3 before:absolute before:bottom-3 before:left-0 before:top-3 before:w-[2px] before:rounded-full before:bg-primary/70", className)}>
       {showFileOnRefs && path && (
         <p className="mb-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
           <FileChip path={path} onOpen={onOpen ? (file) => onOpen(file) : undefined} />
@@ -400,7 +405,7 @@ function LessonDetails({ id, lesson, path, showFileOnRefs, onOpen, className }: 
                 <p className={cn("break-words text-[12px] leading-[1.7] text-foreground/80", part.code && "mt-1.5")}>
                   <LessonText text={part.text} />
                   {part.concept && (
-                    <span className="ml-1.5 inline-flex h-[18px] items-center rounded-full border border-primary/30 bg-primary/10 px-1.5 align-middle text-[10.5px] font-medium text-primary">
+                    <span className="ml-1.5 inline-flex h-[18px] items-center rounded-full bg-white/[0.06] px-1.5 align-middle text-[10.5px] font-medium text-primary">
                       {part.concept}
                     </span>
                   )}
@@ -413,7 +418,7 @@ function LessonDetails({ id, lesson, path, showFileOnRefs, onOpen, className }: 
 
       {!lesson.isComplete && (
         <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+          <OrbitSpinner className="h-3 w-3" />
           Still writing&hellip;
         </p>
       )}
@@ -437,13 +442,13 @@ function LessonToggle({ open, lesson, fileName, fileCount = 1, controls, onToggl
       title={lesson.summary || undefined}
       onClick={onToggle}
       className={cn(
-        "mr-1.5 flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50",
+        "hl-row mr-1.5 flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] focus-visible:outline-none",
         open ? "text-primary" : "text-muted-foreground"
       )}
     >
       {lesson.isComplete
         ? <GraduationCap className="h-3.5 w-3.5" />
-        : <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
+        : <OrbitSpinner className="h-3.5 w-3.5" />}
       How it works
       {fileCount > 1 && <span className="tabular-nums text-muted-foreground">({fileCount} files)</span>}
       {fileName && <span className="sr-only"> ({fileName})</span>}
@@ -466,15 +471,15 @@ function LessonsBlock({ items, onOpen }: { items: LessonItem[]; onOpen?: OpenFil
     });
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/70 bg-card/60">
-      <div className="flex h-8 items-center gap-2 border-b border-border/60 px-3 text-xs">
+    <div className="chat-tile overflow-hidden rounded-xl">
+      <div className="chat-tile-head flex h-8 items-center gap-2 px-3 text-xs">
         <GraduationCap className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="font-medium text-foreground/90">How it works</span>
         {items.length > 1 && (
           <button
             type="button"
             onClick={() => setOpenItems(isAllOpen ? new Set() : new Set(items.map((_, index) => index)))}
-            className="-mr-1.5 ml-auto flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
+            className="hl-row -mr-1.5 ml-auto flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-muted-foreground focus-visible:outline-none"
           >
             {isAllOpen ? "Collapse all" : "Expand all"}
           </button>
@@ -510,10 +515,10 @@ function LessonsBlock({ items, onOpen }: { items: LessonItem[]; onOpen?: OpenFil
                     type="button"
                     title={`Open ${path}`}
                     onClick={() => onOpen(path)}
-                    className="group flex h-7 min-w-0 flex-1 items-center gap-2 pl-3 pr-2 text-left transition-colors hover:bg-primary/10"
+                    className="hl-row group flex h-7 min-w-0 flex-1 items-center gap-2 pl-3 pr-2 text-left focus-visible:outline-none"
                   >
                     {row}
-                    <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-colors group-hover:text-primary" />
+                    <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
                   </button>
                 ) : (
                   <div className="flex h-7 min-w-0 flex-1 items-center gap-2 pl-3 pr-2">{row}</div>
@@ -536,10 +541,10 @@ function EditsBlock({ items, onOpen }: { items: EditItem[]; onOpen?: OpenFile })
   const count = `${items.length} ${items.length === 1 ? "file" : "files"}`;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/70 bg-card/60">
-      <div className="flex h-8 items-center gap-2 border-b border-border/60 px-3 text-xs">
+    <div className="chat-tile overflow-hidden rounded-xl">
+      <div className="chat-tile-head flex h-8 items-center gap-2 px-3 text-xs">
         {isActive
-          ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+          ? <OrbitSpinner className="h-3.5 w-3.5" />
           : <FilePen className="h-3.5 w-3.5 text-muted-foreground" />}
         <span className="font-medium text-foreground/90">
           {items.some((item) => item.deleted) ? (isActive ? "Changing" : "Changed") : isActive ? "Editing" : "Edited"} {count}
@@ -552,7 +557,7 @@ function EditsBlock({ items, onOpen }: { items: EditItem[]; onOpen?: OpenFile })
           const row = (
             <>
               {active
-                ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+                ? <OrbitSpinner className="h-3.5 w-3.5" />
                 : deleted
                   ? <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/80" />
                   : <Check className="h-3.5 w-3.5 shrink-0 text-syntax-string" />}
@@ -572,7 +577,7 @@ function EditsBlock({ items, onOpen }: { items: EditItem[]; onOpen?: OpenFile })
                   type="button"
                   title={`Open ${path}`}
                   onClick={() => onOpen(path)}
-                  className="group flex h-7 w-full min-w-0 items-center gap-2 pl-3 pr-2 text-left transition-colors hover:bg-primary/10"
+                  className="hl-row group flex h-7 w-full min-w-0 items-center gap-2 pl-3 pr-2 text-left focus-visible:outline-none"
                 >
                   {row}
                   <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
@@ -617,7 +622,7 @@ export function AssistantEvents({ events, isStreaming, isIdle, fallbackThought, 
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <LogoMark className="h-5 w-5" title="Singularity" />
+        <HorizonMark className="h-5 w-5" title="Singularity" />
         {thought && (
           <span className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
@@ -645,7 +650,7 @@ export function AssistantEvents({ events, isStreaming, isIdle, fallbackThought, 
 
       {showWorking && (
         <div className="flex h-6 items-center gap-2 text-xs">
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+          <OrbitSpinner className="h-3.5 w-3.5" />
           <span className="text-shimmer font-medium">{events.length === 0 ? "Thinking" : "Working"}&hellip;</span>
         </div>
       )}
@@ -655,7 +660,7 @@ export function AssistantEvents({ events, isStreaming, isIdle, fallbackThought, 
 
 export function AssistantError({ message }: { message: string }) {
   return (
-    <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs">
+    <div className="chat-enter flex items-start gap-2.5 rounded-xl border border-destructive/25 bg-destructive/[0.07] px-3 py-2.5 text-xs">
       <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
       <div className="min-w-0">
         <p className="font-medium text-foreground">This response didn&rsquo;t finish</p>
