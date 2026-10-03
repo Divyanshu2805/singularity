@@ -2,7 +2,10 @@
  * The actions a project row offers, with the dialogs they need.
  *
  * Handles: pinning and starring, forking, and deleting - including the confirmation whose wording depends on whether
- * the caller owns the project, since for anyone else it only removes their own access.
+ * the caller owns the project, since for anyone else it only removes their own access. Once a delete has gone
+ * through, the project is marked as leaving for a moment (isLeaving, from lib/project-leaving's shared store, so a
+ * delete made in the sidebar reaches the card on the page) and its card fades away before the list is refetched
+ * without it.
  */
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,7 +25,10 @@ import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import type { ProjectSummaryResponse } from "@/lib/types";
 import { deleteCopy } from "@/lib/project-delete";
+import { clearProjectLeaving, markProjectLeaving, useLeavingProjectId } from "@/lib/project-leaving";
 import { ForkProjectDialog } from "@/components/ForkProjectDialog";
+
+const LEAVE_MS = 300;
 
 export function useProjectActions({ onDeleted }: { onDeleted?: (project: ProjectSummaryResponse) => void } = {}) {
     const { toast } = useToast();
@@ -30,6 +36,7 @@ export function useProjectActions({ onDeleted }: { onDeleted?: (project: Project
     const [projectToDelete, setProjectToDelete] = useState<ProjectSummaryResponse | null>(null);
     const [projectToFork, setProjectToFork] = useState<ProjectSummaryResponse | null>(null);
     const [renamingId, setRenamingId] = useState<number | null>(null);
+    const leavingId = useLeavingProjectId();
     const preferences = useProjectPreferences();
 
     const downloadProject = async (project: ProjectSummaryResponse) => {
@@ -64,8 +71,10 @@ export function useProjectActions({ onDeleted }: { onDeleted?: (project: Project
         const copy = deleteCopy(projectToDelete.role, projectToDelete.name);
         try {
             await api.deleteProject(String(projectToDelete.id));
-            queryClient.invalidateQueries({ queryKey: ["projects"] });
             toast({ title: copy.doneTitle });
+            markProjectLeaving(projectToDelete.id);
+            await new Promise((resolve) => setTimeout(resolve, LEAVE_MS));
+            await queryClient.invalidateQueries({ queryKey: ["projects"] });
             onDeleted?.(projectToDelete);
         } catch (error) {
             toast({
@@ -75,6 +84,7 @@ export function useProjectActions({ onDeleted }: { onDeleted?: (project: Project
             });
         } finally {
             setProjectToDelete(null);
+            clearProjectLeaving();
         }
     };
 
@@ -129,6 +139,7 @@ export function useProjectActions({ onDeleted }: { onDeleted?: (project: Project
         downloadProject,
         renameProject,
         isRenaming: (project: ProjectSummaryResponse) => renamingId === project.id,
+        isLeaving: (project: ProjectSummaryResponse) => leavingId === project.id,
         startRename,
         finishRename,
         requestDelete: setProjectToDelete,

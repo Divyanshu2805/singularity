@@ -2,21 +2,53 @@
  * The home page once signed in: start something new, or pick up where you left off.
  *
  * Handles: the prompt box that creates a project from a description (through the idea interview), the recent projects
- * as cards, filtering and searching, and the per-project actions.
+ * as cards, filtering and searching, and the per-project actions. An idea a visitor typed on the landing page before
+ * signing up (lib/pending-idea) arrives here in the prompt, with the mode they picked, ready to send - it is never
+ * sent by itself, so the quota checks and the interview still run when they press Build.
  *
- * Placeholders keep a row's exact height while loading, so the page does not jump as projects arrive.
+ * It is set in the landing page's night, so signing in carries on in the same place rather than cutting to a
+ * different app: the root carries .dash-night (index.css), which gives the page the landing's Inter type and brighter
+ * text, and .dash-sky, which makes the page near-black at its head, lightening only towards the wash of colour at its foot,
+ * and its panel and cards black with hairlines strong enough to tell each from the one under it (the owner asked for
+ * black cards and a darker head once the app had turned gold; they were charcoal steps, each lighter than the last,
+ * before that). The page sits in a rounded inset frame (.dash-frame) beside the docked sidebar, as
+ * Lovable's does, with the sidebar standing on the plain surround around it (AppSidebar's inset). Behind everything is a living yellow, orange and brown
+ * nebula standing at the foot of the screen with stars round it (Nebula), held there whatever the scroll - the
+ * starfield that first sat behind the page was removed when the owner found the app too dark, the nebula, taken out
+ * with it, was asked back, then asked to look like a real nebula with stars round it, and then gave way to the wash
+ * of rose, amber and gold that Nebula draws now, with more stars and a shooting star now and then - a low gold tint rising from the
+ * hero's foot (gold and amber, kept faint so it colours the night without becoming a band of its own -
+ * a stronger one, with a rose corner, turned the projects panel into an ember haze and muddied its text; it runs a
+ * little way behind the panel and fades out there, since stopping at the hero's edge drew a hard line across the
+ * page), a soft gold bloom behind the prompt, the horizon mark building itself above a Fraunces headline in
+ * near-white whose italic pale-gold accent is the visitor's name, the prompt on a matte glass card that takes a calm
+ * gold ring while it has focus, and the recent projects on a glass panel below. The page arrives in a short
+ * staggered rise - mark, headline (its words dropping in, as the landing hero's do, and again whenever the headline
+ * changes between asking, shaping and setting up), prompt, suggestions, then the projects dealt in one after another - kept well under a second, since this is a
+ * page people come back to all day, not one they see once.
+ *
+ * Creating a project shows its progress on the same glass: a progress line that fills as it works, and each step's
+ * comet (OrbitSpinner) while it is the one under way.
+ *
+ * Placeholders keep a row's exact height while loading, so the page does not jump as projects arrive; they shimmer
+ * rather than blink.
  */
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Nebula } from "@/components/app/Nebula";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ArrowUp, Check, FolderOpen, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, ArrowUpRight, ArrowUp, Camera, Check, FolderOpen, Layers, ListChecks, Sparkles } from "lucide-react";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { ProjectCard } from "@/components/ProjectCard";
 import { ProjectFilterTabs } from "@/components/ProjectFilterTabs";
-import { AnimatedLogoMark } from "@/components/SingularityLogo";
+import { Button } from "@/components/ui/button";
+import { HorizonMark } from "@/components/HorizonMark";
 import { IdeaClarifier } from "@/components/IdeaClarifier";
-import { TeachingModeToggle } from "@/components/TeachingModeToggle";
+import { PromptModeMenu } from "@/components/PromptModeMenu";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
+import { HeadlineWords } from "@/components/landing/HeadlineWords";
+import { WORD_DROP } from "@/components/landing/intro";
+import { play } from "@/components/landing/motion";
 import { useProjectActions } from "@/hooks/use-project-actions";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useTeachingMode } from "@/hooks/use-teaching-mode";
@@ -28,19 +60,13 @@ import type { QuotaDetails } from "@/lib/types";
 import { api, getUserInfo, isAuthenticated, loginRedirectPath, isQuotaError } from "@/lib/api";
 import { byLastEdited, countByFilter, matchesProjectFilter, type ProjectFilter } from "@/lib/project-filters";
 import { cn } from "@/lib/utils";
-
-const IDEA_SUGGESTIONS = [
-    "a habit tracker with daily streaks",
-    "a landing page for my coffee shop",
-    "a kanban board for my side projects",
-    "a personal finance dashboard with charts",
-    "a recipe book with search and favorites",
-];
+import { IDEA_SUGGESTIONS } from "@/lib/idea-suggestions";
+import { takePendingIdea } from "@/lib/pending-idea";
 
 const QUICK_STARTS = [
-    "A todo app with drag and drop",
-    "A portfolio site for a photographer",
-    "A pricing page with three tiers",
+    { idea: "A todo app with drag and drop", Icon: ListChecks },
+    { idea: "A portfolio site for a photographer", Icon: Camera },
+    { idea: "A pricing page with three tiers", Icon: Layers },
 ];
 
 const CREATION_STEPS = [
@@ -64,14 +90,18 @@ const EMPTY_MESSAGES: Record<NonNullable<ProjectFilter> | "all", { title: string
     starred: { title: "No starred projects", hint: "Star the projects you love to find them here." },
 };
 
-const HERO_GLOW: CSSProperties = {
+const HERO_TINT: CSSProperties = {
     backgroundImage: [
-        "radial-gradient(60% 55% at 50% 100%, hsl(22 90% 55% / 0.75) 0%, transparent 70%)",
-        "radial-gradient(45% 50% at 12% 100%, hsl(340 82% 58% / 0.55) 0%, transparent 70%)",
-        "radial-gradient(45% 50% at 88% 100%, hsl(38 95% 60% / 0.45) 0%, transparent 70%)",
-        "radial-gradient(70% 60% at 50% 65%, hsl(25 78% 56% / 0.18) 0%, transparent 75%)",
+        "radial-gradient(60% 45% at 50% 78%, hsl(40.7 99.9% 76.1% / 0.12) 0%, transparent 70%)",
+        "radial-gradient(45% 40% at 12% 78%, hsl(46 88% 62% / 0.05) 0%, transparent 70%)",
+        "radial-gradient(45% 40% at 88% 78%, hsl(41.3 100% 85.6% / 0.08) 0%, transparent 70%)",
+        "radial-gradient(70% 50% at 50% 52%, hsl(40.4 99.9% 77.1% / 0.05) 0%, transparent 75%)",
     ].join(", "),
+    maskImage: "linear-gradient(to bottom, #000 62%, transparent)",
+    WebkitMaskImage: "linear-gradient(to bottom, #000 62%, transparent)",
 };
+
+const stagger = (index: number, delayMs = 0) => ({ "--i": index, "--rise-delay": `${delayMs}ms` }) as CSSProperties;
 
 const resizePrompt = (el: HTMLTextAreaElement) => {
     el.style.height = "auto";
@@ -84,6 +114,28 @@ interface Creation {
     projectName?: string;
 }
 
+function Headline({ lead, accent }: { lead: string; accent: string }) {
+    const ref = useRef<HTMLHeadingElement>(null);
+
+    useLayoutEffect(() => {
+        const words = ref.current?.querySelectorAll("[data-word]");
+        if (!words) return;
+        return play(words, WORD_DROP, { delay: 120, step: 55, duration: 900 });
+    }, [lead, accent]);
+
+    return (
+        <h1
+            ref={ref}
+            className="landing-heading dash-headline font-display text-[38px] font-semibold leading-[1.04] tracking-[-0.025em] sm:text-[52px]"
+        >
+            <HeadlineWords text={lead} />{" "}
+            <em data-word className="heat-text inline-block animate-heat-sweep pb-[0.1em] -mb-[0.1em] pr-2 font-semibold not-italic motion-reduce:animate-none">
+                {accent}
+            </em>
+        </h1>
+    );
+}
+
 function CreationProgress({ creation, now }: { creation: Creation; now: number }) {
     const elapsedMs = now - creation.startedAt;
     const lastIndex = CREATION_STEPS.length - 1;
@@ -93,43 +145,34 @@ function CreationProgress({ creation, now }: { creation: Creation; now: number }
     const progress = creation.projectName ? 100 : Math.min(92, 8 + (elapsedMs / 9000) * 84);
 
     return (
-        <div
-            role="status"
-            aria-live="polite"
-            className="mt-7 w-full overflow-hidden rounded-3xl border border-primary/40 bg-card/90 text-left shadow-2xl shadow-black/40 backdrop-blur animate-in fade-in-0 zoom-in-95 duration-200"
-        >
-            <div className="h-1 w-full bg-primary/10">
-                <div className="h-full bg-primary transition-[width] duration-500 ease-out" style={{ width: `${progress}%` }} />
-            </div>
-            <div className="p-5">
+        <div role="status" aria-live="polite" className="app-glass app-rise relative mt-8 w-full rounded-[22px] text-left">
+            <div className="px-5 pb-5 pt-4">
                 <p className="line-clamp-2 text-sm text-muted-foreground">&ldquo;{creation.description}&rdquo;</p>
-                <ol className="mt-4 space-y-2.5">
+                <div className="app-progress mt-4">
+                    <div className="app-progress-fill" style={{ width: `${progress}%` }} />
+                </div>
+                <ol className="mt-5 space-y-3">
                     {CREATION_STEPS.map((step, index) => {
                         const state = index < activeIndex ? "done" : index === activeIndex ? "active" : "pending";
                         return (
                             <li
                                 key={step.label}
                                 className={cn(
-                                    "flex items-center gap-3 text-sm transition-colors duration-300",
-                                    state === "pending" && "text-muted-foreground/50",
+                                    "flex items-center gap-3 text-sm transition-colors duration-500",
+                                    state === "pending" && "text-muted-foreground/45",
                                     state === "active" && "text-foreground",
                                     state === "done" && "text-muted-foreground"
                                 )}
                             >
-                                <span
-                                    className={cn(
-                                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors duration-300",
-                                        state === "done" && "border-primary/40 bg-primary/15 text-primary",
-                                        state === "active" && "border-primary/60",
-                                        state === "pending" && "border-border"
-                                    )}
-                                >
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center">
                                     {state === "done" ? (
-                                        <Check className="h-3 w-3" />
+                                        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-primary/40 bg-primary/15 text-primary">
+                                            <Check className="h-3 w-3" />
+                                        </span>
                                     ) : state === "active" ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                                        <OrbitSpinner className="h-[18px] w-[18px]" />
                                     ) : (
-                                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/35" />
                                     )}
                                 </span>
                                 {index === lastIndex && creation.projectName ? (
@@ -148,15 +191,16 @@ function CreationProgress({ creation, now }: { creation: Creation; now: number }
     );
 }
 
-function CardPlaceholder({ className }: { className?: string }) {
+function CardPlaceholder({ className, shimmer = true }: { className?: string; shimmer?: boolean }) {
+    const block = shimmer ? "app-skeleton" : "bg-muted/40";
     return (
-        <div aria-hidden="true" className={cn("overflow-hidden rounded-xl border border-border/60 bg-card/60", className)}>
-            <div className="aspect-[16/9] bg-muted" />
-            <div className="flex items-center gap-3 px-3 py-2.5">
-                <div className="h-8 w-8 shrink-0 rounded-lg bg-muted" />
-                <div className="flex h-9 flex-1 flex-col justify-center gap-1.5">
-                    <div className="h-3 w-2/3 rounded bg-muted" />
-                    <div className="h-2.5 w-1/3 rounded bg-muted" />
+        <div aria-hidden="true" className={cn("app-card overflow-hidden rounded-2xl", className)}>
+            <div className={cn("aspect-[16/9] border-b border-transparent", block)} />
+            <div className="flex items-center gap-3 px-3 py-3">
+                <div className={cn("h-8 w-8 shrink-0 rounded-lg", block)} />
+                <div className="flex h-[38px] flex-1 flex-col justify-center gap-1.5">
+                    <div className={cn("h-3 w-2/3 rounded", block)} />
+                    <div className={cn("h-2.5 w-1/3 rounded", block)} />
                 </div>
             </div>
         </div>
@@ -221,6 +265,21 @@ export function ProjectsDashboard() {
         next.delete("new");
         setSearchParams(next, { replace: true });
     }, [searchParams, setSearchParams, navigate]);
+
+    useEffect(() => {
+        if (!isSignedIn) return;
+        const pending = takePendingIdea();
+        if (!pending) return;
+        setPrompt(pending.text);
+        setTeachingMode(pending.teaching);
+        requestAnimationFrame(() => {
+            const el = promptRef.current;
+            if (!el) return;
+            el.focus();
+            resizePrompt(el);
+            el.setSelectionRange(pending.text.length, pending.text.length);
+        });
+    }, [isSignedIn, setTeachingMode]);
 
     const [blockedBy, setBlockedBy] = useState<QuotaDetails | null>(null);
     const { refresh: refreshBilling, quota, projects: projectAllowance, subscription } = useBilling();
@@ -293,27 +352,45 @@ export function ProjectsDashboard() {
     const emptyMessage = EMPTY_MESSAGES[filter ?? "all"];
     const slotCount = Math.min(RECENT_PROJECT_LIMIT, Math.max(counts.all, 1));
 
+    const headline = creation
+        ? creation.projectName
+            ? { lead: "Setting up", accent: creation.projectName }
+            : { lead: "Setting up your", accent: "project" }
+        : clarifyingIdea
+            ? { lead: "Let's shape your", accent: "idea" }
+            : firstName
+                ? { lead: "Got an idea,", accent: `${firstName}?` }
+                : { lead: "Got an", accent: "idea?" };
+    const eyebrow = creation ? "Building" : clarifyingIdea ? "A few quick questions" : null;
+
     return (
-        <div className="relative flex h-screen overflow-hidden bg-background">
+        <div className="dash-night dash-sky relative flex h-screen overflow-hidden bg-background">
+            <Nebula />
             <SidebarSpacer sidebar={sidebar} />
 
-            <div className="relative flex min-w-0 flex-1 flex-col">
+            <div className="dash-frame relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
                 <main className="min-h-0 flex-1 overflow-y-auto">
                     <div className="flex min-h-full flex-col">
-                        <section className="relative flex min-h-[420px] flex-1 flex-col items-center justify-center overflow-hidden px-6 pb-20 pt-12">
-                            <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={HERO_GLOW} />
+                        <section className="relative flex min-h-[460px] flex-1 flex-col items-center justify-center px-6 pb-24 pt-14">
+                            <div aria-hidden="true" className="app-fade pointer-events-none absolute inset-x-0 top-0 -bottom-[160px]" style={HERO_TINT} />
+                            <div
+                                aria-hidden="true"
+                                className="app-bloom absolute left-1/2 top-1/2 h-[560px] w-[min(1000px,110%)] -translate-x-1/2 -translate-y-1/2"
+                            />
 
                             <div className="relative flex w-full max-w-2xl flex-col items-center text-center">
-                                {!clarifyingIdea && <AnimatedLogoMark glow className="mb-6 h-16 w-16" />}
-                                <h1 className="font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
-                                    {creation
-                                        ? creation.projectName
-                                            ? `Setting up ${creation.projectName}`
-                                            : "Setting up your project"
-                                        : clarifyingIdea
-                                            ? "Let's shape your idea"
-                                            : `Got an idea${firstName ? `, ${firstName}` : ""}?`}
-                                </h1>
+                                {!clarifyingIdea && (
+                                    <span className="relative mb-7 inline-flex h-16 w-16">
+                                        <span aria-hidden="true" className="nav-brand-glow pointer-events-none absolute -inset-[60%] rounded-full" />
+                                        <HorizonMark drawn className="relative h-full w-full" />
+                                    </span>
+                                )}
+                                {eyebrow && (
+                                    <p key={eyebrow} className="app-eyebrow app-fade mb-4" style={stagger(1)}>
+                                        {eyebrow}
+                                    </p>
+                                )}
+                                <Headline lead={headline.lead} accent={headline.accent} />
 
                                 {creation ? (
                                     <CreationProgress creation={creation} now={now} />
@@ -338,14 +415,15 @@ export function ProjectsDashboard() {
                                                 e.preventDefault();
                                                 handleCreate();
                                             }}
-                                            className="group mt-7 w-full rounded-3xl border border-border/80 bg-card/90 p-3 text-left shadow-2xl shadow-black/40 backdrop-blur transition-[border-color,box-shadow] duration-150 hover:border-primary/40 focus-within:border-primary/60 focus-within:shadow-[0_0_0_4px_hsl(var(--primary)/0.12),0_25px_50px_-12px_rgb(0_0_0/0.5)]"
+                                            className="app-glass app-prompt app-rise group relative mt-8 w-full rounded-[22px] p-3 text-left"
+                                            style={stagger(0, 300)}
                                         >
                                             <div className="flex items-start">
                                                 <span
                                                     aria-hidden="true"
-                                                    className="select-none pl-2 pt-1 text-[17px] font-semibold leading-6 text-muted-foreground/50 transition-colors group-focus-within:text-primary"
+                                                    className="prompt-badge mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-white/70"
                                                 >
-                                                    ›
+                                                    <Sparkles className="no-icon-anim h-4 w-4" />
                                                 </span>
                                                 <textarea
                                                     ref={promptRef}
@@ -363,35 +441,32 @@ export function ProjectsDashboard() {
                                                             handleCreate();
                                                         }
                                                     }}
-                                                    className="block min-h-[56px] w-full flex-1 resize-none bg-transparent px-2.5 pt-1 text-[15px] leading-6 text-foreground caret-primary outline-none placeholder:text-muted-foreground"
+                                                    className="app-prompt-input block min-h-[64px] w-full flex-1 resize-none bg-transparent px-3 pt-1.5 text-[15px] font-normal leading-6 tracking-[-0.005em] text-white caret-white outline-none placeholder:text-white/70"
                                                 />
                                             </div>
                                             <div className="mt-2 flex items-center justify-between gap-3 pl-2">
                                                 <span className="min-w-0 truncate text-xs text-muted-foreground">Enter to create · Shift+Enter for a new line</span>
                                                 <div className="flex shrink-0 items-center gap-2">
-                                                    <TeachingModeToggle size="md" enabled={teachingMode} onChange={setTeachingMode} />
-                                                    <Button
-                                                        type="submit"
-                                                        size="icon"
-                                                        aria-label="Create project"
-                                                        disabled={!prompt.trim()}
-                                                        className="h-9 w-9 shrink-0 rounded-full disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
-                                                    >
-                                                        <ArrowUp />
-                                                    </Button>
+                                                    <PromptModeMenu teaching={teachingMode} onChange={setTeachingMode} />
+                                                    <button type="submit" aria-label="Create project" disabled={!prompt.trim()} className="app-send h-9 w-9">
+                                                        <ArrowUp className="h-4 w-4" />
+                                                    </button>
                                                 </div>
                                             </div>
                                         </form>
 
-                                        <div className="mt-4 flex flex-wrap justify-center gap-2">
-                                            {QUICK_STARTS.map((idea) => (
+                                        <div className="mt-5 flex flex-wrap justify-center gap-2">
+                                            {QUICK_STARTS.map(({ idea, Icon }, index) => (
                                                 <button
                                                     key={idea}
                                                     type="button"
                                                     onClick={() => applyIdea(idea)}
-                                                    className="rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur transition-colors hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
+                                                    className="idea-chip app-rise group/idea"
+                                                    style={stagger(index, 460)}
                                                 >
+                                                    <Icon className="h-3.5 w-3.5 shrink-0 text-white/55 transition-all duration-300 group-hover/idea:text-[hsl(46_100%_85%)]" />
                                                     {idea}
+                                                    <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-white/45 transition-all duration-300 group-hover/idea:translate-x-0.5 group-hover/idea:text-[hsl(46_100%_85%)]" />
                                                 </button>
                                             ))}
                                         </div>
@@ -400,15 +475,16 @@ export function ProjectsDashboard() {
                             </div>
                         </section>
 
-                        <section className="relative z-10 mx-auto -mt-14 w-full max-w-6xl shrink-0 px-4 pb-5 sm:px-6">
-                            <div className="rounded-2xl border border-border/70 bg-panel/90 p-4 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                        <section className="relative z-10 mx-auto -mt-12 w-full max-w-6xl shrink-0 px-4 pb-6 sm:px-6">
+                            <div className="app-glass app-rise rounded-[22px] p-4 sm:p-5" style={stagger(0, 420)}>
                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                                     <ProjectFilterTabs value={filter} onChange={setFilter} counts={counts} isLoading={isLoading} />
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={() => navigate(filter ? `/projects/all?filter=${filter}` : "/projects/all")}
-                                        className="h-8 gap-1.5 text-xs [&_svg]:size-3.5"
+                                        style={{ "--icon-hover": "translateX(3px)" } as CSSProperties}
+                                        className="h-8 gap-1.5 px-3.5 text-xs [&_svg]:size-3.5"
                                     >
                                         Browse all projects
                                         <ArrowRight />
@@ -418,32 +494,34 @@ export function ProjectsDashboard() {
                                 <div className="relative -m-1 grid grid-cols-1 gap-4 p-1 sm:grid-cols-2 lg:grid-cols-4">
                                     {isLoading
                                         ? Array.from({ length: PLACEHOLDER_CARDS }, (_, i) => (
-                                            <CardPlaceholder key={i} className={cn("animate-pulse", i > 0 && "hidden sm:block")} />
+                                            <CardPlaceholder key={i} className={cn(i > 0 && "hidden sm:block")} />
                                         ))
-                                        : recentProjects.map((project) => (
-                                            <ProjectCard
-                                                key={project.id}
-                                                project={project}
-                                                onOpen={() => navigate(`/projects/${project.id}`)}
-                                                onDownload={() => projectActions.downloadProject(project)}
-                                                onDelete={() => projectActions.requestDelete(project)}
-                                                onFork={() => projectActions.requestFork(project)}
-                                                onTogglePin={() => projectActions.togglePin(project)}
-                                                onToggleStar={() => projectActions.toggleStar(project)}
-                                                isRenaming={projectActions.isRenaming(project)}
-                                                onStartRename={() => projectActions.startRename(project)}
-                                                onRenameDone={(name) => projectActions.finishRename(project, name)}
-                                            />
+                                        : recentProjects.map((project, index) => (
+                                            <div key={project.id} className="app-rise" style={stagger(index, 520)}>
+                                                <ProjectCard
+                                                    project={project}
+                                                    onOpen={() => navigate(`/projects/${project.id}`)}
+                                                    onDownload={() => projectActions.downloadProject(project)}
+                                                    onDelete={() => projectActions.requestDelete(project)}
+                                                    onFork={() => projectActions.requestFork(project)}
+                                                    onTogglePin={() => projectActions.togglePin(project)}
+                                                    onToggleStar={() => projectActions.toggleStar(project)}
+                                                    isRenaming={projectActions.isRenaming(project)}
+                                                    isLeaving={projectActions.isLeaving(project)}
+                                                    onStartRename={() => projectActions.startRename(project)}
+                                                    onRenameDone={(name) => projectActions.finishRename(project, name)}
+                                                />
+                                            </div>
                                         ))}
 
                                     {!isLoading &&
                                         Array.from({ length: Math.max(slotCount - recentProjects.length, 0) }, (_, i) => (
-                                            <CardPlaceholder key={`slot-${i}`} className="invisible" />
+                                            <CardPlaceholder key={`slot-${i}`} shimmer={false} className="invisible" />
                                         ))}
 
                                     {!isLoading && recentProjects.length === 0 && (
-                                        <div className="absolute inset-1 flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border/60 px-4 text-center">
-                                            <FolderOpen className="mb-1 h-5 w-5 text-muted-foreground/70" />
+                                        <div className="app-fade absolute inset-1 flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-white/10 bg-black/10 px-4 text-center">
+                                            <FolderOpen className="mb-1 h-5 w-5 text-primary/60" />
                                             <p className="text-sm font-medium">{emptyMessage.title}</p>
                                             <p className="text-xs text-muted-foreground">{emptyMessage.hint}</p>
                                         </div>
@@ -459,7 +537,7 @@ export function ProjectsDashboard() {
                 {projectActions.forkDialog}
             </div>
 
-            <AppSidebar sidebar={sidebar} />
+            <AppSidebar sidebar={sidebar} inset />
         </div>
     );
 }

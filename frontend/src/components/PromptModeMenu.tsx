@@ -1,0 +1,69 @@
+/**
+ * The mode picker on the home prompt.
+ *
+ * Handles: choosing how the next project is built from a small menu - Build (just the project) or Teach me (each
+ * file also comes with a plain-English note on the idea it uses). Each option's explanation appears only as a hover
+ * tooltip. The trigger names the mode in force, so it is never a guess what a build will do; the choice is the
+ * teaching-mode flag (hooks/use-teaching-mode.ts), so it still resets on sign-out.
+ *
+ * It is dressed as the rest of the app's menus are rather than in colours of its own: the trigger is the app's chip
+ * (index.css, .app-chip - a dark charcoal pill that takes the gold wash and a gold hairline under the pointer and
+ * while the menu is open, its chevron turning over), and the list is the shared raised menu surface. It had a brassy
+ * border, a brown body and a shadow left over from the violet palette, which showed as a blue haze beside it.
+ * Hovering is the sidebar's wash, as in every menu (index.css, the shared .app-menu rules): one gold wash glides from
+ * option to option (lib/menu-glide) and the icon of the option under it turns gold; the option itself holds still. The
+ * mode in force (data-current) is marked in gold - its icon and its tick, which holds still under the pointer - so
+ * the choice reads without hovering.
+ */
+import { Check, ChevronDown, GraduationCap, Hammer } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+
+interface PromptModeMenuProps {
+  teaching: boolean;
+  onChange: (teaching: boolean) => void;
+}
+
+const MODES = [
+  { teaching: false, label: "Build", hint: "Just build the project.", Icon: Hammer },
+  { teaching: true, label: "Teach me", hint: "A plain-English note on the idea behind each file.", Icon: GraduationCap },
+];
+
+export function PromptModeMenu({ teaching, onChange }: PromptModeMenuProps) {
+  const current = MODES.find((mode) => mode.teaching === teaching) ?? MODES[0];
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Mode: ${current.label}`}
+          className="app-chip mode-trigger inline-flex h-9 shrink-0 items-center gap-2 px-3.5 text-[13px] font-medium"
+        >
+          <current.Icon className="h-4 w-4" />
+          {current.label}
+          <ChevronDown className="mode-chevron no-icon-anim h-3.5 w-3.5 opacity-70" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" side="bottom" sideOffset={8} className="w-48 rounded-2xl p-1.5">
+        {MODES.map(({ teaching: value, label, hint, Icon }) => (
+          <Tooltip key={label}>
+            <TooltipTrigger asChild>
+              <DropdownMenuItem
+                onSelect={() => onChange(value)}
+                data-current={value === teaching}
+                className="gap-2.5 rounded-xl px-3 py-2 text-sm font-medium"
+              >
+                <Icon className="h-4 w-4" />
+                <span className="flex-1">{label}</span>
+                {value === teaching && <Check className="no-icon-anim h-4 w-4" />}
+              </DropdownMenuItem>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={10} className="app-menu-raised max-w-[220px] rounded-xl px-3 py-2 text-xs leading-5 text-[hsl(40_30%_92%)]">
+              {hint}
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
