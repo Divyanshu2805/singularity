@@ -3,11 +3,28 @@
  *
  * Handles: the name with inline renaming, the generated gradient thumbnail, the last-edited time, the caller's role,
  * and the actions menu - pin, star, fork, delete.
+ *
+ * The card and the row share one hover: the app's gold wash, never a lit border. On the card it fades in across the
+ * foot (index.css, .card-foot) with a soft glare under the pointer and a slight tilt towards it
+ * (motion.ts's tiltToPointer - a mouse only, and never under reduced motion); its thumbnail eases in a little closer
+ * while its colours drift (.card-thumb), and a round arrow fades in at the thumbnail's corner (.card-open). The card
+ * used to answer with a gold hairline all the way round and an ember glow beneath, and its name turned gold. On the
+ * row (the list form, pages/AllProjects.tsx) the wash is the list's gliding highlight (data-glide,
+ * hooks/use-glide-highlight), which is why the row itself paints no hover background, and the arrow fades in beside
+ * the name. On both, the tile swells and the dim text brightens (.proj-tile, .proj-name, .proj-meta), and nothing
+ * shifts sideways; that nudge is the sidebar's alone. The same look holds while the item's menu is open.
+ *
+ * At rest the actions button is always in view but dim. The role is a small chip (.role-chip): on the row for
+ * everyone, gold for an owner; on the card only for someone who is not the owner, set on the thumbnail over a dark
+ * backing. Renaming holds the card still. A project that has just been deleted fades and shrinks away (isLeaving,
+ * data-leaving) before the list drops it, rather than vanishing. The initial on its tile carries a faint shadow,
+ * since the tile can be any hue and white on a yellow needs it.
  */
 import { useEffect, useRef, useState } from "react";
+import { releaseTilt, tiltToPointer } from "@/components/landing/motion";
 import { deleteCopy } from "@/lib/project-delete";
 import { formatDistanceToNow } from "date-fns";
-import { Download, GitFork, MoreHorizontal, Pencil, Pin, PinOff, Star, StarOff, Trash2 } from "lucide-react";
+import { ArrowUpRight, Download, GitFork, MoreHorizontal, Pencil, Pin, PinOff, Star, StarOff, Trash2 } from "lucide-react";
 import { canForkProject } from "@/lib/project-fork";
 import {
     DropdownMenu,
@@ -28,6 +45,7 @@ export interface ProjectItemProps {
     onTogglePin: () => void;
     onToggleStar: () => void;
     isRenaming?: boolean;
+    isLeaving?: boolean;
     onStartRename?: () => void;
     onRenameDone?: (name: string | null) => void;
 }
@@ -78,7 +96,7 @@ function RenameNameField({ project, onDone, className }: {
                 }
             }}
             className={cn(
-                "min-w-0 flex-1 rounded-md border border-primary/50 bg-background px-1.5 py-0.5 text-sm text-foreground caret-primary outline-none ring-[3px] ring-primary/15",
+                "min-w-0 flex-1 rounded-md border border-primary/50 bg-[hsl(30_11%_3%)] px-1.5 py-0.5 text-sm text-foreground caret-primary outline-none ring-[3px] ring-primary/[0.12]",
                 className
             )}
         />
@@ -87,6 +105,12 @@ function RenameNameField({ project, onDone, className }: {
 
 function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin, onToggleStar, isRenaming, onStartRename }: Omit<ProjectItemProps, "onOpen" | "onRenameDone">) {
     const canManage = project.role === "OWNER" || project.role === "EDITOR";
+    const pendingRenameRef = useRef(false);
+    const beginPendingRename = () => {
+        if (!pendingRenameRef.current) return;
+        pendingRenameRef.current = false;
+        onStartRename?.();
+    };
 
     return (
         <DropdownMenu modal={false}>
@@ -95,17 +119,31 @@ function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin
                     type="button"
                     aria-label={`Actions for ${project.name}`}
                     className={cn(
-                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[opacity,background-color,color] hover:bg-muted/60 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:bg-primary/15 data-[state=open]:text-primary data-[state=open]:opacity-100 md:opacity-0",
+                        "icon-btn h-7 w-7 opacity-60 transition-[opacity,background-color,color] focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:text-foreground data-[state=open]:opacity-100",
                         isRenaming && "hidden"
                     )}
                 >
                     <MoreHorizontal className="h-4 w-4" />
                 </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+            <DropdownMenuContent
+                align="end"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+                onCloseAutoFocus={(e) => {
+                    if (!pendingRenameRef.current) return;
+                    e.preventDefault();
+                    beginPendingRename();
+                }}
+            >
                 {canManage && onStartRename && (
                     <>
-                        <DropdownMenuItem onClick={onStartRename}>
+                        <DropdownMenuItem
+                            onSelect={() => {
+                                pendingRenameRef.current = true;
+                                window.setTimeout(beginPendingRename, 400);
+                            }}
+                        >
                             <Pencil />
                             Rename
                         </DropdownMenuItem>
@@ -136,7 +174,7 @@ function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                             onClick={onDelete}
-                            className="text-destructive focus:bg-destructive/10 focus:text-destructive [&_svg]:text-destructive [&[data-highlighted]_svg]:text-destructive"
+                            data-danger="delete"
                         >
                             <Trash2 />
                             {deleteCopy(project.role, project.name).menuLabel}
@@ -152,7 +190,7 @@ function PreferenceMarks({ project }: { project: ProjectSummaryResponse }) {
     if (!project.pinnedAt && !project.starredAt) return null;
     return (
         <span className="flex shrink-0 items-center gap-1 text-primary">
-            {project.pinnedAt && <Pin aria-label="Pinned" className="h-3 w-3" />}
+            {project.pinnedAt && <Pin aria-label="Pinned" className="pin-active h-3 w-3" />}
             {project.starredAt && <Star aria-label="Starred" className="h-3 w-3 fill-current" />}
         </span>
     );
@@ -162,7 +200,7 @@ const openOnEnter = (onOpen: () => void) => (e: React.KeyboardEvent) => {
     if (e.key === "Enter") onOpen();
 };
 
-export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, onRenameDone, ...props }: ProjectItemProps & { thumbnailClassName?: string }) {
+export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, isLeaving, onRenameDone, ...props }: ProjectItemProps & { thumbnailClassName?: string }) {
     const { project } = props;
     return (
         <div
@@ -170,29 +208,38 @@ export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, onRenameDo
             tabIndex={isRenaming ? undefined : 0}
             onClick={isRenaming ? undefined : onOpen}
             onKeyDown={isRenaming ? undefined : openOnEnter(onOpen)}
+            onPointerMove={isRenaming ? undefined : (e) => tiltToPointer(e, 3)}
+            onPointerLeave={releaseTilt}
+            data-interactive={!isRenaming}
+            data-leaving={isLeaving || undefined}
             className={cn(
-                "group flex flex-col overflow-hidden rounded-xl border border-border/70 bg-card transition-[border-color,box-shadow,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                isRenaming
-                    ? "border-primary/50"
-                    : "cursor-pointer hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-[0_14px_32px_-16px_hsl(var(--primary)/0.5)]"
+                "app-card group flex flex-col overflow-hidden rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                isRenaming ? "border-primary/50" : "cursor-pointer"
             )}
         >
-            <div className={cn("relative aspect-[16/9] overflow-hidden border-b border-border/60", thumbnailClassName)}>
+            <span aria-hidden="true" className="app-card-glare" />
+            <div className={cn("relative aspect-[16/9] overflow-hidden border-b border-white/[0.06]", thumbnailClassName)}>
                 <div
-                    className="absolute inset-0 transition-transform duration-500 group-hover:scale-105"
+                    className="card-thumb absolute inset-0 group-hover:scale-[1.06]"
                     style={generateGradient(project.name)}
                 />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.14),transparent_55%)]" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[hsl(30_11%_3.7%/0.6)] via-transparent to-transparent" />
                 {project.role && project.role !== "OWNER" && (
-                    <span className="absolute left-2.5 top-2.5 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white/90 backdrop-blur">
+                    <span className="role-chip absolute left-2.5 top-2.5" data-on="thumb">
                         {ROLE_LABELS[project.role]}
                     </span>
                 )}
+                {!isRenaming && (
+                    <span aria-hidden="true" className="card-open">
+                        <ArrowUpRight className="no-icon-anim h-3.5 w-3.5" />
+                    </span>
+                )}
             </div>
-            <div className="flex items-center gap-3 px-3 py-2.5">
+            <div className="card-foot relative flex items-center gap-3 px-3 py-3">
                 <span
                     aria-hidden="true"
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold text-white ring-1 ring-inset ring-white/15"
+                    className="proj-tile flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold text-white ring-1 ring-inset ring-white/15 [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
                     style={generateGradient(project.name)}
                 >
                     {project.name.charAt(0).toUpperCase()}
@@ -203,12 +250,12 @@ export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, onRenameDo
                             <RenameNameField project={project} onDone={onRenameDone!} />
                         ) : (
                             <>
-                                <p className="truncate text-sm font-medium transition-colors group-hover:text-primary">{project.name}</p>
+                                <p className="proj-name truncate text-sm font-medium">{project.name}</p>
                                 <PreferenceMarks project={project} />
                             </>
                         )}
                     </div>
-                    {!isRenaming && <p className="truncate text-xs text-muted-foreground">Edited {editedAgo(project)}</p>}
+                    {!isRenaming && <p className="proj-meta mt-0.5 truncate text-xs">Edited {editedAgo(project)}</p>}
                 </div>
                 <ProjectActionsMenu {...props} isRenaming={isRenaming} />
             </div>
@@ -216,7 +263,7 @@ export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, onRenameDo
     );
 }
 
-export function ProjectRow({ onOpen, isRenaming, onRenameDone, ...props }: ProjectItemProps) {
+export function ProjectRow({ onOpen, isRenaming, isLeaving, onRenameDone, ...props }: ProjectItemProps) {
     const { project } = props;
     return (
         <div
@@ -224,32 +271,39 @@ export function ProjectRow({ onOpen, isRenaming, onRenameDone, ...props }: Proje
             tabIndex={isRenaming ? undefined : 0}
             onClick={isRenaming ? undefined : onOpen}
             onKeyDown={isRenaming ? undefined : openOnEnter(onOpen)}
+            data-glide={isRenaming ? undefined : ""}
+            data-leaving={isLeaving || undefined}
             className={cn(
-                "group flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                isRenaming ? "border-primary/50 bg-muted/20" : "cursor-pointer border-transparent hover:border-border/70 hover:bg-muted/40"
+                "project-row group relative flex items-center gap-3.5 rounded-xl border px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35",
+                isRenaming ? "border-primary/50 bg-white/[0.03]" : "cursor-pointer border-transparent"
             )}
         >
             <span
                 aria-hidden="true"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold text-white ring-1 ring-inset ring-white/15"
+                className="proj-tile flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-sm font-semibold text-white ring-1 ring-inset ring-white/15 [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
                 style={generateGradient(project.name)}
             >
                 {project.name.charAt(0).toUpperCase()}
             </span>
-            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
                 {isRenaming ? (
                     <RenameNameField project={project} onDone={onRenameDone!} />
                 ) : (
                     <>
-                        <p className="truncate text-sm font-medium transition-colors group-hover:text-primary">{project.name}</p>
+                        <p className="proj-name truncate text-sm font-medium">{project.name}</p>
                         <PreferenceMarks project={project} />
+                        <ArrowUpRight aria-hidden="true" className="proj-arrow no-icon-anim h-3.5 w-3.5 shrink-0" />
                     </>
                 )}
             </div>
-            <span className={cn("hidden w-24 text-xs sm:block", project.role === "OWNER" ? "text-primary" : "text-muted-foreground")}>
-                {project.role ? ROLE_LABELS[project.role] : ""}
+            <span className="hidden w-28 sm:block">
+                {project.role && (
+                    <span className="role-chip" data-role={project.role.toLowerCase()}>
+                        {ROLE_LABELS[project.role]}
+                    </span>
+                )}
             </span>
-            <span className="hidden w-40 text-xs text-muted-foreground md:block">Edited {editedAgo(project)}</span>
+            <span className="proj-meta hidden w-44 truncate text-[13px] md:block">{editedAgo(project)}</span>
             <ProjectActionsMenu {...props} isRenaming={isRenaming} />
         </div>
     );

@@ -5,11 +5,14 @@
  *
  * The copy has every file but starts with a fresh chat, and the person forking owns it - nothing they do there
  * reaches the original, and nothing done to the original reaches them.
+ *
+ * Its mark sits in a quiet tile, and the fork button shows the app's comet while it copies.
  */
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { GitFork, Loader2 } from "lucide-react";
+import { GitFork } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -60,7 +63,7 @@ export function ForkProjectDialog({ project, onOpenChange }: {
       <DialogContent className="sm:max-w-md">
         <form onSubmit={fork} className="grid gap-4">
           <DialogHeader>
-            <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-primary">
               <GitFork className="h-4 w-4" />
             </div>
             <DialogTitle>Fork this project?</DialogTitle>
@@ -83,7 +86,7 @@ export function ForkProjectDialog({ project, onOpenChange }: {
               Cancel
             </Button>
             <Button type="submit" disabled={isForking || !name.trim()} className="gap-1.5">
-              {isForking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitFork className="h-3.5 w-3.5" />}
+              {isForking ? <OrbitSpinner className="h-3.5 w-3.5" /> : <GitFork className="h-3.5 w-3.5" />}
               {isForking ? "Forking…" : "Fork project"}
             </Button>
           </DialogFooter>

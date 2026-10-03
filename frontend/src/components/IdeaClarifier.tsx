@@ -6,9 +6,14 @@
  * spent allowance to the quota dialog rather than showing an error.
  *
  * The answers are compiled so the first prompt the AI sees is a clear spec instead of a one-liner.
+ *
+ * It sits on the dashboard's glass (index.css, .app-glass): each question rises in, a chosen answer takes the app's
+ * selected look - a faint gold glass fill inside a gold hairline (.row-active) and a filled number badge - and the step bar fills
+ * in gold as the questions are answered.
  */
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, ArrowUp, Check, Loader2, PenLine, Plus, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, Check, PenLine, Plus, Sparkles } from "lucide-react";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { Button } from "@/components/ui/button";
 import { api, isQuotaError } from "@/lib/api";
 import type { ClarifyingQuestion, IdeaAnswer, QuotaDetails } from "@/lib/types";
@@ -211,8 +216,8 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
   const currentStep = phase === "review" || phase === "compiling" ? questions.length : index;
 
   return (
-    <div className="mt-7 w-full overflow-hidden rounded-3xl border border-border/80 bg-card/90 text-left shadow-2xl shadow-black/40 backdrop-blur animate-in fade-in-0 zoom-in-95 duration-200">
-      <div className="flex items-center gap-3 border-b border-border/60 px-5 py-3">
+    <div className="app-glass app-rise relative mt-8 w-full rounded-[22px] text-left">
+      <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3">
         <Sparkles className="h-4 w-4 shrink-0 text-primary" />
         <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={idea}>
           &ldquo;<span className="text-foreground/90">{idea}</span>&rdquo;
@@ -231,8 +236,8 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
       <div className="px-5 pb-5 pt-4">
         {phase === "loading" ? (
           <div role="status" className="flex flex-col items-center gap-2 py-10 text-center">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <p className="text-shimmer mt-1 text-sm">Tailoring a few questions to your idea…</p>
+            <OrbitSpinner className="h-7 w-7" />
+            <p className="text-shimmer mt-2 text-sm">Tailoring a few questions to your idea…</p>
             <p className="text-xs text-muted-foreground">Only what's needed, and you can skip any of them.</p>
           </div>
         ) : (
@@ -256,16 +261,20 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
                 <span
                   key={step}
                   className={cn(
-                    "h-1 rounded-full transition-colors duration-300",
-                    step < currentStep ? "bg-primary/70" : step === currentStep ? "bg-primary" : "bg-border/80"
+                    "h-1 rounded-full transition-[background-color,box-shadow] duration-500",
+                    step < currentStep
+                      ? "bg-primary/60"
+                      : step === currentStep
+                        ? "bg-primary"
+                        : "bg-white/[0.08]"
                   )}
                 />
               ))}
             </div>
 
             {phase === "asking" && question ? (
-              <div key={question.id} className="animate-fade-in">
-                <h2 className="mt-4 text-lg font-semibold tracking-tight text-foreground">{question.question}</h2>
+              <div key={question.id} className="chat-enter">
+                <h2 className="mt-5 font-display text-[22px] font-semibold leading-tight tracking-tight text-foreground">{question.question}</h2>
                 {question.helper && <p className="mt-1 text-sm text-muted-foreground">{question.helper}</p>}
 
                 <div role="group" aria-label={question.question} className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -278,17 +287,19 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
                         onClick={() => choose(option)}
                         aria-pressed={isSelected}
                         className={cn(
-                          "flex min-h-10 items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          "flex min-h-10 items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-sm transition-[border-color,background-color,color,box-shadow] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           isSelected
-                            ? "border-primary/60 bg-primary/15 text-primary"
-                            : "border-border/80 bg-background/40 text-foreground/90 hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                            ? "row-active border-transparent pl-4 text-foreground"
+                            : "border-white/[0.07] bg-black/20 text-foreground/90 hover:border-primary/40 hover:bg-primary/[0.06] hover:text-foreground"
                         )}
                       >
                         <span
                           aria-hidden="true"
                           className={cn(
                             "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-[10px] font-medium transition-colors",
-                            isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
+                            isSelected
+                              ? "border-transparent bg-primary text-primary-foreground"
+                              : "border-white/10 text-muted-foreground"
                           )}
                         >
                           {isSelected ? <Check className="h-3 w-3" /> : optionIndex < 9 ? optionIndex + 1 : ""}
@@ -301,7 +312,7 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
                   {isWritingOwn ? (
                     <form
                       onSubmit={addOwnAnswer}
-                      className="flex min-h-10 items-center gap-2 rounded-xl border border-primary/50 bg-background/60 pl-3 pr-1.5 ring-[3px] ring-primary/10 sm:col-span-2"
+                      className="app-field flex min-h-10 items-center gap-2 rounded-xl pl-3 pr-1.5 sm:col-span-2"
                     >
                       <span aria-hidden="true" className="select-none font-semibold text-primary">›</span>
                       <input
@@ -328,7 +339,7 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
                     <button
                       type="button"
                       onClick={() => setIsWritingOwn(true)}
-                      className="flex min-h-10 items-center gap-2.5 rounded-xl border border-dashed border-border/80 px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="flex min-h-10 items-center gap-2.5 rounded-xl border border-dashed border-white/10 px-3 py-2 text-left text-sm text-muted-foreground transition-colors duration-300 hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <Plus className="h-4 w-4 shrink-0" />
                       Something else
@@ -345,23 +356,23 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
                     <span className="hidden text-[11px] text-muted-foreground sm:inline">
                       {question.multiSelect ? "Pick as many as you like · Enter to continue" : `Press 1–${Math.min(options.length, 9)} to choose`}
                     </span>
-                    <Button size="sm" onClick={next} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
+                    <button type="button" onClick={next} className="app-send h-8 gap-1.5 px-3.5 text-xs font-medium">
                       {selected.length > 0 ? "Continue" : "Skip"}
-                      <ArrowRight />
-                    </Button>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="animate-fade-in">
-                <h2 className="mt-4 text-lg font-semibold tracking-tight text-foreground">Here&rsquo;s the plan</h2>
+              <div className="chat-enter">
+                <h2 className="mt-5 font-display text-[22px] font-semibold leading-tight tracking-tight text-foreground">Here&rsquo;s the plan</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {answeredCount > 0
                     ? "Singularity will turn this into a project brief and start building."
                     : "You skipped the questions, so Singularity will make sensible choices for you."}
                 </p>
 
-                <dl className="mt-4 divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-background/40">
+                <dl className="mt-4 divide-y divide-white/[0.05] overflow-hidden rounded-xl border border-white/[0.07] bg-black/20">
                   {answers.map((answer, answerIndex) => (
                     <div key={answer.questionId} className="group flex items-start gap-3 px-3.5 py-2.5">
                       <div className="min-w-0 flex-1">
@@ -387,19 +398,19 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
                     <ArrowLeft />
                     Back
                   </Button>
-                  <Button size="sm" onClick={build} disabled={phase === "compiling"} className="h-9 gap-2 px-4 text-sm [&_svg]:size-4">
+                  <button type="button" onClick={build} disabled={phase === "compiling"} className="app-send h-9 gap-2 px-4 text-sm font-medium">
                     {phase === "compiling" ? (
                       <>
-                        <Loader2 className="animate-spin" />
+                        <OrbitSpinner className="h-4 w-4" />
                         Writing your brief…
                       </>
                     ) : (
                       <>
                         Build it
-                        <ArrowUp />
+                        <ArrowUp className="h-4 w-4" />
                       </>
                     )}
-                  </Button>
+                  </button>
                 </div>
               </div>
             )}

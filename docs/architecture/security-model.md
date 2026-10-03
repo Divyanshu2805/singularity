@@ -61,7 +61,9 @@ Every stored project file path goes through workspace-service's `ProjectFilePath
 
 ## Sign-out data isolation (frontend)
 
-A client-side route change after sign-out does not clear module-level state: the chat and code-notes stores live for the page's lifetime, and `sessionStorage` survives a reload. `frontend/src/lib/session.ts` solves this in one place: stores register a reset with `onSignOut(reset)`, and `signOut()` leaves through a full document reload (`window.location.assign`), so anything that forgot to register is discarded anyway. Any new module-level store holding project- or user-specific data must register there.
+A client-side route change after sign-out does not clear module-level state: the chat, code-notes and project-leaving stores live for the page's lifetime, and `sessionStorage` survives a reload. `frontend/src/lib/session.ts` solves this in one place: stores register a reset with `onSignOut(reset)`, and `signOut()` leaves through a full document reload (`window.location.assign`), so anything that forgot to register is discarded anyway. Any new module-level store holding project- or user-specific data must register there.
+
+**The one deliberate exception is the landing page's pending idea** (`frontend/src/lib/pending-idea.ts`). An idea a visitor types into the landing page's prompt, or picks from its example cards, is kept in `localStorage` and is not registered with `onSignOut`, because signing *in* runs the same teardown and the idea has to survive that step to reach the dashboard's prompt. It is not account data: it can only be written while nobody is signed in, it is removed the moment the dashboard reads it, and it is ignored after an hour, so a forgotten one cannot turn up in a stranger's prompt on a shared browser. The dashboard only puts it back in the prompt; it never sends it.
 
 ## Secrets
 
