@@ -1,347 +1,281 @@
 /**
- * The frame every auth page is drawn in.
+ * The stage every sign-in page is set on.
  *
- * Handles: the drifting ember background, the wordmark and the card the form sits in.
+ * Handles: the landing page's sky (LandingBackdrop) behind everything, with the dashboard's wash of colour rising from the
+ * foot of the left-hand (brand) half only (Nebula without its stars, which the sky already has - the owner asked for the gas nebula here first, and then for
+ * the wash that replaced it on the signed-in pages - held inside that half
+ * rather than fixed to the window, at the owner's request) and, now and then, a shooting star across that half's
+ * upper sky - a faint gold streak, one every seven and a half seconds, each of three taking its own path on a 22.5-second
+ * cycle (.shooting-star), kept to the top of that sky, well clear of the brand - and a way back to the landing page in the top-right corner,
+ * leaving by the page slide - its words written in stardust (.stardust-text, a gold-to-cream gradient with a soft glow
+ * whose light slides across on hover, and four tiny motes rising off and fading in a slow loop, .stardust-link-mote,
+ * the same motes the form's fields shed as someone types), with a gold underline wiping in under the pointer (.wipe-link);
+ * in that half the horizon mark (HorizonMark) with the name beside it, leading home (Brand). The name never animates,
+ * and the mark does on a clock alone: every six seconds it hides and replays its build, then holds still until the
+ * next - the pointer does nothing to it, and the glow behind it (.auth-brand) never moves. Before this the owner had
+ * it replay only under the pointer, with the glow breathing while hovered, and then asked for the clock instead;
+ * before that it built itself as the page opened and kept breathing after, with the name wiping in beside it. Under
+ * the brand, the working demo (IdeaForge.tsx): one line of caption over a small card in which an idea is typed into
+ * the app's prompt and the app it asks for is built and goes live, three ideas on a loop, starting once the page's
+ * opening has got as far as FORGE_FROM. It stands where the tagline was - "Describe an idea. Watch it become real.",
+ * two lines whose letters bent away from the pointer (a gold star flying from "idea." to "real project." every twelve
+ * seconds was tried before that and turned down; one plain muted sentence before that) - which the owner asked to be
+ * replaced by "something better ... maybe some working animation"; the sentence is now the demo's caption, each half
+ * of it shown while the card does what it says. The brand stands higher than it did, to make room, and the shooting
+ * stars' paths were moved up with it so that none crosses the name. Over the whole half, on top of everything in it,
+ * rides the pointer's lens (GravityLens.tsx): a faint disc of glass that follows the pointer and, where the browser
+ * can do it (Chromium), optically bends whatever is behind it - nebula, shooting star, mark, name, demo. In the other
+ * half, the card the form sits on. That is all there is: the stage used to carry a two-line headline and an earlier,
+ * larger IdeaForge in a column of their own beside the card, and the owner asked for just the logo, the name and the
+ * form (the link home went with them and was asked back). The page's name is still given to screen readers as a
+ * hidden heading (title). The form stands straight on the night with no box round it (.auth-panel keeps only its
+ * rounding and the faint light of the eclipse that heads each form falling on its head), with the dashboard's gold
+ * bloom breathing behind it (.app-bloom): the owner had the card's hairline, its dark grey fill and its shadow taken
+ * away. It was a card in the dashboard's flat dark grey before that, the landing page's recommended plan card before
+ * that (the rippling grid, lit cells and stars of PlanLight, lit from its bottom edge), and frosted glass in a violet
+ * bloom before that. A refused attempt (shake) shakes the card, and a change of view
+ * (the form, the second factor, the inbox check) brings its rows up in turn. The page is laid out to fit a laptop
+ * screen without scrolling; when the card grows (the sign-up form's name field) the mark and the card stay centred
+ * together. What goes inside the card - the eclipse, the headline, the fields and the buttons - is AuthForm.tsx's.
  *
- * The background is plain gradients on a single layer that only moves by transform - no blur filters and no backdrop
- * blur on top, which is what made an earlier version stutter.
+ * The first sign-in page of a visit opens with a sequence on the landing page's clock (landing/intro.ts): the card
+ * eases up into its bloom as the sky fades up, and the form's rows (each marked data-cascade) rise in
+ * turn. Only the first page gets it - moving between sign-in pages shouldn't replay it - and arriving by the page
+ * slide gets none, since the page comes in already made; a later sign-in page reached any other way rises in softly
+ * instead. A click anywhere hurries the sequence to its end, as a key press or a scroll already does, and a view that
+ * changes mid-sequence finishes the sequence's own animations on those pieces before running its own, so the two
+ * never fight over them. The root carries .auth-page, which is how the page slide knows the sign-in page has rendered
+ * and may slide in, and data-intro, which holds the landing sky's sheens back until the page is made.
+ *
+ * Under reduced motion nothing drops, rises,
+ * shakes, draws or loops; the page is simply there.
  */
-import { useEffect, useState, type CSSProperties, type InputHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
-import { ArrowRight, CircleAlert, Eye, EyeOff, Info } from "lucide-react";
-import { AnimatedLogo } from "@/components/SingularityLogo";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { MIN_PASSWORD_LENGTH, passwordStrength } from "@/lib/auth-form";
-import { cn } from "@/lib/utils";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { ArrowLeft } from "lucide-react";
+import { BrandName, HorizonMark } from "@/components/HorizonMark";
+import { SlideLink } from "@/components/SlideLink";
+import { LandingBackdrop } from "@/components/landing/LandingBackdrop";
+import { Nebula } from "@/components/app/Nebula";
+import { StardustMotes } from "@/components/auth/AuthForm";
+import { GravityLens } from "@/components/auth/GravityLens";
+import { IdeaForge } from "@/components/auth/IdeaForge";
+import {
+    CARD_RISE,
+    CONTENT_RISE,
+    EASE_OUT,
+    FADE_IN,
+    INTRO,
+    IntroContext,
+    ITEM_DROP,
+    useIntro,
+    useIntroChildrenEntrance,
+    useIntroClock,
+    useIntroEntrance,
+    useIntroReached,
+    useIntroStagger,
+} from "@/components/landing/intro";
+import { play, usePrefersReducedMotion } from "@/components/landing/motion";
+import { isSliding } from "@/lib/page-slide";
 
-function AuthBackground() {
+type Entrance = "intro" | "soft" | "none";
+
+let introOffered = false;
+
+const BLOOM = { at: 300, for: 1300 };
+const CARD = { at: 380, for: 1100 };
+const CARD_FADE = { at: 380, for: 600 };
+const ROWS = { at: 820, for: 600 };
+const BACK = { at: 1000, for: 600 };
+const FORGE_FROM = 1100;
+const SOFT_RISE: Keyframe[] = [
+    { opacity: 0, transform: "translate3d(0, 28px, 0) scale(0.985)" },
+    { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
+];
+const SHAKE: Keyframe[] = [
+    { translate: "0 0" },
+    { translate: "-7px 0" },
+    { translate: "6px 0" },
+    { translate: "-4px 0" },
+    { translate: "2px 0" },
+    { translate: "0 0" },
+];
+
+function BackHome() {
+    const link = useRef<HTMLAnchorElement>(null);
+    useIntroEntrance(link, ITEM_DROP, BACK);
+
     return (
-        <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
-            <div
-                className="absolute -inset-[15%] animate-aurora-drift [will-change:transform] motion-reduce:animate-none"
-                style={{
-                    backgroundImage: [
-                        "radial-gradient(40% 32% at 50% 100%, hsl(22 90% 55% / 0.28), transparent 72%)",
-                        "radial-gradient(30% 28% at 15% 95%, hsl(340 82% 58% / 0.14), transparent 72%)",
-                        "radial-gradient(30% 28% at 85% 95%, hsl(38 95% 60% / 0.12), transparent 72%)",
-                        "radial-gradient(45% 30% at 50% 0%, hsl(25 78% 56% / 0.07), transparent 72%)",
-                    ].join(", "),
-                }}
-            />
-        </div>
+        <SlideLink
+            ref={link}
+            to="/"
+            className="wipe-link group absolute right-[var(--gutter)] top-6 z-30 flex items-center gap-1.5 text-[13.5px] font-medium text-primary hover:text-white focus-visible:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+            <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-x-0.5" />
+            <span className="stardust-text">Back to home</span>
+            <StardustMotes />
+        </SlideLink>
     );
 }
 
-const SPINNER_FRAMES = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
+const SHOOTING_STARS = [
+    { top: "10%", left: "18%", angle: "18deg", delay: "3s" },
+    { top: "7%", left: "70%", angle: "158deg", delay: "10.5s" },
+    { top: "6%", left: "30%", angle: "20deg", delay: "18s" },
+];
 
-function SparkSpinner() {
-    const [frame, setFrame] = useState(0);
+const MARK_BUILD_MS = 1950;
+const MARK_HIDE_MS = 360;
+const MARK_EVERY_MS = 6000;
+
+function Brand() {
+    const [drawn, setDrawn] = useState<boolean | undefined>(undefined);
+    const still = usePrefersReducedMotion();
+
     useEffect(() => {
-        const timer = window.setInterval(() => setFrame((current) => (current + 1) % SPINNER_FRAMES.length), 120);
-        return () => window.clearInterval(timer);
-    }, []);
-    return (
-        <span aria-hidden="true" className="inline-block w-3.5 text-center">
-            {SPINNER_FRAMES[frame]}
-        </span>
-    );
-}
-
-export function AuthLayout({ windowTitle, raiseBy = 0, extendBelow = 0, animateRaise = false, children }: {
-    windowTitle: string;
-    raiseBy?: number;
-    extendBelow?: number;
-    animateRaise?: boolean;
-    children: ReactNode;
-}) {
-    return (
-        <div className="relative min-h-screen overflow-x-hidden bg-background">
-            <AuthBackground />
-            <div className="relative mx-auto grid min-h-screen w-full max-w-6xl content-center items-center gap-12 px-5 py-12 sm:px-8 lg:grid-cols-2 lg:gap-16">
-                <header className="flex flex-col items-center text-center">
-                    <AnimatedLogo markClassName="h-16 w-16 sm:h-20 sm:w-20" nameClassName="text-[36px] sm:text-[46px]" />
-                    <h1 className="mt-8 font-display text-[40px] font-semibold leading-tight tracking-tight sm:text-[52px]">
-                        Turn ideas into{" "}
-                        <span className="bg-gradient-to-r from-[hsl(36_90%_62%)] to-[hsl(12_78%_55%)] bg-clip-text pb-[0.16em] text-transparent lg:mx-auto lg:-mb-[0.16em] lg:block lg:w-fit">
-                            working apps.
-                        </span>
-                    </h1>
-                    <p className="mt-5 max-w-md text-[15px] leading-7 text-muted-foreground sm:text-base">
-                        Describe what you want to build. Singularity writes the code, and you shape it through conversation.
-                    </p>
-                </header>
-
-                <main className="mx-auto w-full max-w-[440px]">
-                    <div
-                        style={{ "--raise": `${raiseBy}px`, "--extend": `${extendBelow}px` } as CSSProperties}
-                        className={cn(
-                            "overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-[0_24px_60px_-24px_rgb(0_0_0/0.7)] animate-slide-up motion-reduce:animate-none lg:relative lg:[margin-bottom:calc((var(--raise)_+_var(--extend))*-1)] lg:[top:calc(var(--raise)*-1)]",
-                            animateRaise && "transition-[top,margin-bottom] duration-300 ease-out motion-reduce:transition-none"
-                        )}
-                    >
-                        <div className="flex h-11 items-center border-b border-border/60 bg-panel/80 px-4">
-                            <div aria-hidden="true" className="flex w-14 gap-1.5">
-                                <span className="h-3 w-3 rounded-full bg-[#ff5f57]/85" />
-                                <span className="h-3 w-3 rounded-full bg-[#febc2e]/85" />
-                                <span className="h-3 w-3 rounded-full bg-[#28c840]/85" />
-                            </div>
-                            <p key={windowTitle} className="flex-1 truncate text-center text-sm text-muted-foreground animate-fade-in">
-                                {windowTitle}
-                            </p>
-                            <span aria-hidden="true" className="w-14" />
-                        </div>
-                        <div className="p-6 sm:p-8">{children}</div>
-                    </div>
-                </main>
-            </div>
-        </div>
-    );
-}
-
-interface AuthFieldProps extends InputHTMLAttributes<HTMLInputElement> {
-    id: string;
-    label: string;
-    error?: string;
-    hint?: ReactNode;
-    trailing?: ReactNode;
-    labelAction?: ReactNode;
-}
-
-export function AuthField({ id, label, error, hint, trailing, labelAction, className, ...inputProps }: AuthFieldProps) {
-    const note = error ?? hint;
-    const noteId = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
+        if (still) return;
+        const timers: number[] = [];
+        const build = () => {
+            setDrawn(false);
+            timers.push(window.setTimeout(() => setDrawn(true), MARK_HIDE_MS));
+            timers.push(window.setTimeout(() => setDrawn(undefined), MARK_HIDE_MS + MARK_BUILD_MS));
+        };
+        const every = window.setInterval(build, MARK_EVERY_MS);
+        return () => {
+            window.clearInterval(every);
+            timers.forEach(window.clearTimeout);
+            setDrawn(undefined);
+        };
+    }, [still]);
 
     return (
-        <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between gap-3">
-                <label htmlFor={id} className="block text-[13px] font-medium text-foreground/85">
-                    {label}
-                </label>
-                {labelAction}
-            </div>
-            <div
-                className={cn(
-                    "group flex h-11 items-center gap-2.5 rounded-lg border bg-background/60 pl-3 pr-1.5 transition-[border-color,box-shadow,background-color] duration-150 focus-within:bg-background focus-within:ring-[3px]",
-                    error
-                        ? "border-destructive/60 focus-within:ring-destructive/15"
-                        : "border-border/80 hover:border-primary/35 focus-within:border-primary/60 focus-within:ring-primary/15"
-                )}
-            >
-                <span
-                    aria-hidden="true"
-                    className={cn(
-                        "select-none text-base font-semibold leading-none transition-colors",
-                        error ? "text-destructive" : "text-muted-foreground/50 group-focus-within:text-primary"
-                    )}
-                >
-                    ›
-                </span>
-                <input
-                    id={id}
-                    aria-invalid={error ? true : undefined}
-                    aria-describedby={noteId}
-                    className={cn(
-                        "h-full min-w-0 flex-1 bg-transparent text-sm text-foreground caret-primary outline-none placeholder:text-muted-foreground/50 disabled:cursor-not-allowed disabled:opacity-60",
-                        className
-                    )}
-                    {...inputProps}
-                />
-                {trailing}
-            </div>
-            {note && (
-                <div id={noteId} className={cn("text-xs leading-5", error ? "flex gap-2 pl-0.5 text-destructive animate-fade-in" : "text-muted-foreground")}>
-                    {error && <span aria-hidden="true" className="select-none text-muted-foreground/60">⎿</span>}
-                    {error ? <span className="min-w-0">{error}</span> : note}
-                </div>
-            )}
-        </div>
-    );
-}
-
-export function PasswordField({ onKeyUp, onKeyDown, onBlur, hint, ...props }: Omit<AuthFieldProps, "type" | "trailing">) {
-    const [isVisible, setIsVisible] = useState(false);
-    const [isCapsLockOn, setIsCapsLockOn] = useState(false);
-    const trackCapsLock = (e: KeyboardEvent<HTMLInputElement>) => setIsCapsLockOn(e.getModifierState("CapsLock"));
-
-    return (
-        <AuthField
-            {...props}
-            type={isVisible ? "text" : "password"}
-            onKeyDown={(e) => {
-                trackCapsLock(e);
-                onKeyDown?.(e);
-            }}
-            onKeyUp={(e) => {
-                trackCapsLock(e);
-                onKeyUp?.(e);
-            }}
-            onBlur={(e) => {
-                setIsCapsLockOn(false);
-                onBlur?.(e);
-            }}
-            hint={
-                isCapsLockOn ? (
-                    <span className="flex items-center gap-1.5 text-primary">
-                        <Info aria-hidden="true" className="h-3.5 w-3.5" />
-                        Caps Lock is on
-                    </span>
-                ) : (
-                    hint
-                )
-            }
-            trailing={
-                <button
-                    type="button"
-                    onClick={() => setIsVisible((visible) => !visible)}
-                    aria-label={isVisible ? "Hide password" : "Show password"}
-                    aria-pressed={isVisible}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                    {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-            }
-        />
-    );
-}
-
-const STRENGTH_LABELS = ["Too short", "Weak", "Okay", "Good", "Strong"];
-const STRENGTH_BARS = ["", "bg-destructive/80", "bg-amber-500/80", "bg-primary/85", "bg-emerald-500/80"];
-const STRENGTH_TEXT = ["text-muted-foreground", "text-destructive", "text-amber-500", "text-primary", "text-emerald-500"];
-
-export function PasswordStrength({ password }: { password: string }) {
-    const score = passwordStrength(password);
-    const isShown = password.length > 0;
-
-    return (
-        <div
-            aria-hidden={!isShown}
-            className={cn(
-                "flex h-5 items-center gap-3 transition-[opacity,visibility] duration-200",
-                isShown ? "visible opacity-100" : "invisible opacity-0"
-            )}
+        <SlideLink
+            to="/"
+            aria-label="Singularity home"
+            className="auth-brand relative z-10 inline-flex items-center gap-3.5 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
         >
-            <div aria-hidden="true" className="grid flex-1 grid-cols-4 gap-1">
-                {[1, 2, 3, 4].map((segment) => (
-                    <span
-                        key={segment}
-                        className={cn("h-1 rounded-full transition-colors duration-300", segment <= score ? STRENGTH_BARS[score] : "bg-border/70")}
-                    />
-                ))}
-            </div>
-            <span aria-live="polite" className={cn("w-[4.5rem] shrink-0 text-right text-xs font-medium", STRENGTH_TEXT[score])}>
-                {password ? STRENGTH_LABELS[score] : ""}
+            <span className="relative inline-flex h-11 w-11 shrink-0 sm:h-12 sm:w-12">
+                <span aria-hidden="true" className="nav-brand-glow pointer-events-none absolute -inset-[55%] rounded-full" />
+                <HorizonMark className="relative h-full w-full" drawn={drawn} />
             </span>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <button
-                        type="button"
-                        tabIndex={-1}
-                        aria-label="Password tips"
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-primary"
-                    >
-                        <Info className="h-3.5 w-3.5" />
-                    </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" align="end" className="max-w-[230px] text-xs leading-5">
-                    Use at least {MIN_PASSWORD_LENGTH} characters. Mixing in capitals, numbers, and symbols makes it stronger.
-                </TooltipContent>
-            </Tooltip>
+            <BrandName className="text-[28px] sm:text-[32px]" />
+        </SlideLink>
+    );
+}
+
+function AuthCard({ view, shake, entrance, children }: { view: string; shake: number; entrance: Entrance; children: ReactNode }) {
+    const bloom = useRef<HTMLDivElement>(null);
+    const rise = useRef<HTMLDivElement>(null);
+    const layers = useRef<HTMLDivElement>(null);
+    const body = useRef<HTMLDivElement>(null);
+    const shownView = useRef<string | null>(null);
+    useIntroEntrance(bloom, FADE_IN, BLOOM, "cubic-bezier(0.4, 0, 0.2, 1)");
+    useIntroEntrance(rise, CARD_RISE, CARD, EASE_OUT);
+    useIntroChildrenEntrance(layers, FADE_IN, CARD_FADE);
+    useIntroStagger(body, "[data-cascade]", CONTENT_RISE, ROWS, 60);
+
+    useLayoutEffect(() => {
+        if (entrance !== "soft" || !rise.current) return;
+        return play([rise.current], SOFT_RISE, { duration: 800 });
+    }, [entrance]);
+
+    useLayoutEffect(() => {
+        const previous = shownView.current;
+        shownView.current = view;
+        if (!body.current || (previous === null ? entrance !== "soft" : previous === view)) return;
+        return play(body.current.querySelectorAll("[data-cascade]"), CONTENT_RISE, { delay: previous === null ? 180 : 0, step: 55, duration: 600 });
+    }, [view, entrance]);
+
+    useEffect(() => {
+        if (!shake || !rise.current) return;
+        return play([rise.current], SHAKE, { duration: 480, easing: "cubic-bezier(0.36, 0.07, 0.19, 0.97)" });
+    }, [shake]);
+
+    return (
+        <div className="relative">
+            <div ref={bloom} aria-hidden="true" className="pointer-events-none absolute -inset-x-24 -inset-y-20">
+                <div className="app-bloom h-full w-full" />
+            </div>
+            <div ref={rise} className="relative z-10 will-change-transform">
+                <div ref={layers} className="relative">
+                    <div className="auth-panel relative z-10">
+                        <div ref={body} key={view} className="relative p-6 sm:px-8 sm:pb-7 sm:pt-6">
+                            {children}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
 
-export function FormAlert({ tone = "error", title, children }: { tone?: "error" | "info"; title: string; children: ReactNode }) {
-    const isError = tone === "error";
-    const Icon = isError ? CircleAlert : Info;
-    return (
-        <div
-            role={isError ? "alert" : "status"}
-            className={cn(
-                "rounded-lg border px-3 py-2.5 text-center text-[13px] leading-5 animate-fade-in",
-                isError ? "border-destructive/40 bg-destructive/10" : "border-primary/30 bg-primary/10"
-            )}
-        >
-            <p className="flex items-center justify-center gap-2 font-medium text-foreground">
-                <Icon aria-hidden="true" className={cn("h-4 w-4 shrink-0", isError ? "text-destructive" : "text-primary")} />
-                {title}
-            </p>
-            <p className="mt-0.5 text-muted-foreground">{children}</p>
-        </div>
-    );
-}
-
-export function AuthSubmitButton({ isLoading, loadingText, children }: { isLoading: boolean; loadingText: string; children: ReactNode }) {
-    return (
-        <button
-            type="submit"
-            disabled={isLoading}
-            aria-busy={isLoading}
-            className="group flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-semibold text-primary-foreground shadow-[0_10px_24px_-12px_hsl(var(--primary)/0.8)] transition-[filter,transform] duration-150 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card active:translate-y-px disabled:cursor-wait disabled:brightness-95"
-        >
-            {isLoading ? (
-                <>
-                    <SparkSpinner />
-                    {loadingText}
-                </>
-            ) : (
-                <>
-                    {children}
-                    <ArrowRight aria-hidden="true" className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                </>
-            )}
-        </button>
-    );
-}
-
-function GoogleMark() {
-    return (
-        <svg aria-hidden="true" viewBox="0 0 48 48" className="h-[18px] w-[18px] shrink-0">
-            <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z" />
-            <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
-            <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
-            <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z" />
-        </svg>
-    );
-}
-
-export function GoogleButton({ onClick, isLoading, disabled, children }: {
-    onClick: () => void;
-    isLoading: boolean;
-    disabled?: boolean;
+function AuthScene({ title, entrance, view, shake, children }: {
+    title: string;
+    entrance: Entrance;
+    view: string;
+    shake: number;
     children: ReactNode;
 }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={disabled || isLoading}
-            aria-busy={isLoading}
-            className="flex h-11 w-full items-center justify-center gap-2.5 rounded-lg border border-border/80 bg-background/60 text-sm font-medium text-foreground transition-[border-color,background-color,transform] duration-150 hover:border-primary/35 hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-wait"
-        >
-            {isLoading ? <SparkSpinner /> : <GoogleMark />}
-            {isLoading ? "Waiting for Google…" : children}
-        </button>
-    );
-}
+    const clock = useIntro();
+    const live = useIntroReached(INTRO.live);
 
-export function AuthDivider({ label = "or" }: { label?: string }) {
     return (
-        <div className="my-5 flex items-center gap-3" role="separator" aria-label={label}>
-            <span className="h-px flex-1 bg-border/70" />
-            <span className="text-xs uppercase tracking-wider text-muted-foreground/70">{label}</span>
-            <span className="h-px flex-1 bg-border/70" />
+        <div
+            data-intro={live ? "live" : "playing"}
+            onPointerDown={() => clock?.hurry()}
+            className="auth-page relative min-h-screen overflow-x-clip bg-background"
+        >
+            <LandingBackdrop />
+            <BackHome />
+            <div className="relative grid min-h-screen lg:grid-cols-2">
+                <aside className="relative hidden flex-col items-center justify-center overflow-hidden px-[var(--gutter)] lg:flex">
+                    <Nebula stars={false} className="sky-strong absolute" />
+                    {SHOOTING_STARS.map(({ top, left, angle, delay }) => (
+                        <span
+                            key={delay}
+                            aria-hidden="true"
+                            className="shooting-star"
+                            style={{ top, left, "--angle": angle, "--delay": delay } as CSSProperties}
+                        />
+                    ))}
+                    <span aria-hidden="true" className="plan-halo pointer-events-none absolute left-1/2 top-1/2 h-[34rem] w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60" />
+                    <div className="relative scale-[1.35]">
+                        <Brand />
+                    </div>
+                    <IdeaForge from={FORGE_FROM} className="mt-10" />
+                    <GravityLens />
+                </aside>
+                <div className="relative flex min-h-screen items-center justify-center bg-background/70 px-[var(--gutter)] py-10 backdrop-blur-none lg:border-l lg:border-white/[0.06]">
+                    <div className="w-full max-w-md">
+                        <h1 className="sr-only">{title}</h1>
+                        <div className="mb-8 flex justify-center lg:hidden">
+                            <Brand />
+                        </div>
+                        <main className="relative w-full">
+                            <AuthCard view={view} shake={shake} entrance={entrance}>
+                                {children}
+                            </AuthCard>
+                        </main>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
 
-export function AuthTextLink({ onClick, children, disabled }: { onClick: () => void; children: ReactNode; disabled?: boolean }) {
+export function AuthLayout({ title, view = "form", shake = 0, children }: { title: string; view?: string; shake?: number; children: ReactNode }) {
+    const [first] = useState(() => !introOffered);
+    const clock = useIntroClock(first);
+    const [entrance] = useState<Entrance>(() => (clock ? "intro" : isSliding() ? "none" : "soft"));
+    useEffect(() => {
+        introOffered = true;
+    }, []);
+
     return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={disabled}
-            className="text-xs font-medium text-primary underline-offset-4 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-        >
-            {children}
-        </button>
+        <IntroContext.Provider value={clock}>
+            <AuthScene title={title} entrance={entrance} view={view} shake={shake}>
+                {children}
+            </AuthScene>
+        </IntroContext.Provider>
     );
 }
+

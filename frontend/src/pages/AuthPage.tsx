@@ -4,32 +4,53 @@
  * Handles: both modes, validating before anything is sent, password and Google sign-in, the second-factor step,
  * sending a verification email, and exchanging the result for this app's session before moving on.
  *
- * Both routes render this same component, so switching keeps what has been typed and animates the difference - the
- * name field - instead of swapping pages.
+ * The card is headed by the eclipse over a headline ("Welcome back", or "Start building" when creating an account).
+ * The eclipse plays by itself on a slow loop - twenty seconds to totality, which is the logo, then the sun comes back
+ * and the next begins (Eclipse.tsx); while anything is in
+ * flight its glow breathes, and a refusal slips the moon back as it shakes the card. The second-factor view has its
+ * own. Once every field would pass (ready - a name, an address that looks like one, and a password: any password to
+ * sign in, one long enough to create an account) the submit button's light warms, so the form can be seen to be
+ * ready before it is sent.
+ *
+ * Both routes render this same component, so switching keeps what has been typed and animates the difference instead
+ * of swapping pages: the headline's words drop in anew, the switch's gold chip glides across, the name field opens
+ * above the email field (the mark and the card staying centred as the card grows; the eclipse carries on where it
+ * was) and the button's label rises into its new wording. As each field comes to hold something that would pass - an
+ * address that looks like one, a name, and when creating an account a password long enough - a tick draws itself at
+ * its end (the fields' valid); a password being typed to sign in gets none, since only the server can say whether it
+ * is right. While a sign-in is in flight the submit button shows the
+ * app's comet; a refusal shakes the card once. The second-factor code is entered in six boxes and sent as soon as
+ * the sixth digit is in, and the form's rows are marked data-cascade so the stage can bring them up in turn.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { MailCheck, ShieldCheck } from "lucide-react";
+import { Lock, Mail, MailCheck, UserRound } from "lucide-react";
 import type { MultiFactorResolver } from "firebase/auth";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { AuthLayout } from "@/components/auth/AuthLayout";
 import {
+    AuthCardHeading,
     AuthDivider,
     AuthField,
-    AuthLayout,
+    AuthModeSwitch,
+    AuthSecondaryButton,
     AuthSubmitButton,
     AuthTextLink,
+    CodeField,
     FormAlert,
     GoogleButton,
     PasswordField,
     PasswordStrength,
-} from "@/components/auth/AuthLayout";
+} from "@/components/auth/AuthForm";
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
 import { isAuthenticated } from "@/lib/api";
 import {
     MAX_NAME_LENGTH,
+    MIN_PASSWORD_LENGTH,
     firstInvalidField,
     friendlyAuthError,
     validateAuthForm,
+    validateEmail,
     type AuthFieldErrors,
     type AuthMode,
     type FriendlyAuthError,
@@ -45,23 +66,16 @@ import {
 } from "@/lib/firebase-auth";
 import { cn } from "@/lib/utils";
 
-const COPY: Record<AuthMode, { title: string; subtitle: string; submit: string; loading: string; switchPrompt: string; switchAction: string }> = {
-    login: {
-        title: "Welcome back",
-        subtitle: "Sign in to continue building.",
-        submit: "Sign in",
-        loading: "Signing you in…",
-        switchPrompt: "New to Singularity?",
-        switchAction: "Create an account",
-    },
-    signup: {
-        title: "Let's build something great",
-        subtitle: "Create your account to get started.",
-        submit: "Create account",
-        loading: "Creating your account…",
-        switchPrompt: "Already have an account?",
-        switchAction: "Sign in",
-    },
+const COPY: Record<AuthMode, { submit: string; loading: string; google: string; lead: string; accent: string }> = {
+    login: { submit: "Sign in", loading: "Signing you in…", google: "Continue with Google", lead: "Welcome", accent: "back" },
+    signup: { submit: "Create account", loading: "Creating your account…", google: "Sign up with Google", lead: "Start", accent: "building" },
+};
+
+const TITLES: Record<AuthMode | "second-factor" | "check-inbox", string> = {
+    login: "Sign in to Singularity",
+    signup: "Create your Singularity account",
+    "second-factor": "Two-step verification",
+    "check-inbox": "Check your inbox",
 };
 
 const STRENGTH_ROW_HEIGHT = 26;
@@ -86,7 +100,12 @@ export default function AuthPage() {
     const [formError, setFormError] = useState<FriendlyAuthError | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+    const [shake, setShake] = useState(0);
     const isBusy = isLoading || isGoogleLoading;
+    const checks = isSignup
+        ? [Boolean(name.trim()) && name.trim().length <= MAX_NAME_LENGTH, !validateEmail(email), password.length >= MIN_PASSWORD_LENGTH]
+        : [!validateEmail(email), password.length > 0];
+    const ready = checks.every(Boolean);
 
     const [step, setStep] = useState<"form" | "second-factor" | "check-inbox">("form");
     const [resolver, setResolver] = useState<MultiFactorResolver | null>(null);
@@ -99,7 +118,7 @@ export default function AuthPage() {
     useLayoutEffect(() => {
         const el = nameContentRef.current;
         if (!el) return;
-        const measure = () => setNameHeight(el.offsetHeight);
+        const measure = () => el.offsetHeight && setNameHeight(el.offsetHeight);
         measure();
         const observer = new ResizeObserver(measure);
         observer.observe(el);
@@ -108,7 +127,7 @@ export default function AuthPage() {
             observer.disconnect();
             window.clearTimeout(timer);
         };
-    }, []);
+    }, [step]);
 
     useEffect(() => {
         if (isAuthenticated()) navigate("/projects", { replace: true });
@@ -120,6 +139,8 @@ export default function AuthPage() {
         previousModeRef.current = mode;
         document.getElementById(isSignup ? "name" : email ? "password" : "email")?.focus({ preventScroll: true });
     }, [mode, isSignup, email]);
+
+    const refuse = () => setShake((count) => count + 1);
 
     const switchMode = () => {
         setFieldErrors({});
@@ -184,6 +205,7 @@ export default function AuthPage() {
         } catch (error) {
             setFormError({ message: friendlyFirebaseError(error, "Couldn't sign you in with Google. Please try again.") });
             setIsGoogleLoading(false);
+            refuse();
         }
     };
 
@@ -201,6 +223,7 @@ export default function AuthPage() {
         const invalidField = firstInvalidField(errors);
         if (invalidField) {
             document.getElementById(invalidField)?.focus();
+            refuse();
             return;
         }
 
@@ -220,23 +243,25 @@ export default function AuthPage() {
             const message = friendlyFirebaseError(error, "") || friendlyAuthError(error, mode).message || fallback;
             setFormError({ message, suggestSignIn: /already exists/i.test(message) });
             setIsLoading(false);
+            refuse();
         }
     };
 
-    const handleSecondFactor = async (e: FormEvent) => {
-        e.preventDefault();
-        if (!resolver) return;
-        if (!/^\d{6}$/.test(code.replace(/\s+/g, ""))) {
+    const verifyCode = async (value: string) => {
+        if (!resolver || isLoading) return;
+        if (!/^\d{6}$/.test(value)) {
             setFormError({ message: "Enter the 6-digit code from your authenticator app." });
+            refuse();
             return;
         }
         setFormError(null);
         setIsLoading(true);
         try {
-            handleOutcome(await completeSecondFactor(resolver, code));
+            handleOutcome(await completeSecondFactor(resolver, value));
         } catch (error) {
             setFormError({ message: friendlyFirebaseError(error, "That code didn't work. Please try again.") });
             setIsLoading(false);
+            refuse();
         }
     };
 
@@ -251,40 +276,46 @@ export default function AuthPage() {
 
     if (step === "second-factor") {
         return (
-            <AuthLayout windowTitle="Singularity — two-step verification">
-                <div className="mb-6 text-center animate-fade-in">
-                    <ShieldCheck aria-hidden="true" className="mx-auto h-10 w-10 text-primary" />
-                    <h2 className="mt-4 text-lg font-semibold tracking-tight text-foreground">Enter your code</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">Open your authenticator app and enter the 6-digit code for Singularity.</p>
+            <AuthLayout title={TITLES["second-factor"]} view="second-factor" shake={shake}>
+                <div data-cascade>
+                    <AuthCardHeading eclipse={{ busy: isLoading, slip: shake }} title="Enter your" accent="code">
+                        Open your authenticator app and type the 6-digit code for Singularity.
+                    </AuthCardHeading>
                 </div>
-                <form onSubmit={handleSecondFactor} noValidate>
+                <form
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        void verifyCode(code);
+                    }}
+                    noValidate
+                    className="mt-7"
+                >
                     {formError && (
-                        <div className="mb-4">
+                        <div className="mb-5">
                             <FormAlert title="Couldn't verify the code">{formError.message}</FormAlert>
                         </div>
                     )}
-                    <AuthField
-                        id="code"
-                        label="Verification code"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        autoFocus
-                        maxLength={7}
-                        placeholder="123456"
-                        value={code}
-                        disabled={isLoading}
-                        onChange={(e) => {
-                            setCode(e.target.value.replace(/[^\d\s]/g, ""));
-                            setFormError(null);
-                        }}
-                    />
-                    <div className="mt-6">
+                    <div data-cascade>
+                        <CodeField
+                            id="code"
+                            label="Verification code"
+                            value={code}
+                            disabled={isLoading}
+                            invalid={Boolean(formError)}
+                            onChange={(next) => {
+                                setCode(next);
+                                setFormError(null);
+                            }}
+                            onComplete={(full) => void verifyCode(full)}
+                        />
+                    </div>
+                    <div data-cascade className="mt-7">
                         <AuthSubmitButton isLoading={isLoading} loadingText="Verifying…">
                             Verify
                         </AuthSubmitButton>
                     </div>
                 </form>
-                <p className="mt-6 text-center text-sm text-muted-foreground">
+                <p data-cascade className="mt-6 text-center">
                     <AuthTextLink onClick={backToForm} disabled={isLoading}>
                         Use a different account
                     </AuthTextLink>
@@ -295,42 +326,37 @@ export default function AuthPage() {
 
     if (step === "check-inbox" && inbox) {
         return (
-            <AuthLayout windowTitle="Singularity — verify your email">
-                <div className="text-center animate-fade-in">
-                    <MailCheck aria-hidden="true" className="mx-auto h-10 w-10 text-primary" />
-                    <h2 className="mt-4 text-lg font-semibold tracking-tight text-foreground">
-                        {inbox.reason === "signup" ? "Confirm your email" : "Verify your email first"}
-                    </h2>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            <AuthLayout title={TITLES["check-inbox"]} view="check-inbox">
+                <div data-cascade>
+                    <AuthCardHeading icon={MailCheck} title={inbox.reason === "signup" ? "Confirm your email" : "Verify your email first"}>
                         We sent a link to <span className="font-medium text-foreground">{inbox.email}</span>.{" "}
                         {inbox.reason === "signup"
                             ? "Open it to activate your account, then sign in."
                             : "Your account can't be used until the address is confirmed. Open the link, then sign in again."}
-                    </p>
-                    <p className="mt-4 text-xs leading-5 text-muted-foreground">Nothing arrived? Check spam - or sign in again to get a new link.</p>
-                    <div className="mt-6">
-                        <AuthTextLink onClick={backToForm}>Back to sign in</AuthTextLink>
-                    </div>
+                    </AuthCardHeading>
+                </div>
+                <p data-cascade className="mt-5 text-center text-[12.5px] leading-5 text-muted-foreground/80">
+                    Nothing arrived? Check spam - or sign in again to get a new link.
+                </p>
+                <div data-cascade className="mt-7">
+                    <AuthSecondaryButton onClick={backToForm}>Back to sign in</AuthSecondaryButton>
                 </div>
             </AuthLayout>
         );
     }
 
     return (
-        <AuthLayout
-            windowTitle={isSignup ? "Singularity — create account" : "Singularity — sign in"}
-            raiseBy={isSignup ? nameHeight : 0}
-            extendBelow={isSignup ? STRENGTH_ROW_HEIGHT : 0}
-            animateRaise={canAnimate}
-        >
-            <div key={mode} className="mb-6 text-center animate-fade-in">
-                <h2 className="text-lg font-semibold tracking-tight text-foreground">{copy.title}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
+        <AuthLayout title={TITLES[mode]} shake={shake}>
+            <div data-cascade>
+                <AuthCardHeading eclipse={{ busy: isBusy, slip: shake }} title={copy.lead} accent={copy.accent} compact={isSignup} />
+            </div>
+            <div data-cascade className="mt-5">
+                <AuthModeSwitch mode={mode} onChange={switchMode} disabled={isBusy} />
             </div>
 
-            <form onSubmit={handleSubmit} noValidate>
+            <form onSubmit={handleSubmit} noValidate className="mt-4">
                 {formError ? (
-                    <div className="mb-4">
+                    <div className="mb-5">
                         <FormAlert title={isSignup ? "Couldn't create your account" : "Couldn't sign you in"}>
                             {formError.message}
                             {formError.suggestSignIn && (
@@ -348,20 +374,20 @@ export default function AuthPage() {
                         </FormAlert>
                     </div>
                 ) : wasEmailVerified ? (
-                    <div className="mb-4">
+                    <div className="mb-5">
                         <FormAlert tone="info" title="Email verified">
                             Thanks for confirming. Sign in to get started.
                         </FormAlert>
                     </div>
                 ) : wasPasswordReset ? (
-                    <div className="mb-4">
+                    <div className="mb-5">
                         <FormAlert tone="info" title="Password updated">
                             Sign in with your new password.
                         </FormAlert>
                     </div>
                 ) : (
                     isSessionExpired && (
-                        <div className="mb-4">
+                        <div className="mb-5">
                             <FormAlert tone="info" title="You were signed out">
                                 For your security, sessions end after a while. Your projects are right where you left them.
                             </FormAlert>
@@ -369,10 +395,14 @@ export default function AuthPage() {
                     )
                 )}
 
-                <GoogleButton onClick={handleGoogle} isLoading={isGoogleLoading} disabled={isLoading}>
-                    {isSignup ? "Sign up with Google" : "Continue with Google"}
-                </GoogleButton>
-                <AuthDivider label="or use email" />
+                <div data-cascade>
+                    <GoogleButton onClick={handleGoogle} isLoading={isGoogleLoading} disabled={isLoading}>
+                        {copy.google}
+                    </GoogleButton>
+                </div>
+                <div data-cascade>
+                    <AuthDivider label="or with email" tight={isSignup} />
+                </div>
 
                 <div
                     aria-hidden={!isSignup}
@@ -383,52 +413,60 @@ export default function AuthPage() {
                         isSignup ? "opacity-100" : "opacity-0"
                     )}
                 >
-                    <div ref={nameContentRef} className="shrink-0 pb-4">
-                            <AuthField
-                                id="name"
-                                label="Name"
-                                autoComplete="name"
-                                autoFocus={isSignup}
-                                maxLength={MAX_NAME_LENGTH}
-                                placeholder="What should we call you?"
-                                tabIndex={isSignup ? undefined : -1}
-                                value={name}
-                                error={isSignup ? fieldErrors.name : undefined}
-                                disabled={!isSignup || isBusy}
-                                onChange={(e) => {
-                                    setName(e.target.value);
-                                    clearErrorFor("name");
-                                }}
-                            />
+                    <div ref={nameContentRef} className="shrink-0 pb-3">
+                        <AuthField
+                            id="name"
+                            label="Name"
+                            icon={UserRound}
+                            autoComplete="name"
+                            autoFocus={isSignup}
+                            maxLength={MAX_NAME_LENGTH}
+                            placeholder="What should we call you?"
+                            tabIndex={isSignup ? undefined : -1}
+                            value={name}
+                            valid={Boolean(name.trim()) && name.trim().length <= MAX_NAME_LENGTH}
+                            error={isSignup ? fieldErrors.name : undefined}
+                            disabled={!isSignup || isBusy}
+                            onChange={(e) => {
+                                setName(e.target.value);
+                                clearErrorFor("name");
+                            }}
+                        />
                     </div>
                 </div>
 
-                <div className="space-y-4">
-                    <AuthField
-                        id="email"
-                        label="Email"
-                        type="email"
-                        inputMode="email"
-                        autoComplete="email"
-                        autoFocus={!isSignup}
-                        spellCheck={false}
-                        placeholder="you@example.com"
-                        value={email}
-                        error={fieldErrors.email}
-                        disabled={isBusy}
-                        onChange={(e) => {
-                            setEmail(e.target.value);
-                            clearErrorFor("email");
-                        }}
-                    />
+                <div className="space-y-3">
+                    <div data-cascade>
+                        <AuthField
+                            id="email"
+                            label="Email"
+                            icon={Mail}
+                            type="email"
+                            inputMode="email"
+                            autoComplete="email"
+                            autoFocus={!isSignup}
+                            spellCheck={false}
+                            placeholder="you@example.com"
+                            value={email}
+                            valid={!validateEmail(email)}
+                            error={fieldErrors.email}
+                            disabled={isBusy}
+                            onChange={(e) => {
+                                setEmail(e.target.value);
+                                clearErrorFor("email");
+                            }}
+                        />
+                    </div>
 
-                    <div>
+                    <div data-cascade>
                         <PasswordField
                             id="password"
                             label="Password"
+                            icon={Lock}
                             autoComplete={isSignup ? "new-password" : "current-password"}
                             placeholder={isSignup ? "Create a password" : "Your password"}
                             value={password}
+                            valid={isSignup ? password.length >= MIN_PASSWORD_LENGTH : undefined}
                             error={fieldErrors.password}
                             disabled={isBusy}
                             labelAction={
@@ -462,24 +500,12 @@ export default function AuthPage() {
                     </div>
                 </div>
 
-                <div className="mt-6">
-                    <AuthSubmitButton isLoading={isLoading} loadingText={copy.loading}>
+                <div data-cascade className={cn("transition-[margin] duration-300 ease-out motion-reduce:transition-none", isSignup ? "mt-4" : "mt-5")}>
+                    <AuthSubmitButton isLoading={isLoading} loadingText={copy.loading} ready={ready}>
                         {copy.submit}
                     </AuthSubmitButton>
                 </div>
             </form>
-
-            <p className="mt-6 text-center text-sm text-muted-foreground">
-                {copy.switchPrompt}{" "}
-                <button
-                    type="button"
-                    onClick={switchMode}
-                    disabled={isBusy}
-                    className="font-medium text-primary underline-offset-4 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-                >
-                    {copy.switchAction}
-                </button>
-            </p>
         </AuthLayout>
     );
 }

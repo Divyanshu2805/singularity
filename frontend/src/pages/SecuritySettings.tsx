@@ -15,7 +15,7 @@ import QRCode from "qrcode";
 import { KeyRound, Loader2, LogOut, ShieldCheck, ShieldOff, Smartphone } from "lucide-react";
 import type { MultiFactorInfo, MultiFactorResolver, TotpSecret, User } from "firebase/auth";
 import { AppSidebar, SidebarSpacer, SidebarToggleSpace } from "@/components/AppSidebar";
-import { AuthField, AuthSubmitButton, FormAlert, GoogleButton, PasswordField } from "@/components/auth/AuthLayout";
+import { AuthField, AuthSubmitButton, FormAlert, GoogleButton, PasswordField } from "@/components/auth/AuthForm";
 import { NewPasswordForm } from "@/components/auth/NewPasswordForm";
 import {
     AlertDialog,
