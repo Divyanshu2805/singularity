@@ -1,25 +1,63 @@
 /**
- * Today's AI allowance, always in view right above the composer, with the time until it refills beside it.
+ * Today's AI allowance, always in view right above the composer as a small orbit, with the figures a click away.
  *
- * Handles: the bar, the remaining figure and a countdown that re-reads the clock every so often - so you know how
- * much building is left before starting a long request rather than after.
+ * Handles: the orbit that shows the allowance (UsageOrbit), which is the whole of what the row shows and is itself the
+ * button, and the panel that opens from it with everything in words - used and limit, what is left, a countdown to
+ * the refill that re-reads the clock every so often, this project's share, the last request, the project count, and
+ * the ways on to the usage page and the plans - so you know how much building is left before starting a long request
+ * rather than after. The owner asked for the figures and the countdown, which stood beside the orbit, to be shown only
+ * on a click, and for the hover to touch the orbit alone (it swells a little) where the whole row lit up before.
+ *
+ * The orbit is a small sun with one planet going round it. Where the planet stands is how much of the allowance is
+ * spent - the top with nothing used, a full turn clockwise with it all gone - and the orbit it has travelled is lit
+ * behind it, with the area it has swept filled in more faintly, in a tone that deepens as it goes, pale gold to a crimson ember (lib/usage-tone.ts; the styles are
+ * index.css's .usage-orbit). It starts from the top when it appears and travels to its place, and travels again when
+ * the figure changes. The owner asked for usage as a planet revolving round a centre with the tone following how far
+ * it has revolved; before this a planet circled a sun for decoration while a shadow crept across it.
  *
  * Honest while a reply streams: token counts only exist once a response has finished, since they arrive on its last
- * chunk, so mid-stream it shows a moving shimmer and says it will update rather than guessing a number. Once the
- * allowance is fully spent it steps aside, because the chat's quota banner already says everything this would.
+ * chunk, so mid-stream the planet pulses where it stands and the panel says it will update rather than guessing
+ * when. Once the allowance is fully spent it steps aside, because the chat's quota banner already says everything
+ * this would.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, ChevronUp, Gauge } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useBilling, USAGE_QUERY_KEY } from "@/hooks/use-billing";
 import { api, isAuthenticated } from "@/lib/api";
 import { formatResetIn, formatTokens, toQuota } from "@/lib/billing";
-import { compactTokens, featureLabel } from "@/lib/usage-insights";
+import { featureLabel } from "@/lib/usage-insights";
+import { USAGE_TRAIL, usageTone } from "@/lib/usage-tone";
 import { cn } from "@/lib/utils";
 
 const COUNTDOWN_TICK_MS = 30_000;
+
+function UsageOrbit({ percent, busy }: { percent: number; busy: boolean }) {
+  const [placed, setPlaced] = useState(false);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setPlaced(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  return (
+    <span
+      aria-hidden="true"
+      data-usage-turn={percent}
+      className={cn("usage-orbit", busy && "usage-orbit-busy")}
+      style={{ "--usage-turn": placed ? percent / 100 : 0, "--usage-tone": usageTone(percent), "--usage-trail": USAGE_TRAIL } as CSSProperties}
+    >
+      <span className="usage-orbit-path" />
+      <span className="usage-orbit-area" />
+      <span className="usage-orbit-trail" />
+      <span className="usage-orbit-sun" />
+      <span className="usage-orbit-arm">
+        <span className="usage-orbit-planet" />
+      </span>
+    </span>
+  );
+}
 
 export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; isStreaming: boolean }) {
   const navigate = useNavigate();
@@ -55,72 +93,52 @@ export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; 
         <button
           type="button"
           aria-label={`${formatTokens(quota.used)} of ${formatTokens(quota.limit)} AI tokens used today. Resets in ${formatResetIn(resetsAt, now)}. Show details.`}
-          className="group mb-1.5 flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="usage-trigger mb-1.5 ml-1 flex w-fit rounded-full p-0.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
         >
-          <Gauge className={cn("h-3.5 w-3.5 shrink-0", tone === "warning" ? "text-amber-500" : "text-muted-foreground")} />
-
-          <div className="relative h-1.5 min-w-[60px] flex-1 overflow-hidden rounded-full bg-muted/60">
-            <div
-              className={cn(
-                "h-full rounded-full transition-[width] duration-700 ease-out",
-                tone === "warning" ? "bg-amber-500" : "bg-primary"
-              )}
-              style={{ width: `${Math.max(quota.percent, quota.used > 0 ? 1.5 : 0)}%` }}
-            />
-            {isStreaming && (
-              <div className="absolute inset-y-0 w-1/4 animate-[usage-sweep_1.6s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-transparent via-foreground/40 to-transparent motion-reduce:hidden" />
-            )}
-          </div>
-
-          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-            <span className={cn("font-medium", tone === "warning" ? "text-amber-500" : "text-foreground/85")}>
-              {compactTokens(quota.used)}
-            </span>
-            {" / "}
-            {compactTokens(quota.limit)}
-            <span className="hidden sm:inline"> tokens</span>
-          </span>
-          <span aria-hidden="true" className="hidden h-3 w-px shrink-0 bg-border sm:block" />
-          <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">
-            {isStreaming ? "Updates after this reply" : `Resets in ${formatResetIn(resetsAt, now)}`}
-          </span>
-          <ChevronUp className="h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform group-data-[state=open]:rotate-180" />
+          <UsageOrbit percent={quota.percent} busy={isStreaming} />
         </button>
       </PopoverTrigger>
 
-      <PopoverContent side="top" align="start" className="w-[300px] p-0">
-        <div className="border-b border-border/60 px-4 py-3">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="text-sm font-semibold">Today&rsquo;s AI usage</p>
-            <span className="rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+      <PopoverContent side="top" align="start" className="w-[272px] rounded-2xl p-0">
+        <div className="border-b border-white/[0.07] px-4 pb-3 pt-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Today&rsquo;s AI usage</p>
+            <span className="rounded-full border border-primary/30 bg-primary/[0.12] px-2.5 py-0.5 text-[10px] font-medium text-[hsl(46_100%_88%)]">
               {usage.planName} plan
             </span>
           </div>
-          <p className="mt-2 font-display text-2xl font-semibold tabular-nums">
+          <p className="mt-2 font-display text-[28px] font-semibold leading-none tabular-nums">
             {formatTokens(quota.used)}
-            <span className="text-sm font-normal text-muted-foreground"> / {formatTokens(quota.limit)}</span>
+            <span className="font-sans text-sm font-normal text-muted-foreground"> / {formatTokens(quota.limit)}</span>
           </p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/60">
+          <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
             <div
-              className={cn("h-full rounded-full", tone === "warning" ? "bg-amber-500" : "bg-primary")}
+              data-usage-fill
+              className={cn("h-full rounded-full", tone === "warning" ? "bg-[linear-gradient(90deg,hsl(30_100%_56%),hsl(12_96%_58%))]" : "app-progress-fill !relative")}
               style={{ width: `${quota.percent}%` }}
             />
           </div>
           <p className="mt-1.5 text-[11px] text-muted-foreground">
-            {formatTokens(quota.remaining)} left · resets in {formatResetIn(resetsAt, now)}
-            {resetsAt && ` (${resetsAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })})`}
+            {isStreaming ? (
+              "Updates after this reply"
+            ) : (
+              <>
+                {formatTokens(quota.remaining)} left · resets in {formatResetIn(resetsAt, now)}
+                {resetsAt && ` (${resetsAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })})`}
+              </>
+            )}
           </p>
         </div>
 
-        <dl className="space-y-2 px-4 py-3 text-xs">
+        <dl className="space-y-1.5 px-4 py-2.5 text-xs">
           <div className="flex justify-between gap-3">
             <dt className="text-muted-foreground">This project today</dt>
-            <dd className="tabular-nums">{formatTokens(usage.projectTokensToday ?? 0)}</dd>
+            <dd className="font-medium tabular-nums text-foreground">{formatTokens(usage.projectTokensToday ?? 0)}</dd>
           </div>
           {last && (
             <div className="flex justify-between gap-3">
               <dt className="text-muted-foreground">{lastIsThisChat ? "Last reply" : `Last request · ${featureLabel(last.feature)}`}</dt>
-              <dd className="text-right tabular-nums">
+              <dd className="text-right font-medium tabular-nums text-foreground">
                 {formatTokens(last.totalTokens)}
                 <span className="block text-[10px] text-muted-foreground">
                   {formatTokens(last.inputTokens)} in · {formatTokens(last.outputTokens)} out
@@ -130,15 +148,15 @@ export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; 
           )}
           <div className="flex justify-between gap-3">
             <dt className="text-muted-foreground">Projects</dt>
-            <dd className="tabular-nums">{usage.projectsUsed} / {usage.projectsLimit}</dd>
+            <dd className="font-medium tabular-nums text-foreground">{usage.projectsUsed} / {usage.projectsLimit}</dd>
           </div>
         </dl>
 
-        <div className="flex items-center justify-between gap-2 border-t border-border/60 px-4 py-2.5">
+        <div className="flex items-center justify-between gap-2 border-t border-white/[0.07] px-4 py-2.5">
           <button
             type="button"
             onClick={() => navigate("/usage")}
-            className="flex items-center gap-1 text-xs text-primary hover:underline"
+            className="wipe-link flex items-center gap-1 text-xs text-primary"
           >
             View detailed usage <ArrowUpRight className="h-3 w-3" />
           </button>
@@ -146,7 +164,7 @@ export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; 
             <button
               type="button"
               onClick={() => navigate("/pricing")}
-              className="text-xs font-medium text-foreground/80 hover:text-primary"
+              className="btn btn-glass h-6 rounded-full px-2.5 text-[11px] font-semibold text-foreground/90"
             >
               Upgrade
             </button>

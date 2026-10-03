@@ -18,6 +18,7 @@ vi.mock("@/lib/api", () => ({
 import { api } from "@/lib/api";
 import { ChatUsageMeter } from "./ChatUsageMeter";
 import type { UsageToday } from "@/lib/types";
+import { usageTone } from "@/lib/usage-tone";
 
 const inSixHours = () => new Date(Date.now() + 6 * 3_600_000 + 12 * 60_000 + 30_000).toISOString();
 
@@ -55,21 +56,26 @@ describe("ChatUsageMeter", () => {
 
   it("shows used and limit, and when the allowance resets", async () => {
     await renderMeter(usage());
-    expect(screen.getByText("50k")).toBeTruthy();
-    expect(screen.getByText(/Resets in 6h 12m/)).toBeTruthy();
+    expect(screen.queryByText(/resets in/i)).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /AI tokens used today/ }));
+    });
+    expect(screen.getByText("50,000")).toBeTruthy();
+    expect(screen.getByText(/resets in 6h 12m/)).toBeTruthy();
     expect(api.getUsageToday).toHaveBeenCalledWith("7");
   });
 
-  it("fills the bar in proportion and switches to a warning tone near the limit", async () => {
+  it("stands the planet on its orbit in proportion to the tokens used, in the tone of that point", async () => {
     const { container, unmount } = await renderMeter(usage({ tokensUsed: 50_000 }));
-    const fill = () => container.querySelector<HTMLElement>(".bg-primary, .bg-amber-500")!;
-    expect(fill().style.width).toBe("50%");
-    expect(fill().className).toContain("bg-primary");
+    const half = container.querySelector<HTMLElement>("[data-usage-turn]");
+    expect(half?.getAttribute("data-usage-turn")).toBe("50");
+    expect(half?.style.getPropertyValue("--usage-tone")).toBe(usageTone(50));
     unmount();
 
     const warning = await renderMeter(usage({ tokensUsed: 90_000 }));
-    const warningFill = warning.container.querySelector<HTMLElement>(".bg-amber-500");
-    expect(warningFill?.style.width).toBe("90%");
+    const most = warning.container.querySelector<HTMLElement>("[data-usage-turn]");
+    expect(most?.getAttribute("data-usage-turn")).toBe("90");
+    expect(most?.style.getPropertyValue("--usage-tone")).toBe(usageTone(90));
   });
 
   it("steps aside once the allowance is spent - the composer's quota banner takes over", async () => {
@@ -79,8 +85,11 @@ describe("ChatUsageMeter", () => {
 
   it("says it will update rather than inventing a number while a reply streams", async () => {
     await renderMeter(usage(), true);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /AI tokens used today/ }));
+    });
     expect(screen.getByText("Updates after this reply")).toBeTruthy();
-    expect(screen.queryByText(/Resets in/)).toBeNull();
+    expect(screen.queryByText(/resets in/i)).toBeNull();
   });
 
   it("opens to the other facts: this project, the last reply, and projects", async () => {
