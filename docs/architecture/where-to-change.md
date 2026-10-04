@@ -1,6 +1,6 @@
 # Where Do I Change…?
 
-A task-oriented index into the code. Paths are relative to each service's `src/main/java/com/vibecraft/<service>/` unless they start with a module name.
+A task-oriented index into the code. Paths are relative to each service's `src/main/java/com/singularity/<service>/` unless they start with a module name.
 
 ## AI and generation
 

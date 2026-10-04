@@ -1,6 +1,6 @@
 # Architecture Decisions
 
-Short records of the decisions that shape VibeCraft, each with the context that forced it and the trade-offs it accepts. They explain *why* the system looks the way it does; the rest of the architecture docs explain *what* it is.
+Short records of the decisions that shape Singularity, each with the context that forced it and the trade-offs it accepts. They explain *why* the system looks the way it does; the rest of the architecture docs explain *what* it is.
 
 | # | Decision | Status |
 |---|---|---|

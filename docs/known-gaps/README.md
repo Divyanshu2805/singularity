@@ -1,6 +1,6 @@
 # Known Gaps
 
-What VibeCraft deliberately doesn't do yet, the trade-offs its design accepts, and behaviour worth knowing before you rely on it. Everything here is intentional or tracked — none of it is an undiscovered bug.
+What Singularity deliberately doesn't do yet, the trade-offs its design accepts, and behaviour worth knowing before you rely on it. Everything here is intentional or tracked — none of it is an undiscovered bug.
 
 | Page | Covers |
 |---|---|

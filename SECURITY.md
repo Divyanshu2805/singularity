@@ -17,4 +17,4 @@ Please don't run automated scanners or load tests against the live demo, access 
 
 ## Security model
 
-How VibeCraft isolates tenants, authenticates services, sandboxes generated code, and protects preview links is described in the [security model](docs/architecture/security-model.md). The rules every change must respect are in the [security guardrails](docs/practices/security-guardrails.md).
+How Singularity isolates tenants, authenticates services, sandboxes generated code, and protects preview links is described in the [security model](docs/architecture/security-model.md). The rules every change must respect are in the [security guardrails](docs/practices/security-guardrails.md).

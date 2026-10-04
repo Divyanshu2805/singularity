@@ -1,6 +1,6 @@
 # Security Model
 
-VibeCraft runs code written by an AI on behalf of its users, stores their projects, and bills them. This page describes the boundaries that keep those concerns apart and where each one is enforced. The rules contributors must not break are summarised in [security guardrails](../practices/security-guardrails.md); how to report a vulnerability is in [`SECURITY.md`](../../SECURITY.md).
+Singularity runs code written by an AI on behalf of its users, stores their projects, and bills them. This page describes the boundaries that keep those concerns apart and where each one is enforced. The rules contributors must not break are summarised in [security guardrails](../practices/security-guardrails.md); how to report a vulnerability is in [`SECURITY.md`](../../SECURITY.md).
 
 ## Identity and sessions
 

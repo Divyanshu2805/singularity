@@ -5,7 +5,7 @@
 | Suite | Command | Size | Needs |
 |---|---|---|---|
 | Backend (all modules) | `./mvnw test` | 452 tests — common-lib 24, gateway 66, account 32, workspace 205, intelligence 125 | Docker, for one integration test (below) |
-| Frontend | `cd frontend && npm test` | 298 tests in 29 files (Vitest) | — |
+| Frontend | `cd frontend && npm test` | 417 tests in 43 files (Vitest) | — |
 | Preview proxy | `cd proxy && node --test` | Access-token and routing tests | — |
 
 Run the tests you changed by name while iterating:
@@ -26,7 +26,7 @@ Include `common-lib` in the `-pl` list so it is built from source rather than re
 
 ## Frontend
 
-Vitest with Testing Library. Most tests target framework-free logic in `src/lib/` directly rather than rendered components; prefer that shape for new logic. Also run `npx tsc --noEmit` and `npm run build` before calling a frontend change done.
+Vitest with Testing Library. Most tests target framework-free logic in `src/lib/` directly rather than rendered components; prefer that shape for new logic. Also run `npx tsc --noEmit -p tsconfig.app.json` and `npm run build` before calling a frontend change done.
 
 ## What automated tests don't cover
 

@@ -1,6 +1,6 @@
 # Local Development
 
-Everything needed to run VibeCraft on your own machine.
+Everything needed to run Singularity on your own machine.
 
 Local development runs **six processes**: Eureka, the three domain services, the Gateway, and the Vite dev server. Postgres and MinIO run in Docker. Live previews additionally need a local Kubernetes cluster — every other feature works without one.
 

@@ -1,6 +1,6 @@
 # API Reference
 
-The contract for VibeCraft's REST API. There is no generated OpenAPI spec, so these pages are the reference: when an endpoint's shape changes, update its page in the same change.
+The contract for Singularity's REST API. There is no generated OpenAPI spec, so these pages are the reference: when an endpoint's shape changes, update its page in the same change.
 
 ## Base URL and routing
 
