@@ -7,10 +7,19 @@
  *
  * Whether the files column is open is a preference about the editor layout rather than anything to do with one
  * project, so it is remembered per browser.
+ *
+ * The files column, the editor and the code lens are each their own rounded window on the workspace's surround
+ * (index.css, .ws-window), parted by gaps; the gap after the files column slides shut with it, and the one before the
+ * code lens is its resize handle (ResizableGutter). The Files header and the tab strip are each window's lighter top
+ * band (.ws-bar), so the two windows line up as a pair. Its toolbars use the app's
+ * icon buttons (.icon-btn): quiet until the pointer reaches them, then the app's round gold wash, each icon with a
+ * motion of its own - the download arrow drops, the expand chevrons stretch, the changes toggle turns - and the
+ * deeper selected wash for the one that is switched on.
  */
-import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import { Check, ChevronsDownUp, ChevronsUpDown, Copy, Download, GitCompare, MessagesSquare, PanelLeft, PanelLeftClose } from "lucide-react";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
+import { memo, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
+import { ResizablePanelGroup, ResizablePanel, ResizableGutter } from "@/components/ui/resizable";
+import { Check, ChevronsDownUp, ChevronsUpDown, Copy, Download, GitCompare, MessagesSquare, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { FileTree, type TreeExpansionCommand } from "./FileTree";
 import { CodeEditor } from "./CodeEditor";
 import { FileTabs } from "./FileTabs";
@@ -44,7 +53,6 @@ interface CodePanelProps {
   streamingFiles: ReadonlyMap<string, string>;
   diffBaselines: ReadonlyMap<string, string>;
   isStreaming: boolean;
-  streamingFilePath: string | null;
   lastTurnFiles: readonly string[];
   openFileRequest: OpenFileRequest | null;
   onDiffViewed: (path: string) => void;
@@ -78,7 +86,6 @@ export const CodePanel = memo(function CodePanel({
   streamingFiles,
   diffBaselines,
   isStreaming,
-  streamingFilePath,
   lastTurnFiles,
   openFileRequest,
   onDiffViewed,
@@ -100,7 +107,6 @@ export const CodePanel = memo(function CodePanel({
     codeLens.restore(projectId);
   }, [projectId]);
 
-  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const copyResetRef = useRef<number>();
   const [openDiffPaths, setOpenDiffPaths] = useState<ReadonlySet<string>>(new Set());
@@ -220,7 +226,6 @@ export const CodePanel = memo(function CodePanel({
   const hasDiffAvailable = activeTab ? diffBaselines.has(activeTab) : false;
   const isDiffToggledOn = activeTab ? openDiffPaths.has(activeTab) : false;
   const diffOriginal = hasDiffAvailable && isDiffToggledOn && activeTab ? diffBaselines.get(activeTab) ?? null : null;
-  const isShowingDiff = diffOriginal !== null;
 
   const toggleDiff = useCallback(() => {
     if (!activeTab) return;
@@ -305,21 +310,21 @@ export const CodePanel = memo(function CodePanel({
   };
 
   return (
-    <div className="flex h-full bg-background">
+    <div className="flex h-full">
       <div
         className={cn(
-          "shrink-0 overflow-hidden border-r border-border/60 bg-panel transition-[width] duration-200 ease-out",
-          showFileTree ? "w-60 border-r" : "w-0 border-r-0"
+          "shrink-0 overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+          showFileTree ? "w-[15.5rem]" : "w-0"
         )}
       >
-        <div className="flex h-full w-60 flex-col">
-          <div className="flex h-10 shrink-0 items-center justify-between border-b border-border/60 pl-3 pr-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Files</span>
+        <div className="ws-window flex h-full w-60 flex-col">
+          <div className="ws-bar flex h-11 shrink-0 items-center justify-between pl-3.5 pr-1.5">
+            <span className="text-[13.5px] font-medium text-foreground/70">Files</span>
             <div className="flex items-center">
               {([
-                { mode: "expand", label: "Expand all folders", Icon: ChevronsUpDown },
-                { mode: "collapse", label: "Collapse all folders", Icon: ChevronsDownUp },
-              ] as const).map(({ mode, label, Icon }) => (
+                { mode: "expand", label: "Expand all folders", Icon: ChevronsUpDown, motion: "scaleY(1.25)" },
+                { mode: "collapse", label: "Collapse all folders", Icon: ChevronsDownUp, motion: "scaleY(0.75)" },
+              ] as const).map(({ mode, label, Icon, motion }) => (
                 <Tooltip key={mode}>
                   <TooltipTrigger asChild>
                     <button
@@ -327,7 +332,8 @@ export const CodePanel = memo(function CodePanel({
                       aria-label={label}
                       disabled={files.length === 0}
                       onClick={() => setTreeExpansion({ mode, id: Date.now() })}
-                      className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/60 hover:text-primary disabled:pointer-events-none disabled:opacity-40"
+                      style={{ "--icon-hover": motion } as CSSProperties}
+                      className="icon-btn h-7 w-7"
                     >
                       <Icon className="h-3.5 w-3.5" />
                     </button>
@@ -341,9 +347,10 @@ export const CodePanel = memo(function CodePanel({
                     type="button"
                     aria-label="Hide files panel"
                     onClick={() => setShowFileTree(false)}
-                    className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/60 hover:text-primary"
+                    style={{ "--icon-hover": "translateX(-2px)" } as CSSProperties}
+                    className="icon-btn h-7 w-7"
                   >
-                    <PanelLeftClose className="h-3.5 w-3.5" />
+                    <PanelLeftClose className="panel-anim h-3.5 w-3.5" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Hide files panel</TooltipContent>
@@ -375,7 +382,7 @@ export const CodePanel = memo(function CodePanel({
       </div>
 
       <ResizablePanelGroup direction="horizontal" className="min-w-0 flex-1">
-        <ResizablePanel order={1} minSize={30} className="min-w-0 overflow-hidden">
+        <ResizablePanel order={1} minSize={30} className="ws-window min-w-0">
           <div className="flex h-full min-w-0 flex-col">
             <FileTabs
               openTabs={openTabs}
@@ -391,9 +398,10 @@ export const CodePanel = memo(function CodePanel({
                         type="button"
                         aria-label="Show files panel"
                         onClick={() => setShowFileTree(true)}
-                        className="flex w-9 shrink-0 items-center justify-center border-r border-border/60 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-primary"
+                        style={{ "--icon-hover": "translateX(2px)" } as CSSProperties}
+                        className="icon-btn w-8"
                       >
-                        <PanelLeft className="h-4 w-4" />
+                        <PanelLeftOpen className="panel-anim h-4 w-4" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">Show files panel</TooltipContent>
@@ -402,17 +410,16 @@ export const CodePanel = memo(function CodePanel({
               }
               actions={
                 activeTab ? (
-                  <div className="flex shrink-0 items-center gap-1 border-l border-border/50 pl-1.5 pr-1.5">
+                  <div className="flex shrink-0 items-center gap-0.5 border-l border-white/[0.1] pl-1.5">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
                           type="button"
                           aria-label={isLensOpen ? "Close ExplainLLM" : "Open ExplainLLM"}
                           onClick={() => (isLensOpen ? codeLens.close(projectId) : codeLens.reopen(projectId))}
-                          className={cn(
-                            "flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-muted/60 hover:text-primary",
-                            isLensOpen ? "bg-primary/15 text-primary" : "text-muted-foreground"
-                          )}
+                          aria-pressed={isLensOpen}
+                          style={{ "--icon-hover": "rotate(-8deg)" } as CSSProperties}
+                          className="icon-btn h-7 w-7"
                         >
                           <MessagesSquare className="h-3.5 w-3.5" />
                         </button>
@@ -427,7 +434,8 @@ export const CodePanel = memo(function CodePanel({
                           type="button"
                           aria-label="Copy file contents"
                           onClick={handleCopyFile}
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-primary"
+                          style={{ "--icon-hover": "translateX(1px)" } as CSSProperties}
+                          className="icon-btn h-7 w-7"
                         >
                           {copyState === "copied" ? <Check className="h-3.5 w-3.5 text-syntax-string" /> : <Copy className="h-3.5 w-3.5" />}
                         </button>
@@ -440,7 +448,8 @@ export const CodePanel = memo(function CodePanel({
                           type="button"
                           aria-label="Download this file"
                           onClick={handleDownloadFile}
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-primary"
+                          style={{ "--icon-hover": "translateY(2px)" } as CSSProperties}
+                          className="icon-btn h-7 w-7"
                         >
                           <Download className="h-3.5 w-3.5" />
                         </button>
@@ -462,12 +471,8 @@ export const CodePanel = memo(function CodePanel({
                         aria-pressed={isDiffToggledOn}
                         aria-label={isDiffToggledOn ? "Hide changes from the last chat" : "Show changes from the last chat"}
                         onClick={toggleDiff}
-                        className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-md border shadow-sm backdrop-blur-sm transition-colors",
-                          isDiffToggledOn
-                            ? "border-primary/50 bg-primary/20 text-primary hover:bg-primary/25"
-                            : "border-border/70 bg-card/90 text-muted-foreground hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
-                        )}
+                        style={{ "--icon-hover": "rotate(180deg)" } as CSSProperties}
+                        className="icon-btn app-menu h-8 w-8 border"
                       >
                         <GitCompare className="h-4 w-4" />
                       </button>
@@ -495,7 +500,8 @@ export const CodePanel = memo(function CodePanel({
                 />
               )}
               {isBeingWritten && !isAwaitingNewFile && (
-                <div className="pointer-events-none absolute bottom-3 right-3 z-10 rounded-md border border-border/70 bg-card/90 px-2 py-1 text-[11px] text-muted-foreground shadow-sm backdrop-blur-sm">
+                <div className="app-menu chat-enter pointer-events-none absolute bottom-3 right-3 z-10 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                  <OrbitSpinner className="h-3 w-3" />
                   Being updated &mdash; the new version appears when it&rsquo;s done
                 </div>
               )}
@@ -505,11 +511,8 @@ export const CodePanel = memo(function CodePanel({
 
         {isLensOpen && (
           <>
-            <ResizableHandle
-              onDragging={setIsDraggingSplit}
-              className="w-px bg-border/60 transition-colors hover:bg-primary/50 data-[resize-handle-state=drag]:bg-primary/70"
-            />
-            <ResizablePanel order={2} defaultSize={42} minSize={20} maxSize={60} className="min-w-0 overflow-hidden">
+            <ResizableGutter />
+            <ResizablePanel order={2} defaultSize={42} minSize={20} maxSize={60} className="ws-window min-w-0">
               <CodeLensPanel
                 projectId={projectId}
                 projectName={projectName}

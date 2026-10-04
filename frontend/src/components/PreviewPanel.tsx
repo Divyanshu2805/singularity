@@ -15,8 +15,17 @@
  * previewUrl carries a short-lived access token (CODE_REVIEW.md SEC-06) that the backend mints fresh on every poll;
  * the iframe's own src is memoized separately so a routine poll never re-navigates it, and "Copy link"/"Open in new
  * tab" reattach the token by hand since resolving an in-app path against the base URL otherwise drops it.
+ *
+ * Its toolbar is the window's lighter top band (index.css, .ws-bar) holding the app's icon buttons (.icon-btn - the
+ * same round wash and switched-on look as every other toolbar; a one-off ghost button with its own fill was here
+ * before), each icon with a motion of its own (reload turns, the new-tab arrow leaves up and right), and the address
+ * sits in a sunken pill like a browser's. Each state - starting, stopped, failed - rises in as a centred card with a
+ * Fraunces title, the app's comet marking whatever is under way. The idle ones are only a gold tile over a soft
+ * light, the title and the action - the explanatory sentence under the title was removed at the owner's request, so
+ * a stopped preview shows a line only when it has a real reason (an idle timeout, say).
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -25,7 +34,6 @@ import {
   Download,
   ExternalLink,
   Link2,
-  Loader2,
   Monitor,
   Play,
   RotateCcw,
@@ -203,7 +211,7 @@ export function PreviewPanel({
     body = <StartingState detail={preview.detail} startedAt={preview.startedAt} />;
   } else if (isRunning) {
     body = (
-      <div className={cn("relative flex min-h-0 flex-1 justify-center overflow-hidden", device === "mobile" && "bg-muted/30 py-4")}>
+      <div className={cn("relative flex min-h-0 flex-1 justify-center overflow-hidden", device === "mobile" && "bg-[hsl(var(--ws-well))] py-4")}>
         <iframe
           ref={iframeRef}
           key={`${preview.id}-${reloadKey}`}
@@ -212,12 +220,12 @@ export function PreviewPanel({
           onLoad={() => setIsFrameLoading(false)}
           className={cn(
             "h-full border-0 bg-white",
-            device === "desktop" ? "w-full" : "w-[390px] max-w-full rounded-xl shadow-lg ring-1 ring-border"
+            device === "desktop" ? "w-full" : "w-[390px] max-w-full rounded-2xl shadow-[0_30px_70px_-30px_rgb(0_0_0/0.9)] ring-1 ring-white/10"
           )}
         />
         {isFrameLoading && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60 animate-in fade-in-0">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[hsl(var(--ws-window)/0.7)] animate-in fade-in-0">
+            <OrbitSpinner className="h-6 w-6" label="Loading the preview" />
           </div>
         )}
       </div>
@@ -245,7 +253,7 @@ export function PreviewPanel({
   }
 
   return (
-    <div className="relative flex h-full flex-col bg-background">
+    <div className="relative flex h-full flex-col">
       <PreviewToolbar
         preview={preview}
         path={path}
@@ -271,10 +279,10 @@ export function PreviewPanel({
 
       {status === "TERMINATED" || (!preview && isLoaded && !isStarting) ? (
         <div className="flex shrink-0 justify-center gap-2 pb-4">
-          <Button variant="ghost" size="sm" onClick={onViewCode} className="h-7 gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">
+          <Button variant="outline" size="sm" onClick={onViewCode} className="h-8 gap-1.5 px-3.5 text-xs [&_svg]:size-3.5">
             <CodeXml /> View code
           </Button>
-          <Button variant="ghost" size="sm" onClick={onDownload} className="h-7 gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">
+          <Button variant="outline" size="sm" onClick={onDownload} className="h-8 gap-1.5 px-3.5 text-xs [&_svg]:size-3.5">
             <Download /> Download ZIP
           </Button>
         </div>
@@ -283,27 +291,28 @@ export function PreviewPanel({
   );
 }
 
-function ToolbarButton({ label, onClick, disabled, active, children }: {
+function ToolbarButton({ label, onClick, disabled, active, motion, children }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
   active?: boolean;
+  motion?: string;
   children: ReactNode;
 }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
+        <button
+          type="button"
           aria-label={label}
           aria-pressed={active}
           onClick={onClick}
           disabled={disabled}
-          className={cn("h-7 w-7 text-muted-foreground hover:text-primary [&_svg]:size-3.5", active && "bg-primary/10 text-primary")}
+          style={motion ? ({ "--icon-hover": motion } as CSSProperties) : undefined}
+          className="icon-btn h-7 w-7 rounded-lg [&_svg]:size-3.5"
         >
           {children}
-        </Button>
+        </button>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="px-2 py-1 text-xs">{label}</TooltipContent>
     </Tooltip>
@@ -344,45 +353,45 @@ function PreviewToolbar({
   const stopsIn = isRunning ? formatStopsIn(preview?.stopsAt) : null;
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border/60 px-2 text-xs text-muted-foreground">
-      <ToolbarButton label="Reload" onClick={onReload} disabled={!isRunning}>
+    <div className="ws-bar flex h-11 shrink-0 items-center gap-1 px-2 text-xs text-muted-foreground">
+      <ToolbarButton label="Reload" motion="rotate(180deg)" onClick={onReload} disabled={!isRunning}>
         <RotateCw />
       </ToolbarButton>
 
       <div
-        className="mx-1 flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2"
+        className="app-field mx-1 flex h-7 min-w-0 flex-1 items-center gap-2 rounded-full px-3"
         title={stopsIn ? `Stops after ${stopsIn} without a visit` : undefined}
       >
         <span
           aria-hidden="true"
           className={cn(
             "h-1.5 w-1.5 shrink-0 rounded-full",
-            isRunning ? "bg-syntax-string" : preview?.status === "CREATING" ? "animate-pulse bg-primary" : preview?.status === "FAILED" ? "bg-destructive" : "bg-muted-foreground/40"
+            isRunning ? "bg-syntax-string shadow-[0_0_0_3px_hsl(var(--syntax-string)/0.18)]" : preview?.status === "CREATING" ? "animate-pulse bg-primary" : preview?.status === "FAILED" ? "bg-destructive" : "bg-muted-foreground/60"
           )}
         />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
+        <span className={cn("min-w-0 flex-1 truncate font-mono text-[11px]", address ? "text-foreground/85" : "text-muted-foreground")}>
           {address ?? "Live preview"}
         </span>
       </div>
 
-      <ToolbarButton label={device === "desktop" ? "Phone width" : "Full width"} onClick={() => onDeviceChange(device === "desktop" ? "mobile" : "desktop")} disabled={!isRunning} active={device === "mobile"}>
+      <ToolbarButton label={device === "desktop" ? "Phone width" : "Full width"} motion="scale(1.15)" onClick={() => onDeviceChange(device === "desktop" ? "mobile" : "desktop")} disabled={!isRunning} active={device === "mobile"}>
         {device === "desktop" ? <Smartphone /> : <Monitor />}
       </ToolbarButton>
-      <ToolbarButton label={copied ? "Copied" : "Copy link"} onClick={() => shareableLink && void copy(shareableLink)} disabled={!isRunning}>
+      <ToolbarButton label={copied ? "Copied" : "Copy link"} motion="rotate(-25deg)" onClick={() => shareableLink && void copy(shareableLink)} disabled={!isRunning}>
         {copied ? <Check className="text-syntax-string" /> : <Link2 />}
       </ToolbarButton>
-      <ToolbarButton label="Open in new tab" onClick={() => shareableLink && window.open(shareableLink, "_blank", "noopener,noreferrer")} disabled={!isRunning}>
+      <ToolbarButton label="Open in new tab" motion="translateX(1.5px)" onClick={() => shareableLink && window.open(shareableLink, "_blank", "noopener,noreferrer")} disabled={!isRunning}>
         <ExternalLink />
       </ToolbarButton>
-      <ToolbarButton label={isLogsOpen ? "Hide output" : "Show output"} onClick={onToggleLogs} disabled={!canShowLogs} active={isLogsOpen && canShowLogs}>
+      <ToolbarButton label={isLogsOpen ? "Hide output" : "Show output"} motion="scale(1.08)" onClick={onToggleLogs} disabled={!canShowLogs} active={isLogsOpen && canShowLogs}>
         <SquareTerminal />
       </ToolbarButton>
-      <ToolbarButton label="Reinstall and restart" onClick={onRestart} disabled={!isRunning || isStarting}>
+      <ToolbarButton label="Reinstall and restart" motion="rotate(-180deg)" onClick={onRestart} disabled={!isRunning || isStarting}>
         <RotateCcw />
       </ToolbarButton>
       {isActive && preview?.canStop && (
-        <ToolbarButton label="Stop preview" onClick={onStop} disabled={isStopping}>
-          {isStopping ? <Loader2 className="animate-spin" /> : <Square />}
+        <ToolbarButton label="Stop preview" motion="scale(0.85)" onClick={onStop} disabled={isStopping}>
+          {isStopping ? <OrbitSpinner className="h-3.5 w-3.5" /> : <Square />}
         </ToolbarButton>
       )}
     </div>
@@ -396,16 +405,20 @@ function CenteredState({ icon, title, children, tone = "default" }: {
   tone?: "default" | "error";
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-8 text-center">
-      <div
-        className={cn(
-          "flex h-12 w-12 items-center justify-center rounded-xl border",
-          tone === "error" ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-muted/40 text-muted-foreground"
-        )}
-      >
-        {icon}
+    <div className="idle-state flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-8 text-center">
+      <div className="relative mb-1">
+        {tone === "default" && <span aria-hidden="true" className="empty-glow absolute -inset-[95%]" />}
+        <div
+          className={cn(
+            "relative flex h-14 w-14 items-center justify-center rounded-2xl border",
+            tone === "default" && "idle-tile",
+            tone === "error" ? "border-destructive/35 bg-destructive/[0.12] text-destructive" : "border-primary/30 bg-[hsl(30_11%_16%)] text-[hsl(46_100%_86%)] shadow-[0_14px_30px_-18px_hsl(32.8_100%_60%/0.6)]"
+          )}
+        >
+          {icon}
+        </div>
       </div>
-      <h3 className="text-sm font-medium">{title}</h3>
+      <h3 className="max-w-[420px] font-display text-[24px] font-semibold leading-tight tracking-tight text-white">{title}</h3>
       {children}
     </div>
   );
@@ -427,17 +440,17 @@ function StartingState({ detail, startedAt }: { detail: string | null; startedAt
   const elapsed = useElapsedSeconds(startedAt);
 
   return (
-    <CenteredState icon={<Loader2 className="h-5 w-5 animate-spin" />} title="Starting your preview">
+    <CenteredState icon={<OrbitSpinner className="h-6 w-6" />} title="Starting your preview">
       <ol className="w-full max-w-[260px] space-y-2 text-left text-xs">
         {PREVIEW_STEPS.map((step, index) => {
           const isDone = index < current;
           const isCurrent = index === current;
           return (
-            <li key={step.detail} className={cn("flex items-center gap-2", !isDone && !isCurrent && "text-muted-foreground/60")}>
+            <li key={step.detail} className={cn("flex items-center gap-2", isDone ? "text-muted-foreground" : !isCurrent && "text-muted-foreground/70")}>
               {isDone ? (
                 <Check className="h-3.5 w-3.5 shrink-0 text-syntax-string" />
               ) : isCurrent ? (
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+                <OrbitSpinner className="h-3.5 w-3.5" />
               ) : (
                 <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
                   <span className="h-1 w-1 rounded-full bg-current" />
@@ -448,10 +461,9 @@ function StartingState({ detail, startedAt }: { detail: string | null; startedAt
           );
         })}
       </ol>
-      <p className="max-w-[300px] text-[11px] leading-5 text-muted-foreground">
-        {elapsed !== null ? `${elapsed}s · ` : ""}
-        The first start installs every dependency, so it takes around half a minute.
-      </p>
+      {elapsed !== null && (
+        <p className="font-mono text-[11px] tabular-nums text-muted-foreground">{elapsed}s</p>
+      )}
     </CenteredState>
   );
 }
@@ -463,13 +475,12 @@ function StoppedState({ reason, hasStartedBefore, onStart, isStarting }: {
   isStarting: boolean;
 }) {
   return (
-    <CenteredState icon={<Play className="h-5 w-5" />} title={hasStartedBefore ? "The preview isn't running" : "Preview your app"}>
-      <p className="max-w-[320px] text-xs leading-5 text-muted-foreground">
-        {reason && reason !== "Stopped" ? `${reason}. ` : ""}
-        Start it to see the app live - it updates as the AI makes changes.
-      </p>
-      <Button size="sm" onClick={onStart} disabled={isStarting} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
-        {isStarting ? <Loader2 className="animate-spin" /> : <Play />}
+    <CenteredState icon={<Play className="h-5 w-5 translate-x-px" />} title={hasStartedBefore ? "The preview isn't running" : "Preview your app"}>
+      {reason && reason !== "Stopped" && (
+        <p className="-mt-1 max-w-[320px] text-xs leading-5 text-muted-foreground">{reason}</p>
+      )}
+      <Button size="sm" onClick={onStart} disabled={isStarting} className="btn-invite mt-1 h-9 gap-1.5 px-5 text-[13px] [&_svg]:size-3.5">
+        {isStarting ? <OrbitSpinner className="h-3.5 w-3.5" /> : <Play />}
         Start preview
       </Button>
     </CenteredState>
@@ -507,7 +518,7 @@ Please find the cause in the project's files (package.json, vite.config, the ent
     <CenteredState icon={<AlertTriangle className="h-5 w-5" />} title="The preview couldn't start" tone="error">
       <p className="max-w-[360px] text-xs leading-5 text-muted-foreground">{detail ?? "Something went wrong."}</p>
       {output && (
-        <pre className="max-h-48 w-full max-w-[520px] overflow-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/30 p-3 text-left font-mono text-[11px] leading-4 text-muted-foreground">
+        <pre className="max-h-48 w-full max-w-[520px] overflow-auto whitespace-pre-wrap rounded-xl border border-white/[0.1] bg-[hsl(var(--ws-well))] p-3 text-left font-mono text-[11px] leading-4 text-muted-foreground">
           {output.slice(-4000)}
         </pre>
       )}
@@ -517,10 +528,10 @@ Please find the cause in the project's files (package.json, vite.config, the ent
             <Wrench /> Ask AI to fix
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={onRetry} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
+        <Button variant="outline" size="sm" onClick={onRetry} style={{ "--icon-hover": "rotate(-180deg)" } as CSSProperties} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
           <RotateCcw /> Try again
         </Button>
-        <Button variant="ghost" size="sm" onClick={onViewCode} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
+        <Button variant="outline" size="sm" onClick={onViewCode} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
           <CodeXml /> View code
         </Button>
       </div>
@@ -559,7 +570,7 @@ function StartErrorState({ error, onRetry, onDownload }: { error: unknown; onRet
           Stop one that's running to open this one, or upgrade to keep more going at once.
         </p>
         {running && running.length > 0 && (
-          <ul className="w-full max-w-[340px] divide-y divide-border/60 rounded-lg border border-border/60 text-left text-xs">
+          <ul className="ws-card w-full max-w-[340px] divide-y divide-white/[0.08] overflow-hidden rounded-xl text-left text-xs">
             {running.map((item) => (
               <li key={item.id} className="flex items-center gap-2 px-3 py-2">
                 <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", item.status === "RUNNING" ? "bg-syntax-string" : "animate-pulse bg-primary")} />
@@ -571,7 +582,7 @@ function StartErrorState({ error, onRetry, onDownload }: { error: unknown; onRet
                   onClick={() => void stopAndRetry(item.projectId, item.id)}
                   className="h-7 gap-1 px-2 text-[11px] [&_svg]:size-3"
                 >
-                  {stoppingId === item.id ? <Loader2 className="animate-spin" /> : <Square />}
+                  {stoppingId === item.id ? <OrbitSpinner className="h-3 w-3" /> : <Square />}
                   Stop &amp; open this
                 </Button>
               </li>
@@ -590,14 +601,14 @@ function StartErrorState({ error, onRetry, onDownload }: { error: unknown; onRet
 
   return (
     <CenteredState
-      icon={isBusy ? <Loader2 className="h-5 w-5" /> : <ServerCrash className="h-5 w-5" />}
+      icon={isBusy ? <OrbitSpinner className="h-6 w-6" /> : <ServerCrash className="h-5 w-5" />}
       title={failure.title}
       tone={isBusy ? "default" : "error"}
     >
       <p className="max-w-[340px] text-xs leading-5 text-muted-foreground">{failure.message}</p>
       {failure.hint && <p className="max-w-[340px] text-xs leading-5 text-muted-foreground/70">{failure.hint}</p>}
       <div className="flex gap-2">
-        <Button size="sm" onClick={onRetry} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
+        <Button size="sm" onClick={onRetry} style={{ "--icon-hover": "rotate(-180deg)" } as CSSProperties} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
           <RotateCcw /> Try again
         </Button>
         <Button variant="outline" size="sm" onClick={onDownload} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
@@ -622,16 +633,21 @@ function LogsDrawer({ projectId, isLive, onClose }: { projectId: string; isLive:
   }, [data?.log]);
 
   return (
-    <div className="flex h-56 shrink-0 flex-col border-t border-border/60 bg-panel animate-in slide-in-from-bottom-2 fade-in-0">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border/60 px-3 text-[11px] text-muted-foreground">
+    <div className="flex h-56 shrink-0 flex-col bg-[hsl(var(--ws-well))] animate-in slide-in-from-bottom-2 fade-in-0 duration-300">
+      <div className="ws-bar ws-bar-top flex h-9 shrink-0 items-center gap-2 px-3 text-[11px] font-medium text-foreground/85">
         <SquareTerminal className="h-3.5 w-3.5" />
         Output
-        {isLive && <span className="text-muted-foreground/60">· live</span>}
-        <button type="button" onClick={onClose} aria-label="Hide output" className="ml-auto rounded p-0.5 hover:text-primary">
+        {isLive && (
+          <span className="flex items-center gap-1.5 font-normal text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-syntax-string" />
+            live
+          </span>
+        )}
+        <button type="button" onClick={onClose} aria-label="Hide output" style={{ "--icon-hover": "scale(0.8)" } as CSSProperties} className="icon-btn ml-auto h-6 w-6 rounded-md">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
-      <pre ref={scrollRef} className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-3 font-mono text-[11px] leading-4 text-muted-foreground">
+      <pre ref={scrollRef} className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-3 font-mono text-[11.5px] leading-[1.6] text-foreground/80">
         {isLoading ? "Loading…" : error instanceof Error ? error.message : data?.log?.trim() || "No output yet."}
       </pre>
     </div>

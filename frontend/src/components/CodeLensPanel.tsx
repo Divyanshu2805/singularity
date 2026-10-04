@@ -6,9 +6,16 @@
  *
  * Docked beside the editor rather than floating over it - the point is reading an explanation while looking at the
  * code, and a popover anchored to the selection would cover exactly what is being discussed.
+ *
+ * It is dressed as the build chat is (index.css): the app's charcoal surface, the horizon mark signing each answer,
+ * turns rising in as they arrive, the question in a gold bubble, the app's comet while it reads the code, and a
+ * matte composer that takes a calm gold ring while focused. Its header is the window's lighter top band (.ws-bar)
+ * with the app's icon buttons, a quoted snippet is a card with its file named in a lighter head, and the line that
+ * explained where notes are kept was removed from under the composer, as the owner asked of explanatory footnotes.
  */
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, ClipboardCopy, Eraser, FileDown, Loader2, MessagesSquare, Sparkles, X } from "lucide-react";
+import { ArrowUp, Check, ClipboardCopy, Eraser, FileDown, MessagesSquare, X } from "lucide-react";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
-import { LogoMark } from "@/components/SingularityLogo";
+import { HorizonMark } from "@/components/HorizonMark";
 import { ChatMarkdown } from "@/components/ChatMarkdown";
 import { MessageActions } from "@/components/MessageActions";
 import { highlightCode } from "@/lib/highlight-code";
@@ -52,12 +59,12 @@ function SnippetQuote({ selection, onOpen }: { selection: CodeSelection; onOpen:
   const lineCount = selection.code.split("\n").length;
 
   return (
-    <div className="mb-2 overflow-hidden rounded-lg border border-border/70 bg-background/50">
+    <div className="ws-card mb-2 overflow-hidden rounded-lg">
       <button
         type="button"
         onClick={onOpen}
         title={`Go to ${selection.path}:${selection.startLine}`}
-        className="group flex w-full items-center gap-1.5 border-b border-border/60 px-2 py-1 text-left text-[11px] transition-colors hover:bg-primary/10"
+        className="hl-row group flex w-full items-center gap-1.5 border-b border-white/[0.08] bg-[hsl(var(--ws-card-head))] px-2 py-1 text-left text-[11px] focus-visible:outline-none"
       >
         <Icon className={cn("h-3 w-3 shrink-0", getFileColor(selection.path))} />
         <span className="truncate font-medium text-foreground/85 group-hover:text-primary">{base}</span>
@@ -71,7 +78,7 @@ function SnippetQuote({ selection, onOpen }: { selection: CodeSelection; onOpen:
         </code>
       </pre>
       {lineCount > 12 && (
-        <p className="border-t border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground/60">
+        <p className="border-t border-white/[0.08] px-2 py-0.5 text-[10px] text-muted-foreground">
           {lineCount} lines
         </p>
       )}
@@ -93,10 +100,10 @@ function Turn({ turn, onOpenSelection, onDelete }: {
 
   if (turn.role === "user") {
     return (
-      <div className="group/message">
+      <div className="chat-enter group/message">
         {quote}
         <div className="flex justify-end">
-          <p className="max-w-[90%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary/15 px-3 py-1.5 text-[13px] text-foreground">
+          <p className="chat-user-bubble max-w-[90%] whitespace-pre-wrap rounded-2xl rounded-br-sm px-3 py-1.5 text-[13px] text-foreground">
             {turn.content}
           </p>
         </div>
@@ -112,10 +119,10 @@ function Turn({ turn, onOpenSelection, onDelete }: {
   }
 
   return (
-    <div className="group/message">
+    <div className="chat-enter group/message">
       {quote}
       <div className="flex gap-2">
-        <LogoMark className="mt-0.5 h-4 w-4 shrink-0" title="Singularity" />
+        <HorizonMark className="mt-0.5 h-4 w-4 shrink-0" title="Singularity" />
         <div className="min-w-0 flex-1">
           {turn.isStreaming && !turn.content ? (
             <span className="text-shimmer text-xs font-medium">Reading the code&hellip;</span>
@@ -189,10 +196,10 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
   const handleCopyAll = () => copyAll(buildLensMarkdown(turns, projectName));
 
   return (
-    <aside className="flex h-full min-w-0 flex-col bg-panel animate-in fade-in-0 slide-in-from-right-2 duration-200">
-      <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border/60 px-2.5">
-        <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
-        <span className="flex-1 truncate text-xs font-medium text-foreground/90">ExplainLLM</span>
+    <aside className="app-surface flex h-full min-w-0 flex-col animate-in fade-in-0 slide-in-from-right-2 duration-300">
+      <header className="ws-bar flex h-11 shrink-0 items-center gap-1 pl-3.5 pr-1.5">
+        <HorizonMark drawn className="mr-1 h-4 w-4" />
+        <span className="flex-1 truncate font-display text-[14px] font-semibold tracking-tight text-foreground">Explain<em className="heat-text animate-heat-sweep pr-0.5 font-medium motion-reduce:animate-none">LLM</em></span>
         {turns.length > 0 && (
           <>
             <Tooltip>
@@ -201,7 +208,7 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
                   type="button"
                   aria-label="Clear these notes"
                   onClick={() => setIsClearing(true)}
-                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/60 hover:text-primary"
+                  className="icon-btn h-7 w-7 rounded-lg"
                 >
                   <Eraser className="h-3.5 w-3.5" />
                 </button>
@@ -214,10 +221,7 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
                   type="button"
                   aria-label={copiedAll ? "Copied" : "Copy as markdown"}
                   onClick={() => void handleCopyAll()}
-                  className={cn(
-                    "flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-muted/60 hover:text-primary",
-                    copiedAll ? "text-syntax-string" : "text-muted-foreground"
-                  )}
+                  className={cn("icon-btn h-7 w-7 rounded-lg", copiedAll && "text-syntax-string")}
                 >
                   {copiedAll ? <Check className="h-3.5 w-3.5" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
                 </button>
@@ -230,7 +234,7 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
                   type="button"
                   aria-label="Export as markdown"
                   onClick={handleExport}
-                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/60 hover:text-primary"
+                  className="icon-btn h-7 w-7 rounded-lg"
                 >
                   <FileDown className="h-3.5 w-3.5" />
                 </button>
@@ -245,7 +249,7 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
               type="button"
               aria-label="Close ExplainLLM"
               onClick={onClose}
-              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/60 hover:text-primary"
+              className="icon-btn h-7 w-7 rounded-lg"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -264,14 +268,14 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
       >
         {turns.length === 0 && isLoading && (
           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span>Loading your notes&hellip;</span>
+            <OrbitSpinner className="h-3.5 w-3.5" />
+            <span className="text-shimmer">Loading your notes&hellip;</span>
           </div>
         )}
 
         {turns.length === 0 && !isBusy && !isLoading && (
-          <div className="flex flex-col items-center gap-2 text-center">
-            <MessagesSquare className="h-6 w-6 text-muted-foreground/40" />
+          <div className="chat-enter flex flex-col items-center gap-2 text-center">
+            <span className="prompt-card-icon mb-1 h-10 w-10 rounded-xl"><MessagesSquare className="h-5 w-5" /></span>
             <p className="max-w-[16rem] text-xs text-muted-foreground">
               {selection
                 ? "Ask anything about the code you selected - or about the project in general."
@@ -281,7 +285,7 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
               <button
                 type="button"
                 onClick={() => void codeLens.explain(projectId)}
-                className="rounded-md px-2 py-1 text-xs text-primary transition-colors hover:bg-primary/10"
+                className="app-chip mt-1 px-3 py-1.5 text-xs text-foreground"
               >
                 Explain it to me
               </button>
@@ -299,8 +303,8 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
         ))}
 
         {isBusy && !turns.at(-1)?.isStreaming && (
-          <div className="flex items-center gap-2 text-xs">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+          <div className="chat-enter flex items-center gap-2 text-xs">
+            <OrbitSpinner className="h-3.5 w-3.5" />
             <span className="text-shimmer font-medium">Reading the code&hellip;</span>
           </div>
         )}
@@ -319,15 +323,15 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
         )}
       </div>
 
-      <div className="shrink-0 border-t border-border/60 p-2">
+      <div className="shrink-0 border-t border-white/[0.08] p-2.5">
         {selection && (
-          <div className="mb-1.5 flex items-center gap-0.5 rounded-md bg-muted/40 text-[10px] text-muted-foreground">
+          <div className="ws-card mb-1.5 flex items-center gap-0.5 rounded-lg text-[10.5px] text-muted-foreground">
             <button
               type="button"
               onClick={() => onOpenSelection(selection.path, selection.startLine, selection.code, selection.endLine)}
-              className="group flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors hover:bg-primary/10"
+              className="hl-row group flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1 text-left focus-visible:outline-none"
             >
-              <span className="shrink-0 uppercase tracking-wider text-muted-foreground/70">Asking about</span>
+              <span className="shrink-0 uppercase tracking-wider text-muted-foreground">Asking about</span>
               <span className="truncate font-medium text-foreground/80 group-hover:text-primary">
                 {splitPath(selection.path).base}
               </span>
@@ -339,7 +343,7 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
                   type="button"
                   aria-label="Stop asking about the selected code"
                   onClick={() => codeLens.clearSelection(projectId)}
-                  className="mr-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded transition-colors hover:bg-primary/10 hover:text-primary"
+                  className="icon-btn mr-0.5 h-5 w-5 rounded-md"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -348,7 +352,7 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
             </Tooltip>
           </div>
         )}
-        <div className="flex items-end gap-1.5 rounded-xl border border-border/80 bg-background/60 p-1.5 transition-colors focus-within:border-primary/50">
+        <div className="app-field relative flex items-end gap-1.5 rounded-2xl p-1.5">
           <textarea
             ref={inputRef}
             value={question}
@@ -366,21 +370,18 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
                 send();
               }
             }}
-            className="max-h-[140px] min-w-0 flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] text-foreground caret-primary outline-none placeholder:text-muted-foreground/70 disabled:cursor-not-allowed"
+            className="max-h-[140px] min-w-0 flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] text-foreground caret-primary outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
           />
           <button
             type="button"
             onClick={send}
             disabled={!question.trim() || isBusy}
             aria-label="Send question"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
+            className="app-send h-7 w-7"
           >
             <ArrowUp className="h-3.5 w-3.5" />
           </button>
         </div>
-        <p className="px-1 pt-1.5 text-[10px] text-muted-foreground/70">
-          Private to you and saved until you delete them.
-        </p>
       </div>
 
       <AlertDialog open={isClearing} onOpenChange={setIsClearing}>

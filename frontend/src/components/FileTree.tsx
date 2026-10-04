@@ -6,7 +6,12 @@
  *
  * Each expand-or-collapse command carries a fresh id, so pressing the same one twice - after opening a few folders by
  * hand in between - applies it again rather than being ignored as unchanged.
+ *
+ * It moves the way the sidebar does: one hover highlight glides from row to row (use-glide-highlight - every row is
+ * marked data-glide and positioned so it paints over it), the open file takes the app's selected look (index.css,
+ * .row-active - a faint gold glass fill inside a gold hairline, the landing navigation's chip), and a folder's chevron turns as it opens.
  */
+import { useGlideHighlight } from "@/hooks/use-glide-highlight";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronRight, Folder, FolderOpen } from "lucide-react";
@@ -64,6 +69,7 @@ function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, e
     <div>
       <button
         type="button"
+        data-glide
         title={node.path}
         aria-expanded={isDirectory ? isExpanded : undefined}
         onClick={() => (isDirectory ? setIsExpanded(!isExpanded) : onSelectFile(node.path))}
@@ -72,16 +78,14 @@ function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, e
         onFocus={showFullNameIfClipped}
         onBlur={() => setOverflowBox(null)}
         className={cn(
-          "flex h-7 w-full items-center gap-1.5 rounded-md pr-2 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50",
-          isSelected
-            ? "bg-primary/20 font-medium text-primary ring-1 ring-inset ring-primary/45"
-            : "text-muted-foreground hover:bg-muted/50 hover:text-primary"
+          "relative flex h-7 w-full items-center gap-1.5 rounded-xl pr-2 text-left text-[13px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35",
+          isSelected ? "row-active font-medium" : "text-muted-foreground hover:text-foreground"
         )}
         style={{ paddingLeft: `${depth * 12 + 6}px` }}
       >
         {isDirectory ? (
           <ChevronRight
-            className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150", isExpanded && "rotate-90")}
+            className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]", isExpanded && "rotate-90")}
           />
         ) : (
           <span className="w-3.5 shrink-0" />
@@ -100,8 +104,8 @@ function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, e
           className={cn(
             "pointer-events-none fixed z-[1000] -ml-1 flex items-center whitespace-nowrap rounded-md border py-0 pl-1 pr-2.5 text-[13px] shadow-lg shadow-black/50",
             isSelected
-              ? "border-primary/45 bg-[hsl(var(--panel))] font-medium text-primary"
-              : "border-border/60 bg-[hsl(var(--panel))] text-primary"
+              ? "border-primary/30 bg-[hsl(30_11%_17%)] font-medium text-white"
+              : "border-white/[0.12] bg-[hsl(var(--ws-card-head))] text-foreground"
           )}
         >
           {node.name}
@@ -125,13 +129,16 @@ function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, e
 }
 
 export function FileTree({ files, selectedPath, onSelectFile, isLoading, changedPaths, expansion }: FileTreeProps) {
+  const treeRef = useRef<HTMLDivElement>(null);
+  const glideRef = useGlideHighlight(treeRef);
+
   if (isLoading) {
     return (
       <div className="space-y-2 p-3">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="flex animate-pulse items-center gap-2">
-            <div className="h-4 w-4 rounded bg-muted" />
-            <div className="h-3.5 rounded bg-muted" style={{ width: `${40 + i * 9}%` }} />
+          <div key={i} className="flex items-center gap-2">
+            <div className="app-skeleton h-4 w-4 rounded" />
+            <div className="app-skeleton h-3.5 rounded" style={{ width: `${40 + i * 9}%` }} />
           </div>
         ))}
       </div>
@@ -143,7 +150,8 @@ export function FileTree({ files, selectedPath, onSelectFile, isLoading, changed
   }
 
   return (
-    <div className="p-1.5">
+    <div ref={treeRef} className="relative p-1.5">
+      <span ref={glideRef} aria-hidden="true" className="glide-pill" />
       {files.map((node) => (
         <FileTreeItem
           key={node.path}
