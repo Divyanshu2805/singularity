@@ -1,0 +1,369 @@
+/* The home page's own few rules (pages/Home.tsx). Everything else it wears is the app's and the first landing page's,
+   from index.css: the prompt's card, the step cards, the feature tiles, the plans and the questions. These are only
+   the pieces that page did not have - the prompt standing on the open sky, the example cards, and the lit row of the
+   step being played. Plain rules rather than a layer, since this sheet is loaded with the page and not through
+   index.css's Tailwind layers. */
+
+.home-prompt {
+  box-shadow:
+    0 0 0 1px hsl(30 11% 1% / 0.55),
+    0 40px 90px -36px rgb(0 0 0 / 0.95);
+}
+
+.home-prompt:focus-within {
+  box-shadow:
+    0 0 0 3px hsl(var(--primary) / 0.12),
+    0 0 0 1px hsl(30 11% 1% / 0.55),
+    0 40px 90px -36px rgb(0 0 0 / 0.95);
+}
+
+/* The hero's theme: the app's sky behind it (HeroSky - the wash a little under the dashboard's strength), the sheet
+   of space-time it stands on (HeroFabric - the canvas's edges faded by a mask, so the grid has no border and thins
+   out before it reaches the project window), the small steady light under the prompt (.hero-ember - it breathes,
+   and --energy, 0 to 1, which the hero sets from how much the visitor has typed, makes it stronger and wider), and
+   the soft glow that answers at the head of the project window when a ripple arrives (.hero-arrive - still and
+   unseen until the hero plays it; a glow, not a line, since nothing on this page traces an edge with light). */
+.hero-sky .nebula {
+  --sky-strength: 0.78;
+}
+
+.hero-fabric {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  width: 100%;
+  height: 60rem;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(ellipse 60% 62% at 50% 44%, #000 34%, transparent 82%);
+  mask-image: radial-gradient(ellipse 60% 62% at 50% 44%, #000 34%, transparent 82%);
+}
+
+/* The sheet when the project window grows out of it (HeroFabric with a frame). It reaches the hero's foot, and its
+   mask gains a second opening: the first is the one above, written in the lengths it had on a 60rem canvas so the
+   sheet round the headline is unchanged; the second is a band over the window - from a little above its top to just
+   under its foot, a little wider than it - which HeroFabric places (--frame-top, -foot, -left, -right, in the
+   canvas's pixels) and whose strength it turns down (--frame-veil, 1 to 0) as the real window arrives, so a formed
+   window has no sheet showing round it. The band is two gradients intersected, joined to the first opening. */
+.hero-fabric[data-frame] {
+  --frame-top: 200vh;
+  --frame-foot: 200vh;
+  --frame-left: 0px;
+  --frame-right: 100vw;
+  --frame-veil: 0;
+  height: 100%;
+  -webkit-mask-image:
+    radial-gradient(ellipse 60% 37.2rem at 50% 26.4rem, #000 34%, transparent 82%),
+    linear-gradient(
+      to bottom,
+      transparent calc(var(--frame-top) - 190px),
+      rgb(0 0 0 / var(--frame-veil)) calc(var(--frame-top) - 60px),
+      rgb(0 0 0 / var(--frame-veil)) calc(var(--frame-foot) + 4px),
+      transparent calc(var(--frame-foot) + 44px)
+    ),
+    linear-gradient(
+      to right,
+      transparent calc(var(--frame-left) - 130px),
+      #000 calc(var(--frame-left) - 28px),
+      #000 calc(var(--frame-right) + 28px),
+      transparent calc(var(--frame-right) + 130px)
+    );
+  mask-image:
+    radial-gradient(ellipse 60% 37.2rem at 50% 26.4rem, #000 34%, transparent 82%),
+    linear-gradient(
+      to bottom,
+      transparent calc(var(--frame-top) - 190px),
+      rgb(0 0 0 / var(--frame-veil)) calc(var(--frame-top) - 60px),
+      rgb(0 0 0 / var(--frame-veil)) calc(var(--frame-foot) + 4px),
+      transparent calc(var(--frame-foot) + 44px)
+    ),
+    linear-gradient(
+      to right,
+      transparent calc(var(--frame-left) - 130px),
+      #000 calc(var(--frame-left) - 28px),
+      #000 calc(var(--frame-right) + 28px),
+      transparent calc(var(--frame-right) + 130px)
+    );
+  -webkit-mask-composite: source-over, source-in, source-over;
+  mask-composite: add, intersect, add;
+}
+
+.hero-ember {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  z-index: -1;
+  width: 82%;
+  height: 170px;
+  translate: -50% -62%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, hsl(42 100% 72% / 0.4), hsl(36 100% 60% / 0.13) 55%, transparent);
+  opacity: calc(0.6 + 0.4 * var(--energy, 0));
+  scale: calc(1 + 0.16 * var(--energy, 0));
+  transition:
+    opacity 0.7s ease,
+    scale 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: hero-ember 6.5s ease-in-out infinite;
+}
+
+@keyframes hero-ember {
+  0%,
+  100% {
+    filter: brightness(0.86);
+  }
+  50% {
+    filter: brightness(1.12);
+  }
+}
+
+.hero-arrive {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 64%;
+  height: 150px;
+  translate: -50% -52%;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(closest-side, hsl(44 100% 80% / 0.42), hsl(40 100% 64% / 0.12) 58%, transparent);
+}
+
+/* The hero's mark as an eclipse (EclipseMark.tsx drives it; the extra parts are HorizonMark's, drawn only when it is
+   given a phase). A sun stands where the mark's core will be (.hz-sun, with a halo round it); the moon (.hz-moon,
+   the core's own disc) comes across it from the lower left towards the mark's spark, taking --eclipse-in, so the
+   sun thins to a sliver at the limb that faces the spark; at totality the sun and its halo give way to the mark's
+   own ring and dome, a bead of light flares once on that limb (.hz-bead - the diamond ring, just before the spark
+   itself settles beyond it), and the mark holds; then the moon moves on the same way, taking --eclipse-out, and the
+   sun comes back from behind it. The moon's two resting places are --moon-from and --moon-to, which HorizonMark
+   works out from its own geometry. "away" puts the moon back at its start with no transition, unseen. */
+.hz-sun,
+.hz-halo {
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+
+.hz-mark:is([data-eclipse="away"], [data-eclipse="closing"], [data-eclipse="parting"]) :is(.hz-sun, .hz-halo) {
+  opacity: 1;
+}
+
+.hz-mark[data-eclipse="total"] :is(.hz-sun, .hz-halo) {
+  transition: opacity 0.75s ease;
+}
+
+.hz-moon {
+  opacity: 0;
+  translate: var(--moon-from, 0 0);
+}
+
+.hz-mark[data-eclipse="closing"] .hz-moon {
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    translate var(--eclipse-in, 1700ms) cubic-bezier(0.45, 0, 0.3, 1),
+    opacity 0.5s ease;
+}
+
+.hz-mark[data-eclipse="total"] .hz-moon {
+  opacity: 1;
+  translate: 0 0;
+}
+
+.hz-mark[data-eclipse="parting"] .hz-moon {
+  opacity: 0;
+  translate: var(--moon-to, 0 0);
+  transition:
+    translate var(--eclipse-out, 1700ms) cubic-bezier(0.6, 0, 0.55, 1),
+    opacity 0.45s ease calc(var(--eclipse-out, 1700ms) - 500ms);
+}
+
+.hz-bead {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  filter: drop-shadow(0 0 1.5px hsl(44 100% 78%));
+}
+
+.hz-mark[data-eclipse="total"] .hz-bead {
+  animation: hz-bead 0.95s ease-out both;
+}
+
+@keyframes hz-bead {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+
+.home-step {
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.home-step:focus-visible {
+  outline: none;
+}
+
+.home-step:focus-visible .orbit-card {
+  border-color: hsl(43.6 100% 80% / 0.45);
+  box-shadow: 0 0 0 3px hsl(43.6 100% 80% / 0.18);
+}
+
+.home-step:hover .orbit-card {
+  border-color: hsl(40 28% 90% / 0.2);
+}
+
+.orbit-node[data-active="true"] .home-step:hover .orbit-card {
+  border-color: hsl(42 100% 76% / 0.36);
+}
+
+.home-step:active {
+  transform: scale(0.985);
+}
+
+.home-card {
+  --mx: 50%;
+  --my: 0%;
+  position: relative;
+  border: 1px solid hsl(40 27% 88% / 0.09);
+  background: linear-gradient(180deg, hsl(30 11% 13% / 0.5), hsl(30 11% 6% / 0.42));
+  box-shadow: 0 30px 70px -40px rgb(0 0 0 / 0.95);
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.5s ease;
+}
+
+.home-card:hover {
+  border-color: hsl(40 15.2% 92.5% / 0.16);
+  box-shadow: 0 36px 80px -38px rgb(0 0 0 / 1);
+}
+
+.home-card:focus-visible {
+  outline: none;
+  border-color: hsl(43.6 100% 80% / 0.45);
+  box-shadow: 0 0 0 3px hsl(43.6 100% 80% / 0.18);
+}
+
+.home-glare {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(420px circle at var(--mx) var(--my), hsl(42.6 99.2% 88.3% / 0.06), transparent 50%);
+  transition: opacity 0.4s ease;
+}
+
+.home-card:hover .home-glare {
+  opacity: 1;
+}
+
+.home-go {
+  color: hsl(var(--muted-foreground));
+  transition: color 0.3s ease;
+}
+
+.home-go svg {
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.home-card:hover .home-go {
+  color: hsl(46 100% 85%);
+}
+
+.home-card:hover .home-go svg {
+  transform: translateX(3px);
+}
+
+/* A feature card (index.css, .deck-tile) keeps its 3D for the pointer only. At rest its transform was a perspective
+   with no rotation and its demo stood 26px forward of it, which looks the same as no transform at all but makes the
+   browser draw the demo as a separate picture and resample it - every film's type came out soft. So at rest the card
+   and its demo carry no transform, and the tilt and the lift arrive with the pointer. */
+.deck-tile:not(:hover),
+.deck-tile:not(:hover) .deck-float {
+  transform: none;
+}
+
+/* The home page's feature cards (.home-tile) do not tilt at all. A card that leans in 3D is drawn as a picture and
+   resampled for as long as it leans, so the film inside it went soft under the pointer - the owner asked for that to
+   stop, and any tilt at all does it to type this small. Under the pointer a card answers with the light that follows
+   it, its border and its glow, none of which move the film. */
+.deck-tile.home-tile,
+.deck-tile.home-tile:hover,
+.deck-tile.home-tile .deck-float {
+  transform: none;
+  transform-style: flat;
+}
+
+/* The features on their sheet of space-time (FeatureChapters.next.tsx). The sheet (FeatureSheet) lies behind the
+   whole section and is cut into canvases one above another, each placed by the component. In a row only one card's
+   film plays at a time: a card waiting for its turn stands on its finished frame with its screen dimmed, and the
+   screen comes up as the turn reaches it. Only the screen dims - the words under it stay at full strength. A card
+   in a chapter that is not being read is dimmed whole, by a black veil over it whose strength feature-motion.ts
+   writes from the scroll (.feature-veil - it covers the card's border too, hence the inset). */
+.feature-sheet {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.feature-sheet canvas {
+  position: absolute;
+  left: 0;
+  display: block;
+  width: 100%;
+}
+
+.feature-veil {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: #000;
+  opacity: 0;
+  will-change: opacity;
+}
+
+.home-tile[data-relay] .deck-float {
+  transition: opacity 0.7s ease;
+}
+
+.home-tile[data-relay="waiting"] .deck-float {
+  opacity: 0.5;
+}
+
+.home-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(40 28% 90% / 0.16), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-ember {
+    animation: none;
+    transition: none;
+  }
+
+  .home-step,
+  .home-card,
+  .home-glare,
+  .home-go,
+  .home-go svg {
+    transition: none;
+  }
+
+  .home-step:active {
+    transform: none;
+  }
+
+  .home-card:hover .home-go svg {
+    transform: none;
+  }
+}
