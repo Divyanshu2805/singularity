@@ -6,8 +6,7 @@
  * returning user being redirected never downloads it, and the sky with the horizon mark (AppLoading) shows while it
  * arrives, so the landing page's night is there from the first paint.
  *
- * The landing page is pages/Home.tsx, the content-first page. The one it replaces here (pages/Landing.tsx) is kept
- * until Home is finished and approved, and is reachable in development at /landing-classic (App.tsx).
+ * The landing page is pages/Home.tsx, the content-first page.
  */
 import { lazy, Suspense } from "react";
 import { Navigate } from "react-router-dom";

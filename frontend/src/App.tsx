@@ -11,12 +11,6 @@
  * who only wanted the pricing page. While a page's code arrives the app shows its own night (AppLoading) - the sky
  * with the horizon mark building itself - rather than a blank screen.
  *
- * Three routes are registered in development only (import.meta.env.DEV), so a production build neither serves nor
- * bundles them: /landing-classic, the first landing page (pages/Landing.tsx), kept while the content-first page that
- * replaced it at the root (pages/Home.tsx, shown by Index) is finished and approved; /landing-next, an earlier
- * rebuild that was turned down; and /features-next, the home page with the next version of its features section
- * (pages/FeaturesNext.tsx), there to be compared with the root until one of the two is chosen.
- *
  * Route order matters: the catch-all must stay last, or it would swallow everything after it.
  */
 import { lazy, Suspense } from "react";
@@ -43,9 +37,6 @@ const Pricing = lazy(() => import("./pages/Pricing").then((m) => ({ default: m.P
 const BillingSettings = lazy(() => import("./pages/BillingSettings").then((m) => ({ default: m.BillingSettings })));
 const UsageInsights = lazy(() => import("./pages/UsageInsights").then((m) => ({ default: m.UsageInsights })));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const LandingNext = import.meta.env.DEV ? lazy(() => import("./pages/LandingNext")) : null;
-const LandingClassic = import.meta.env.DEV ? lazy(() => import("./pages/Landing")) : null;
-const FeaturesNext = import.meta.env.DEV ? lazy(() => import("./pages/FeaturesNext")) : null;
 
 const queryClient = new QueryClient();
 
@@ -72,9 +63,6 @@ const App = () => (
               <Route path="/settings/billing" element={<BillingSettings />} />
               <Route path="/usage" element={<UsageInsights />} />
               <Route path="/settings/security" element={<SecuritySettings />} />
-              {LandingNext && <Route path="/landing-next" element={<LandingNext />} />}
-              {LandingClassic && <Route path="/landing-classic" element={<LandingClassic />} />}
-              {FeaturesNext && <Route path="/features-next" element={<FeaturesNext />} />}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

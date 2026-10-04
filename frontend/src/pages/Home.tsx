@@ -73,14 +73,6 @@
  * The copy is docs/landing-content-plan.md's, held to what the app does today. Three things that plan lists are not
  * on the page yet: captures of real generated apps on the example cards, and the footer's links to the source, a
  * privacy page and a terms page - none of which exist to link to.
- *
- * The first landing page (pages/Landing.tsx) is kept, unchanged, at /landing-classic in development until this one
- * is finished and approved to replace it for good.
- *
- * The features section can be handed in from outside (features), which is how a version of it that is waiting for
- * the owner's word is shown in its place on the page without touching the one at the root: the development-only
- * /features-next (pages/FeaturesNext.tsx) passes FeatureChapters.next.tsx, the cards standing on a sheet of
- * space-time. Given nothing, the page shows FeatureChapters.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { BrandName, HorizonMark } from "@/components/HorizonMark";
@@ -357,7 +349,7 @@ function Stage({ children }: { children: ReactNode }) {
   );
 }
 
-export default function Home({ features }: { features?: ReactNode }) {
+export default function Home() {
   const intro = useIntroClock();
   useSmoothScroll();
 
@@ -371,7 +363,7 @@ export default function Home({ features }: { features?: ReactNode }) {
           <HowItWorks />
           <Examples />
           <Understand />
-          {features ?? <FeatureChapters />}
+          <FeatureChapters />
           <PlanShowcase />
           <Faq questions={HOME_QUESTIONS} aside={false} tucked={false} />
           <ClosingCall />

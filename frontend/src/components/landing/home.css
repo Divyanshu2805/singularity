@@ -302,44 +302,6 @@
   transform-style: flat;
 }
 
-/* The features on their sheet of space-time (FeatureChapters.next.tsx). The sheet (FeatureSheet) lies behind the
-   whole section and is cut into canvases one above another, each placed by the component. In a row only one card's
-   film plays at a time: a card waiting for its turn stands on its finished frame with its screen dimmed, and the
-   screen comes up as the turn reaches it. Only the screen dims - the words under it stay at full strength. A card
-   in a chapter that is not being read is dimmed whole, by a black veil over it whose strength feature-motion.ts
-   writes from the scroll (.feature-veil - it covers the card's border too, hence the inset). */
-.feature-sheet {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.feature-sheet canvas {
-  position: absolute;
-  left: 0;
-  display: block;
-  width: 100%;
-}
-
-.feature-veil {
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  pointer-events: none;
-  background: #000;
-  opacity: 0;
-  will-change: opacity;
-}
-
-.home-tile[data-relay] .deck-float {
-  transition: opacity 0.7s ease;
-}
-
-.home-tile[data-relay="waiting"] .deck-float {
-  opacity: 0.5;
-}
-
 .home-rule {
   height: 1px;
   background: linear-gradient(90deg, transparent, hsl(40 28% 90% / 0.16), transparent);
