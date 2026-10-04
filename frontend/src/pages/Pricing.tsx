@@ -4,55 +4,122 @@
  * Handles: the plan cards with what each one buys, starting a checkout for someone with no subscription, and changing
  * plan in place for someone who already has one.
  *
- * Feature lists are built from each plan's own numbers rather than written out per tier, so a limit changed on the
- * server cannot leave the page claiming the old one. The unlimited-AI flag is deliberately not shown: no plan sets
- * it, and a card promising unlimited AI beside a daily token figure would contradict itself.
+ * Feature lists are built from each plan's own numbers rather than written out per tier (lib/billing's
+ * planFeatures, shared with the landing page's plan section), so a limit changed on the server cannot leave the page
+ * claiming the old one. The unlimited-AI flag is deliberately not shown: no plan sets it, and a card promising
+ * unlimited AI beside a daily token figure would contradict itself.
+ *
+ * It stands on the signed-in pages' night (.dash-night) under the horizon mark and a Fraunces headline with an
+ * italic gold close. Signed in, the page sits in the rounded inset frame (.dash-frame) beside the docked sidebar, as
+ * the dashboard, usage and billing pages do, over the wash of colour at the foot of the screen and the stars above it (Nebula);
+ * signed out there is no sidebar and the quiet sky (LandingBackdrop) fills the window, since a visitor arrives here from
+ * the landing page's sky, so the wash is asked for without its stars and the stars are that sky's. The owner asked for this page's background
+ * to match the others and its cards to match the landing page's, so the cards are the landing's own (PlanCard): glass
+ * for the outer plans, the lit card with the "Most popular" pill for the recommended one, and the landing's buttons -
+ * the dark primary pill on the recommended card and its quiet twin on the others, or on any card whose button can't
+ * be pressed (the current plan, or a free plan already scheduled), which shows no arrow.
+ *
+ * The cards come in once, when the plans arrive, the way the landing's open with the scroll: the recommended card
+ * rises into place first (RISE) and the other two then slide out from behind it to either side (FAN, starting at the
+ * recommended card's centre - measured from the grid cells, which never move). When the cards are stacked rather than
+ * side by side, each simply rises in turn. Each card is marked landed half-way through its entrance (LAND_AT), which
+ * starts its price count, its feature list and its light. Under reduced motion the cards are simply there, landed.
+ *
+ * Three columns need room: with the sidebar open beside the page they start at xl rather than lg, or the cards would
+ * be squeezed too narrow for their buttons (PlanCard's columns).
  */
-import { useEffect, useState, type CSSProperties } from "react";
+import { Nebula } from "@/components/app/Nebula";
+import { LandingBackdrop } from "@/components/landing/LandingBackdrop";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Check, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { HorizonMark } from "@/components/HorizonMark";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
+import { LandingButton } from "@/components/landing/LandingButton";
+import { PlanCard } from "@/components/landing/PlanCard";
+import { usePrefersReducedMotion } from "@/components/landing/motion";
 import { Button } from "@/components/ui/button";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useToast } from "@/hooks/use-toast";
 import { useBilling, usePlans } from "@/hooks/use-billing";
 import { api, isAuthenticated } from "@/lib/api";
-import { cardPrice, formatTokens, hasPaidSubscription, planAction, planActionLabel, planPriceLabel, type PlanAction } from "@/lib/billing";
+import { hasPaidSubscription, isRecommended, planAction, planActionLabel } from "@/lib/billing";
 import { PlanChangeDialog } from "@/components/PlanChangeDialog";
 import { PaymentsTestModeNotice } from "@/components/PaymentsTestModeNotice";
-import { Logo } from "@/components/SingularityLogo";
 import type { Plan } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const PAGE_GLOW: CSSProperties = {
     backgroundImage: [
-        "radial-gradient(70% 45% at 50% -8%, hsl(22 90% 55% / 0.22) 0%, transparent 70%)",
-        "radial-gradient(35% 30% at 8% 0%, hsl(340 82% 58% / 0.10) 0%, transparent 70%)",
-        "radial-gradient(35% 30% at 92% 0%, hsl(38 95% 60% / 0.10) 0%, transparent 70%)",
+        "radial-gradient(70% 45% at 50% -8%, hsl(40.7 99.9% 76.1% / 0.07) 0%, transparent 70%)",
+        "radial-gradient(35% 30% at 8% 0%, hsl(28 100% 56% / 0.04) 0%, transparent 70%)",
+        "radial-gradient(35% 30% at 92% 0%, hsl(41.3 100% 85.6% / 0.04) 0%, transparent 70%)",
     ].join(", "),
 };
 
-function planFeatures(plan: Plan): string[] {
-    const projects = plan.maxProjects ?? 0;
-    const tokens = plan.maxTokensPerDay ?? 0;
-    const previews = plan.maxPreviews ?? 0;
+const EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
+const RISE = { delay: 150, duration: 900, y: 64, scale: 0.94 };
+const FAN = { delay: 520, duration: 1000, y: 22, scale: 0.9 };
+const STACK_STEP = 120;
+const LAND_AT = 0.5;
 
-    return [
-        `${projects} ${projects === 1 ? "project" : "projects"}`,
-        `${formatTokens(tokens)} AI tokens per day`,
-        `${previews} live ${previews === 1 ? "preview" : "previews"} running at once`,
-        plan.isFree ? "Full editor, chat and ExplainLLM" : "Everything in the free plan",
-        plan.isFree ? "Teaching mode walkthroughs" : "Priority access when the AI is busy",
-    ];
+function useDeal(shape: string, reduced: boolean) {
+    const cells = useRef<(HTMLDivElement | null)[]>([]);
+    const pops = useRef<(HTMLDivElement | null)[]>([]);
+    const [landed, setLanded] = useState<boolean[]>([]);
+
+    useLayoutEffect(() => {
+        const roles = shape ? shape.split(",").map((flag) => flag === "true") : [];
+        if (roles.length === 0) return;
+        if (reduced || typeof Element.prototype.animate !== "function") {
+            setLanded(roles.map(() => true));
+            return;
+        }
+
+        const lead = roles.indexOf(true);
+        const hub = lead >= 0 ? cells.current[lead] : null;
+        const centre = (cell: HTMLElement) => cell.offsetLeft + cell.offsetWidth / 2;
+        const wide = !!hub && cells.current.some((cell, index) => index !== lead && !!cell && Math.abs(cell.offsetTop - hub.offsetTop) < cell.offsetHeight / 2);
+
+        const timers: number[] = [];
+        const animations = roles.map((isFeatured, index) => {
+            const card = pops.current[index];
+            const cell = cells.current[index];
+            if (!card || !cell) return null;
+
+            const fanOut = wide && hub && !isFeatured ? centre(hub) - centre(cell) : null;
+            const delay = fanOut !== null ? FAN.delay : wide ? RISE.delay : RISE.delay + index * STACK_STEP;
+            const duration = fanOut !== null ? FAN.duration : RISE.duration;
+            const from = fanOut !== null
+                ? `translate3d(${fanOut.toFixed(1)}px, ${FAN.y}px, 0) scale(${FAN.scale})`
+                : `translate3d(0, ${RISE.y}px, 0) scale(${RISE.scale})`;
+
+            timers.push(window.setTimeout(() => setLanded((was) => roles.map((_, order) => order === index || Boolean(was[order]))), delay + duration * LAND_AT));
+            return card.animate(
+                [
+                    { transform: from, opacity: 0 },
+                    { opacity: 1, offset: fanOut !== null ? 0.2 : 0.4 },
+                    { transform: "none", opacity: 1 },
+                ],
+                { delay, duration, easing: EASE, fill: "backwards" }
+            );
+        });
+
+        return () => {
+            timers.forEach((timer) => window.clearTimeout(timer));
+            animations.forEach((animation) => animation?.cancel());
+        };
+    }, [shape, reduced]);
+
+    return { cells, pops, landed };
 }
-
-const isRecommended = (plan: Plan, plans: Plan[]) =>
-    !plan.isFree && plans.filter((candidate) => !candidate.isFree)[0]?.id === plan.id;
 
 export function Pricing() {
     const navigate = useNavigate();
     const { toast } = useToast();
     const sidebar = useSidebar();
+    const reduced = usePrefersReducedMotion();
     const [searchParams, setSearchParams] = useSearchParams();
 
     const signedIn = isAuthenticated();
@@ -60,6 +127,10 @@ export function Pricing() {
     const { subscription } = useBilling();
     const [startingPlanId, setStartingPlanId] = useState<number | null>(null);
     const [changingTo, setChangingTo] = useState<Plan | null>(null);
+
+    const featured = plans.map((plan) => isRecommended(plan, plans));
+    const { cells, pops, landed } = useDeal(featured.join(), reduced);
+    const columns = signedIn && sidebar.isExpanded ? "xl" : "lg";
 
     useEffect(() => {
         if (searchParams.get("checkout") !== "cancelled") return;
@@ -105,15 +176,17 @@ export function Pricing() {
     };
 
     return (
-        <div className="relative flex h-screen overflow-hidden bg-background">
+        <div className="dash-night dash-sky relative flex h-screen overflow-hidden bg-background">
+            {!signedIn && <LandingBackdrop mode="quiet" />}
+            <Nebula stars={signedIn} />
             {signedIn && <SidebarSpacer sidebar={sidebar} />}
 
-            <div className="relative flex min-w-0 flex-1 flex-col">
+            <div className={cn("relative flex min-w-0 flex-1 flex-col overflow-hidden", signedIn && "dash-frame my-2 mr-2 rounded-2xl")}>
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={PAGE_GLOW} />
 
                 <header className="relative flex h-12 shrink-0 items-center gap-2 px-2">
-                    {signedIn ? null : (
-                        <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => navigate("/")}>
+                    {!signedIn && (
+                        <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" style={{ "--icon-hover": "translateX(-2px)" } as CSSProperties} onClick={() => navigate("/")}>
                             <ArrowLeft className="h-3.5 w-3.5" />
                             Back
                         </Button>
@@ -121,17 +194,18 @@ export function Pricing() {
                 </header>
 
                 <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-                    <div className="mx-auto w-full max-w-5xl px-4 pb-16 pt-6 sm:px-6">
-                        <div className="mb-10 text-center">
-                            {!signedIn && (
-                                <div className="mb-6 flex justify-center">
-                                    <Logo />
-                                </div>
-                            )}
-                            <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-                                Build more, for less than you'd think
+                    <div className="mx-auto w-full max-w-[1080px] px-4 pb-20 pt-6 sm:px-6">
+                        <div className="mb-14 text-center">
+                            <div className="mb-6 flex justify-center">
+                                <span className="relative inline-flex h-14 w-14">
+                                    <span aria-hidden="true" className="nav-brand-glow pointer-events-none absolute -inset-[60%] rounded-full" />
+                                    <HorizonMark drawn className="relative h-full w-full" />
+                                </span>
+                            </div>
+                            <h1 className="landing-heading app-fade font-display text-[34px] font-semibold leading-[1.05] tracking-[-0.02em] sm:text-[44px]" style={{ "--i": 1 } as CSSProperties}>
+                                Build more, for less than <em className="heat-text animate-heat-sweep pr-1 font-medium motion-reduce:animate-none">you&rsquo;d think</em>
                             </h1>
-                            <p className="mx-auto mt-3 max-w-lg text-sm text-muted-foreground">
+                            <p className="app-fade mx-auto mt-3 max-w-lg text-sm text-muted-foreground" style={{ "--i": 3 } as CSSProperties}>
                                 Every plan includes the whole editor - the AI chat, teaching mode, ExplainLLM and live
                                 previews. What changes is how many projects you keep and how much you can build each day.
                             </p>
@@ -140,84 +214,57 @@ export function Pricing() {
 
                         {isLoading ? (
                             <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <OrbitSpinner className="h-4 w-4" />
                                 Loading plans&hellip;
                             </div>
                         ) : (
-                            <div className="grid gap-4 md:grid-cols-3">
-                                {plans.map((plan) => {
+                            <div
+                                className={cn(
+                                    "mx-auto grid max-w-[440px] items-stretch gap-5",
+                                    columns === "xl" ? "xl:max-w-none xl:grid-cols-3" : "lg:max-w-none lg:grid-cols-3"
+                                )}
+                            >
+                                {plans.map((plan, position) => {
                                     const action = planAction(plan, subscription, signedIn);
-                                    const recommended = isRecommended(plan, plans);
+                                    const locked = action === "current" || action === "scheduled";
                                     const isStarting = startingPlanId === plan.id;
 
                                     return (
-                                        <div
+                                        <PlanCard
                                             key={plan.id ?? plan.name}
-                                            className={cn(
-                                                "relative flex flex-col rounded-2xl border bg-panel/70 p-5 backdrop-blur transition-colors",
-                                                recommended
-                                                    ? "border-primary/50 shadow-[0_0_0_1px_hsl(var(--primary)/0.25),0_18px_40px_-24px_hsl(var(--primary)/0.65)]"
-                                                    : "border-border/60",
-                                                action === "current" && "border-primary/40"
-                                            )}
+                                            plan={plan}
+                                            featured={featured[position]}
+                                            order={position}
+                                            landed={Boolean(landed[position])}
+                                            columns={columns}
+                                            cellRef={(node) => {
+                                                cells.current[position] = node;
+                                            }}
+                                            popRef={(node) => {
+                                                pops.current[position] = node;
+                                            }}
                                         >
-                                            {recommended && (
-                                                <span className="absolute -top-2.5 left-5 flex items-center gap-1 rounded-full border border-primary/40 bg-background px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
-                                                    <Sparkles className="h-3 w-3" />
-                                                    Most popular
-                                                </span>
-                                            )}
-
-                                            <h2 className="font-display text-lg font-semibold">{plan.name}</h2>
-                                            {plan.tagline && (
-                                                <p className="mt-1 min-h-[2.5rem] text-xs leading-relaxed text-muted-foreground">
-                                                    {plan.tagline}
-                                                </p>
-                                            )}
-
-                                            <p className="mt-4 flex items-baseline gap-1">
-                                                <span className="font-display text-3xl font-semibold tracking-tight">
-                                                    {cardPrice(plan)}
-                                                </span>
-                                                {plan.billingInterval && (
-                                                    <span className="text-xs text-muted-foreground">/{plan.billingInterval}</span>
-                                                )}
-                                            </p>
-                                            <span className="sr-only">{planPriceLabel(plan)}</span>
-
-                                            <ul className="mt-5 flex-1 space-y-2.5">
-                                                {planFeatures(plan).map((feature) => (
-                                                    <li key={feature} className="flex items-start gap-2 text-xs text-foreground/85">
-                                                        <Check className="mt-px h-3.5 w-3.5 shrink-0 text-primary" />
-                                                        <span>{feature}</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-
-                                            <Button
-                                                className="mt-6 w-full"
-                                                variant={buttonVariant(action, recommended)}
-                                                disabled={action === "current" || action === "scheduled" || isStarting}
+                                            <LandingButton
+                                                variant={featured[position] && !locked ? "primary" : "quiet"}
+                                                block
+                                                arrow={!locked}
+                                                busy={isStarting}
+                                                knob={isStarting ? <OrbitSpinner className="h-3.5 w-3.5" /> : undefined}
+                                                disabled={locked || isStarting}
+                                                className={locked ? "!text-white !opacity-100" : undefined}
                                                 onClick={() => void choose(plan)}
                                             >
-                                                {isStarting ? (
-                                                    <>
-                                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                        Taking you to Stripe&hellip;
-                                                    </>
-                                                ) : (
-                                                    planActionLabel(action, plan, subscription)
-                                                )}
-                                            </Button>
-                                        </div>
+                                                {isStarting ? "Taking you to Stripe…" : planActionLabel(action, plan, subscription)}
+                                            </LandingButton>
+                                        </PlanCard>
                                     );
                                 })}
                             </div>
                         )}
 
-                        <p className="mt-8 text-center text-xs text-muted-foreground">
+                        <p className="mt-14 text-center text-[13px] text-muted-foreground">
                             Prices in INR, billed monthly. Cancel any time from{" "}
-                            <button type="button" onClick={() => navigate("/settings/billing")} className="text-primary hover:underline">
+                            <button type="button" onClick={() => navigate("/settings/billing")} className="wipe-link text-primary">
                                 billing settings
                             </button>{" "}
                             - you keep your plan until the period you've paid for ends.
@@ -226,23 +273,11 @@ export function Pricing() {
                 </main>
             </div>
 
-            {signedIn && <AppSidebar sidebar={sidebar} />}
+            {signedIn && <AppSidebar sidebar={sidebar} inset />}
 
             <PlanChangeDialog current={subscription} target={changingTo} onClose={() => setChangingTo(null)} />
         </div>
     );
-}
-
-function buttonVariant(action: PlanAction, recommended: boolean): "default" | "outline" | "secondary" {
-    switch (action) {
-        case "upgrade":
-        case "resume":
-            return "default";
-        case "signIn":
-            return recommended ? "default" : "outline";
-        default:
-            return "outline";
-    }
 }
 
 export default Pricing;

@@ -36,7 +36,7 @@ export function QuotaDialog({ quota, onClose }: { quota: QuotaDetails | null; on
     <AlertDialog open onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent className="sm:max-w-md">
         <AlertDialogHeader>
-          <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-primary">
             {isTokens ? <Zap className="h-4.5 w-4.5" /> : <Sparkles className="h-4.5 w-4.5" />}
           </div>
           <AlertDialogTitle>

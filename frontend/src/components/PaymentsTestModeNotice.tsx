@@ -23,7 +23,7 @@ export function PaymentsTestModeNotice({ enabled = PAYMENTS_TEST_MODE, className
     <div
       role="note"
       className={cn(
-        "flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left",
+        "flex items-start gap-2.5 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-4 py-3 text-left",
         className,
       )}
     >

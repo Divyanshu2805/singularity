@@ -94,7 +94,7 @@ describe("UsageInsights page", () => {
     await renderPage();
     await screen.findByText("Tokens by day");
 
-    expect(screen.getByText("12,000")).toBeTruthy();
+    expect(await screen.findByText("12,000")).toBeTruthy();
     expect(screen.getByText("Days at limit")).toBeTruthy();
     expect(screen.getByText(/daily limit of 5,000/)).toBeTruthy();
     expect(screen.getAllByText("Earlier activity").length).toBeGreaterThan(0);

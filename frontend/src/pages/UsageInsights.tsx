@@ -6,18 +6,30 @@
  *
  * Ranked bars are scaled to the largest entry rather than to 100%, so a short list still reads. This page pulls in
  * the charting library, which is why it is loaded on demand.
+ *
+ * It stands on the app's night - a page a step lighter than the surround, a wash of rose, amber and gold breathing at the foot of the
+ * screen with stars above it (Nebula - the wash took the gas nebula's place) and one faint gold glow at its head; the first starfield was taken out when the
+ * owner found the app too dark to read its panels on, and stars came back when the nebula was redrawn as gas -
+ * under the shared page heading (PageHeading - a mono eyebrow, a
+ * Fraunces title with an italic gold close, its words dropping in), its panels are solid raised surfaces that rise in one
+ * after another (index.css, .app-glass, .app-rise), and anything working shows the app's comet (OrbitSpinner).
  */
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Nebula } from "@/components/app/Nebula";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
+import { PageHeading } from "@/components/app/PageHeading";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
-import { Activity, ArrowUpRight, BarChart3, Download, Loader2, Sparkles } from "lucide-react";
+import { useSlidingPill } from "@/hooks/use-sliding-pill";
+import { Activity, ArrowUpRight, BarChart3, Download, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useToast } from "@/hooks/use-toast";
 import { useBilling } from "@/hooks/use-billing";
+import { CountUp } from "@/components/CountUp";
 import { api, isAuthenticated, loginRedirectPath } from "@/lib/api";
 import { formatResetIn, formatTokens } from "@/lib/billing";
 import {
@@ -37,8 +49,8 @@ import { cn } from "@/lib/utils";
 
 const PAGE_GLOW: CSSProperties = {
   backgroundImage: [
-    "radial-gradient(70% 45% at 50% -8%, hsl(22 90% 55% / 0.22) 0%, transparent 70%)",
-    "radial-gradient(35% 30% at 92% 0%, hsl(199 80% 58% / 0.08) 0%, transparent 70%)",
+    "radial-gradient(70% 45% at 50% -8%, hsl(38.8 100% 75% / 0.07) 0%, transparent 70%)",
+    "radial-gradient(35% 30% at 92% 0%, hsl(31.9 100% 74% / 0.03) 0%, transparent 70%)",
   ].join(", "),
 };
 
@@ -47,8 +59,8 @@ const PAGE_SIZE = 25;
 
 function Tile({ label, value, hint, children }: { label: string; value: ReactNode; hint?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-panel/70 p-4 backdrop-blur">
-      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
+    <div className="app-card app-rise rounded-2xl p-4">
+      <p className="app-label">{label}</p>
       <p className="mt-1.5 font-display text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
       {children}
       {hint && <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>}
@@ -58,7 +70,7 @@ function Tile({ label, value, hint, children }: { label: string; value: ReactNod
 
 function Section({ title, description, action, children }: { title: string; description?: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-border/60 bg-panel/70 p-5 backdrop-blur">
+    <section className="app-glass app-rise rounded-[22px] p-5" style={{ "--i": 1 } as CSSProperties}>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">{title}</h2>
@@ -95,7 +107,7 @@ function RankedBar({ label, sublabel, value, share, max, color, onClick }: {
           {formatTokens(value)} · {formatShare(share)}
         </span>
       </div>
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted/50">
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
         <div className="h-full rounded-full" style={{ width: `${max > 0 ? Math.max(2, (value / max) * 100) : 0}%`, background: color }} />
       </div>
     </Wrapper>
@@ -117,6 +129,8 @@ export function UsageInsights() {
       return "7d";
     }
   });
+  const rangeRef = useRef<HTMLDivElement>(null);
+  const rangePill = useSlidingPill(rangeRef, Math.max(0, RANGES.findIndex((entry) => entry.value === range)), "[role=radio]");
   const [isExporting, setExporting] = useState(false);
   const [page, setPage] = useState(0);
   const [events, setEvents] = useState<UsageEvent[]>([]);
@@ -199,10 +213,11 @@ export function UsageInsights() {
   const isEmpty = !!insights && insights.totals.totalTokens === 0;
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-background">
+    <div className="dash-night dash-sky relative flex h-screen overflow-hidden bg-background">
+      <Nebula />
       <SidebarSpacer sidebar={sidebar} />
 
-      <div className="relative flex min-w-0 flex-1 flex-col">
+      <div className="dash-frame relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={PAGE_GLOW} />
 
         <header className="relative flex h-12 shrink-0 items-center gap-2 px-2">
@@ -211,15 +226,13 @@ export function UsageInsights() {
         <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
           <div className="mx-auto w-full max-w-6xl space-y-4 px-4 pb-16 pt-4 sm:px-6">
             <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h1 className="font-display text-3xl font-semibold tracking-tight">Usage</h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Where your AI tokens go - by day, by feature and by project.
-                </p>
-              </div>
+              <PageHeading eyebrow="Account" title="Your" accent="usage">
+                Where your AI tokens go - by day, by feature and by project.
+              </PageHeading>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div role="radiogroup" aria-label="Range" className="flex rounded-lg border border-border/60 bg-background/60 p-0.5">
+                <div ref={rangeRef} role="radiogroup" aria-label="Range" className="app-track relative flex p-1">
+                  <span aria-hidden="true" className="seg-pill seg-slide absolute inset-y-1" style={rangePill} />
                   {RANGES.map((entry) => (
                     <button
                       key={entry.value}
@@ -228,10 +241,8 @@ export function UsageInsights() {
                       aria-checked={range === entry.value}
                       onClick={() => setRange(entry.value)}
                       className={cn(
-                        "h-7 rounded-md px-3 text-xs transition-colors",
-                        range === entry.value
-                          ? "border border-primary/40 bg-primary/15 text-primary"
-                          : "text-muted-foreground hover:text-foreground"
+                        "relative z-10 h-7 rounded-full px-3.5 text-xs transition-colors duration-300",
+                        range === entry.value ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       {entry.label}
@@ -239,7 +250,7 @@ export function UsageInsights() {
                   ))}
                 </div>
                 <Button variant="outline" size="sm" className="h-8 gap-1.5" disabled={isExporting || isEmpty} onClick={() => void exportCsv()}>
-                  {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  {isExporting ? <OrbitSpinner className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
                   Export CSV
                 </Button>
               </div>
@@ -252,9 +263,9 @@ export function UsageInsights() {
                 hint={quota ? `Resets in ${formatResetIn(quota.resetsAt)}` : undefined}
               >
                 {quota && (
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/50">
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
                     <div
-                      className={cn("h-full rounded-full", quota.isExhausted ? "bg-destructive" : quota.isLow ? "bg-amber-500" : "bg-primary")}
+                      className={cn("h-full rounded-full", quota.isExhausted ? "bg-destructive" : quota.isLow ? "bg-[linear-gradient(90deg,hsl(30_100%_56%),hsl(12_96%_58%))]" : "app-progress-fill !relative")}
                       style={{ width: `${quota.percent}%` }}
                     />
                   </div>
@@ -262,12 +273,12 @@ export function UsageInsights() {
               </Tile>
               <Tile
                 label={range === "today" ? "Used today" : "This period"}
-                value={insights ? formatTokens(insights.totals.totalTokens) : "—"}
+                value={insights ? <CountUp value={insights.totals.totalTokens} format={formatTokens} /> : "—"}
                 hint={insights ? `${formatTokens(insights.totals.requests)} AI requests` : undefined}
               />
               <Tile
                 label={range === "today" ? "Per request" : "Daily average"}
-                value={insights ? formatTokens(range === "today" ? tokensPerRequest(insights.totals) : insights.averagePerDay) : "—"}
+                value={insights ? <CountUp value={range === "today" ? tokensPerRequest(insights.totals) : insights.averagePerDay} format={formatTokens} /> : "—"}
                 hint={insights && range !== "today" ? `${formatTokens(tokensPerRequest(insights.totals))} per request` : "tokens"}
               />
               <Tile label={peak?.title ?? "Peak day"} value={peak?.value ?? "—"} hint={insights?.peakDay ? `${formatTokens(insights.peakDay.totalTokens)} tokens` : undefined} />
@@ -279,12 +290,12 @@ export function UsageInsights() {
             </div>
 
             {insightsQuery.isLoading ? (
-              <div className="flex items-center justify-center gap-2 rounded-2xl border border-border/60 bg-panel/70 py-24 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
+              <div className="app-glass flex items-center justify-center gap-2 rounded-[22px] py-24 text-sm text-muted-foreground">
+                <OrbitSpinner className="h-4 w-4" />
                 Loading your usage&hellip;
               </div>
             ) : isEmpty ? (
-              <div className="flex flex-col items-center gap-2 rounded-2xl border border-border/60 bg-panel/70 py-20 text-center">
+              <div className="app-glass app-rise flex flex-col items-center gap-2 rounded-[22px] py-20 text-center">
                 <BarChart3 className="h-7 w-7 text-muted-foreground/40" />
                 <p className="text-sm font-medium">No AI usage {range === "today" ? "today" : "in this period"}</p>
                 <p className="max-w-sm text-xs text-muted-foreground">
@@ -294,14 +305,14 @@ export function UsageInsights() {
             ) : insights ? (
               <>
                 {subscription?.isFree && insights.daysAtLimit > 0 && (
-                  <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
+                  <div className="app-rise flex flex-wrap items-center gap-3 rounded-2xl border border-[hsl(41.8_98%_70%/0.26)] bg-gradient-to-b from-[hsl(40_40%_94%/0.08)] to-[hsl(46_100%_88%/0.02)] px-4 py-3">
                     <Sparkles className="h-4 w-4 shrink-0 text-primary" />
                     <p className="min-w-0 flex-1 text-xs">
                       You hit the free plan's daily limit on {insights.daysAtLimit} {insights.daysAtLimit === 1 ? "day" : "days"} in this period.
                       Upgrading raises your daily budget, so builds don't stop part-way through the day.
                     </p>
                     <Button size="sm" className="h-7 gap-1 text-xs" onClick={() => navigate("/pricing")}>
-                      See plans <ArrowUpRight className="h-3 w-3" />
+                      See plans <ArrowUpRight className="h-3 w-3 transition-colors [button:hover>&]:text-yellow-400" />
                     </Button>
                   </div>
                 )}
@@ -352,10 +363,10 @@ export function UsageInsights() {
                       {showLimitLine && (
                         <ReferenceLine
                           y={insights.dailyLimit}
-                          stroke="hsl(0 72% 60%)"
+                          stroke="hsl(346 72% 60%)"
                           strokeDasharray="5 4"
                           strokeOpacity={0.8}
-                          label={{ value: "Daily limit", position: "insideTopRight", fontSize: 10, fill: "hsl(0 72% 65%)" }}
+                          label={{ value: "Daily limit", position: "insideTopRight", fontSize: 10, fill: "hsl(346 72% 65%)" }}
                         />
                       )}
                       {inUse.map((feature, index) => (
@@ -384,13 +395,13 @@ export function UsageInsights() {
                 <div className="grid gap-4 lg:grid-cols-3">
                   <Section title="Input vs output" description="Output is what the AI writes - long builds and walkthroughs spend most of it.">
                     <p className="font-display text-2xl font-semibold tabular-nums">{formatShare(split)} <span className="text-sm font-normal text-muted-foreground">output</span></p>
-                    <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-muted/50">
-                      <div style={{ width: `${(1 - split) * 100}%`, background: "hsl(199 80% 58%)" }} />
-                      <div style={{ width: `${split * 100}%`, background: "hsl(22 90% 55%)" }} />
+                    <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-white/[0.07]">
+                      <div style={{ width: `${(1 - split) * 100}%`, background: "hsl(212 90% 70%)" }} />
+                      <div style={{ width: `${split * 100}%`, background: "hsl(40 100% 64%)" }} />
                     </div>
                     <dl className="mt-3 space-y-1.5 text-xs">
-                      <div className="flex justify-between"><dt className="flex items-center gap-1.5 text-muted-foreground"><span className="h-2 w-2 rounded-sm" style={{ background: "hsl(199 80% 58%)" }} />Input (your messages, files read)</dt><dd className="tabular-nums">{formatTokens(insights.totals.inputTokens)}</dd></div>
-                      <div className="flex justify-between"><dt className="flex items-center gap-1.5 text-muted-foreground"><span className="h-2 w-2 rounded-sm" style={{ background: "hsl(22 90% 55%)" }} />Output (code and replies)</dt><dd className="tabular-nums">{formatTokens(insights.totals.outputTokens)}</dd></div>
+                      <div className="flex justify-between"><dt className="flex items-center gap-1.5 text-muted-foreground"><span className="h-2 w-2 rounded-sm" style={{ background: "hsl(212 90% 70%)" }} />Input (your messages, files read)</dt><dd className="tabular-nums">{formatTokens(insights.totals.inputTokens)}</dd></div>
+                      <div className="flex justify-between"><dt className="flex items-center gap-1.5 text-muted-foreground"><span className="h-2 w-2 rounded-sm" style={{ background: "hsl(40 100% 64%)" }} />Output (code and replies)</dt><dd className="tabular-nums">{formatTokens(insights.totals.outputTokens)}</dd></div>
                     </dl>
                   </Section>
 
@@ -404,7 +415,7 @@ export function UsageInsights() {
                           value={entry.totalTokens}
                           share={entry.share}
                           max={maxFeature}
-                          color={FEATURES[entry.feature]?.color ?? "hsl(220 8% 48%)"}
+                          color={FEATURES[entry.feature]?.color ?? "hsl(30 6% 48%)"}
                         />
                       ))}
                     </div>
@@ -423,7 +434,7 @@ export function UsageInsights() {
                             value={entry.totalTokens}
                             share={entry.share}
                             max={maxProject}
-                            color="hsl(22 90% 55%)"
+                            color="hsl(40 100% 64%)"
                             onClick={entry.deleted ? undefined : () => navigate(`/projects/${entry.projectId}`)}
                           />
                         ))}
@@ -445,7 +456,7 @@ export function UsageInsights() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[560px] text-xs">
                     <thead>
-                      <tr className="border-b border-border/60 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                      <tr className="border-b border-border/60 text-left app-label">
                         <th className="py-2 pr-3 font-medium">When</th>
                         <th className="py-2 pr-3 font-medium">Feature</th>
                         <th className="py-2 pr-3 font-medium">Project</th>
@@ -481,7 +492,7 @@ export function UsageInsights() {
               {eventsQuery.data?.hasMore && (
                 <div className="mt-3 flex justify-center">
                   <Button variant="ghost" size="sm" disabled={eventsQuery.isFetching} onClick={() => setPage((current) => current + 1)}>
-                    {eventsQuery.isFetching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {eventsQuery.isFetching && <OrbitSpinner className="h-3.5 w-3.5" />}
                     Load more
                   </Button>
                 </div>
@@ -491,7 +502,7 @@ export function UsageInsights() {
         </main>
       </div>
 
-      <AppSidebar sidebar={sidebar} />
+      <AppSidebar sidebar={sidebar} inset />
     </div>
   );
 }

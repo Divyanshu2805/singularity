@@ -8,8 +8,8 @@
  * moment it is clicked: this one has to stay open while the request runs and show an error in place if the payment
  * provider refuses, a declined card on an upgrade most likely.
  */
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -78,7 +78,7 @@ export function PlanChangeDialog({ current, target, onClose }: {
             disabled={isWorking}
             className={cn(copy.destructive && buttonVariants({ variant: "destructive" }))}
           >
-            {isWorking && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {isWorking && <OrbitSpinner className="h-3.5 w-3.5" />}
             {copy.confirmLabel}
           </Button>
         </AlertDialogFooter>
