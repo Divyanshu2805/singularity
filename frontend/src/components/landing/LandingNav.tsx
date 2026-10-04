@@ -19,7 +19,7 @@
  * left to right. The page passes the links, so the pill names whatever sections that page has; the list must be a
  * constant, since the section spy is rebuilt whenever it changes.
  *
- * This is the pill the first landing page (pages/Landing.tsx) carries, moved out to a file of its own for the home
+ * This is the pill the first landing page (since removed) carried, moved out to a file of its own for the home
  * page that replaces it. "Sign in" is the one addition: the first page had only "Start building", which sent a
  * returning visitor and a new one to the same place.
  *

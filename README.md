@@ -96,7 +96,7 @@ Open <http://localhost:5173>. The full guide, including live previews and troubl
 
 ```bash
 ./mvnw test                  # backend: 452 tests across all modules
-cd frontend && npm test      # frontend: 417 tests
+cd frontend && npm test      # frontend: 377 tests
 cd proxy && node --test      # preview proxy
 ```
 
