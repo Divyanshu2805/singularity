@@ -79,7 +79,6 @@ describe("projectChatStore file content during a response", () => {
 
     act(() => stream.onFile("src/components/TodoItem.tsx", "export function TodoItem() {\n  return null;", false));
     expect(resolve(result.current, "src/components/TodoItem.tsx")).toBe("export function TodoItem() {\n  return null;");
-    expect(result.current.streamingFilePath).toBe("src/components/TodoItem.tsx");
   });
 
   it("has content for a file the moment its tag opens, before any body has arrived", () => {
@@ -100,7 +99,6 @@ describe("projectChatStore file content during a response", () => {
     expect(result.current.streamingFiles.has("src/App.tsx")).toBe(false);
     expect(result.current.completedFiles.get("src/App.tsx")).toBe("export default App;");
     expect(resolve(result.current, "src/App.tsx")).toBe("export default App;");
-    expect(result.current.streamingFilePath).toBeNull();
     expect(result.current.lastTurnFiles).toEqual(["src/App.tsx"]);
   });
 

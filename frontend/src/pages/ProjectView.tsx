@@ -6,21 +6,38 @@
  *
  * This is the heaviest page in the app - it pulls in the editor - which is why it is loaded on demand rather than
  * with the shell.
+ *
+ * It is laid out the way the dashboard is, after Lovable: the docked sidebar (inset) stands on the plain surround
+ * (index.css, .ws-shell), the header and every pane on a near-black stage beside it (.ws-stage), and each pane - the chat, the preview, and inside the code view the file
+ * tree, the editor and the code lens - is its own rounded window (.ws-window) parted from the next by a narrow gap
+ * that is also its resize handle (ui/resizable's ResizableGutter). The root carries .dash-night, so the page reads in
+ * the dashboard's Inter and brighter text with unblurred glass. There is no sky here any more: every pane is opaque,
+ * so the starfield it used to draw once showed nowhere but behind the header, and the blurred glass header over it is
+ * gone with it. The windows step up from the surround in tone (index.css, the workspace section): they were once
+ * darker than the surround they stood on and all but vanished into it, so the owner asked for every area to be told
+ * apart - the surround is now the darkest thing on screen, each window lifted off it, its top band lighter again.
+ *
+ * Every button and row answers hover and selection with the app's one highlight (the Build/Teach menu's gold wash,
+ * index.css's --hl-* variables): the header's icon buttons are .icon-btn (a round wash, red for delete), and the
+ * Preview/Code switch is a sunken track whose chip (.seg-pill) is the selected wash, sliding between the two. Each
+ * header icon also answers the pointer with a motion that suits it (.icon-pop, through HeaderIconButton's motion): the
+ * pin tilts, the star turns, the download arrow drops, the fork leans.
  */
-import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ClipboardCopy, CodeXml, Download, Eye, FileDown, GitFork, Loader2, Pin, Star, Trash2, type LucideIcon } from "lucide-react";
+import { Check, ClipboardCopy, CodeXml, Download, Eye, FileDown, GitFork, Pin, Star, Trash2, type LucideIcon } from "lucide-react";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { ForkProjectDialog } from "@/components/ForkProjectDialog";
 import { canForkProject } from "@/lib/project-fork";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import { ResizablePanelGroup, ResizablePanel, ResizableGutter } from "@/components/ui/resizable";
 import { ChatPanel } from "@/components/ChatPanel";
 import { CodePanel, type OpenFileRequest } from "@/components/CodePanel";
 import { PreviewPanel } from "@/components/PreviewPanel";
 import { useProjectPreview } from "@/hooks/use-preview";
 import { changedDependencies } from "@/lib/preview";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,32 +79,28 @@ const VIEW_OPTIONS: { mode: ViewMode; label: string; Icon: LucideIcon }[] = [
 const CHAT_PANEL_PERCENT = { sidebarCollapsed: 45, sidebarPinned: 44 };
 const CHAT_PANEL_PERCENT_WITH_NOTES = 28;
 
-function HeaderIconButton({ label, onClick, disabled, destructive, active, children }: {
+function HeaderIconButton({ label, onClick, disabled, destructive, star, motion = "scale(1.14)", children }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
   destructive?: boolean;
-  active?: boolean;
+  star?: boolean;
+  motion?: string;
   children: ReactNode;
 }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
+        <button
+          type="button"
           aria-label={label}
-          aria-pressed={active}
           onClick={onClick}
           disabled={disabled}
-          className={cn(
-            "h-8 w-8 text-muted-foreground [&_svg]:size-4",
-            destructive ? "hover:bg-destructive/15 hover:text-destructive" : "hover:text-primary",
-            active && "bg-primary/10 text-primary"
-          )}
+          style={{ "--icon-hover": motion } as CSSProperties}
+          className={cn("icon-btn group h-8 w-8 [&_svg]:size-4", destructive && "icon-btn-danger", star && "icon-btn-star")}
         >
           {children}
-        </Button>
+        </button>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="px-2 py-1 text-xs">{label}</TooltipContent>
     </Tooltip>
@@ -411,7 +424,7 @@ Please analyze this error and fix the code to resolve it.`;
     if (!projectId) return;
     setIsDownloading(true);
     try {
-      const blob = await api.downloadProjectZip(projectId);
+      const { blob, missingFileCount } = await api.downloadProjectZip(projectId);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -420,6 +433,13 @@ Please analyze this error and fix the code to resolve it.`;
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      if (missingFileCount > 0) {
+        toast({
+          title: "Download incomplete",
+          description: `${missingFileCount} file${missingFileCount === 1 ? "" : "s"} couldn't be included - storage didn't have ${missingFileCount === 1 ? "it" : "them"}.`,
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       console.error("Failed to download:", error);
       toast({
@@ -451,13 +471,12 @@ Please analyze this error and fix the code to resolve it.`;
           streamingFiles={chat.streamingFiles}
           diffBaselines={chat.diffBaselines}
           isStreaming={chat.isStreaming}
-          streamingFilePath={chat.streamingFilePath}
           lastTurnFiles={chat.lastTurnFiles}
           openFileRequest={openFileRequest}
           onDiffViewed={handleDiffViewed}
         />
       </div>
-      <div className={cn("absolute inset-0", viewMode !== "preview" && "hidden")}>
+      <div className={cn("ws-window absolute inset-0", viewMode !== "preview" && "hidden")}>
         <PreviewPanel
           projectId={projectId}
           isVisible={viewMode === "preview"}
@@ -475,11 +494,11 @@ Please analyze this error and fix the code to resolve it.`;
   );
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-background">
+    <div className="dash-night ws-shell relative flex h-screen overflow-hidden">
       <SidebarSpacer sidebar={sidebar} />
 
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="grid h-12 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b border-border/60 bg-panel px-2">
+      <div className="ws-stage relative flex min-w-0 flex-1 flex-col">
+        <header className="relative z-10 grid h-12 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-2">
           <div className="flex min-w-0 items-center">
             {project ? (
               <div className="flex min-w-0 items-center gap-1 pl-1">
@@ -488,16 +507,17 @@ Please analyze this error and fix the code to resolve it.`;
                 <div className="ml-1 flex shrink-0 items-center">
                   <HeaderIconButton
                     label={projectSummary?.pinnedAt ? "Unpin project" : "Pin project"}
-                    active={!!projectSummary?.pinnedAt}
+                    motion="rotate(-22deg) scale(1.12)"
                     disabled={!projectSummary}
                     onClick={() => projectSummary && preferences.togglePin(projectSummary)}
                   >
-                    <Pin className={cn(projectSummary?.pinnedAt && "fill-current")} />
+                    <Pin className={cn(projectSummary?.pinnedAt && "pin-active")} />
                   </HeaderIconButton>
 
                   <HeaderIconButton
                     label={projectSummary?.starredAt ? "Remove star" : "Star project"}
-                    active={!!projectSummary?.starredAt}
+                    star
+                    motion="rotate(72deg) scale(1.18)"
                     disabled={!projectSummary}
                     onClick={() => projectSummary && preferences.toggleStar(projectSummary)}
                   >
@@ -506,15 +526,15 @@ Please analyze this error and fix the code to resolve it.`;
                 </div>
               </div>
             ) : (
-              <div className="ml-2 h-4 w-28 animate-pulse rounded bg-muted" />
+              <div className="app-skeleton ml-2 h-4 w-28 rounded" />
             )}
           </div>
 
-          <div role="tablist" aria-label="View" className="relative grid grid-cols-2 rounded-lg border border-border/60 bg-background/60 p-0.5">
+          <div role="tablist" aria-label="View" className="app-track relative grid grid-cols-2 p-0.5">
             <span
               aria-hidden="true"
               className={cn(
-                "absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-md border border-primary/40 bg-primary/15 shadow-sm transition-transform duration-200 ease-out",
+                "seg-pill absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] transition-transform duration-[650ms] ease-[cubic-bezier(0.34,1.35,0.64,1)] motion-reduce:transition-none",
                 viewMode === "code" && "translate-x-full"
               )}
             />
@@ -526,8 +546,8 @@ Please analyze this error and fix the code to resolve it.`;
                 aria-selected={viewMode === mode}
                 onClick={() => setViewMode(mode)}
                 className={cn(
-                  "relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  viewMode === mode ? "text-primary" : "text-muted-foreground hover:text-primary"
+                  "relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  viewMode === mode ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 <Icon className={cn("h-3.5 w-3.5 transition-colors", viewMode === mode && "text-primary")} />
@@ -551,6 +571,7 @@ Please analyze this error and fix the code to resolve it.`;
               <>
                 <HeaderIconButton
                   label={copiedChat ? "Copied" : "Copy as markdown"}
+                  motion="scale(1.08)"
                   onClick={() => void handleCopyChat()}
                   disabled={!hasChatToExport}
                 >
@@ -559,6 +580,7 @@ Please analyze this error and fix the code to resolve it.`;
 
                 <HeaderIconButton
                   label="Export as markdown"
+                  motion="translateY(1.5px) scale(1.08)"
                   onClick={handleExportChat}
                   disabled={!hasChatToExport}
                 >
@@ -568,33 +590,33 @@ Please analyze this error and fix the code to resolve it.`;
             )}
 
             {canForkProject(role) && (
-              <HeaderIconButton label="Fork project" onClick={() => setIsForkDialogOpen(true)} disabled={!project}>
+              <HeaderIconButton label="Fork project" motion="rotate(-14deg) scale(1.1)" onClick={() => setIsForkDialogOpen(true)} disabled={!project}>
                 <GitFork />
               </HeaderIconButton>
             )}
 
-            <HeaderIconButton label="Download ZIP" onClick={handleDownloadProject} disabled={!project || isDownloading}>
-              {isDownloading ? <Loader2 className="animate-spin" /> : <Download />}
+            <HeaderIconButton label="Download ZIP" motion="translateY(2px)" onClick={handleDownloadProject} disabled={!project || isDownloading}>
+              {isDownloading ? <OrbitSpinner /> : <Download />}
             </HeaderIconButton>
 
             {canEdit && (
-              <HeaderIconButton label={deleteText.menuLabel} destructive onClick={() => setIsDeleteDialogOpen(true)}>
+              <HeaderIconButton label={deleteText.menuLabel} destructive motion="rotate(-10deg) scale(1.1)" onClick={() => setIsDeleteDialogOpen(true)}>
                 <Trash2 />
               </HeaderIconButton>
             )}
 
-            <span aria-hidden="true" className="mx-1 h-5 w-px bg-border/70" />
+            <span aria-hidden="true" className="mx-1 h-5 w-px bg-white/[0.1]" />
 
             <ShareDialog projectId={projectId} canManageMembers={role === "OWNER"} />
           </div>
         </header>
 
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 pb-2 pr-2">
           {isViewer ? (
             workArea
           ) : (
             <ResizablePanelGroup direction="horizontal" className="h-full">
-              <ResizablePanel ref={chatPanelRef} defaultSize={chatPanelPercent} minSize={20} maxSize={65}>
+              <ResizablePanel ref={chatPanelRef} defaultSize={chatPanelPercent} minSize={20} maxSize={65} className="ws-window">
                 <ChatPanel
                   messages={chat.messages}
                   quotaBlock={quotaBlock}
@@ -617,7 +639,7 @@ Please analyze this error and fix the code to resolve it.`;
                 />
               </ResizablePanel>
 
-              <ResizableHandle className="bg-border/60 transition-colors hover:bg-primary/50 data-[resize-handle-state=drag]:bg-primary/70" />
+              <ResizableGutter />
 
               <ResizablePanel defaultSize={100 - chatPanelPercent} minSize={35}>
                 {workArea}
@@ -649,7 +671,7 @@ Please analyze this error and fix the code to resolve it.`;
         </AlertDialog>
       </div>
 
-      <AppSidebar sidebar={sidebar} currentProjectId={projectId} />
+      <AppSidebar sidebar={sidebar} currentProjectId={projectId} inset />
     </div>
   );
 }

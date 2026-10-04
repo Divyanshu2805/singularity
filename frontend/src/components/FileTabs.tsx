@@ -2,9 +2,13 @@
  * The row of open file tabs above the editor.
  *
  * Handles: selecting and closing a tab, marking the ones the last turn changed, and hosting whatever the panel wants
- * beside them.
+ * beside them. The strip is the editor window's lighter top band (index.css, .ws-bar). Tabs are rounded chips on it
+ * that take the app's one highlight (.tab-hl): the gold wash fading in under the pointer and the deeper selected
+ * wash inside a gold hairline on the open tab, as every row in the app does - a short gold bar along the open
+ * tab's top was dropped with the sidebar's edge bar. A tab's close button turns its cross a quarter as the pointer
+ * reaches it.
  */
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { getFileColor, getFileIcon, splitPath } from "@/lib/file-icons";
 import { cn } from "@/lib/utils";
@@ -27,9 +31,9 @@ export function FileTabs({ openTabs, activeTab, changedPaths, onSelectTab, onClo
   }, [activeTab]);
 
   return (
-    <div className="flex h-10 shrink-0 items-stretch border-b border-border/60 bg-background">
+    <div className="ws-bar flex h-11 shrink-0 items-stretch gap-1 px-1.5 py-1.5">
       {leading}
-      <div role="tablist" className="tabs-scroll flex min-w-0 flex-1 items-stretch overflow-x-auto overflow-y-hidden">
+      <div role="tablist" className="tabs-scroll flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto overflow-y-hidden">
         {openTabs.map((path) => {
           const isActive = path === activeTab;
           const hasChanges = changedPaths?.has(path) ?? false;
@@ -58,17 +62,10 @@ export function FileTabs({ openTabs, activeTab, changedPaths, onSelectTab, onClo
                 }
               }}
               className={cn(
-                "group relative flex min-w-0 max-w-[200px] shrink-0 cursor-pointer select-none items-center gap-2 border-r border-border/50 pl-3 pr-1.5 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/50",
-                isActive ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/40 hover:text-primary"
+                "tab-hl group relative flex min-w-0 max-w-[200px] shrink-0 cursor-pointer select-none items-center gap-2 rounded-xl pl-3 pr-1.5 text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/50",
+                isActive ? "font-medium" : "text-muted-foreground"
               )}
             >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "absolute inset-x-0 top-0 h-0.5 transition-colors",
-                  isActive ? "bg-primary" : "bg-transparent group-hover:bg-primary/50"
-                )}
-              />
               <Icon className={cn("h-3.5 w-3.5 shrink-0", getFileColor(path))} />
               <span className="truncate">{base}</span>
               <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
@@ -81,12 +78,13 @@ export function FileTabs({ openTabs, activeTab, changedPaths, onSelectTab, onClo
                 <button
                   type="button"
                   aria-label={`Close ${base}`}
+                  style={{ "--icon-hover": "scale(0.8)" } as CSSProperties}
                   onClick={(e) => {
                     e.stopPropagation();
                     onCloseTab(path);
                   }}
                   className={cn(
-                    "absolute inset-0 flex items-center justify-center rounded text-muted-foreground transition-opacity hover:bg-primary/15 hover:text-primary focus-visible:opacity-100",
+                    "icon-btn absolute inset-0 rounded-md transition-[opacity,color,background-color] focus-visible:opacity-100",
                     isActive && !hasChanges ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                   )}
                 >

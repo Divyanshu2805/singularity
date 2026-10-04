@@ -6,9 +6,13 @@
  *
  * The minimum query length keeps single letters from fanning out across every file, and the debounce exists because
  * the search reads every file from storage, so it is not free per keystroke.
+ *
+ * The query box is the app's matte well (index.css, .app-field), showing the app's comet while it searches, and a
+ * hit's row takes the app's row highlight under the pointer (.hl-row).
  */
-import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search, X } from "lucide-react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Search, X } from "lucide-react";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { api } from "@/lib/api";
 import { getFileColor, getFileIcon, splitPath } from "@/lib/file-icons";
 import type { CodeSearchResponse } from "@/lib/types";
@@ -80,10 +84,10 @@ export function CodeSearchPanel({ projectId, query, onQueryChange, onOpenMatch, 
       <form
         role="search"
         onSubmit={(e) => e.preventDefault()}
-        className="shrink-0 border-b border-border/50 px-2 py-2"
+        className="shrink-0 border-b border-white/[0.08] px-2 py-2"
       >
-        <div className="flex h-7 items-center gap-1.5 rounded-md border border-border/80 bg-background/60 px-2 transition-colors focus-within:border-primary/50">
-          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <div className="app-field group flex h-8 items-center gap-1.5 rounded-lg px-2">
+          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-colors group-focus-within:text-primary" />
           <input
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
@@ -96,23 +100,24 @@ export function CodeSearchPanel({ projectId, query, onQueryChange, onOpenMatch, 
             }}
             placeholder="Find in files…"
             aria-label="Search code in this project"
-            className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground caret-primary outline-none placeholder:text-muted-foreground/70"
+            className="min-w-0 flex-1 bg-transparent text-[12.5px] text-foreground caret-primary outline-none placeholder:text-muted-foreground"
           />
           {isSearching ? (
-            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
+            <OrbitSpinner className="h-3.5 w-3.5" />
           ) : query ? (
             <button
               type="button"
               aria-label="Clear search"
               onClick={() => onQueryChange("")}
-              className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-primary"
+              style={{ "--icon-hover": "scale(0.8)" } as CSSProperties}
+              className="icon-btn h-5 w-5 rounded-md"
             >
               <X className="h-3 w-3" />
             </button>
           ) : null}
         </div>
         {hasQuery && summary && (
-          <p className="px-0.5 pt-1.5 text-[10px] text-muted-foreground">
+          <p className="px-0.5 pt-1.5 text-[10.5px] text-muted-foreground">
             {summary}
             {results?.truncated && " · refine to see the rest"}
             {unavailableCount > 0 &&
@@ -138,12 +143,12 @@ export function CodeSearchPanel({ projectId, query, onQueryChange, onOpenMatch, 
                   title={file.path}
                   className={cn(
                     "flex items-center gap-1.5 px-2 py-1 text-[11px]",
-                    file.path === activePath ? "text-primary" : "text-foreground/80"
+                    file.path === activePath ? "text-foreground" : "text-foreground/80"
                   )}
                 >
                   <Icon className={cn("h-3 w-3 shrink-0", getFileColor(file.path))} />
                   <span className="truncate font-medium">{base}</span>
-                  <span className="truncate text-muted-foreground/70">{dir}</span>
+                  <span className="truncate text-muted-foreground">{dir}</span>
                   <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
                     {file.matches.length}
                     {file.truncated && "+"}
@@ -156,14 +161,14 @@ export function CodeSearchPanel({ projectId, query, onQueryChange, onOpenMatch, 
                         type="button"
                         onClick={() => onOpenMatch(file.path, match.line, match.text)}
                         title={`${file.path}:${match.line}`}
-                        className="group flex w-full items-baseline gap-2 px-2 py-0.5 pl-6 text-left transition-colors hover:bg-primary/10"
+                        className="hl-row group flex w-full items-baseline gap-2 rounded-md px-2 py-0.5 pl-6 text-left focus-visible:outline-none"
                       >
-                        <span className="w-7 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground/60">
+                        <span className="w-7 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground/80">
                           {match.line}
                         </span>
                         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground group-hover:text-foreground">
                           {match.text.slice(0, match.column)}
-                          <mark className="rounded-sm bg-primary/25 px-px text-foreground">
+                          <mark className="rounded-sm bg-primary/30 px-px text-white">
                             {match.text.slice(match.column, match.column + match.length)}
                           </mark>
                           {match.text.slice(match.column + match.length)}

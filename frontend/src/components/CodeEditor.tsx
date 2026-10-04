@@ -8,6 +8,9 @@
  * The highlight is applied through an editor state field defined outside this component, so that logic can be tested
  * against a real editor state - the dispatch here is scheduled inside an animation frame, which never runs in a
  * hidden tab.
+ *
+ * The selection's menu is the app's matte menu - Explain as a small primary button, Ask beside it - and the empty
+ * and loading states use the app's quiet tile and comet.
  */
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
@@ -17,8 +20,9 @@ import { css } from '@codemirror/lang-css';
 import { unifiedMergeView } from '@codemirror/merge';
 import { StateEffect } from '@codemirror/state';
 
-import { FileCode, Loader2, MessagesSquare, Sparkles } from "lucide-react";
-import { singularityTheme, diffViewTheme, referencedLineTheme } from '@/lib/editor-theme';
+import { FileCode, MessagesSquare, Sparkles } from "lucide-react";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
+import { singularityTheme, diffViewTheme, editorReadabilityTheme, referencedLineTheme } from '@/lib/editor-theme';
 import { findCodeLine, type CodeTarget } from '@/lib/lesson';
 import { referencedLineField, setReferencedLines } from '@/lib/referenced-lines';
 import type { CodeSelection } from '@/lib/types';
@@ -94,7 +98,7 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
           diffViewTheme,
         ]
       : [];
-    return [EditorView.lineWrapping, referencedLineField, referencedLineTheme, ...languageExtensionsFor(filePath), ...diffExtensions];
+    return [EditorView.lineWrapping, editorReadabilityTheme, referencedLineField, referencedLineTheme, ...languageExtensionsFor(filePath), ...diffExtensions];
   }, [filePath, diffOriginal]);
 
   const selectionHandlerRef = useRef(onSelectionAction);
@@ -180,24 +184,26 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center bg-panel">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div className="flex h-full items-center justify-center">
+        <OrbitSpinner className="h-6 w-6" label="Loading the file" />
       </div>
     );
   }
 
   if (!filePath) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 bg-panel p-8 text-center">
-        <FileCode className="h-8 w-8 text-muted-foreground/40" />
+      <div className="chat-enter flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.03]">
+          <FileCode className="h-5 w-5 text-muted-foreground" />
+        </span>
         <p className="text-sm text-muted-foreground">Select a file to view its code</p>
       </div>
     );
   }
 
   const lineLabel = selection && (selection.startLine === selection.endLine
-    ? `line ${selection.startLine}`
-    : `lines ${selection.startLine}-${selection.endLine}`);
+    ? `Line ${selection.startLine}`
+    : `Lines ${selection.startLine}–${selection.endLine}`);
 
   return (
     <div ref={wrapperRef} className="relative h-full w-full overflow-hidden">
@@ -209,31 +215,28 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
         extensions={extensions}
         basicSetup={BASIC_SETUP}
         onCreateEditor={setView}
-        className="text-sm h-full"
+        className="h-full"
       />
 
       {selection && anchor && onSelectionAction && (
         <div
           onMouseDown={(e) => e.preventDefault()}
           style={{ top: anchor.top, left: anchor.left, transform: anchor.below ? undefined : "translateY(-100%)" }}
-          className="absolute z-20 flex items-center gap-0.5 rounded-lg border border-border/80 bg-popover/95 p-1 shadow-xl shadow-black/40 backdrop-blur animate-in fade-in-0 zoom-in-95 duration-100"
+          className="app-menu app-menu-raised absolute z-20 flex items-center gap-1.5 rounded-full border p-1 pl-3.5 animate-in fade-in-0 zoom-in-95 duration-200"
         >
-          <span className="px-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-            {lineLabel}
-          </span>
-          <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-border/70" />
+          <span className="mr-1 font-mono text-[10.5px] uppercase tracking-[0.16em] text-[hsl(40_31.5%_88%/0.7)]">{lineLabel}</span>
           <button
             type="button"
             onClick={() => onSelectionAction(selection, "explain")}
-            className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-primary/15 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
+            className="btn btn-primary flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35"
           >
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <Sparkles className="h-3.5 w-3.5" />
             Explain
           </button>
           <button
             type="button"
             onClick={() => onSelectionAction(selection, "ask")}
-            className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/15 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
+            className="btn btn-glass flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold text-foreground/90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35"
           >
             <MessagesSquare className="h-3.5 w-3.5" />
             Ask

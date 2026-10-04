@@ -33,7 +33,6 @@ export interface ProjectChatState {
     isHistoryLoaded: boolean;
     historyError: string | null;
     isStreaming: boolean;
-    streamingFilePath: string | null;
     streamingFiles: ReadonlyMap<string, string>;
     completedFiles: ReadonlyMap<string, string>;
     deletedFiles: ReadonlySet<string>;
@@ -50,7 +49,6 @@ const INITIAL_STATE: ProjectChatState = {
     isHistoryLoaded: false,
     historyError: null,
     isStreaming: false,
-    streamingFilePath: null,
     streamingFiles: EMPTY_FILES,
     completedFiles: EMPTY_FILES,
     deletedFiles: new Set<string>(),
@@ -307,7 +305,6 @@ function followTurn(
             if (!isComplete) {
                 captureBaseline(path);
                 update(projectId, (state) => ({
-                    streamingFilePath: path,
                     streamingFiles: new Map(state.streamingFiles).set(path, fileContent),
                 }));
                 return;
@@ -324,7 +321,6 @@ function followTurn(
                     deletedFiles,
                     completedFiles: new Map(state.completedFiles).set(path, fileContent),
                     streamingFiles,
-                    streamingFilePath: state.streamingFilePath === path ? null : state.streamingFilePath,
                     lastTurnFiles: [...turnFiles],
                     messages: updateMessage(state.messages, aiMessageId, () => ({ editedFiles: [...turnFiles] })),
                 };
@@ -342,7 +338,6 @@ function followTurn(
                 unfinished = unfinishedStepCount(answer?.content ?? "", turnFiles);
                 return {
                     isStreaming: false,
-                    streamingFilePath: null,
                     streamingFiles: EMPTY_FILES,
                     hasUnsavedTurn: true,
                     messages: updateMessage(state.messages, aiMessageId, () => ({
@@ -369,7 +364,6 @@ function followTurn(
             if (error instanceof ApiRequestError && error.status === 409) {
                 update(projectId, (state) => ({
                     isStreaming: false,
-                    streamingFilePath: null,
                     streamingFiles: EMPTY_FILES,
                     // This turn was never accepted by the server at all - unlike every other error path, its
                     // optimistic placeholder pair is removed rather than kept-with-an-error, so it doesn't
@@ -393,7 +387,6 @@ function followTurn(
             }
             update(projectId, (state) => ({
                 isStreaming: false,
-                streamingFilePath: null,
                 streamingFiles: EMPTY_FILES,
                 messages: updateMessage(state.messages, aiMessageId, () => ({
                     isStreaming: false,
@@ -405,7 +398,7 @@ function followTurn(
         },
         onGone: () => {
             cancelStreams.delete(projectId);
-            update(projectId, () => ({ isStreaming: false, streamingFilePath: null, streamingFiles: EMPTY_FILES }));
+            update(projectId, () => ({ isStreaming: false, streamingFiles: EMPTY_FILES }));
             void projectChat.loadHistory(projectId);
         },
     });
@@ -500,7 +493,6 @@ export const projectChat = {
             hasUnsavedTurn: false,
             isStreaming: true,
             lastSentMessage: active.userMessage,
-            streamingFilePath: null,
             streamingFiles: EMPTY_FILES,
             lastTurnFiles: [],
         }));
@@ -534,7 +526,6 @@ export const projectChat = {
             ],
             isStreaming: true,
             lastSentMessage: content,
-            streamingFilePath: null,
             streamingFiles: EMPTY_FILES,
             diffBaselines: EMPTY_FILES,
             lastTurnFiles: [],
@@ -563,7 +554,6 @@ export const projectChat = {
 
         update(projectId, (state) => ({
             isStreaming: false,
-            streamingFilePath: null,
             streamingFiles: EMPTY_FILES,
             messages: state.messages.map((message, index) =>
                 index === state.messages.length - 1 && message.role === "assistant"
