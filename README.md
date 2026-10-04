@@ -22,7 +22,7 @@
 
 ---
 
-VibeCraft is an AI-assisted project builder. You type a one-line idea; a short, AI-written interview turns it into a spec; an AI chat writes the project file by file while a checklist ticks off each step; and a live preview runs the result in its own Kubernetes pod as it's being built. Teammates collaborate with owner, editor and viewer roles, and usage is metered against plans billed through Stripe.
+Singularity is an AI-assisted project builder. You type a one-line idea; a short, AI-written interview turns it into a spec; an AI chat writes the project file by file while a checklist ticks off each step; and a live preview runs the result in its own Kubernetes pod as it's being built. Teammates collaborate with owner, editor and viewer roles, and usage is metered against plans billed through Stripe.
 
 **Live demo:** <https://vibecraft.divyanshuagrahari.dev> — sign in with Google or email. Payments run in Stripe test mode; use card `4242 4242 4242 4242`.
 
@@ -47,7 +47,7 @@ VibeCraft is an AI-assisted project builder. You type a one-line idea; a short, 
 
 ## Architecture
 
-![VibeCraft system architecture](docs/assets/diagrams/system-architecture.png)
+![Singularity system architecture](docs/assets/diagrams/system-architecture.png)
 
 A Spring Cloud Gateway routes each URL to one of three domain services, each with its own database. Services find each other through Eureka and call each other over a private, secret-authenticated internal API. Sign-in is Firebase-only; each service verifies the session itself. **Generated code runs only inside isolated preview pods**, never in the backend.
 
@@ -96,7 +96,7 @@ Open <http://localhost:5173>. The full guide, including live previews and troubl
 
 ```bash
 ./mvnw test                  # backend: 452 tests across all modules
-cd frontend && npm test      # frontend: 298 tests
+cd frontend && npm test      # frontend: 417 tests
 cd proxy && node --test      # preview proxy
 ```
 
@@ -148,7 +148,7 @@ The full index is at [`docs/`](docs/README.md).
 
 ## Project history
 
-VibeCraft began as a single Spring Boot application and was split into the current services in stages; the original monolith was then removed ([ADR 0001](docs/architecture/decisions/0001-microservices-with-database-per-service.md)). Both are preserved in git history:
+Singularity began as a single Spring Boot application and was split into the current services in stages; the original monolith was then removed ([ADR 0001](docs/architecture/decisions/0001-microservices-with-database-per-service.md)). Both are preserved in git history:
 
 | To see | Command |
 |---|---|

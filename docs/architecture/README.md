@@ -1,6 +1,6 @@
 # Architecture
 
-How VibeCraft is put together: the services and what each one owns, how they talk to each other, how the important requests flow end to end, and the decisions behind the shape of it all.
+How Singularity is put together: the services and what each one owns, how they talk to each other, how the important requests flow end to end, and the decisions behind the shape of it all.
 
 If you are new to the codebase, read these in order:
 

@@ -4,37 +4,67 @@
     {
       "name": "discovery-service",
       "runtimeExecutable": ".\\mvnw.cmd",
-      "runtimeArgs": ["-pl", "discovery-service", "spring-boot:run"],
+      "runtimeArgs": [
+        "-pl",
+        "discovery-service",
+        "spring-boot:run",
+        "-Dspring-boot.run.jvmArguments=-Dmanagement.server.port=9401"
+      ],
       "port": 8761
     },
     {
       "name": "gateway-service",
       "runtimeExecutable": ".\\mvnw.cmd",
-      "runtimeArgs": ["-pl", "gateway-service", "spring-boot:run"],
+      "runtimeArgs": [
+        "-pl",
+        "gateway-service",
+        "spring-boot:run",
+        "-Dspring-boot.run.jvmArguments=-Dmanagement.server.port=9402"
+      ],
       "port": 8000
     },
     {
       "name": "account-service",
       "runtimeExecutable": ".\\mvnw.cmd",
-      "runtimeArgs": ["-pl", "account-service", "spring-boot:run"],
+      "runtimeArgs": [
+        "-pl",
+        "account-service",
+        "spring-boot:run",
+        "-Dspring-boot.run.jvmArguments=-Dmanagement.server.port=9403"
+      ],
       "port": 8081
     },
     {
       "name": "workspace-service",
       "runtimeExecutable": ".\\mvnw.cmd",
-      "runtimeArgs": ["-pl", "workspace-service", "spring-boot:run"],
+      "runtimeArgs": [
+        "-pl",
+        "workspace-service",
+        "spring-boot:run",
+        "-Dspring-boot.run.jvmArguments=-Dmanagement.server.port=9405"
+      ],
       "port": 8082
     },
     {
       "name": "intelligence-service",
       "runtimeExecutable": ".\\mvnw.cmd",
-      "runtimeArgs": ["-pl", "intelligence-service", "spring-boot:run"],
+      "runtimeArgs": [
+        "-pl",
+        "intelligence-service",
+        "spring-boot:run",
+        "-Dspring-boot.run.jvmArguments=-Dmanagement.server.port=9406"
+      ],
       "port": 8083
     },
     {
       "name": "singularity-frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev"
+      ],
       "port": 5173,
       "autoPort": true
     }

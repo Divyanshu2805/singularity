@@ -20,7 +20,7 @@ Run from `frontend/`.
 |---|---|
 | `npm run dev` | Development server on port 5173 |
 | `npm test` | Run the test suite once (`npm run test:watch` to watch) |
-| `npx tsc --noEmit` | Type-check only |
+| `npx tsc --noEmit -p tsconfig.app.json` | Type-check only |
 | `npm run lint` | ESLint |
 | `npm run build` | Production build |
 

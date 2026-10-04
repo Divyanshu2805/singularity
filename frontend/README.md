@@ -1,6 +1,6 @@
-# VibeCraft Frontend
+# Singularity Frontend
 
-The React single-page app for VibeCraft: sign-in, the project dashboard, the build chat with its live checklist, the code editor and diff view, live previews, code insight, billing and usage.
+The React single-page app for Singularity: sign-in, the project dashboard, the build chat with its live checklist, the code editor and diff view, live previews, code insight, billing and usage.
 
 ## Stack
 
@@ -26,7 +26,7 @@ In development, Vite proxies `/api` to the Gateway on `http://localhost:8000`, s
 | `npm test` | Run the test suite once |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run lint` | ESLint |
-| `npm run build` | Production build (type-check separately with `npx tsc --noEmit`) |
+| `npm run build` | Production build (type-check separately with `npx tsc --noEmit -p tsconfig.app.json`) |
 | `npm run preview` | Serve the production build locally |
 
 ## Configuration

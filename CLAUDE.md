@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository. It exists so an agent 
 
 ## Project overview
 
-VibeCraft is an AI-assisted project builder: a user describes an idea, answers a short AI-written interview, and gets a real project built through an AI chat — generated files are published to object storage as atomic revisions, a Kubernetes-backed live preview runs the result, and collaborators work together with per-project roles. Billing runs on Stripe with enforced daily-token, project and preview limits.
+Singularity is an AI-assisted project builder: a user describes an idea, answers a short AI-written interview, and gets a real project built through an AI chat — generated files are published to object storage as atomic revisions, a Kubernetes-backed live preview runs the result, and collaborators work together with per-project roles. Billing runs on Stripe with enforced daily-token, project and preview limits.
 
 - **Two codebases, one repository:** a Spring Boot 4.1 (Java 25) backend and a React 18 + TypeScript SPA in `frontend/`. Several features (the streaming chat, sign-out data isolation, the live-preview panel) span both.
 - **The backend is a set of microservices** in a multi-module Maven reactor: a Gateway in front of `account-service`, `workspace-service` and `intelligence-service`, each with its own database, plus `common-lib` and `discovery-service`. Don't assume which service owns a class, endpoint or table — check the docs below.
@@ -41,7 +41,7 @@ gateway-service/        Spring Cloud Gateway — the browser's single origin. Or
 account-service/        users, plans, subscriptions, Stripe, sessions and their audit trail
 workspace-service/      projects, members, files, file revisions, the live-preview pipeline
 intelligence-service/   AI generation, code insight, idea clarifier, usage metering
-  inside each service (com.vibecraft.<service>): entity/ enums/ repository/ mapper/ service/ service/impl/
+  inside each service (com.singularity.<service>): entity/ enums/ repository/ mapper/ service/ service/impl/
   controller/ dto/ security/ feign/ config/ util/ (+ llm/ in intelligence); migrations in
   src/main/resources/db/migration/
 frontend/src/           pages/ components/ hooks/ lib/ — logic lives in lib/
@@ -62,7 +62,7 @@ docs/                   documentation — start at docs/README.md
 ./mvnw -pl <service> spring-boot:run                           # prove a change boots (see local setup for ports)
 ./mvnw test                                                    # all backend tests (452; one needs Docker)
 ./mvnw clean package                                           # build every module
-cd frontend && npx tsc --noEmit && npm run lint && npm test && npm run build
+cd frontend && npx tsc --noEmit -p tsconfig.app.json && npm run lint && npm test && npm run build
 ```
 
 On Windows, use `mvnw.cmd`. A bare `./mvnw spring-boot:run` at the root fails — the root `pom.xml` has no main class. Running all five services on one machine needs a distinct `MANAGEMENT_SERVER_PORT` per service; see [setup](docs/local-development/setup.md).

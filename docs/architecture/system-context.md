@@ -1,6 +1,6 @@
 # System Context
 
-VibeCraft is a React single-page app in front of a Spring Boot 4.1 (Java 25) backend made of three domain services, each with its own database, behind one Gateway. Live previews run outside the JVMs entirely — in Kubernetes pods behind a standalone Node proxy — because generated project code has to execute somewhere the backend itself never touches.
+Singularity is a React single-page app in front of a Spring Boot 4.1 (Java 25) backend made of three domain services, each with its own database, behind one Gateway. Live previews run outside the JVMs entirely — in Kubernetes pods behind a standalone Node proxy — because generated project code has to execute somewhere the backend itself never touches.
 
 ## Services
 
@@ -32,6 +32,6 @@ It never executes AI-generated or user-authored code anywhere except inside a li
 
 ## Diagram
 
-![VibeCraft system architecture](../assets/diagrams/system-architecture.png)
+![Singularity system architecture](../assets/diagrams/system-architecture.png)
 
 In production the same services run in-cluster on a single k3s node behind a Cloudflare tunnel; see [Deployment](../deployment/README.md) for that topology.

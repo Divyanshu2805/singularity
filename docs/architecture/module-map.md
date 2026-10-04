@@ -35,7 +35,7 @@ Every class here is contributed to the consuming services by `CommonLibAutoConfi
 
 ## Inside a domain service
 
-The three domain services share one layering. Package names are relative to `com.vibecraft.<account|workspace|intelligence>`.
+The three domain services share one layering. Package names are relative to `com.singularity.<account|workspace|intelligence>`.
 
 | Package | Owns | Must never |
 |---|---|---|

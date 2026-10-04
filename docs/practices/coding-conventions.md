@@ -34,7 +34,7 @@ Throw, or let propagate, an existing typed exception from `common-lib`'s `error`
 ### Configuration
 
 - Every secret is a bare `${ENV_VAR}` placeholder in `application.yaml` with **no default**. A missing value must fail startup, never fall back to something insecure.
-- A `@Configuration`, `@Component` or `@Service` class must live under its service's component-scan root (`com.vibecraft.<service>`). A new `common-lib` class that must be a bean has to be registered in `CommonLibAutoConfiguration`.
+- A `@Configuration`, `@Component` or `@Service` class must live under its service's component-scan root (`com.singularity.<service>`). A new `common-lib` class that must be a bean has to be registered in `CommonLibAutoConfiguration`.
 
 ## Frontend
 

@@ -6,7 +6,7 @@ The platform's core loop: a user asks for something in the project chat, and fil
 
 ## Steps
 
-All paths below are under `intelligence-service/src/main/java/com/vibecraft/intelligence/`.
+All paths below are under `intelligence-service/src/main/java/com/singularity/intelligence/`.
 
 1. **`controller/ChatController.streamChat`** — the SSE endpoint. The `@PreAuthorize("@security.canEditProject(#projectId)")` gate sits on the service method.
 2. **`service/impl/AiGenerationServiceImpl.streamResponse`** — the whole pipeline lives here. It calls `UsageService.assertWithinDailyTokenBudget()` *synchronously, before building the `Flux`*, so a quota refusal is a real HTTP 402 rather than an error event inside the stream. The plan's limit comes from account-service.

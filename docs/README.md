@@ -1,6 +1,6 @@
-# VibeCraft Documentation
+# Singularity Documentation
 
-Everything about how VibeCraft is built, run and changed. Start with the section that matches what you're trying to do.
+Everything about how Singularity is built, run and changed. Start with the section that matches what you're trying to do.
 
 ## Getting started
 

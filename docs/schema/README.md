@@ -1,6 +1,6 @@
 # Data Model
 
-The entities, tables and conventions behind VibeCraft's three databases.
+The entities, tables and conventions behind Singularity's three databases.
 
 Data is split across **three PostgreSQL databases, one per service**, and each service owns its schema through Flyway migrations; Hibernate only validates it. Two consequences run through every page here:
 

@@ -1,4 +1,4 @@
-# Contributing to VibeCraft
+# Contributing to Singularity
 
 ## Before you start
 
@@ -25,7 +25,7 @@
 ./mvnw -pl <service> spring-boot:run
 
 # Frontend
-cd frontend && npx tsc --noEmit && npm run lint && npm test && npm run build
+cd frontend && npx tsc --noEmit -p tsconfig.app.json && npm run lint && npm test && npm run build
 ```
 
 The full checklist is the [definition of done](docs/practices/definition-of-done.md).

@@ -4,7 +4,7 @@
 
 ## Context
 
-VibeCraft began as a single Spring Boot application with one database. Its concerns grew along three clearly separate lines: identity and billing, projects and their live previews, and AI generation with usage metering. They change at different rates, have different external dependencies (Stripe; Kubernetes and MinIO; OpenRouter), and fail in different ways. In a single deployable, a slow AI provider or a stuck preview cluster could degrade sign-in and billing.
+Singularity began as a single Spring Boot application with one database. Its concerns grew along three clearly separate lines: identity and billing, projects and their live previews, and AI generation with usage metering. They change at different rates, have different external dependencies (Stripe; Kubernetes and MinIO; OpenRouter), and fail in different ways. In a single deployable, a slow AI provider or a stuck preview cluster could degrade sign-in and billing.
 
 ## Decision
 
