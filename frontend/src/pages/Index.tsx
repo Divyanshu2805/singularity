@@ -1,26 +1,28 @@
 /**
- * The entry route: decides where to send someone.
+ * The entry route: the landing page for visitors, the workspace for everyone signed in.
  *
- * Handles: redirecting to their projects or to sign-in, showing the mark briefly while it decides. Kept eagerly
- * loaded, since it is what the very first paint renders.
+ * Handles: sending a signed-in person straight to their projects, and showing everyone else the landing page. Kept
+ * eagerly loaded, since it is what the very first paint renders - the landing page itself is loaded on demand, so a
+ * returning user being redirected never downloads it, and the sky with the horizon mark (AppLoading) shows while it
+ * arrives, so the landing page's night is there from the first paint.
+ *
+ * The landing page is pages/Home.tsx, the content-first page. The one it replaces here (pages/Landing.tsx) is kept
+ * until Home is finished and approved, and is reachable in development at /landing-classic (App.tsx).
  */
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { AnimatedLogo } from "@/components/SingularityLogo";
+import { lazy, Suspense } from "react";
+import { Navigate } from "react-router-dom";
+import { AppLoading } from "@/components/app/AppLoading";
 import { isAuthenticated } from "@/lib/api";
 
-const Index = () => {
-  const navigate = useNavigate();
+const Landing = lazy(() => import("./Home"));
 
-  useEffect(() => {
-    navigate(isAuthenticated() ? "/projects" : "/login", { replace: true });
-  }, [navigate]);
+const Index = () => {
+  if (isAuthenticated()) return <Navigate to="/projects" replace />;
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background">
-      <AnimatedLogo />
-      <p className="mt-6 text-sm text-muted-foreground">Loading your workspace&hellip;</p>
-    </div>
+    <Suspense fallback={<AppLoading />}>
+      <Landing />
+    </Suspense>
   );
 };
 
