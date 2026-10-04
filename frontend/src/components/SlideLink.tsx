@@ -16,6 +16,7 @@ import { isAuthPath } from "@/lib/page-slide";
 
 function prefetch(to: string) {
   if (isAuthPath(to)) void import("@/pages/AuthPage");
+  else if (to === "/") void import("@/pages/Home");
 }
 
 type SlideLinkProps = Omit<LinkProps, "to"> & { to: string };

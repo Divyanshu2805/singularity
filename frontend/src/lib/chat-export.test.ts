@@ -8,7 +8,6 @@
  */
 import { describe, it, expect } from "vitest";
 import { buildChatMarkdown, buildLensMarkdown, exportFilename } from "./chat-export";
-import type { ChatMessage } from "@/components/ChatPanel";
 import { ChatEventType } from "./types";
 import type { ChatEvent, CodeSelection } from "./types";
 
