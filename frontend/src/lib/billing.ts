@@ -2,7 +2,8 @@
  * The arithmetic and wording behind every quota meter, banner and plan card.
  *
  * Handles: turning today's usage into a quota with a clamped percentage and low and exhausted flags, formatting a
- * countdown to the refill, formatting prices and token counts, deciding whether a plan is an upgrade, a downgrade,
+ * countdown to the refill, formatting prices and token counts, the feature list each plan card shows (built from the
+ * plan's own numbers) and which plan is recommended (the first paid one), deciding whether a plan is an upgrade, a downgrade,
  * the current one or a cancellation, and the copy for confirming any of those.
  *
  * Kept pure and out of the components so it can be tested without rendering: the parts that are easy to get subtly
@@ -72,6 +73,23 @@ export function cardPrice(plan: Plan): string {
     return plan.price;
   }
 }
+
+export function planFeatures(plan: Plan): string[] {
+  const projects = plan.maxProjects ?? 0;
+  const tokens = plan.maxTokensPerDay ?? 0;
+  const previews = plan.maxPreviews ?? 0;
+
+  return [
+    `${projects} ${projects === 1 ? "project" : "projects"}`,
+    `${formatTokens(tokens)} AI tokens per day`,
+    `${previews} live ${previews === 1 ? "preview" : "previews"} running at once`,
+    plan.isFree ? "Full editor, chat and ExplainLLM" : "Everything in the free plan",
+    plan.isFree ? "Teaching mode walkthroughs" : "Priority access when the AI is busy",
+  ];
+}
+
+export const isRecommended = (plan: Plan, plans: Plan[]) =>
+  !plan.isFree && plans.filter((candidate) => !candidate.isFree)[0]?.id === plan.id;
 
 export function planPriceLabel(plan: Plan): string {
   if (plan.isFree || !plan.priceAmountMinor) return plan.price;

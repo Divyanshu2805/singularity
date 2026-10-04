@@ -7,15 +7,25 @@
  * Re-authentication is asked for up front because the provider demands a recent sign-in for these changes anyway -
  * doing it first means nobody gets halfway through a change and is then refused. Device descriptions are a rough hint
  * from the user agent, not an identity.
+ *
+ * It stands on the app's night - a page a step lighter than the surround, a wash of rose, amber and gold breathing at the foot of the
+ * screen with stars above it (Nebula - the wash took the gas nebula's place) and one faint gold glow at its head; the first starfield was taken out when the
+ * owner found the app too dark to read its panels on, and stars came back when the nebula was redrawn as gas -
+ * under the shared page heading (PageHeading - a mono eyebrow, a
+ * Fraunces title with an italic gold close, its words dropping in), its panels are solid raised surfaces that rise in one
+ * after another (index.css, .app-glass, .app-rise), and anything working shows the app's comet (OrbitSpinner).
  */
+import { Nebula } from "@/components/app/Nebula";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
+import { PageHeading } from "@/components/app/PageHeading";
 import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import QRCode from "qrcode";
-import { KeyRound, Loader2, LogOut, ShieldCheck, ShieldOff, Smartphone } from "lucide-react";
+import { KeyRound, Lock, LogOut, ShieldCheck, ShieldOff, Smartphone } from "lucide-react";
 import type { MultiFactorInfo, MultiFactorResolver, TotpSecret, User } from "firebase/auth";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
-import { AuthField, AuthSubmitButton, FormAlert, GoogleButton, PasswordField } from "@/components/auth/AuthForm";
+import { AuthDialogCard, AuthDivider, AuthField, AuthSubmitButton, FormAlert, GoogleButton, PasswordField } from "@/components/auth/AuthForm";
 import { NewPasswordForm } from "@/components/auth/NewPasswordForm";
 import {
     AlertDialog,
@@ -29,7 +39,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useToast } from "@/hooks/use-toast";
 import { api, getUserInfo, isAuthenticated, loginRedirectPath, signOut } from "@/lib/api";
@@ -52,8 +62,8 @@ import type { AuthSecurityEvent, AuthSecurityEventType } from "@/lib/types";
 
 const PAGE_GLOW: CSSProperties = {
     backgroundImage: [
-        "radial-gradient(70% 45% at 50% -8%, hsl(22 90% 55% / 0.22) 0%, transparent 70%)",
-        "radial-gradient(35% 30% at 92% 0%, hsl(38 95% 60% / 0.10) 0%, transparent 70%)",
+        "radial-gradient(70% 45% at 50% -8%, hsl(40.7 99.9% 76.1% / 0.07) 0%, transparent 70%)",
+        "radial-gradient(35% 30% at 92% 0%, hsl(41.3 100% 85.6% / 0.04) 0%, transparent 70%)",
     ].join(", "),
 };
 
@@ -128,59 +138,86 @@ function ConfirmIdentityDialog({ open, onOpenChange, onConfirmed }: {
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>Confirm it's you</DialogTitle>
-                    <DialogDescription>
-                        {resolver ? "Enter the 6-digit code from your authenticator app." : `Sign in again as ${email} to change your security settings.`}
-                    </DialogDescription>
-                </DialogHeader>
-
-                {error && <FormAlert title="Not confirmed">{error}</FormAlert>}
-
-                {resolver ? (
-                    <form onSubmit={submitCode} noValidate className="space-y-4">
-                        <AuthField
-                            id="confirm-code"
-                            label="Verification code"
-                            inputMode="numeric"
-                            autoComplete="one-time-code"
-                            autoFocus
-                            maxLength={7}
-                            value={code}
-                            onChange={(e) => setCode(e.target.value.replace(/[^\d\s]/g, ""))}
-                        />
-                        <AuthSubmitButton isLoading={busy === "code"} loadingText="Verifying…">
-                            Verify
-                        </AuthSubmitButton>
-                    </form>
-                ) : (
-                    <div className="space-y-4">
-                        <GoogleButton onClick={() => void handle("google", confirmWithGoogle)} isLoading={busy === "google"} disabled={busy !== null}>
-                            Confirm with Google
-                        </GoogleButton>
-                        <form
-                            noValidate
-                            className="space-y-4"
-                            onSubmit={(e) => {
-                                e.preventDefault();
-                                if (password) void handle("password", () => confirmWithPassword(email, password));
-                            }}
-                        >
-                            <PasswordField
-                                id="confirm-password"
-                                label="Or your password"
-                                autoComplete="current-password"
-                                value={password}
-                                disabled={busy !== null}
-                                onChange={(e) => setPassword(e.target.value)}
-                            />
-                            <AuthSubmitButton isLoading={busy === "password"} loadingText="Confirming…">
-                                Confirm
-                            </AuthSubmitButton>
-                        </form>
+            <DialogContent className="dialog-pop overflow-hidden p-0 sm:max-w-[27rem]">
+                <AuthDialogCard>
+                    <div className="text-center">
+                        <span aria-hidden="true" className="auth-medallion mx-auto mb-5">
+                            <ShieldCheck className="h-5 w-5" strokeWidth={1.75} />
+                        </span>
+                        <DialogTitle className="font-display text-[26px] font-semibold leading-tight tracking-tight text-foreground">
+                            Confirm it's you
+                        </DialogTitle>
+                        <DialogDescription className="mx-auto mt-2 max-w-sm text-[14px] leading-6">
+                            {resolver ? (
+                                "Enter the 6-digit code from your authenticator app."
+                            ) : (
+                                <>
+                                    Sign in again as <span className="break-all font-medium text-foreground">{email}</span> to change your security settings.
+                                </>
+                            )}
+                        </DialogDescription>
                     </div>
-                )}
+
+                    <div className="mt-7">
+                        {error && (
+                            <div className="mb-5">
+                                <FormAlert title="Not confirmed">{error}</FormAlert>
+                            </div>
+                        )}
+
+                        {resolver ? (
+                            <form onSubmit={submitCode} noValidate>
+                                <AuthField
+                                    id="confirm-code"
+                                    label="Verification code"
+                                    icon={Smartphone}
+                                    placeholder="123 456"
+                                    inputMode="numeric"
+                                    autoComplete="one-time-code"
+                                    autoFocus
+                                    maxLength={7}
+                                    value={code}
+                                    onChange={(e) => setCode(e.target.value.replace(/[^\d\s]/g, ""))}
+                                />
+                                <div className="mt-7">
+                                    <AuthSubmitButton isLoading={busy === "code"} loadingText="Verifying…">
+                                        Verify
+                                    </AuthSubmitButton>
+                                </div>
+                            </form>
+                        ) : (
+                            <>
+                                <GoogleButton onClick={() => void handle("google", confirmWithGoogle)} isLoading={busy === "google"} disabled={busy !== null}>
+                                    Confirm with Google
+                                </GoogleButton>
+                                <AuthDivider label="or with your password" />
+                                <form
+                                    noValidate
+                                    onSubmit={(e) => {
+                                        e.preventDefault();
+                                        if (password) void handle("password", () => confirmWithPassword(email, password));
+                                    }}
+                                >
+                                    <PasswordField
+                                        id="confirm-password"
+                                        label="Password"
+                                        icon={Lock}
+                                        placeholder="Your password"
+                                        autoComplete="current-password"
+                                        value={password}
+                                        disabled={busy !== null}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                    />
+                                    <div className="mt-7">
+                                        <AuthSubmitButton isLoading={busy === "password"} loadingText="Confirming…">
+                                            Confirm
+                                        </AuthSubmitButton>
+                                    </div>
+                                </form>
+                            </>
+                        )}
+                    </div>
+                </AuthDialogCard>
             </DialogContent>
         </Dialog>
     );
@@ -228,12 +265,12 @@ function TotpSetup({ user, onDone, onCancel }: { user: User; onDone: () => void;
     };
 
     return (
-        <div className="mt-4 rounded-xl border border-border/60 bg-background/40 p-4">
+        <div className="app-field mt-4 rounded-2xl p-4">
             {error && <div className="mb-3"><FormAlert title="Two-step verification isn't on yet">{error}</FormAlert></div>}
             {!secret ? (
                 !error && (
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" /> Preparing a secret…
+                        <OrbitSpinner className="h-4 w-4" /> Preparing a secret…
                     </p>
                 )
             ) : (
@@ -256,7 +293,7 @@ function TotpSetup({ user, onDone, onCancel }: { user: User; onDone: () => void;
                         />
                         <div className="flex gap-2">
                             <Button type="submit" disabled={isSaving} className="gap-1.5">
-                                {isSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                {isSaving && <OrbitSpinner className="h-3.5 w-3.5" />}
                                 Turn on
                             </Button>
                             <Button type="button" variant="ghost" onClick={onCancel} disabled={isSaving}>
@@ -352,10 +389,11 @@ export default function SecuritySettings() {
     const hasPassword = user ? providerIds(user).includes("password") : false;
 
     return (
-        <div className="relative flex h-screen overflow-hidden bg-background">
+        <div className="dash-night dash-sky relative flex h-screen overflow-hidden bg-background">
+            <Nebula />
             <SidebarSpacer sidebar={sidebar} />
 
-            <div className="relative flex min-w-0 flex-1 flex-col">
+            <div className="dash-frame relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={PAGE_GLOW} />
                 <header className="relative flex h-12 shrink-0 items-center gap-2 px-2">
                 </header>
@@ -363,14 +401,15 @@ export default function SecuritySettings() {
                 <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
                     <div className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-16 pt-4 sm:px-6">
                         <div className="mb-6">
-                            <h1 className="font-display text-3xl font-semibold tracking-tight">Security</h1>
-                            <p className="mt-1 text-sm text-muted-foreground">How you sign in, and where you're signed in.</p>
+                            <PageHeading eyebrow="Account" title="Sign-in &" accent="security">
+                                How you sign in, and where you're signed in.
+                            </PageHeading>
                         </div>
 
-                        <section className="rounded-2xl border border-border/60 bg-panel/70 p-5 backdrop-blur">
+                        <section className="app-glass app-rise rounded-[22px] p-5" style={{ "--i": 1 } as CSSProperties}>
                             <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div className="min-w-0">
-                                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Sign-in protection</p>
+                                    <p className="app-label">Sign-in protection</p>
                                     <h2 className="mt-1 flex items-center gap-2 text-lg font-semibold">
                                         <ShieldCheck className="h-4 w-4 text-primary" /> Two-step verification &amp; password
                                     </h2>
@@ -397,7 +436,7 @@ export default function SecuritySettings() {
                                         {factors.length > 0 ? (
                                             <ul className="mt-2 space-y-2">
                                                 {factors.map((factor) => (
-                                                    <li key={factor.uid} className="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2">
+                                                    <li key={factor.uid} className="flex items-center justify-between gap-3 app-field rounded-2xl px-3 py-2">
                                                         <span className="flex min-w-0 items-center gap-2 text-sm">
                                                             <Smartphone className="h-4 w-4 shrink-0 text-emerald-500" />
                                                             <span className="truncate">{factor.displayName || "Authenticator app"}</span>
@@ -412,7 +451,7 @@ export default function SecuritySettings() {
                                                             disabled={removing === factor.uid}
                                                             onClick={() => void remove(factor)}
                                                         >
-                                                            {removing === factor.uid ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldOff className="h-3.5 w-3.5" />}
+                                                            {removing === factor.uid ? <OrbitSpinner className="h-3.5 w-3.5" /> : <ShieldOff className="h-3.5 w-3.5" />}
                                                             Remove
                                                         </Button>
                                                     </li>
@@ -469,10 +508,10 @@ export default function SecuritySettings() {
                             )}
                         </section>
 
-                        <section className="rounded-2xl border border-border/60 bg-panel/70 p-5 backdrop-blur">
+                        <section className="app-glass app-rise rounded-[22px] p-5" style={{ "--i": 2 } as CSSProperties}>
                             <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div className="min-w-0">
-                                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Sessions</p>
+                                    <p className="app-label">Sessions</p>
                                     <h2 className="mt-1 text-lg font-semibold">Sign out everywhere</h2>
                                     <p className="mt-1 text-xs text-muted-foreground">
                                         Ends every session on every device, this one included. Use it if you signed in somewhere you shouldn't have
@@ -482,7 +521,7 @@ export default function SecuritySettings() {
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                         <Button variant="outline" className="gap-1.5" disabled={isSigningOutEverywhere}>
-                                            {isSigningOutEverywhere ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+                                            {isSigningOutEverywhere ? <OrbitSpinner className="h-3.5 w-3.5" /> : <LogOut className="h-3.5 w-3.5 text-red-500" />}
                                             Sign out everywhere
                                         </Button>
                                     </AlertDialogTrigger>
@@ -502,8 +541,8 @@ export default function SecuritySettings() {
                             </div>
                         </section>
 
-                        <section className="rounded-2xl border border-border/60 bg-panel/70 p-5 backdrop-blur">
-                            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Recent activity</p>
+                        <section className="app-glass app-rise rounded-[22px] p-5" style={{ "--i": 3 } as CSSProperties}>
+                            <p className="app-label">Recent activity</p>
                             <p className="mt-1 text-xs text-muted-foreground">Your last 8 sign-in and security events.</p>
                             <p className="mt-0.5 text-xs text-muted-foreground">
                                 Anything you don't recognise? Change your password and sign out everywhere.
@@ -512,7 +551,7 @@ export default function SecuritySettings() {
                                 <p className="mt-4 text-sm text-destructive">{eventsError}</p>
                             ) : events === null ? (
                                 <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-                                    <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                                    <OrbitSpinner className="h-4 w-4" /> Loading…
                                 </p>
                             ) : events.length === 0 ? (
                                 <p className="mt-4 text-sm text-muted-foreground">Nothing recorded yet.</p>
@@ -539,7 +578,7 @@ export default function SecuritySettings() {
                 </main>
             </div>
 
-            <AppSidebar sidebar={sidebar} />
+            <AppSidebar sidebar={sidebar} inset />
             <ConfirmIdentityDialog open={confirmOpen} onOpenChange={setConfirmOpen} onConfirmed={onConfirmed} />
         </div>
     );

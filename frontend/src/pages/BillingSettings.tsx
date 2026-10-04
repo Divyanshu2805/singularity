@@ -5,10 +5,20 @@
  * provider's portal, changing plan, and settling a checkout the browser has just returned from.
  *
  * Both meters are drawn by the same component, so tokens and projects read as the same kind of thing.
+ *
+ * It stands on the app's night - a page a step lighter than the surround, a wash of rose, amber and gold breathing at the foot of the
+ * screen with stars above it (Nebula - the wash took the gas nebula's place) and one faint gold glow at its head; the first starfield was taken out when the
+ * owner found the app too dark to read its panels on, and stars came back when the nebula was redrawn as gas -
+ * under the shared page heading (PageHeading - a mono eyebrow, a
+ * Fraunces title with an italic gold close, its words dropping in), its panels are solid raised surfaces that rise in one
+ * after another (index.css, .app-glass, .app-rise), and anything working shows the app's comet (OrbitSpinner).
  */
+import { Nebula } from "@/components/app/Nebula";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
+import { PageHeading } from "@/components/app/PageHeading";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ArrowUpRight, CreditCard, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { useSidebar } from "@/hooks/use-sidebar";
@@ -29,8 +39,8 @@ import { cn } from "@/lib/utils";
 
 const PAGE_GLOW: CSSProperties = {
     backgroundImage: [
-        "radial-gradient(70% 45% at 50% -8%, hsl(22 90% 55% / 0.22) 0%, transparent 70%)",
-        "radial-gradient(35% 30% at 92% 0%, hsl(38 95% 60% / 0.10) 0%, transparent 70%)",
+        "radial-gradient(70% 45% at 50% -8%, hsl(40.7 99.9% 76.1% / 0.07) 0%, transparent 70%)",
+        "radial-gradient(35% 30% at 92% 0%, hsl(41.3 100% 85.6% / 0.04) 0%, transparent 70%)",
     ].join(", "),
 };
 
@@ -51,11 +61,11 @@ function Meter({ label, used, limit, detail, tone = "default" }: {
                     {formatTokens(used)} / {formatTokens(limit)}
                 </span>
             </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/60">
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
                 <div
                     className={cn(
                         "h-full rounded-full transition-[width] duration-500",
-                        tone === "exhausted" ? "bg-destructive" : tone === "warning" ? "bg-amber-500" : "bg-primary"
+                        tone === "exhausted" ? "bg-destructive" : tone === "warning" ? "bg-[linear-gradient(90deg,hsl(30_100%_56%),hsl(12_96%_58%))]" : "app-progress-fill !relative"
                     )}
                     style={{ width: `${percent}%` }}
                 />
@@ -128,10 +138,11 @@ export function BillingSettings() {
     const busy = isLoading || isConfirming;
 
     return (
-        <div className="relative flex h-screen overflow-hidden bg-background">
+        <div className="dash-night dash-sky relative flex h-screen overflow-hidden bg-background">
+            <Nebula />
             <SidebarSpacer sidebar={sidebar} />
 
-            <div className="relative flex min-w-0 flex-1 flex-col">
+            <div className="dash-frame relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={PAGE_GLOW} />
 
                 <header className="relative flex h-12 shrink-0 items-center gap-2 px-2">
@@ -140,22 +151,21 @@ export function BillingSettings() {
                 <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
                     <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-4 sm:px-6">
                         <div className="mb-6">
-                            <h1 className="font-display text-3xl font-semibold tracking-tight">Plans &amp; billing</h1>
-                            <p className="mt-1 text-sm text-muted-foreground">
+                            <PageHeading eyebrow="Account" title="Plans &" accent="billing">
                                 What you're on, what you've used, and how to change it.
-                            </p>
+                            </PageHeading>
                             <PaymentsTestModeNotice className="mt-4" />
                         </div>
 
                         {busy ? (
-                            <div className="flex items-center justify-center gap-2 rounded-2xl border border-border/60 bg-panel/70 py-16 text-sm text-muted-foreground backdrop-blur">
-                                <Loader2 className="h-4 w-4 animate-spin" />
+                            <div className="app-glass flex items-center justify-center gap-2 rounded-[22px] py-16 text-sm text-muted-foreground">
+                                <OrbitSpinner className="h-4 w-4" />
                                 {isConfirming ? "Confirming your payment…" : "Loading your plan…"}
                             </div>
                         ) : (
                             <div className="space-y-4">
                                 {attention && (
-                                    <div className="flex items-start gap-2.5 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3">
+                                    <div className="flex items-start gap-2.5 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3">
                                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                                         <div className="min-w-0 flex-1">
                                             <p className="text-sm font-medium text-destructive">
@@ -170,10 +180,10 @@ export function BillingSettings() {
                                     </div>
                                 )}
 
-                                <section className="rounded-2xl border border-border/60 bg-panel/70 p-5 backdrop-blur">
+                                <section className="app-glass app-rise rounded-[22px] p-5" style={{ "--i": 1 } as CSSProperties}>
                                     <div className="flex flex-wrap items-start justify-between gap-4">
                                         <div className="min-w-0">
-                                            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                            <p className="app-label">
                                                 Current plan
                                             </p>
                                             <h2 className="mt-1 font-display text-2xl font-semibold">
@@ -197,9 +207,9 @@ export function BillingSettings() {
                                     </div>
 
                                     <div className="mt-5 flex flex-wrap gap-2">
-                                        <Button variant="default" className="gap-1.5" onClick={() => navigate("/pricing")}>
+                                        <Button variant="outline" className="gap-1.5" onClick={() => navigate("/pricing")}>
                                             {subscription?.isFree ? "See plans" : "Change plan"}
-                                            <ArrowUpRight className="h-3.5 w-3.5" />
+                                            <ArrowUpRight className="h-3.5 w-3.5 transition-colors [button:hover>&]:text-yellow-400" />
                                         </Button>
                                         {!subscription?.isFree && (
                                             <Button
@@ -209,7 +219,7 @@ export function BillingSettings() {
                                                 onClick={() => void openPortal()}
                                             >
                                                 {isOpeningPortal ? (
-                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    <OrbitSpinner className="h-3.5 w-3.5" />
                                                 ) : (
                                                     <CreditCard className="h-3.5 w-3.5" />
                                                 )}
@@ -233,9 +243,9 @@ export function BillingSettings() {
                                     </div>
                                 </section>
 
-                                <section className="rounded-2xl border border-border/60 bg-panel/70 p-5 backdrop-blur">
+                                <section className="app-glass app-rise rounded-[22px] p-5" style={{ "--i": 2 } as CSSProperties}>
                                     <div className="flex items-center justify-between gap-2">
-                                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Usage</p>
+                                        <p className="app-label">Usage</p>
                                         <button
                                             type="button"
                                             onClick={() => navigate("/usage")}
@@ -284,7 +294,7 @@ export function BillingSettings() {
                 </main>
             </div>
 
-            <AppSidebar sidebar={sidebar} />
+            <AppSidebar sidebar={sidebar} inset />
 
             <PlanChangeDialog current={subscription} target={changingTo} onClose={() => setChangingTo(null)} />
         </div>

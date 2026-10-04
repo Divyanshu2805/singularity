@@ -3,15 +3,18 @@
  * overshoot, a zero limit reading as full rather than dividing by it, warning only when the allowance is nearly gone,
  * and an unparsable reset time being ignored rather than producing an invalid date.
  *
- * Also covers the countdown's formatting and the plan comparisons behind upgrade, downgrade, cancel and resume.
+ * Also covers the countdown's formatting, the plan comparisons behind upgrade, downgrade, cancel and resume, the
+ * feature list a plan card builds from the plan's own limits, and which plan is the recommended one.
  */
 import { describe, it, expect } from "vitest";
 import {
   cardPrice,
   describePlanChange,
   formatResetIn,
+  isRecommended,
   planAction,
   planActionLabel,
+  planFeatures,
   planPriceLabel,
   subscriptionStatusLabel,
   toQuota,
@@ -54,6 +57,27 @@ const subscription = (over: Partial<Subscription> = {}): Subscription => ({
   cancelAtPeriodEnd: false,
   isFree: false,
   ...over,
+});
+
+describe("planFeatures", () => {
+  it("builds the list from the plan's own limits, singular where there is one", () => {
+    const features = planFeatures({ ...free, maxPreviews: 1 });
+    expect(features[0]).toBe("1 project");
+    expect(features[1]).toBe(`${(5_000).toLocaleString()} AI tokens per day`);
+    expect(features[2]).toBe("1 live preview running at once");
+  });
+
+  it("points a paid plan back at everything the free one has", () => {
+    expect(planFeatures({ ...business, maxPreviews: 3 })).toContain("Everything in the free plan");
+    expect(planFeatures({ ...business, maxPreviews: 3 })[2]).toBe("3 live previews running at once");
+  });
+});
+
+describe("isRecommended", () => {
+  it("picks the first paid plan, never the free one", () => {
+    const plans = [free, plan(), business];
+    expect(plans.filter((candidate) => isRecommended(candidate, plans)).map((candidate) => candidate.name)).toEqual(["Pro"]);
+  });
 });
 
 describe("toQuota", () => {
