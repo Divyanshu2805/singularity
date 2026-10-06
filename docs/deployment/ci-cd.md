@@ -2,8 +2,6 @@
 
 Everything is one workflow, `.github/workflows/ci.yml`.
 
-![CI/CD pipeline](../assets/diagrams/ci-cd-pipeline.png)
-
 ## Jobs
 
 | Job | Runs on | Does |
@@ -47,3 +45,10 @@ The smoke test runs as soon as the last rollout finishes, and the gateway finds 
 ## Database migrations
 
 Flyway runs when each service starts, and migrations only go forward. Rolling code back after a migration works only if the migration is backward-compatible, so keep migrations additive.
+
+## Supply-chain checks
+
+- **Actions are pinned by commit SHA**, with the tag it pointed to as a trailing comment (`uses: actions/checkout@<sha> # v4`), so a moved or hijacked tag cannot change what a workflow runs. A new action is added the same way: resolve the tag with `git ls-remote https://github.com/<owner>/<repo> 'refs/tags/<tag>^{}'`.
+- **Dependabot** (`.github/dependabot.yml`) opens weekly update pull requests for Maven, the frontend and proxy npm packages, the container base images and the pinned actions. Turn on *Dependabot security updates* in the repository settings for advisory-driven pull requests between those.
+- **CodeQL** (`.github/workflows/codeql.yml`) analyses the Java services and the TypeScript on every pull request and push to `main`, and weekly. Java runs without a build, so it needs no Maven cache. Findings are under the Security tab.
+- **Pinned security versions.** The root `pom.xml` overrides several versions Spring Boot's BOM manages (Tomcat, Netty, Jackson, the PostgreSQL driver, FreeMarker, the Apache HTTP components, Log4j) and pins Bouncy Castle and Apache HttpClient 4, because a scan of the runtime classpath found advisories in the BOM's versions. Drop an override once the Boot version in use includes it.

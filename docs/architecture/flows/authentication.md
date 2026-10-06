@@ -2,15 +2,13 @@
 
 How a user signs in, and how every service trusts the resulting session. Firebase is the only sign-in method; the backend never sees a password.
 
-![Sign-in and session sequence](../../assets/diagrams/flow-authentication.png)
-
 ## Steps
 
 1. **The browser signs in against Firebase directly.** No request reaches the backend yet. See `frontend/src/lib/firebase-auth.ts`.
 2. **The ID token is exchanged for a session.** `POST /api/auth/session { idToken }` → Gateway → account-service `AuthController` → `SessionServiceImpl.createSession`:
    - `FirebaseIdentityVerifier` verifies the token;
    - the `User` is found, or created, by `firebaseUid`;
-   - `SessionCookies` mints the `httpOnly` `vc_session` cookie, valid for 5 days;
+   - `SessionCookies` mints the `httpOnly` `__Host-vc_session` cookie, valid for 5 days;
    - `AuthAuditService` records a `SIGN_IN` event.
 3. **Every later request carries the cookie** to whichever service owns the URL. In each service, `SessionAuthFilter` (ahead of `UsernamePasswordAuthenticationFilter`) hands it to the `SessionAuthenticator`, which checks its in-process `SessionCache` first. An entry lives at most `app.auth.revocation-check-interval` (60 s). On a miss it:
    - checks whether the cookie's hash has been revoked;

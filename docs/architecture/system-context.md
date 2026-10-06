@@ -8,9 +8,9 @@ Singularity is a React single-page app in front of a Spring Boot 4.1 (Java 25) b
 |---|---|---|---|
 | `gateway-service` | 8000 | The browser's single origin: an ordered URL → service route table. No auth logic of its own. Reactive (Spring Cloud Gateway), so it never buffers the SSE streams. | — |
 | `discovery-service` | 8761 | Eureka. Services find each other by name (`lb://account-service`), not by address. | — |
-| `account-service` | 8081 | Users, plans, subscriptions, Stripe billing, the sign-in session and its audit trail. `/api/auth/**`, `/api/plans`, `/api/me/**`, `/api/payments/**`, `/webhooks/payment`. | `vibecraft-account-db` |
-| `workspace-service` | 8082 | Projects, members, files, file revisions, and the whole live-preview pipeline. `/api/projects/**` (except `.../code/**`) and `/api/previews`. | `vibecraft-workspace-db` |
-| `intelligence-service` | 8083 | Chat generation, code insight and notes, the idea clarifier, usage metering. `/api/chat/**`, `/api/ideas/**`, `/api/usage/**`, `/api/projects/{id}/code/**`. | `vibecraft-intelligence-db` |
+| `account-service` | 8081 | Users, plans, subscriptions, Stripe billing, the sign-in session and its audit trail. `/api/auth/**`, `/api/plans`, `/api/me/**`, `/api/payments/**`, `/webhooks/payment`. | `singularity-account-db` |
+| `workspace-service` | 8082 | Projects, members, files, file revisions, and the whole live-preview pipeline. `/api/projects/**` (except `.../code/**`) and `/api/previews`. | `singularity-workspace-db` |
+| `intelligence-service` | 8083 | Chat generation, code insight and notes, the idea clarifier, usage metering. `/api/chat/**`, `/api/ideas/**`, `/api/usage/**`, `/api/projects/{id}/code/**`. | `singularity-intelligence-db` |
 | `common-lib` | — | Not a service: the shared error shape, the session-authentication kit, the internal-call plumbing, and cross-service DTOs. | — |
 
 All three databases live on one Postgres server. A service never reads another service's tables: anything it needs from another domain it asks for over that service's [internal API](service-communication.md#internal-api).
@@ -30,8 +30,6 @@ All three databases live on one Postgres server. A service never reads another s
 
 It never executes AI-generated or user-authored code anywhere except inside a live-preview Kubernetes pod — not in a request thread, not in a background job, not in any service. There is no in-process sandbox. The isolation boundary is described in [Live preview](flows/live-preview.md#isolation-boundary) and the [security model](security-model.md#untrusted-code-isolation).
 
-## Diagram
+## In production
 
-![Singularity system architecture](../assets/diagrams/system-architecture.png)
-
-In production the same services run in-cluster on a single k3s node behind a Cloudflare tunnel; see [Deployment](../deployment/README.md) for that topology.
+The same services run in-cluster on a single k3s node behind a Cloudflare tunnel; see [Deployment](../deployment/README.md) for that topology.

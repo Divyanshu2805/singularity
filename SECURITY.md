@@ -11,7 +11,7 @@ Include what you found, how to reproduce it, and the impact you expect. You'll g
 In scope:
 
 - this repository's code and deployment configuration;
-- the live demo at `vibecraft.divyanshuagrahari.dev` and its preview hostnames.
+- the live demo at `singularity.divyanshuagrahari.dev` and its preview hostnames.
 
 Please don't run automated scanners or load tests against the live demo, access other users' data, or disrupt the service. The demo uses Stripe test mode; no real payments are processed.
 

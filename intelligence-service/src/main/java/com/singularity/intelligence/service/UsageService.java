@@ -4,6 +4,7 @@ import com.singularity.intelligence.dto.usage.PlanLimitsResponse;
 import com.singularity.intelligence.dto.usage.UsageRecord;
 import com.singularity.intelligence.dto.usage.UsageReservation;
 import com.singularity.intelligence.dto.usage.UsageTodayResponse;
+import com.singularity.intelligence.enums.UsageFeature;
 
 /**
  * Token metering and the daily budget gate.
@@ -26,7 +27,7 @@ public interface UsageService {
 
     void recordTokenUsage(UsageRecord record);
 
-    UsageReservation reserveBudget();
+    UsageReservation reserveBudget(UsageFeature feature);
 
     void reconcileBudget(UsageReservation reservation, UsageRecord actualUsage);
 

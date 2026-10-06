@@ -10,7 +10,7 @@ G, B, P, O, Y, R, T, GR = C["green"], C["blue"], C["purple"], C["orange"], C["ye
 
 
 def account():
-    e = ER(1460, 900, "account-service database — vibecraft-account-db",
+    e = ER(1460, 900, "account-service database — singularity-account-db",
            "Users, plans and billing, and the sign-in audit trail · V1–V6 migrations")
     u = e.entity("u", 520, 120, "users", [("id", "bigint", "PK"), ("username", "varchar", "UK"), ("name", "varchar"),
                   ("firebase_uid", "varchar", "UK"), ("stripe_customer_id", "varchar", "UK"), ("created_at", "timestamp"),
@@ -47,7 +47,7 @@ def account():
 
 
 def workspace():
-    e = ER(1560, 1000, "workspace-service database — vibecraft-workspace-db",
+    e = ER(1560, 1000, "workspace-service database — singularity-workspace-db",
            "Projects, members, files, revisions and previews · V1–V4 migrations · user ids point into account-service")
     pr = e.entity("p", 560, 120, "projects", [("id", "bigint", "PK"), ("name", "varchar"), ("is_public", "boolean"),
                   ("template_init_issue", "varchar"), ("forked_from_project_id", "bigint", "ID"),
@@ -94,7 +94,7 @@ def workspace():
 
 
 def intelligence():
-    e = ER(1540, 800, "intelligence-service database — vibecraft-intelligence-db",
+    e = ER(1540, 800, "intelligence-service database — singularity-intelligence-db",
            "Chat history, code notes and AI usage · project and user ids point into workspace- and account-service")
     cs = e.entity("cs", 60, 120, "chat_sessions", [("project_id", "bigint", "PK"), ("user_id", "bigint", "PK"),
                   ("created_at", "timestamp"), ("updated_at", "timestamp"), ("deleted_at", "timestamp")], B, w=270,

@@ -4,7 +4,8 @@ package com.singularity.intelligence.enums;
  * The kinds of step an assistant turn is made of.
  *
  * <p>Handles: naming them - a thought, a plain message, a checklist item announced before writing, a file written, a
- * file deleted (how a rename gets rid of the old copy), a teaching-mode lesson, and a tool log.
+ * file deleted (how a rename gets rid of the old copy), a teaching-mode lesson, a tool log, and a question put to the
+ * user when a request cannot be built correctly without their answer.
  *
  * <p>The column these are stored in carries no check constraint, so adding a value here needs no migration - see the
  * entity for why that matters.
@@ -16,5 +17,6 @@ public enum ChatEventType {
     FILE_EDIT,
     FILE_DELETE,
     LEARN,
-    TOOL_LOG
+    TOOL_LOG,
+    ASK
 }

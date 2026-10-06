@@ -124,4 +124,23 @@ class AiGenerationServiceImplHistoryTest {
         assertThat(history.getLast().getText()).isEqualTo("turn 29");
         assertThat(history.getFirst().getText()).isNotEqualTo("turn 0");
     }
+
+    @Test
+    void aQuestionTheModelAskedIsReplayedSoTheUsersAnswerHasSomethingToAnswer() {
+        ChatMessage asked = assistantTurn(
+                messageEvent("I need one thing first."),
+                ChatEvent.builder().type(ChatEventType.ASK).content("How should people sign in?")
+                        .metadata("Email and password|Google sign-in only").build());
+        when(chatMessageRepository.findByChatSession(chatSession))
+                .thenReturn(List.of(userTurn("add accounts"), asked, userTurn("Google sign-in only")));
+
+        List<Message> history = service.recentHistory(chatSession);
+
+        assertThat(history).hasSize(3);
+        assertThat(history.get(1)).isInstanceOf(AssistantMessage.class);
+        assertThat(history.get(1).getText())
+                .contains("I need one thing first.")
+                .contains("You asked the user: How should people sign in?");
+        assertThat(history.get(2).getText()).isEqualTo("Google sign-in only");
+    }
 }

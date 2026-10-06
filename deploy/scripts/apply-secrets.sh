@@ -7,10 +7,10 @@
 #
 # Expects every GitHub secret name below as an already-exported env var (the CI workflow's `env:` block does this
 # with `${{ secrets.X }}`) and a working kubectl context already pointed at the Oracle cluster. Never run this
-# against kind - minio-runner-credentials/preview-access-token both need writing to `vibecraft-ai` too, a namespace
+# against kind - minio-runner-credentials/preview-access-token both need writing to `singularity-ai` too, a namespace
 # kind's own rehearsal already creates through deploy/k8s/base, not through this script.
 #
-# Two secrets need the SAME value in both `vibecraft` and `vibecraft-ai` (base/minio.yaml's and
+# Two secrets need the SAME value in both `singularity` and `singularity-ai` (base/minio.yaml's and
 # base/preview-proxy.yaml's own comments explain why - Kubernetes Secrets don't cross namespaces).
 set -euo pipefail
 
@@ -28,33 +28,33 @@ apply() {
   kubectl create secret generic "$@" --dry-run=client -o yaml | kubectl apply -f -
 }
 
-apply db-credentials -n vibecraft --from-literal=password="$DB_PASSWORD"
+apply db-credentials -n singularity --from-literal=password="$DB_PASSWORD"
 
-apply minio-root-credentials -n vibecraft \
+apply minio-root-credentials -n singularity \
   --from-literal=username=minioadmin \
   --from-literal=password="$MINIO_ROOT_PASSWORD"
 
-MINIO_RUNNER_HOST_URI="http://previewreader:${MINIO_RUNNER_SECRET}@minio-service.vibecraft.svc.cluster.local:9000"
-apply minio-runner-credentials -n vibecraft \
+MINIO_RUNNER_HOST_URI="http://previewreader:${MINIO_RUNNER_SECRET}@minio-service.singularity.svc.cluster.local:9000"
+apply minio-runner-credentials -n singularity \
   --from-literal=password="$MINIO_RUNNER_SECRET" \
   --from-literal=host-uri="$MINIO_RUNNER_HOST_URI"
-apply minio-runner-credentials -n vibecraft-ai \
+apply minio-runner-credentials -n singularity-ai \
   --from-literal=password="$MINIO_RUNNER_SECRET" \
   --from-literal=host-uri="$MINIO_RUNNER_HOST_URI"
 
-apply internal-service-secret -n vibecraft --from-literal=shared-secret="$INTERNAL_SERVICE_SHARED_SECRET"
+apply internal-service-secret -n singularity --from-literal=shared-secret="$INTERNAL_SERVICE_SHARED_SECRET"
 
-apply preview-access-token -n vibecraft --from-literal=secret="$PREVIEW_ACCESS_TOKEN_SECRET"
-apply preview-access-token -n vibecraft-ai --from-literal=secret="$PREVIEW_ACCESS_TOKEN_SECRET"
+apply preview-access-token -n singularity --from-literal=secret="$PREVIEW_ACCESS_TOKEN_SECRET"
+apply preview-access-token -n singularity-ai --from-literal=secret="$PREVIEW_ACCESS_TOKEN_SECRET"
 
 FIREBASE_SA_FILE="$(mktemp)"
 trap 'rm -f "$FIREBASE_SA_FILE"' EXIT
 printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$FIREBASE_SA_FILE"
-apply firebase-service-account -n vibecraft --from-file=sa.json="$FIREBASE_SA_FILE"
+apply firebase-service-account -n singularity --from-file=sa.json="$FIREBASE_SA_FILE"
 
-apply openrouter-api-key -n vibecraft --from-literal=api-key="$OPENROUTER_API_KEY"
+apply openrouter-api-key -n singularity --from-literal=api-key="$OPENROUTER_API_KEY"
 
-apply stripe-credentials -n vibecraft \
+apply stripe-credentials -n singularity \
   --from-literal=secret="$STRIPE_SECRET" \
   --from-literal=webhook-secret="$STRIPE_WEBHOOK_SECRET" \
   --from-literal=price-pro="$STRIPE_PRICE_PRO" \
@@ -63,16 +63,16 @@ apply stripe-credentials -n vibecraft \
 CLOUDFLARE_CREDS_FILE="$(mktemp)"
 trap 'rm -f "$FIREBASE_SA_FILE" "$CLOUDFLARE_CREDS_FILE"' EXIT
 printf '%s' "$CLOUDFLARE_TUNNEL_CREDENTIALS" > "$CLOUDFLARE_CREDS_FILE"
-apply cloudflared-credentials -n vibecraft --from-file=credentials.json="$CLOUDFLARE_CREDS_FILE"
+apply cloudflared-credentials -n singularity --from-file=credentials.json="$CLOUDFLARE_CREDS_FILE"
 
 # The nightly backup job's target (deploy/k8s/base/backup.yaml). R2_ENDPOINT is the bucket's S3 API URL,
 # `https://<cloudflare account id>.r2.cloudflarestorage.com` - it embeds the account id, so like the other private
 # identifiers it lives in the GitHub environment as a secret, not in a committed file. The bucket name is not
 # sensitive and defaults to the one Phase 0 created; export R2_BUCKET to override it.
-apply r2-backup-credentials -n vibecraft \
+apply r2-backup-credentials -n singularity \
   --from-literal=endpoint="$R2_ENDPOINT" \
   --from-literal=access-key-id="$R2_ACCESS_KEY_ID" \
   --from-literal=secret-access-key="$R2_SECRET_ACCESS_KEY" \
-  --from-literal=bucket="${R2_BUCKET:-vibecraft-backups}"
+  --from-literal=bucket="${R2_BUCKET:-singularity-backups}"
 
 echo "All secrets reconciled."

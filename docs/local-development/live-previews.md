@@ -11,7 +11,7 @@ In this setup the backend runs on your machine (`spring-boot:run`) and only the 
 1. **Create the cluster** with the repository's config:
 
    ```bash
-   kind create cluster --name vibecraft --config k8s/kind-config.yaml
+   kind create cluster --name singularity --config k8s/kind-config.yaml
    ```
 
    The config sets a kubelet PID limit (`podPidsLimit: 1024`) so a runaway process in a runner pod can't exhaust the node. It applies only when a node is created, so an existing cluster created without it must be recreated.
@@ -19,7 +19,7 @@ In this setup the backend runs on your machine (`spring-boot:run`) and only the 
 2. **Apply the base resources**, then the bridge to your local MinIO:
 
    ```bash
-   kubectl apply -f k8s/infra.yml             # namespace vibecraft-ai, Redis, LimitRange, ResourceQuota
+   kubectl apply -f k8s/infra.yml             # namespace singularity-ai, Redis, LimitRange, ResourceQuota
    kubectl apply -f k8s/minio-hostbridge.yml  # points the cluster at MinIO on your machine
    ```
 
@@ -29,11 +29,11 @@ In this setup the backend runs on your machine (`spring-boot:run`) and only the 
 
    ```bash
    # The runner pods' MinIO credential
-   kubectl create secret generic minio-runner-credentials -n vibecraft-ai \
+   kubectl create secret generic minio-runner-credentials -n singularity-ai \
      --from-literal=host-uri='http://minioadmin:minioadmin123@minio-service:9000'
 
    # The proxy's token secret — must equal PREVIEW_ACCESS_TOKEN_SECRET in .env
-   kubectl create secret generic preview-access-token -n vibecraft-ai \
+   kubectl create secret generic preview-access-token -n singularity-ai \
      --from-literal=secret='<same value as PREVIEW_ACCESS_TOKEN_SECRET>'
    ```
 
@@ -41,10 +41,10 @@ In this setup the backend runs on your machine (`spring-boot:run`) and only the 
 
    ```bash
    kubectl apply -f k8s/runner-pods.yml
-   kubectl apply -f k8s/vibecraft-proxy.yml
+   kubectl apply -f k8s/singularity-proxy.yml
    ```
 
-   If you rebuild the proxy image locally, load it into kind first: `kind load docker-image vibecraft-proxy:latest --name vibecraft`.
+   If you rebuild the proxy image locally, load it into kind first: `kind load docker-image singularity-proxy:latest --name singularity`.
 
 5. **Expose Redis and the proxy to the backend.** kind has no load balancer, so forward the ports. Either run the helper script in its own terminal (it reconnects automatically):
 
@@ -67,14 +67,14 @@ In this setup the backend runs on your machine (`spring-boot:run`) and only the 
 Follow a runner pod's output:
 
 ```bash
-kubectl -n vibecraft-ai logs -l app=runner -c runner --tail=100 -f
-kubectl -n vibecraft-ai logs -l app=runner -c syncer --tail=100 -f
+kubectl -n singularity-ai logs -l app=runner -c runner --tail=100 -f
+kubectl -n singularity-ai logs -l app=runner -c syncer --tail=100 -f
 ```
 
 `GET /api/projects/{id}/preview/logs` shows the same output through the app. To see the pool's state:
 
 ```bash
-kubectl -n vibecraft-ai get pods -L status,project-id
+kubectl -n singularity-ai get pods -L status,project-id
 ```
 
 A claimed pod is replaced by a fresh idle one within about a minute. See [troubleshooting](troubleshooting.md#previews) for the error messages the preview panel shows.

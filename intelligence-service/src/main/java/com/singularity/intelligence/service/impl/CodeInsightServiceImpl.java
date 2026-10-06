@@ -78,7 +78,7 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public CodeInsightResponse explain(Long projectId, ExplainCodeRequest request) {
-        UsageReservation reservation = usageService.reserveBudget();
+        UsageReservation reservation = usageService.reserveBudget(UsageFeature.EXPLAIN);
         String answer = callModel(
                 reservation,
                 CodeInsightPrompts.explainSystemPrompt(),
@@ -93,7 +93,7 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public CodeInsightResponse ask(Long projectId, AskCodeRequest request) {
-        UsageReservation reservation = usageService.reserveBudget();
+        UsageReservation reservation = usageService.reserveBudget(UsageFeature.EXPLAIN);
         return new CodeInsightResponse(
                 callModel(reservation, CodeInsightPrompts.askSystemPrompt(), askMessages(projectId, request), projectId, "code question"));
     }
@@ -101,7 +101,7 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public Flux<String> streamExplain(Long projectId, ExplainCodeRequest request) {
-        UsageReservation reservation = usageService.reserveBudget();
+        UsageReservation reservation = usageService.reserveBudget(UsageFeature.EXPLAIN);
         return streamModel(
                 reservation,
                 CodeInsightPrompts.explainSystemPrompt(),
@@ -114,7 +114,7 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public Flux<String> streamAsk(Long projectId, AskCodeRequest request) {
-        UsageReservation reservation = usageService.reserveBudget();
+        UsageReservation reservation = usageService.reserveBudget(UsageFeature.EXPLAIN);
         return streamModel(reservation, CodeInsightPrompts.askSystemPrompt(), askMessages(projectId, request), projectId, "code question");
     }
 

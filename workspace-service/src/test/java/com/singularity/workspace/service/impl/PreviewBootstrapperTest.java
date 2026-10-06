@@ -36,7 +36,7 @@ class PreviewBootstrapperTest {
     private final PreviewRouter router = mock(PreviewRouter.class);
     private final PreviewLifecycle lifecycle = mock(PreviewLifecycle.class);
     private final PreviewProperties properties = new PreviewProperties(
-            "vibecraft-ai", "http", "localhost", null, 5173, "local", "projects",
+            "singularity-ai", "http", "localhost", null, 5173, "local", "projects",
             Duration.ofMinutes(30), Duration.ofMinutes(2), Duration.ofMinutes(5), "secret", Duration.ofHours(6));
     private final InstanceId instanceId = mock(InstanceId.class);
 

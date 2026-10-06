@@ -7,16 +7,16 @@
 #
 # Extra secret needed beyond account-service's (db-credentials/firebase-service-account/internal-service-secret are
 # shared - create each only once):
-#   kubectl create secret generic preview-access-token -n vibecraft \
-#     --from-literal=secret='<PREVIEW_ACCESS_TOKEN_SECRET - byte-for-byte the same value used in vibecraft-ai for
-#     the proxy, and by k8s/vibecraft-proxy.yml's local-dev equivalent>'
+#   kubectl create secret generic preview-access-token -n singularity \
+#     --from-literal=secret='<PREVIEW_ACCESS_TOKEN_SECRET - byte-for-byte the same value used in singularity-ai for
+#     the proxy, and by k8s/singularity-proxy.yml's local-dev equivalent>'
 # minio-root-credentials is created once, in base/minio.yaml's comment - this service reads the SAME secret (it
 # needs full read/write on every bucket, unlike the runner pods' scoped previewreader credential).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: workspace-service
-  namespace: vibecraft
+  namespace: singularity
 spec:
   replicas: 1
   selector:
@@ -39,16 +39,16 @@ spec:
           type: RuntimeDefault
       containers:
         - name: workspace-service
-          image: vibecraft-workspace:local
+          image: singularity-workspace:local
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
           env:
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://postgres:5432/vibecraft-workspace-db"
+              value: "jdbc:postgresql://postgres:5432/singularity-workspace-db"
             - name: DB_USERNAME
-              value: vibecraft
+              value: singularity
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -57,7 +57,9 @@ spec:
             - name: SPRING_JPA_SHOW_SQL
               value: "false"
             - name: SPRING_DATA_REDIS_HOST
-              value: "redis-service.vibecraft-ai"
+              value: "redis-service.singularity-ai"
+            - name: PREVIEW_NAMESPACE
+              value: singularity-ai
             - name: MINIO_URL
               value: "http://minio-service:9000"
             - name: MINIO_ACCESS_KEY
@@ -147,7 +149,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: workspace-service
-  namespace: vibecraft
+  namespace: singularity
 spec:
   selector:
     app: workspace-service

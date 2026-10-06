@@ -1,13 +1,13 @@
 # workspace-service's own identity - it's the only one of the five Java services that talks to the Kubernetes API
-# (PreviewRunnerPool, fabric8 client). Lives in `vibecraft`; the pods it manages (base/runner-pods.yaml) live in
-# `vibecraft-ai`, so the Role/RoleBinding below are cross-namespace - a RoleBinding's `subjects` can reference a
+# (PreviewRunnerPool, fabric8 client). Lives in `singularity`; the pods it manages (base/runner-pods.yaml) live in
+# `singularity-ai`, so the Role/RoleBinding below are cross-namespace - a RoleBinding's `subjects` can reference a
 # ServiceAccount from a different namespace than the RoleBinding itself, as long as the Role it binds to lives in
-# the SAME namespace as the RoleBinding (here, vibecraft-ai, where the governed pods actually are).
+# the SAME namespace as the RoleBinding (here, singularity-ai, where the governed pods actually are).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: workspace-service
-  namespace: vibecraft
+  namespace: singularity
 
 ---
 
@@ -15,7 +15,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: workspace-service-runner-manager
-  namespace: vibecraft-ai
+  namespace: singularity-ai
 rules:
   # Matches exactly what PreviewRunnerPool.java calls: list/get to find and check pods, patch to claim one
   # (the resourceVersion-guarded merge patch), delete to release one. No create - runner pods come from
@@ -37,11 +37,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: workspace-service-runner-manager
-  namespace: vibecraft-ai
+  namespace: singularity-ai
 subjects:
   - kind: ServiceAccount
     name: workspace-service
-    namespace: vibecraft
+    namespace: singularity
 roleRef:
   kind: Role
   name: workspace-service-runner-manager

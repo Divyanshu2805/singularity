@@ -1,14 +1,17 @@
-# firebase-project-id is the same real project everywhere (base/app-config.yaml) - not patched here.
-# client-url is a single-level subdomain (vibecraft.divyanshuagrahari.dev), not vibecraft.app.* - Cloudflare's
+# firebase-project-id is patched to the production Firebase project; base/app-config.yaml holds the dev one. It must
+# name the same project as the production VITE_FIREBASE_* variables and FIREBASE_SERVICE_ACCOUNT_JSON, or sign-in
+# fails with a token-audience error.
+# client-url is a single-level subdomain (singularity.divyanshuagrahari.dev), not singularity.app.* - Cloudflare's
 # free wildcard cert only covers one subdomain level (deploy/k8s/overlays/oracle/cloudflared.yaml's own comment
 # has the full account). preview-public-domain stays the bare apex on purpose - previews never moved.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: app-config
-  namespace: vibecraft
+  namespace: singularity
 data:
-  client-url: https://vibecraft.divyanshuagrahari.dev
+  firebase-project-id: singularity-prod0
+  client-url: https://singularity.divyanshuagrahari.dev
   preview-public-scheme: https
   preview-public-domain: divyanshuagrahari.dev
   preview-public-port: "443"

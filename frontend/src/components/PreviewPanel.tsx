@@ -55,6 +55,7 @@ import { MY_PREVIEWS_QUERY_KEY, type ProjectPreview } from "@/hooks/use-preview"
 import { useCopyFeedback } from "@/hooks/use-copy-feedback";
 import { useToast } from "@/hooks/use-toast";
 import {
+  PREVIEW_SANDBOX,
   PREVIEW_STEPS,
   autoStartKey,
   describePreviewStartFailure,
@@ -217,6 +218,7 @@ export function PreviewPanel({
           key={`${preview.id}-${reloadKey}`}
           src={frameSrc}
           title="Live preview"
+          sandbox={PREVIEW_SANDBOX}
           onLoad={() => setIsFrameLoading(false)}
           className={cn(
             "h-full border-0 bg-white",
