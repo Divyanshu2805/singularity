@@ -32,3 +32,14 @@ export function buildContentSecurityPolicy(env: Record<string, string | undefine
     .map(([name, sources]) => `${name} ${sources.filter(Boolean).join(" ")}`)
     .join("; ");
 }
+
+/**
+ * The nginx directive that serves the policy as a response header.
+ *
+ * Handles: the one line frontend/nginx.conf pulls in through csp-header.conf, which the build writes next to dist.
+ * It is the policy above plus frame-ancestors 'none', the one directive a meta tag cannot carry, so the app cannot be
+ * framed by another page - including a live preview. `always` keeps it on error responses too.
+ */
+export function buildContentSecurityPolicyHeaderDirective(env: Record<string, string | undefined>): string {
+  return `add_header Content-Security-Policy "${buildContentSecurityPolicy(env)}; frame-ancestors 'none'" always;\n`;
+}

@@ -38,6 +38,7 @@ class UsageServiceImplTest {
 
     private static final long USER_ID = 7L;
     private static final int MODEL_MAX_TOKENS = 32_000;
+    private static final int LIGHT_TOKENS = 4_000;
 
     private final UsageLogRepository usageLogRepository = mock(UsageLogRepository.class);
     private final UsageEventRepository usageEventRepository = mock(UsageEventRepository.class);
@@ -46,7 +47,7 @@ class UsageServiceImplTest {
     private final AuthUtil authUtil = mock(AuthUtil.class);
 
     private final UsageServiceImpl service = new UsageServiceImpl(
-            usageLogRepository, usageEventRepository, accountServiceClient, workspaceServiceClient, authUtil, MODEL_MAX_TOKENS);
+            usageLogRepository, usageEventRepository, accountServiceClient, workspaceServiceClient, authUtil, MODEL_MAX_TOKENS, LIGHT_TOKENS);
 
     private PlanDto plan(int maxTokensPerDay, boolean unlimited) {
         return new PlanDto(1L, "Pro", 10, maxTokensPerDay, 5, unlimited);
@@ -58,7 +59,7 @@ class UsageServiceImplTest {
         when(accountServiceClient.getPlanLimits(USER_ID)).thenReturn(plan(100_000, false));
         when(usageLogRepository.tryReserve(eq(USER_ID), any(), eq(MODEL_MAX_TOKENS), eq(100_000))).thenReturn(1);
 
-        UsageReservation reservation = service.reserveBudget();
+        UsageReservation reservation = service.reserveBudget(UsageFeature.BUILD);
 
         verify(usageLogRepository).ensureRowExists(eq(USER_ID), any());
         verify(usageLogRepository).tryReserve(eq(USER_ID), any(), eq(MODEL_MAX_TOKENS), eq(100_000));
@@ -67,12 +68,26 @@ class UsageServiceImplTest {
     }
 
     @Test
+    void theIdeaInterviewAndCodeLensReserveTheSmallAmountNotAWholeBuildsWorth() {
+        when(authUtil.getCurrentUserId()).thenReturn(USER_ID);
+        when(accountServiceClient.getPlanLimits(USER_ID)).thenReturn(plan(100_000, false));
+        when(usageLogRepository.tryReserve(eq(USER_ID), any(), eq(LIGHT_TOKENS), eq(100_000))).thenReturn(1);
+
+        UsageReservation interview = service.reserveBudget(UsageFeature.IDEA_INTERVIEW);
+        UsageReservation lens = service.reserveBudget(UsageFeature.EXPLAIN);
+
+        assertThat(interview.tokens()).isEqualTo(LIGHT_TOKENS);
+        assertThat(lens.tokens()).isEqualTo(LIGHT_TOKENS);
+        verify(usageLogRepository, never()).tryReserve(eq(USER_ID), any(), eq(MODEL_MAX_TOKENS), anyInt());
+    }
+
+    @Test
     void aReservationLargerThanThePlansEntireDailyAllowanceIsCappedAtTheAllowanceInstead() {
         when(authUtil.getCurrentUserId()).thenReturn(USER_ID);
         when(accountServiceClient.getPlanLimits(USER_ID)).thenReturn(plan(5_000, false)); // the free tier
         when(usageLogRepository.tryReserve(eq(USER_ID), any(), eq(5_000), eq(5_000))).thenReturn(1);
 
-        UsageReservation reservation = service.reserveBudget();
+        UsageReservation reservation = service.reserveBudget(UsageFeature.BUILD);
 
         assertThat(reservation.tokens()).isEqualTo(5_000);
         verify(usageLogRepository).tryReserve(eq(USER_ID), any(), eq(5_000), eq(5_000));
@@ -85,7 +100,7 @@ class UsageServiceImplTest {
         when(usageLogRepository.tryReserve(eq(USER_ID), any(), anyInt(), eq(10_000))).thenReturn(0);
         when(usageLogRepository.findByUserIdAndDate(eq(USER_ID), any())).thenReturn(java.util.Optional.empty());
 
-        assertThatThrownBy(() -> service.reserveBudget())
+        assertThatThrownBy(() -> service.reserveBudget(UsageFeature.BUILD))
                 .isInstanceOf(QuotaExceededException.class);
     }
 
@@ -94,7 +109,7 @@ class UsageServiceImplTest {
         when(authUtil.getCurrentUserId()).thenReturn(USER_ID);
         when(accountServiceClient.getPlanLimits(USER_ID)).thenReturn(plan(100_000, true));
 
-        UsageReservation reservation = service.reserveBudget();
+        UsageReservation reservation = service.reserveBudget(UsageFeature.BUILD);
 
         assertThat(reservation.tokens()).isZero();
         verifyNoInteractions(usageLogRepository);

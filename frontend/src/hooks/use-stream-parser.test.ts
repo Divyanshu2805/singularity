@@ -108,3 +108,26 @@ describe("re-outputting the same file mid-turn", () => {
     expect(events.map((event) => event.filePath)).toEqual(["a.tsx", "b.tsx"]);
   });
 });
+
+describe("a question for the user in the stream", () => {
+  it("is parsed with its suggested answers, and its text is never revealed as message prose", () => {
+    const raw = '<message>One thing first.</message><ask options="A table|A set of cards">How should orders be shown?</ask>';
+    const events = parseStreamEvents(raw);
+
+    expect(events[1]).toEqual({
+      type: ChatEventType.ASK,
+      content: "How should orders be shown?",
+      metadata: "A table|A set of cards",
+      isComplete: true,
+    });
+    expect(visibleText(raw)).toEqual(["One thing first."]);
+  });
+
+  it("reads as still arriving until its closing tag is in, and a half-arrived tag is held back", () => {
+    const [arriving] = parseStreamEvents('<ask options="Yes|No">Should it have a dark');
+
+    expect(arriving.type).toBe(ChatEventType.ASK);
+    expect(arriving.isComplete).toBe(false);
+    expect(findSafeEnd("<message>ok</message><as")).toBe("<message>ok</message>".length);
+  });
+});

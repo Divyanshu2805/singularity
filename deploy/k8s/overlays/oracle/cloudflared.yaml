@@ -4,7 +4,7 @@
 #
 # The tunnel is created once, out-of-band, in the Cloudflare dashboard (docs/deployment/provisioning.md - already
 # done) - this Deployment just runs the daemon that connects to it. Credentials come from a Secret, never baked in:
-#   kubectl create secret generic cloudflared-credentials -n vibecraft \
+#   kubectl create secret generic cloudflared-credentials -n singularity \
 #     --from-literal=credentials.json='<the tunnel credentials JSON - CLOUDFLARE_TUNNEL_CREDENTIALS in the plan>'
 #
 # A throwaway `hello-test` nginx pod (not part of this repo) proved HTTPS-in/zero-open-ports end to end in Phase
@@ -16,7 +16,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cloudflared
-  namespace: vibecraft
+  namespace: singularity
 spec:
   replicas: 1
   selector:

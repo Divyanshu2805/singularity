@@ -1716,19 +1716,6 @@
     height: calc(clamp(0.08, calc(var(--local) * 7 - var(--k)), 1) * var(--h) * 100%);
   }
 
-  .landing-reveal {
-    opacity: 0;
-    transform: translate3d(0, 22px, 0);
-    transition:
-      opacity 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) var(--reveal-delay, 0ms),
-      transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) var(--reveal-delay, 0ms);
-  }
-
-  .landing-reveal[data-shown="true"] {
-    opacity: 1;
-    transform: none;
-  }
-
   .fab-floor {
     position: absolute;
     left: 0;
@@ -2341,12 +2328,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .landing-reveal {
-      opacity: 1;
-      transform: none;
-      transition: none;
-    }
-
     .deck-chapter {
       position: relative;
       top: auto;

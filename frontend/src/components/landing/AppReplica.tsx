@@ -61,6 +61,14 @@
  * on screen by undoing the camera's scale (--cam). The canvas is inert and hidden from assistive technology: every
  * window says what it shows in the text beside it.
  *
+ * Reading a part as a share of the sheet's box holds only while the screen is drawn flat or evenly scaled. A page
+ * may stand the screen in perspective (the landing rebuild's hero tilts the project window in 3D), and there a
+ * share of the projected box is no longer a share of the sheet: half-way across the window the pointer landed some
+ * ten to fifteen pixels short of the control it was sent to. So an ancestor that tilts the screen marks itself
+ * data-tilt, and its transform is taken off for the length of the measurement and put straight back, inside the one
+ * layout effect, before anything is painted. The ancestor must not carry a CSS transition on its transform, or
+ * putting it back would animate.
+ *
  * New content in a chat grows into place (index.css, .replica-grow) rather than appearing, so the transcript
  * scrolls up under it the way the real one does while a turn streams; the editor and the built app scroll by a
  * transform on their content, eased, when the script moves their top line.
@@ -196,9 +204,12 @@ export const Screen = forwardRef<HTMLDivElement, ScreenProps>(function Screen(
     if (!canvas || !frameOf || !size.w || !size.h) return;
     const cw = size.w / k;
     const ch = size.h / k;
-    const box = canvas.getBoundingClientRect();
     const sheet = canvas.firstElementChild as HTMLElement | null;
     if (!sheet) return;
+    const tilted = frameOf.closest<HTMLElement>("[data-tilt]");
+    const tilt = tilted?.style.transform ?? "";
+    if (tilted) tilted.style.transform = "none";
+    const box = canvas.getBoundingClientRect();
     const now = sheet.getBoundingClientRect().width / cw || 1;
     const shown = frameOf.getBoundingClientRect().width / size.w || 1;
     const find = (kind: string, name: string | null) => (name ? canvas.querySelector<HTMLElement>(`[data-${kind}~="${name}"]`) : null);
@@ -213,6 +224,7 @@ export const Screen = forwardRef<HTMLDivElement, ScreenProps>(function Screen(
     const subject = target ? rectOf(target) : null;
     const whole = target ? rectOf(target.closest<HTMLElement>(FRAME) ?? target) : null;
     const control = aim ? rectOf(aim) : null;
+    if (tilted) tilted.style.transform = tilt;
 
     let scale = subject || control ? Math.max(k, READ / shown) : k;
     if (whole) scale = Math.max(scale, Math.min(LOOK / shown, fit(whole)));

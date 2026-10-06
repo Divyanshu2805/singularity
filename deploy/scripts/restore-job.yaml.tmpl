@@ -20,7 +20,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: __NAME__
-  namespace: vibecraft
+  namespace: singularity
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: 3600
@@ -155,7 +155,7 @@ spec:
             - name: PGHOST
               value: postgres
             - name: PGUSER
-              value: vibecraft
+              value: singularity
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:

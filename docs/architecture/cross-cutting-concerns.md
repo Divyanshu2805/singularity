@@ -48,7 +48,7 @@ Every service exposes Spring Boot Actuator's `/actuator/health` on a separate ma
 
 `deploy/k8s/` (Kustomize: `base/` plus `overlays/kind` and `overlays/oracle`) is the full-stack shape every service runs as in production:
 
-- namespace `vibecraft` — Postgres, MinIO, the five Java services, the frontend, cloudflared, and the nightly backup CronJob;
-- namespace `vibecraft-ai` — Redis, the preview proxy, and the untrusted runner-pod pool.
+- namespace `singularity` — Postgres, MinIO, the five Java services, the frontend, cloudflared, and the nightly backup CronJob;
+- namespace `singularity-ai` — Redis, the preview proxy, and the untrusted runner-pod pool.
 
 Every Java service Deployment sets `enableServiceLinks: false`, because Kubernetes' auto-injected `<SERVICE>_PORT` variables collide with each service's own port-override property. The runner pool's init container seeds each warm pod's `node_modules` from a pre-built image. See [Deployment](../deployment/README.md) and [Operations](../operations/README.md).

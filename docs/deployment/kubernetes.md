@@ -30,7 +30,7 @@ kubectl apply -k deploy/k8s/overlays/kind       # local rehearsal
 
 ## Overlays
 
-- **`oracle`** maps every image to `ghcr.io/divyanshu2805/vibecraft-<name>` with a placeholder tag that CI replaces with the commit SHA; adds `cloudflared` with its routing config (generated with `configMapGenerator`, so a config change restarts the pod); and holds `deployer-bootstrap.yaml`, the deploy identity applied once out-of-band.
+- **`oracle`** maps every image to `ghcr.io/divyanshu2805/singularity-<name>` with a placeholder tag that CI replaces with the commit SHA; adds `cloudflared` with its routing config (generated with `configMapGenerator`, so a config change restarts the pod); and holds `deployer-bootstrap.yaml`, the deploy identity applied once out-of-band.
 - **`kind`** uses locally built `:local` images, includes `namespaces/` directly (a kind admin has full rights), and adds an nginx config that proxies `/api` so the frontend works through `kubectl port-forward`. See the overlay's [README](../../deploy/k8s/overlays/kind/README.md) to run the rehearsal.
 
 ## Resource limits
@@ -55,5 +55,5 @@ Rollouts proceed in dependency order — Postgres, MinIO and Redis; then discove
 
 ## RBAC
 
-- **workspace-service** has a Role in `vibecraft-ai`, bound to its service account in `vibecraft`: pods `get`, `list`, `patch`, `delete`, and `pods/exec` `get` + `create` (exec is a WebSocket `GET`). It cannot create pods or touch other namespaces.
+- **workspace-service** has a Role in `singularity-ai`, bound to its service account in `singularity`: pods `get`, `list`, `patch`, `delete`, and `pods/exec` `get` + `create` (exec is a WebSocket `GET`). It cannot create pods or touch other namespaces.
 - **The `deployer` service account** used by CI is bound to the built-in `admin` role in each app namespace only, plus read-only access to namespaces. It is not a cluster admin. Because `admin` excludes namespaces, LimitRanges and ResourceQuotas, those live in `deploy/k8s/namespaces/` and are applied once with a privileged kubeconfig.

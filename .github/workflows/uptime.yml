@@ -39,10 +39,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      APP_DOMAIN: vibecraft.divyanshuagrahari.dev
+      APP_DOMAIN: singularity.divyanshuagrahari.dev
       PREVIEW_ROOT_DOMAIN: divyanshuagrahari.dev
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           sparse-checkout: deploy/scripts
       - name: Check the app, the API and the preview route
@@ -65,7 +65,7 @@ jobs:
     # The R2 credentials are `production` environment secrets. Once a day, so one deployment record a day.
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           sparse-checkout: deploy/scripts
       - name: Check the newest complete backup

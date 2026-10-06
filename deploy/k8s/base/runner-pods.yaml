@@ -1,17 +1,17 @@
 # The warm pool of preview runners, adapted from the repo-root `k8s/runner-pods.yml` (which stays as-is for local
-# dev against the vibecraft-ai-only kind cluster). Only real change from that file: MinIO now lives in the
-# `vibecraft` namespace (base/minio.yaml), not here, so the egress NetworkPolicy rule below is cross-namespace -
+# dev against the singularity-ai-only kind cluster). Only real change from that file: MinIO now lives in the
+# `singularity` namespace (base/minio.yaml), not here, so the egress NetworkPolicy rule below is cross-namespace -
 # see its own comment.
 #
 # Secret needed once per cluster, in this namespace:
-#   kubectl create secret generic minio-runner-credentials -n vibecraft-ai \
+#   kubectl create secret generic minio-runner-credentials -n singularity-ai \
 #     --from-literal=password='<MINIO_RUNNER_SECRET>' \
-#     --from-literal=host-uri='http://previewreader:<the same value>@minio-service.vibecraft.svc.cluster.local:9000'
+#     --from-literal=host-uri='http://previewreader:<the same value>@minio-service.singularity.svc.cluster.local:9000'
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: preview-runner
-  namespace: vibecraft-ai
+  namespace: singularity-ai
 automountServiceAccountToken: false
 
 ---
@@ -20,7 +20,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: runner-pool
-  namespace: vibecraft-ai
+  namespace: singularity-ai
 spec:
   replicas: 1 # docs/deployment/'s preview-capacity table: down from 2, saves memory, first start still instant
   selector:
@@ -61,7 +61,7 @@ spec:
         # PreviewBootstrapper's mirror excludes node_modules, so syncing project files leaves the seed alone. The
         # runner container itself stays on the plain node image: the seed is data, not tooling.
         - name: seed-node-modules
-          image: vibecraft-preview-runner:local
+          image: singularity-preview-runner:local
           command: ["/bin/sh", "-c", "cp -a /opt/template-node-modules /app/node_modules"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -142,7 +142,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: runner-pool-policy
-  namespace: vibecraft-ai
+  namespace: singularity-ai
 spec:
   podSelector:
     matchLabels:
@@ -154,7 +154,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              app: vibecraft-proxy
+              app: singularity-proxy
       ports:
         - protocol: TCP
           port: 5173
@@ -169,14 +169,14 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # MinIO now lives in `vibecraft`, not this namespace (base/minio.yaml) - a plain podSelector peer only ever
+    # MinIO now lives in `singularity`, not this namespace (base/minio.yaml) - a plain podSelector peer only ever
     # matches pods in the NetworkPolicy's OWN namespace, so this needs an explicit namespaceSelector alongside it
     # (combined in one peer entry - an AND, not two separate allowed peers). Kubernetes labels every namespace
-    # with the built-in kubernetes.io/metadata.name key, so no custom label on the vibecraft namespace is needed.
+    # with the built-in kubernetes.io/metadata.name key, so no custom label on the singularity namespace is needed.
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: vibecraft
+              kubernetes.io/metadata.name: singularity
           podSelector:
             matchLabels:
               app: minio

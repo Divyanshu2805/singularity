@@ -1,18 +1,18 @@
 # A real in-cluster MinIO, adapted from the repo-root `k8s/minio.yml` (which stays as-is for local dev against the
-# vibecraft-ai-only kind cluster). Moved into the `vibecraft` namespace, alongside the trusted services that own
+# singularity-ai-only kind cluster). Moved into the `singularity` namespace, alongside the trusted services that own
 # project data, per docs/deployment/'s architecture table - `k8s/minio.yml`'s own comment called this move
 # "a non-event, not a migration" once there's a real Phase 3 buildout to do it in. Single replica, no HA - same
 # tradeoff as the rest of this single-machine setup.
 #
 # Create the root credentials once per cluster before applying this file:
-#   kubectl create secret generic minio-root-credentials -n vibecraft \
+#   kubectl create secret generic minio-root-credentials -n singularity \
 #     --from-literal=username=minioadmin \
 #     --from-literal=password='<a long random value - this is MINIO_ROOT_PASSWORD in the deployment plan>'
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: minio
-  namespace: vibecraft
+  namespace: singularity
 spec:
   serviceName: minio-service
   replicas: 1
@@ -95,7 +95,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: minio-service
-  namespace: vibecraft
+  namespace: singularity
 spec:
   # No console port exposed - :9001 stays reachable only via kubectl port-forward.
   selector:
@@ -110,19 +110,19 @@ spec:
 
 # Same read-only `previewreader` bootstrap as `k8s/minio.yml`, run here since it needs `minio-root-credentials`,
 # which lives in this namespace next to the MinIO server it configures. Its target user is consumed from
-# `vibecraft-ai` (the runner pods' syncer container, in base/runner-pods.yaml) - Kubernetes Secrets don't cross
+# `singularity-ai` (the runner pods' syncer container, in base/runner-pods.yaml) - Kubernetes Secrets don't cross
 # namespaces, so `minio-runner-credentials` needs creating in BOTH namespaces with the same password:
-#   kubectl create secret generic minio-runner-credentials -n vibecraft \
+#   kubectl create secret generic minio-runner-credentials -n singularity \
 #     --from-literal=password='<MINIO_RUNNER_SECRET from the deployment plan>' \
-#     --from-literal=host-uri='http://previewreader:<the same value>@minio-service.vibecraft.svc.cluster.local:9000'
-#   kubectl create secret generic minio-runner-credentials -n vibecraft-ai \
+#     --from-literal=host-uri='http://previewreader:<the same value>@minio-service.singularity.svc.cluster.local:9000'
+#   kubectl create secret generic minio-runner-credentials -n singularity-ai \
 #     --from-literal=password='<the same MINIO_RUNNER_SECRET>' \
-#     --from-literal=host-uri='http://previewreader:<the same value>@minio-service.vibecraft.svc.cluster.local:9000'
+#     --from-literal=host-uri='http://previewreader:<the same value>@minio-service.singularity.svc.cluster.local:9000'
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: minio-bootstrap-preview-reader
-  namespace: vibecraft
+  namespace: singularity
 spec:
   backoffLimit: 3
   template:

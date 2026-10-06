@@ -8,7 +8,7 @@ The first version stored usernames and passwords and issued its own bearer JWTs.
 
 ## Decision
 
-Use Firebase Authentication as the **only** sign-in method (password, Google, and second factors, all handled in the browser). The backend receives a Firebase ID token once, verifies it, and issues its own `httpOnly` session cookie (`vc_session`, 5 days).
+Use Firebase Authentication as the **only** sign-in method (password, Google, and second factors, all handled in the browser). The backend receives a Firebase ID token once, verifies it, and issues its own `httpOnly` session cookie (`__Host-vc_session`, 5 days).
 
 - Every service verifies the cookie itself, caching the result for at most 60 seconds.
 - Sign-out records the cookie's hash as revoked and pushes an eviction to the other services, so a single device can be signed out immediately.
