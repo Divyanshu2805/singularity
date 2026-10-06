@@ -21,7 +21,7 @@ RUN npm run build
 
 # nginx-unprivileged already runs as a non-root user (uid 101) and listens on 8080 by default - no extra
 # securityContext work needed here beyond what k8s/*.yml sets for every other pod.
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.29-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
