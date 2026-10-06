@@ -8,7 +8,7 @@ The product's promise is a live, running preview of an AI-generated project. Tha
 
 ## Decision
 
-Generated and user-authored code executes **only** inside disposable runner pods in a dedicated `vibecraft-ai` namespace, reached through the Kubernetes `exec` API. workspace-service claims a warm pod from a pool, syncs the project's files in, runs `npm install` and the Vite dev server there, and routes a preview hostname to it through Redis and a standalone Node proxy.
+Generated and user-authored code executes **only** inside disposable runner pods in a dedicated `singularity-ai` namespace, reached through the Kubernetes `exec` API. workspace-service claims a warm pod from a pool, syncs the project's files in, runs `npm install` and the Vite dev server there, and routes a preview hostname to it through Redis and a standalone Node proxy.
 
 Runner pods are non-root with every capability dropped, have no service-account token, are bound by resource quotas and a PID limit, and sit behind a `NetworkPolicy` that admits only the preview proxy and blocks private cluster ranges and cloud metadata. They read project files with a MinIO user scoped to read-only access on one bucket.
 

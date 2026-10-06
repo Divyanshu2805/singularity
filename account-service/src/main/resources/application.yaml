@@ -7,7 +7,7 @@ spring:
   datasource:
     # A separate logical database on the same local Postgres server — every service owns its own database
     # (docs/schema/). No tables/FKs shared with the other services' databases.
-    url: jdbc:postgresql://localhost:9010/vibecraft-account-db
+    url: jdbc:postgresql://localhost:9010/singularity-account-db
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -38,7 +38,7 @@ firebase:
 app:
   auth:
     session-cookie:
-      name: vc_session
+      name: __Host-vc_session
       max-age: 5d
       secure: true
     revocation-check-interval: 60s
@@ -61,6 +61,10 @@ client.url: http://localhost:5173
 
 server:
   port: ${ACCOUNT_SERVICE_PORT:8081}
+  # Behind cloudflared and the Gateway every request arrives from a private pod address, so without this the rate
+  # limiter and the security-events trail see one client for everybody. Tomcat reads X-Forwarded-For from the right and
+  # skips only private-range hops (its default internal proxies), so what a client forges at the left is ignored.
+  forward-headers-strategy: native
 
 # CODE_REVIEW.md DEP-036: liveness/readiness on a separate port from server.port, so Kubernetes probes hit the pod
 # directly and /actuator/health is never reachable through this service's own port - no Service or gateway route

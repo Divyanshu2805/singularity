@@ -1,31 +1,31 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: vibecraft-proxy
-  namespace: vibecraft-ai
+  name: singularity-proxy
+  namespace: singularity-ai
 
 ---
 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vibecraft-proxy
-  namespace: vibecraft-ai
+  name: singularity-proxy
+  namespace: singularity-ai
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: vibecraft-proxy
+      app: singularity-proxy
   template:
     metadata:
       labels:
-        app: vibecraft-proxy
+        app: singularity-proxy
     spec:
       # CODE_REVIEW.md OPS-01: the same least-privilege pattern k8s/runner-pods.yml already has and had live-verified
       # (SEC-08/09/10) - this manifest never had it, unlike the pods it sits in front of. No Role/RoleBinding is
       # granted (same reasoning as preview-runner in runner-pods.yml): this ServiceAccount exists only so the pod
       # isn't implicitly `default`, and automountServiceAccountToken is false anyway.
-      serviceAccountName: vibecraft-proxy
+      serviceAccountName: singularity-proxy
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -35,7 +35,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: proxy
-          image: vibecraft-proxy:latest
+          image: singularity-proxy:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -52,7 +52,7 @@ spec:
             - name: PREVIEW_ACCESS_TOKEN_SECRET
               # Must be byte-for-byte the same value as the backend's PREVIEW_ACCESS_TOKEN_SECRET (.env) - it's how
               # this proxy verifies the token PreviewAccessToken.java signs (CODE_REVIEW.md SEC-06). Create the
-              # Secret once per cluster: kubectl create secret generic preview-access-token -n vibecraft-ai
+              # Secret once per cluster: kubectl create secret generic preview-access-token -n singularity-ai
               # --from-literal=secret='<same value as the backend .env>'
               valueFrom:
                 secretKeyRef:
@@ -75,8 +75,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: vibecraft-proxy-svc
-  namespace: vibecraft-ai
+  name: singularity-proxy-svc
+  namespace: singularity-ai
 spec:
   # ClusterIP, not LoadBalancer: on kind this was always pending forever anyway (no load balancer to provision),
   # reached locally through k8s/dev-port-forward.ps1/.sh's kubectl port-forward - which targets a Service's
@@ -88,4 +88,4 @@ spec:
     - port: 80
       targetPort: 8080
   selector:
-    app: vibecraft-proxy
+    app: singularity-proxy

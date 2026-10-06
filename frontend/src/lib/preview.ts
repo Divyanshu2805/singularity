@@ -47,6 +47,21 @@ export const autoStartKey = (preview: Preview | null | undefined) => (preview ? 
 export const changedDependencies = (paths: readonly string[]) =>
   paths.some((path) => path.replace(/^\/+/, "") === "package.json");
 
+/**
+ * What the preview iframe may do. The page inside is code an AI wrote and any collaborator can open, so it gets no
+ * top-level navigation (it cannot send the whole app to another address after a click), no pointer-lock and no
+ * orientation or presentation control. allow-same-origin keeps it on its own preview origin, which the message check
+ * and the proxy cookie both rely on; it is safe to grant only because that origin is not the app's.
+ */
+export const PREVIEW_SANDBOX = [
+  "allow-scripts",
+  "allow-same-origin",
+  "allow-forms",
+  "allow-popups",
+  "allow-modals",
+  "allow-downloads",
+].join(" ");
+
 export function previewOrigin(previewUrl: string | null | undefined): string | null {
   if (!previewUrl) return null;
   try {

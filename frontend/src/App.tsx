@@ -11,6 +11,11 @@
  * who only wanted the pricing page. While a page's code arrives the app shows its own night (AppLoading) - the sky
  * with the horizon mark building itself - rather than a blank screen.
  *
+ * One route is registered in development only (import.meta.env.DEV), so a production build neither serves nor
+ * bundles it: /genesis, the landing page being rebuilt as one continuous scene (pages/Genesis.tsx), there to be
+ * reviewed section by section until the owner approves it to replace the page at the root (pages/Home.tsx, shown
+ * by Index).
+ *
  * Route order matters: the catch-all must stay last, or it would swallow everything after it.
  */
 import { lazy, Suspense } from "react";
@@ -37,6 +42,7 @@ const Pricing = lazy(() => import("./pages/Pricing").then((m) => ({ default: m.P
 const BillingSettings = lazy(() => import("./pages/BillingSettings").then((m) => ({ default: m.BillingSettings })));
 const UsageInsights = lazy(() => import("./pages/UsageInsights").then((m) => ({ default: m.UsageInsights })));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const Genesis = import.meta.env.DEV ? lazy(() => import("./pages/Genesis")) : null;
 
 const queryClient = new QueryClient();
 
@@ -63,6 +69,7 @@ const App = () => (
               <Route path="/settings/billing" element={<BillingSettings />} />
               <Route path="/usage" element={<UsageInsights />} />
               <Route path="/settings/security" element={<SecuritySettings />} />
+              {Genesis && <Route path="/genesis" element={<Genesis />} />}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

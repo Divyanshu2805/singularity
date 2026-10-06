@@ -2,7 +2,7 @@
 # The backend does this itself while it runs (PreviewPortForwarder); only needed when preview.port-forward is disabled.
 # Same as dev-port-forward.ps1, for macOS/Linux/Git Bash: the preview proxy on 8090 and Redis on 6379, each
 # restarted if it drops. Ctrl+C stops both.
-NAMESPACE=vibecraft-ai
+NAMESPACE=singularity-ai
 
 forward() {
   while true; do
@@ -14,7 +14,7 @@ forward() {
 }
 
 trap 'kill 0' INT TERM EXIT
-forward "preview proxy" svc/vibecraft-proxy-svc 8090:80 &
+forward "preview proxy" svc/singularity-proxy-svc 8090:80 &
 forward "redis" svc/redis-service 6379:6379 &
 echo "Previews: http://<preview>.localhost:8090   Redis: localhost:6379   (Ctrl+C to stop)"
 wait

@@ -1,7 +1,8 @@
 /**
  * The build and dev-server configuration.
  *
- * Handles: the React plugin, the path alias, injecting the Content Security Policy into production builds, and
+ * Handles: the React plugin, the path alias, injecting the Content Security Policy into production builds (as a meta
+ * tag, and as the csp-header.conf nginx include that serves it as a header too), and
  * proxying API calls in development.
  *
  * The proxy is what keeps API calls same-origin in development, so the app works on any port without depending on
@@ -11,7 +12,8 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { buildContentSecurityPolicy } from "./csp";
+import { writeFileSync } from "fs";
+import { buildContentSecurityPolicy, buildContentSecurityPolicyHeaderDirective } from "./csp";
 
 const contentSecurityPolicy = (env: Record<string, string>): Plugin => ({
   name: "content-security-policy",
@@ -24,6 +26,14 @@ const contentSecurityPolicy = (env: Record<string, string>): Plugin => ({
     },
     { tag: "meta", attrs: { name: "referrer", content: "strict-origin-when-cross-origin" }, injectTo: "head-prepend" },
   ],
+});
+
+const contentSecurityPolicyHeader = (env: Record<string, string>): Plugin => ({
+  name: "content-security-policy-header",
+  apply: "build",
+  closeBundle() {
+    writeFileSync(path.resolve(__dirname, "csp-header.conf"), buildContentSecurityPolicyHeaderDirective(env));
+  },
 });
 
 export default defineConfig(({ mode }) => {
@@ -44,7 +54,7 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    plugins: [react(), contentSecurityPolicy(env)],
+    plugins: [react(), contentSecurityPolicy(env), contentSecurityPolicyHeader(env)],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

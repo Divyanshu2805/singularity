@@ -4,20 +4,20 @@
 # the second silently overwrites whatever the first created.
 #
 # Single replica, no HA - the same "beta tradeoff, not HA" as the rest of the stack,
-# not a new one introduced here. Namespace: vibecraft-ai for now, alongside the runner
-# pool it primarily serves - docs/deployment/'s architecture table's eventual trusted `vibecraft` namespace
+# not a new one introduced here. Namespace: singularity-ai for now, alongside the runner
+# pool it primarily serves - docs/deployment/'s architecture table's eventual trusted `singularity` namespace
 # doesn't exist as a manifest yet (the rest of Phase 3's platform buildout), and moving a namespace before there is
 # any real data in it is a non-event, not a migration.
 #
 # Create the root credentials once per cluster, before applying this file:
-#   kubectl create secret generic minio-root-credentials -n vibecraft-ai \
+#   kubectl create secret generic minio-root-credentials -n singularity-ai \
 #     --from-literal=username=minioadmin \
 #     --from-literal=password='<a long random value - this is MINIO_ROOT_PASSWORD in the deployment plan>'
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: minio
-  namespace: vibecraft-ai
+  namespace: singularity-ai
 spec:
   serviceName: minio-service
   replicas: 1
@@ -105,7 +105,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: minio-service
-  namespace: vibecraft-ai
+  namespace: singularity-ai
 spec:
   # No console port exposed here on purpose - :9001 stays reachable only via kubectl port-forward, never through
   # any Service a NetworkPolicy or the Cloudflare tunnel could accidentally expose further.
@@ -127,7 +127,7 @@ spec:
 #
 # Idempotent - mc admin policy create/user add/policy attach all just re-apply the same state on a re-run, so this
 # is safe to run again after minio-runner-credentials' password rotates. Needs both secrets already created:
-#   kubectl create secret generic minio-runner-credentials -n vibecraft-ai \
+#   kubectl create secret generic minio-runner-credentials -n singularity-ai \
 #     --from-literal=password='<MINIO_RUNNER_SECRET from the deployment plan>' \
 #     --from-literal=host-uri='http://previewreader:<the same value>@minio-service:9000'
 # (host-uri is what k8s/runner-pods.yml's syncer container actually reads; password is what this Job reads to set
@@ -137,7 +137,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: minio-bootstrap-preview-reader
-  namespace: vibecraft-ai
+  namespace: singularity-ai
 spec:
   backoffLimit: 3
   template:

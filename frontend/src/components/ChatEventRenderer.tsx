@@ -1,10 +1,14 @@
 /**
- * Renders an assistant turn: the thought, the build checklist, the files it wrote, the lessons it taught and the
- * prose in between.
+ * Renders an assistant turn: the thought, the build checklist, the files it wrote, the lessons it taught, any
+ * question it put to the user, and the prose in between.
  *
  * Handles: grouping the raw events into blocks, resolving each checklist step's status as the turn progresses,
  * folding teaching-mode walkthroughs underneath the step that wrote their file, opening a file at the line a lesson
- * or message points at, and the separate rendering for a turn that ended in an error.
+ * or message points at, showing a turn's questions with their suggested answers (one question is answered with a
+ * click; several are picked and then sent together), and the separate rendering for a turn that ended in an error.
+ *
+ * A question can only be answered on the newest turn while nothing is streaming; on an older turn its suggestions are
+ * shown as plain text, since the conversation has already moved past them.
  *
  * The checklist has a hard cap matching the parser's, so the live view shows exactly what gets saved. Its real length
  * is set by the work - the model is told to emit one step per file - so the cap only bites when it ignores that.
@@ -14,11 +18,12 @@
  * (OrbitSpinner) rather than a spinning icon, and the turn is signed with the horizon mark (HorizonMark).
  */
 import { Fragment, useId, useState } from 'react';
-import { ArrowUpRight, Check, ChevronDown, Circle, CircleAlert, Clock, FilePen, FileSearch, GraduationCap, ListChecks, Trash2 } from 'lucide-react';
+import { ArrowUp, ArrowUpRight, Check, ChevronDown, Circle, CircleAlert, CircleHelp, Clock, FilePen, FileSearch, GraduationCap, ListChecks, Trash2 } from 'lucide-react';
 import { HorizonMark } from '@/components/HorizonMark';
 import { OrbitSpinner } from '@/components/app/OrbitSpinner';
 import { ChatMarkdown } from '@/components/ChatMarkdown';
 import { ChatEvent, ChatEventType } from '@/lib/types';
+import { type AskedQuestion, formatAnswers, isFullyAnswered, parseAnswerOptions } from '@/lib/ask';
 import { getFileColor, getFileIcon, splitPath } from '@/lib/file-icons';
 import { type CodeTarget, type Lesson, type LessonPart, parseLesson, withLines } from '@/lib/lesson';
 import { cn } from '@/lib/utils';
@@ -34,13 +39,15 @@ const MAX_CHECKLIST_STEPS = 12;
 type LessonView = Lesson & { isComplete: boolean };
 type EditItem = { path: string; active: boolean; deleted?: boolean };
 type LessonItem = { path?: string; lesson: LessonView };
+type AskItem = AskedQuestion & { isComplete: boolean };
 
 type Block =
   | { kind: 'message'; key: string; content: string }
   | { kind: 'reads'; key: string; files: string[]; active: boolean }
   | { kind: 'checklist'; key: string; items: ChecklistItem[] }
   | { kind: 'edits'; key: string; items: EditItem[] }
-  | { kind: 'lessons'; key: string; items: LessonItem[] };
+  | { kind: 'lessons'; key: string; items: LessonItem[] }
+  | { kind: 'ask'; key: string; questions: AskItem[] };
 
 function tidyPartialMarkdown(text: string) {
   let tidy = text;
@@ -121,6 +128,15 @@ export function buildBlocks(events: ChatEvent[], isStreaming: boolean): Block[] 
     } else if (event.type === ChatEventType.MESSAGE && event.content) {
       const content = event.isComplete === false ? tidyPartialMarkdown(event.content) : event.content;
       blocks.push({ kind: 'message', key: `m${index}`, content });
+    } else if (event.type === ChatEventType.ASK && event.content) {
+      const isComplete = event.isComplete !== false;
+      const item: AskItem = {
+        question: event.content,
+        options: isComplete ? parseAnswerOptions(event.metadata) : [],
+        isComplete,
+      };
+      if (prev?.kind === 'ask') prev.questions.push(item);
+      else blocks.push({ kind: 'ask', key: `q${index}`, questions: [item] });
     } else if (event.type === ChatEventType.TOOL_LOG) {
       const files = (event.metadata ?? '').split(',').map((f) => f.trim()).filter(Boolean);
       const active = isStreaming && index === lastIndex;
@@ -209,6 +225,93 @@ function ReadsBlock({ files, active, onOpen }: { files: string[]; active: boolea
       </span>
       <div className="flex min-w-0 flex-wrap gap-1">
         {files.map((file) => <FileChip key={file} path={file} onOpen={onOpen} />)}
+      </div>
+    </div>
+  );
+}
+
+function AskBlock({ questions, onAnswer }: { questions: AskItem[]; onAnswer?: (answer: string) => void }) {
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const isSingle = questions.length === 1;
+  const hasArrived = questions.every((question) => question.isComplete);
+  const canAnswer = !!onAnswer && hasArrived;
+  const canSend = canAnswer && !isSingle && isFullyAnswered(questions, answers);
+
+  const pick = (index: number, option: string) => {
+    if (!canAnswer) return;
+    if (isSingle) {
+      onAnswer(formatAnswers(questions, { 0: option }));
+      return;
+    }
+    setAnswers((prev) => ({ ...prev, [index]: prev[index] === option ? '' : option }));
+  };
+
+  return (
+    <div className="chat-tile overflow-hidden rounded-xl">
+      <div className="chat-tile-head flex items-center gap-2 px-3 py-2 text-xs font-medium text-foreground/90">
+        <CircleHelp className="h-3.5 w-3.5 text-primary" />
+        {isSingle ? 'A quick question' : `${questions.length} quick questions`}
+      </div>
+      <div className="flex flex-col gap-3 px-3 py-3">
+        {questions.map((question, index) => (
+          <div key={index} role="group" aria-label={question.question} className="flex flex-col gap-2">
+            <p className="text-[13px] leading-5 text-foreground">{question.question}</p>
+            {question.options.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {question.options.map((option) => {
+                  const isPicked = answers[index] === option;
+                  return canAnswer ? (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => pick(index, option)}
+                      aria-pressed={isSingle ? undefined : isPicked}
+                      className={cn(
+                        'app-chip inline-flex min-h-7 items-center gap-1.5 border px-2.5 py-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        isPicked
+                          ? 'border-primary/60 bg-primary/15 text-foreground'
+                          : 'border-white/10 bg-black/20 text-foreground/85 hover:border-primary/40 hover:text-foreground'
+                      )}
+                    >
+                      {isPicked && <Check className="h-3 w-3 text-primary" />}
+                      {option}
+                    </button>
+                  ) : (
+                    <span key={option} className="inline-flex min-h-7 items-center rounded-full border border-white/[0.06] px-2.5 py-1 text-xs text-muted-foreground">
+                      {option}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            {canAnswer && !isSingle && question.options.length === 0 && (
+              <input
+                value={answers[index] ?? ''}
+                maxLength={200}
+                onChange={(e) => setAnswers((prev) => ({ ...prev, [index]: e.target.value }))}
+                placeholder="Type your answer"
+                aria-label={question.question}
+                className="app-field h-8 rounded-lg px-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/70"
+              />
+            )}
+          </div>
+        ))}
+        {canAnswer && (
+          <div className="flex items-center justify-between gap-2 text-[11.5px] text-muted-foreground">
+            <span>{isSingle ? 'Pick one, or type your own answer below.' : 'Pick an answer for each, or just reply below in your own words.'}</span>
+            {!isSingle && (
+              <button
+                type="button"
+                disabled={!canSend}
+                onClick={() => onAnswer(formatAnswers(questions, answers))}
+                className="app-chip inline-flex h-7 shrink-0 items-center gap-1.5 border border-primary/50 bg-primary/15 px-2.5 text-xs text-foreground disabled:pointer-events-none disabled:opacity-40"
+              >
+                <ArrowUp className="h-3 w-3" />
+                Send answers
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -599,9 +702,10 @@ interface AssistantEventsProps {
   isIdle: boolean;
   fallbackThought?: string;
   onOpenFile?: OpenFile;
+  onAnswer?: (answer: string) => void;
 }
 
-export function AssistantEvents({ events, isStreaming, isIdle, fallbackThought, onOpenFile }: AssistantEventsProps) {
+export function AssistantEvents({ events, isStreaming, isIdle, fallbackThought, onOpenFile, onAnswer }: AssistantEventsProps) {
   const thought = events.find((event) => event.type === ChatEventType.THOUGHT)?.content ?? fallbackThought;
   const blocks = buildBlocks(events, isStreaming);
 
@@ -645,6 +749,8 @@ export function AssistantEvents({ events, isStreaming, isIdle, fallbackThought, 
             return <EditsBlock key={block.key} items={block.items} onOpen={onOpenFile} />;
           case 'lessons':
             return <LessonsBlock key={block.key} items={block.items} onOpen={onOpenFile} />;
+          case 'ask':
+            return <AskBlock key={block.key} questions={block.questions} onAnswer={isStreaming ? undefined : onAnswer} />;
         }
       })}
 

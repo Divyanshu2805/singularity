@@ -16,7 +16,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: preview-runner
-  namespace: vibecraft-ai
+  namespace: singularity-ai
   # No Role/RoleBinding is granted to this ServiceAccount anywhere - it exists only so the pod isn't implicitly
   # `default`, and automountServiceAccountToken is false below anyway, so no token is even present to misuse.
 automountServiceAccountToken: false
@@ -27,7 +27,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: runner-pool
-  namespace: vibecraft-ai
+  namespace: singularity-ai
 spec:
   replicas: 2 # idle pods kept warm - the number of previews that can start without waiting for a pod
   selector:
@@ -115,7 +115,7 @@ spec:
             # admin credentials - a compromised runner pod's syncer can list and read the projects bucket, never
             # write, delete, or touch any other bucket or the admin API. k8s/minio.yml's bootstrap Job creates that
             # user; create the secret before running it:
-            #   kubectl create secret generic minio-runner-credentials -n vibecraft-ai \
+            #   kubectl create secret generic minio-runner-credentials -n singularity-ai \
             #     --from-literal=password='<MINIO_RUNNER_SECRET from the deployment plan>' \
             #     --from-literal=host-uri='http://previewreader:<the same value>@minio-service:9000'
             # Local kind dev against k8s/minio-hostbridge.yml can keep using the admin literal instead - it's your
@@ -152,7 +152,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: runner-pool-policy
-  namespace: vibecraft-ai
+  namespace: singularity-ai
 spec:
   podSelector:
     matchLabels:
@@ -166,7 +166,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              app: vibecraft-proxy
+              app: singularity-proxy
       ports:
         - protocol: TCP
           port: 5173
@@ -189,6 +189,21 @@ spec:
         - podSelector:
             matchLabels:
               app: minio
+      ports:
+        - protocol: TCP
+          port: 9000
+    # Local kind dev only: k8s/minio-hostbridge.yml points minio-service at MinIO on the developer's machine
+    # (host.docker.internal), which is not a pod, so the rule above never matches it, and its address falls inside
+    # the 192.168.0.0/16 range the blanket rule below excludes - without this every preview start fails with an i/o
+    # timeout in the syncer. Exactly the Docker Desktop host gateway, on the MinIO port, and nothing else. The address
+    # is Docker Desktop's default; if previews time out reaching MinIO on another setup, check what minio-service
+    # resolves to from a runner pod (kubectl exec ... getent hosts minio-service). deploy/k8s/ has no such rule,
+    # because production MinIO is a pod.
+    - to:
+        - ipBlock:
+            cidr: 192.168.65.254/32
+        - ipBlock:
+            cidr: fdc4:f303:9324::254/128
       ports:
         - protocol: TCP
           port: 9000

@@ -7,16 +7,16 @@ domain services and their internal API, the data layer, the live-preview namespa
 from kit import Scene, C, LINE
 
 def build():
-    s = Scene(1720, 1200, "VibeCraft — system architecture",
+    s = Scene(1720, 1200, "Singularity — system architecture",
               "Every runtime component and connection, as wired in the code and the production manifests")
 
     s.group(500, 110, 1180, 120, "External services", C["yellow"], "sparkle")
     s.group(40, 270, 180, 830, "Clients", C["gray"], "user")
     s.group(260, 270, 200, 560, "Edge", C["orange"], "cloud")
-    s.group(500, 270, 700, 500, "Backend", C["green"], "box", sub="namespace vibecraft")
-    s.group(1240, 270, 440, 500, "Data layer", C["red"], "db", sub="namespace vibecraft")
-    s.group(500, 820, 700, 280, "Frontend", C["blue"], "browser", sub="namespace vibecraft")
-    s.group(1240, 820, 440, 280, "Live previews", C["purple"], "pod", sub="namespace vibecraft-ai")
+    s.group(500, 270, 700, 500, "Backend", C["green"], "box", sub="namespace singularity")
+    s.group(1240, 270, 440, 500, "Data layer", C["red"], "db", sub="namespace singularity")
+    s.group(500, 820, 700, 280, "Frontend", C["blue"], "browser", sub="namespace singularity")
+    s.group(1240, 820, 440, 280, "Live previews", C["purple"], "pod", sub="namespace singularity-ai")
 
     fb = s.node(530, 145, "Firebase Auth", "firebase", "ID tokens · session cookies", layout="row", w=240, accent=C["yellow"])
     st = s.node(820, 145, "Stripe", "stripe", "checkout · portal · webhooks", layout="row", w=240, accent=C["yellow"])

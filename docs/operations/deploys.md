@@ -20,7 +20,7 @@ A pull request runs only the tests. Full details: [CI/CD pipeline](../deployment
 To roll back a single workload by hand:
 
 ```bash
-kubectl --context <prod> -n vibecraft rollout undo deploy/<name>
+kubectl --context <prod> -n singularity rollout undo deploy/<name>
 ```
 
 **Migrations only go forward.** Flyway runs when each service starts, so rolling code back past a migration works only if the migration was backward-compatible. Keep migrations additive.
@@ -32,11 +32,11 @@ Find the failed step in the run, then:
 | Failed step | Likely cause | Fix |
 |---|---|---|
 | Smoke test, right after a cold start | The gateway hadn't discovered a just-started service through Eureka yet (up to about 30 seconds) | Check `https://<app domain>/api/plans` by hand; if it answers, **Re-run failed jobs** |
-| Apply, with `field is immutable` on a Job | A Job's pod template can't change after creation, and this deploy changes its image | Delete the completed Job (`kubectl -n vibecraft delete job <name>`), then re-run; the apply creates it again. `minio-bootstrap-preview-reader` is safe to re-run |
-| Wait, stuck on the first workload, with `exceeded quota` in `kubectl -n vibecraft get events` | Leftover pods from an earlier broken deploy hold the namespace's CPU limit, so a pod that everything else needs (usually `postgres-0`) can't be created | Scale the app Deployments to 0 (below), then re-run. The manifests set `replicas: 1`, so the deploy brings each one back |
+| Apply, with `field is immutable` on a Job | A Job's pod template can't change after creation, and this deploy changes its image | Delete the completed Job (`kubectl -n singularity delete job <name>`), then re-run; the apply creates it again. `minio-bootstrap-preview-reader` is safe to re-run |
+| Wait, stuck on the first workload, with `exceeded quota` in `kubectl -n singularity get events` | Leftover pods from an earlier broken deploy hold the namespace's CPU limit, so a pod that everything else needs (usually `postgres-0`) can't be created | Scale the app Deployments to 0 (below), then re-run. The manifests set `replicas: 1`, so the deploy brings each one back |
 
 ```bash
-kubectl --context <prod> -n vibecraft scale deploy discovery-service gateway-service account-service workspace-service intelligence-service frontend --replicas=0
+kubectl --context <prod> -n singularity scale deploy discovery-service gateway-service account-service workspace-service intelligence-service frontend --replicas=0
 ```
 
 A failed deploy's rollback points each workload at its previous version. If that version is itself broken, the new pods may keep serving while the old ones crash-loop; don't mistake that for a stable state, and redeploy.
@@ -55,7 +55,7 @@ Changing `DB_PASSWORD` or `MINIO_ROOT_PASSWORD` in GitHub does **not** change th
 
 To rotate safely:
 
-1. Change the password on the server first — `ALTER USER vibecraft WITH PASSWORD '...'` inside `postgres-0`, or restart MinIO with the new root password.
+1. Change the password on the server first — `ALTER USER singularity WITH PASSWORD '...'` inside `postgres-0`, or restart MinIO with the new root password.
 2. Then update the GitHub secret and deploy.
 
 `apply-secrets.sh` acts on the current `kubectl` context and rewrites every Secret, so never run it by hand without the kubeconfig you mean.

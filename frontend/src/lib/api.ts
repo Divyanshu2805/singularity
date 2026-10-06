@@ -13,7 +13,7 @@
  * Requests are relative by default: in development Vite proxies them to the Gateway, so the browser only ever talks
  * to one origin and the SameSite cookie is always sent.
  */
-import { Preview, PreviewLogs, ActiveGeneration, AuthSecurityEvent, AuthSecurityEventType, SessionResponse, ChatMessage, ClarifyingQuestion, CodeNote, CodeSearchResponse, CodeSelection, FileNode, Plan, QuotaDetails, Subscription, UsageEventPage, UsageInsights, UsageRange, UsageToday, IdeaAnswer, ProjectSummaryResponse, ProjectResponse, ProjectMember, ProjectRole } from "./types";
+import { Preview, PreviewLogs, ActiveGeneration, AuthSecurityEvent, AuthSecurityEventType, SessionResponse, ChatMessage, ClarifyingQuestion, CodeNote, CodeSearchResponse, CodeSelection, FileNode, Plan, QuotaDetails, Subscription, UsageEventPage, UsageInsights, UsageRange, UsageToday, IdeaAnswer, IdeaInterview, ProjectSummaryResponse, ProjectResponse, ProjectMember, ProjectRole } from "./types";
 import { createSseParser } from "./sse";
 import { CSRF_HEADER, ensureCsrfToken, needsCsrf, readCsrfToken } from "./csrf";
 import { clearSignedInState, signOutRedirect } from "./session";
@@ -362,15 +362,15 @@ export const api = {
     return response.json();
   },
 
-  async clarifyIdea(idea: string): Promise<ClarifyingQuestion[]> {
+  async clarifyIdea(idea: string): Promise<IdeaInterview> {
     const response = await apiFetch(`${BASE_URL}/api/ideas/clarify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ idea }),
     });
     await ensureOk(response, "Couldn't prepare questions for your idea");
-    const data: { questions: ClarifyingQuestion[] } = await response.json();
-    return data.questions ?? [];
+    const data: { questions?: ClarifyingQuestion[]; tailored?: boolean } = await response.json();
+    return { questions: data.questions ?? [], tailored: data.tailored !== false };
   },
 
   async compileIdea(idea: string, answers: IdeaAnswer[]): Promise<string> {

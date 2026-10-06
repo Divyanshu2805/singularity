@@ -1,8 +1,6 @@
 # workspace-service data model
 
-Projects, members, files, file revisions and live previews. Database: `vibecraft-workspace-db`.
-
-![workspace-service entity-relationship diagram](../assets/diagrams/er-workspace.png)
+Projects, members, files, file revisions and live previews. Database: `singularity-workspace-db`.
 
 `Project` has no `owner` field of its own — ownership is expressed entirely by a `PROJECT_MEMBER` row with `projectRole = OWNER`; see [Ownership lives on the join row](conventions.md#ownership-lives-on-the-join-row-not-a-foreign-key).
 

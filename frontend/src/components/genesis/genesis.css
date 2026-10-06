@@ -1,0 +1,215 @@
+/* The rebuilt landing page's own rules (pages/Genesis.tsx). Everything else it wears is the app's and the landing
+   page's, from index.css and home.css. Plain rules rather than a layer, since this sheet is loaded with the page and
+   not through index.css's Tailwind layers. */
+
+/* The background (Sky.tsx): the app's wash of colour at the foot of the window, at the strength the page asks for.
+   Sky.tsx writes --wash on the wrapper as the page is scrolled - nearly the dashboard's full strength behind the
+   hero, the strength of the app's panel pages once the hero has gone - and this hands it to the wash, which reads
+   its strength from a property set on its own element (index.css, .nebula). */
+.genesis-sky .nebula {
+  --sky-strength: var(--wash, 0.95);
+}
+
+/* The opening (Opening.tsx): a cover in the brand's gold over the whole window, with the logo's tile at its centre.
+   The cover is a square with rounded corners, laid out large enough to hide the screen and scaled down onto the tile;
+   the scale is Motion's (a transform), so the centring is done with translate, which composes with it. It is above
+   the navigation. While it is held it takes the pointer; once it starts to close it lets it through. */
+.genesis-opening {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  overflow: hidden;
+}
+
+.genesis-opening[data-playing="true"] {
+  pointer-events: none;
+}
+
+.genesis-cover,
+.genesis-tile {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+}
+
+.genesis-cover {
+  border-radius: 28%;
+  background: hsl(var(--primary));
+}
+
+.genesis-tile {
+  display: grid;
+  place-items: center;
+  border-radius: 26%;
+  background: hsl(30 11% 4%);
+  box-shadow: inset 0 0 0 1px hsl(40 30% 90% / 0.07);
+}
+
+/* The hero (Hero.tsx). Under 1280px the copy is centred on the first screen and the project window is whole and
+   flat under it, on the page's usual gutters. From 1280px it is one screen of two columns: the copy on the left and
+   the window on the right, whole on the screen - it once ran off the right edge, after the reference, and the owner
+   had it brought in - standing in a slight perspective with its right side nearer. The perspective is a still pose
+   and is on the window itself, inside the element that rises in, which Motion moves. */
+.genesis-hero {
+  position: relative;
+  overflow-x: clip;
+}
+
+.genesis-hero-grid {
+  position: relative;
+  z-index: 10;
+}
+
+.genesis-hero-copy {
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6rem 0 4rem;
+  text-align: center;
+}
+
+.genesis-hero-stage {
+  padding-bottom: 4rem;
+}
+
+.genesis-window {
+  position: relative;
+  max-width: 82.5rem;
+  margin-inline: auto;
+}
+
+@media (min-width: 1280px) {
+  .genesis-hero {
+    display: flex;
+    min-height: 100svh;
+    align-items: center;
+    padding: 6.5rem 0 3rem;
+  }
+
+  .genesis-hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
+    align-items: center;
+  }
+
+  .genesis-hero-copy {
+    min-height: 0;
+    align-items: flex-start;
+    padding: 0;
+    text-align: left;
+  }
+
+  .genesis-hero-stage {
+    padding: 0 0 0 clamp(2rem, 3.2vw, 4rem);
+  }
+
+  .genesis-window {
+    max-width: none;
+    transform: perspective(1800px) rotateX(-2deg) rotateY(-9deg) rotateZ(-0.3deg);
+  }
+}
+
+/* The headline is set large and light. Under 1280px it is held by the screen's height as well as its width, so the
+   copy fits the first screen on a wide, short window; under 640px the lines are longer than the screen and wrap, so
+   it steps up a weight to stay firm at the smaller size. In the two columns it is three lines in a column well under
+   half the screen, so it is sized by that column. */
+.genesis-headline {
+  padding-bottom: 0.08em;
+  font-size: clamp(2.5rem, min(7.4vw, 11vh), 6.75rem);
+  font-weight: 500;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+}
+
+@media (min-width: 640px) {
+  .genesis-headline {
+    font-weight: 400;
+  }
+}
+
+@media (min-width: 1280px) {
+  .genesis-headline {
+    font-size: clamp(2.75rem, min(4.9vw, 9vh), 5.25rem);
+    line-height: 1;
+  }
+}
+
+/* The falling stars behind the hero (Meteors.tsx): the app's own shooting star (index.css, .shooting-star) given a
+   longer, steeper fall. Each streak is laid from its tail, turned to the line of the fall (--angle) and carried
+   along it by --reach; it is seen for about an eighth of its cycle (--every) and waits out the rest unseen, so the
+   length of the cycle sets both how often it falls and how fast. Transform and opacity only, so the shower runs on
+   the compositor. */
+.genesis-meteors {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.genesis-meteor {
+  position: absolute;
+  width: var(--length);
+  height: 1.5px;
+  border-radius: 9999px;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, transparent, hsl(42 100% 70% / 0.35) 60%, hsl(46 100% 90% / 0.95));
+  opacity: 0;
+  animation: genesis-fall var(--every) var(--delay) linear infinite;
+}
+
+.genesis-meteor::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  translate: 0 -50%;
+  border-radius: 9999px;
+  background: hsl(46 100% 94%);
+  box-shadow: 0 0 6px 2px hsl(42 100% 68% / 0.7);
+}
+
+@keyframes genesis-fall {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--angle)) translateX(0);
+  }
+  1.5%,
+  9% {
+    opacity: var(--bright);
+  }
+  12%,
+  100% {
+    opacity: 0;
+    transform: rotate(var(--angle)) translateX(var(--reach));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .genesis-meteors {
+    display: none;
+  }
+}
+
+/* Glass that blurs what is behind it, on this page. On the home page the wash of colour belongs to the hero and is
+   gone below it; here it is behind every section, and it is redrawn many times a second, so a blur over it is worked
+   out again each time. The app's own pages that stand on the wash tint their surfaces instead of blurring them
+   (index.css, .dash-night), and this does the same for the two kinds of blurred glass this page has: the project
+   window's pane, the largest element on the page, and the questions' rows. Each is a darker tint with no blur, so
+   the sky still shows faintly through it, sharp, and costs nothing. */
+.genesis .hero-glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-image: linear-gradient(to bottom, hsl(30 11% 3.7% / 0.68), hsl(30 11% 3.7% / 0.84) 35%, hsl(30 11% 3.7% / 0.94) 70%);
+}
+
+.genesis .faq-row,
+.genesis .faq-ask {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: linear-gradient(180deg, hsl(30 11% 11% / 0.78), hsl(30 11% 6% / 0.74));
+}

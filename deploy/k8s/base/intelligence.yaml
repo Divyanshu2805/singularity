@@ -4,13 +4,13 @@
 #
 # Extra secret beyond the ones shared with account-service/workspace-service (db-credentials/
 # firebase-service-account/internal-service-secret):
-#   kubectl create secret generic openrouter-api-key -n vibecraft --from-literal=api-key='<OPENROUTER_API_KEY -
+#   kubectl create secret generic openrouter-api-key -n singularity --from-literal=api-key='<OPENROUTER_API_KEY -
 #     a separate key with a hard credit limit, per docs/deployment/configuration.md, never the dev key>'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: intelligence-service
-  namespace: vibecraft
+  namespace: singularity
 spec:
   replicas: 1
   selector:
@@ -33,16 +33,16 @@ spec:
           type: RuntimeDefault
       containers:
         - name: intelligence-service
-          image: vibecraft-intelligence:local
+          image: singularity-intelligence:local
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
           env:
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://postgres:5432/vibecraft-intelligence-db"
+              value: "jdbc:postgresql://postgres:5432/singularity-intelligence-db"
             - name: DB_USERNAME
-              value: vibecraft
+              value: singularity
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -112,7 +112,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: intelligence-service
-  namespace: vibecraft
+  namespace: singularity
 spec:
   selector:
     app: intelligence-service

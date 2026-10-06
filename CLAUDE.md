@@ -60,7 +60,7 @@ docs/                   documentation — start at docs/README.md
 ./mvnw -pl common-lib,<service> test -Dtest=ClassName#method   # one test, building common-lib from source
 ./mvnw -pl gateway-service test -Dtest=RoutingTableTest        # rerun after any controller or route change
 ./mvnw -pl <service> spring-boot:run                           # prove a change boots (see local setup for ports)
-./mvnw test                                                    # all backend tests (452; one needs Docker)
+./mvnw test                                                    # all backend tests (488; one needs Docker)
 ./mvnw clean package                                           # build every module
 cd frontend && npx tsc --noEmit -p tsconfig.app.json && npm run lint && npm test && npm run build
 ```

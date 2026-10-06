@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -48,6 +49,12 @@ import java.util.concurrent.TimeoutException;
  * is not enough.
  *
  * <p>A script that starts something long-running must detach it itself, because exec returns when the shell does.
+ *
+ * <p>The claim time is written under both the current annotation and the legacy {@code vibecraft.dev} one, and read
+ * from either. During a rolling deploy or a rollback two versions of this service run side by side, and the orphan
+ * sweep releases a claimed pod that has no claim time at once, so a version that cannot read the other's key would
+ * release a pod its neighbour had only just claimed. Drop the legacy key only when no version that predates this one
+ * can still be rolled back to.
  */
 @Component
 @RequiredArgsConstructor
@@ -60,7 +67,8 @@ public class PreviewRunnerPool {
     static final String IDLE = "idle";
     static final String BUSY = "busy";
     static final String PROJECT_LABEL = "project-id";
-    static final String CLAIMED_AT_ANNOTATION = "vibecraft.dev/claimed-at";
+    static final String CLAIMED_AT_ANNOTATION = "singularity.dev/claimed-at";
+    static final String LEGACY_CLAIMED_AT_ANNOTATION = "vibecraft.dev/claimed-at";
 
     static final String SYNCER_CONTAINER = "syncer";
     static final String RUNNER_CONTAINER = "runner";
@@ -106,6 +114,7 @@ public class PreviewRunnerPool {
                 .addToLabels(POOL_LABEL, BUSY)
                 .addToLabels(PROJECT_LABEL, projectId.toString())
                 .addToAnnotations(CLAIMED_AT_ANNOTATION, claimedAt.toString())
+                .addToAnnotations(LEGACY_CLAIMED_AT_ANNOTATION, claimedAt.toString())
                 .endMetadata().build();
     }
 
@@ -208,9 +217,10 @@ public class PreviewRunnerPool {
         return statuses != null && !statuses.isEmpty() && statuses.stream().allMatch(ContainerStatus::getReady);
     }
 
-    private static Instant claimedAt(Pod pod) {
-        String value = pod.getMetadata().getAnnotations() == null ? null
-                : pod.getMetadata().getAnnotations().get(CLAIMED_AT_ANNOTATION);
+    static Instant claimedAt(Pod pod) {
+        Map<String, String> annotations = pod.getMetadata().getAnnotations();
+        String value = annotations == null ? null
+                : annotations.getOrDefault(CLAIMED_AT_ANNOTATION, annotations.get(LEGACY_CLAIMED_AT_ANNOTATION));
         try {
             return value == null ? null : Instant.parse(value);
         } catch (RuntimeException e) {

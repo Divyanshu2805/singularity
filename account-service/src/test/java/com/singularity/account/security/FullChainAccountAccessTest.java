@@ -61,7 +61,7 @@ class FullChainAccountAccessTest {
 
     private static final long USER_ID = 7L;
     private static final String VALID_COOKIE = "valid-for-user-7";
-    private static final String SESSION_COOKIE_NAME = "vc_session";
+    private static final String SESSION_COOKIE_NAME = "__Host-vc_session";
 
     @Autowired
     private MockMvc mockMvc;
@@ -113,8 +113,8 @@ class FullChainAccountAccessTest {
     @DisplayName("a mutating request carrying a genuine primed CSRF token passes the CSRF check")
     void logoutWithPrimedCsrfTokenPassesCsrf() throws Exception {
         MvcResult priming = mockMvc.perform(get("/api/auth/csrf")).andReturn();
-        Cookie xsrfCookie = priming.getResponse().getCookie("XSRF-TOKEN");
-        assertThat(xsrfCookie).as("WebSecurityConfig's csrf().spa() must issue an XSRF-TOKEN cookie").isNotNull();
+        Cookie xsrfCookie = priming.getResponse().getCookie("__Host-XSRF-TOKEN");
+        assertThat(xsrfCookie).as("WebSecurityConfig's csrf().spa() must issue a __Host-XSRF-TOKEN cookie").isNotNull();
 
         mockMvc.perform(post("/api/auth/logout")
                         .cookie(xsrfCookie)

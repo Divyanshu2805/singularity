@@ -37,10 +37,39 @@
 		<spring-ai.version>2.0.0-M1</spring-ai.version>
 		<!-- 2025.1.2 ("Oakwood") is the first Spring Cloud release train compatible with Spring Boot 4.1.0. -->
 		<spring-cloud.version>2025.1.2</spring-cloud.version>
+		<!--
+			Security patch overrides of versions Spring Boot 4.1.0's BOM manages (an advisory scan of the runtime
+			classpath on 2026-10-05 found each fixed in the version below). Delete one when the Boot version in use
+			catches up to it. Run the whole reactor after changing any: Netty and Tomcat sit under every service.
+		-->
+		<tomcat.version>11.0.25</tomcat.version>
+		<netty.version>4.2.17.Final</netty.version>
+		<jackson-2-bom.version>2.21.7</jackson-2-bom.version>
+		<jackson-bom.version>3.1.7</jackson-bom.version>
+		<postgresql.version>42.7.12</postgresql.version>
+		<freemarker.version>2.3.35</freemarker.version>
+		<httpcore5.version>5.4.3</httpcore5.version>
+		<httpclient5.version>5.6.3</httpclient5.version>
+		<log4j2.version>2.25.5</log4j2.version>
 	</properties>
 
 	<dependencyManagement>
 		<dependencies>
+			<!--
+				Two libraries no BOM here manages, pinned to patched versions: Bouncy Castle arrives through
+				spring-cloud-starter (1.81.1) and Apache HttpClient 4 through Eureka's client (4.5.3, the version with
+				the cross-site-scripting advisory; firebase-admin already uses 4.5.14).
+			-->
+			<dependency>
+				<groupId>org.bouncycastle</groupId>
+				<artifactId>bcprov-jdk18on</artifactId>
+				<version>1.85</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.httpcomponents</groupId>
+				<artifactId>httpclient</artifactId>
+				<version>4.5.14</version>
+			</dependency>
 			<!--
 				Imported before spring-cloud-dependencies (import order matters here: for the same
 				groupId:artifactId, the first-declared managed version wins) because spring-cloud-dependencies

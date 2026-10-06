@@ -28,7 +28,7 @@ These are public values, safe to show.
 
 | Name | Holds |
 |---|---|
-| `APP_DOMAIN` | The app's hostname, e.g. `vibecraft.divyanshuagrahari.dev` |
+| `APP_DOMAIN` | The app's hostname, e.g. `singularity.divyanshuagrahari.dev` |
 | `PREVIEW_ROOT_DOMAIN` | The parent domain of preview hostnames, e.g. `divyanshuagrahari.dev` |
 | `FIREBASE_PROJECT_ID` | The Firebase project id |
 | `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID` | The Firebase web config baked into the frontend |
@@ -39,8 +39,9 @@ Non-secret settings are set as environment variables or `app-config` entries in 
 
 | Setting | Production value |
 |---|---|
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://postgres:5432/vibecraft-<service>-db` |
-| `SPRING_DATA_REDIS_HOST` | `redis-service.vibecraft-ai` |
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://postgres:5432/singularity-<service>-db` |
+| `SPRING_DATA_REDIS_HOST` | `redis-service.singularity-ai` |
+| `PREVIEW_NAMESPACE` | `singularity-ai` — the namespace workspace-service claims runner pods in. Set explicitly so it can never silently differ from the manifests' namespace; the `application.yaml` default is only the local-dev value |
 | `MINIO_URL` | `http://minio-service:9000` |
 | `EUREKA_SERVER_URL` | `http://discovery-service:8761/eureka/` |
 | `CLIENT_URL` | `https://<app domain>` |

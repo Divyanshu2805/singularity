@@ -8,7 +8,7 @@
  * triggers, so every state-changing request must also carry the cookie's value in a header. Another site can make the
  * browser send our cookies but cannot read them, so it cannot produce the header.
  */
-export const CSRF_COOKIE = "XSRF-TOKEN";
+export const CSRF_COOKIE = "__Host-XSRF-TOKEN";
 export const CSRF_HEADER = "X-XSRF-TOKEN";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);

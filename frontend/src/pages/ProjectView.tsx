@@ -331,12 +331,12 @@ function ProjectWorkspace() {
   const handleFixError = useCallback((error: RuntimeError) => {
     const prompt = `I encountered a ${error.source || "runtime error"} in my application:
 
-Error Message: ${error.message}
-${error.filename ? `File: ${error.filename}` : ''}
+Error Message: ${error.message.slice(0, 2000)}
+${error.filename ? `File: ${error.filename.slice(0, 500)}` : ''}
 ${error.lineno ? `Line: ${error.lineno}` : ''}
 
 Stack Trace:
-${error.stack || "No stack trace available"}
+${error.stack ? error.stack.slice(0, 6000) : "No stack trace available"}
 
 Please analyze this error and fix the code to resolve it.`;
 

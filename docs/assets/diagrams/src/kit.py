@@ -1,5 +1,5 @@
 """
-Diagram toolkit: a tiny SVG scene builder for VibeCraft's documentation diagrams.
+Diagram toolkit: a tiny SVG scene builder for Singularity's documentation diagrams.
 
 Handles: the shared dark theme, group panels, icon nodes, routed connectors with labels, legends, sequence
 diagrams and entity-relationship cards, and exporting each scene to SVG. Icons are Simple Icons (CC0) paths

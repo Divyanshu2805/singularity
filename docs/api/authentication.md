@@ -6,8 +6,8 @@ Sign-in itself happens in the browser against Firebase Authentication (password,
 
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
-| `GET` | `/api/auth/csrf` | — | `204`, sets the `XSRF-TOKEN` cookie | Public. Call once on load to get the token to echo as `X-XSRF-TOKEN` on the first write, including `POST /api/auth/session`. |
-| `POST` | `/api/auth/session` | `{ idToken }` | `SessionResponse { user, expiresAt, newAccount, secondFactorUsed }` | Public. Verifies the Firebase ID token, finds or creates the user, sets the 5-day `vc_session` cookie, and records an audit event. `newAccount` is true when this sign-in created the account; `secondFactorUsed: false` lets the client suggest adding a second factor. Rate-limited to 10 per minute per IP. |
+| `GET` | `/api/auth/csrf` | — | `204`, sets the `__Host-XSRF-TOKEN` cookie | Public. Call once on load to get the token to echo as `X-XSRF-TOKEN` on the first write, including `POST /api/auth/session`. |
+| `POST` | `/api/auth/session` | `{ idToken }` | `SessionResponse { user, expiresAt, newAccount, secondFactorUsed }` | Public. Verifies the Firebase ID token, finds or creates the user, sets the 5-day `__Host-vc_session` cookie, and records an audit event. `newAccount` is true when this sign-in created the account; `secondFactorUsed: false` lets the client suggest adding a second factor. Rate-limited to 10 per minute per IP. |
 | `POST` | `/api/auth/logout` | — | `204`, clears the cookie | Public — no valid session required. Also revokes the session server-side, so a copied cookie stops working in every service immediately. |
 | `POST` | `/api/auth/logout-all` | — | `204` | Revokes every session for the account. |
 | `GET` | `/api/auth/me` | — | `UserProfileResponse { id, username, name }` | |
@@ -16,7 +16,7 @@ Sign-in itself happens in the browser against Firebase Authentication (password,
 
 ## CSRF
 
-The session is a cookie the browser attaches automatically, so every write — including `POST /api/auth/session` and `/logout` — needs a matching `X-XSRF-TOKEN` header (Spring Security's double-submit cookie). The `XSRF-TOKEN` cookie is re-issued on every response: read it fresh before each write, and retry once on a CSRF `403`.
+The session is a cookie the browser attaches automatically, so every write — including `POST /api/auth/session` and `/logout` — needs a matching `X-XSRF-TOKEN` header (Spring Security's double-submit cookie). The `__Host-XSRF-TOKEN` cookie is re-issued on every response: read it fresh before each write, and retry once on a CSRF `403`.
 
 The only exemptions are `/webhooks/**` (authenticated by Stripe's signature) and `/internal/**` (authenticated by the shared secret).
 

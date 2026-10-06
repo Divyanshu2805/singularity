@@ -154,4 +154,50 @@ class LlmResponseParserTest {
 
         assertThat(events).hasSize(12);
     }
+
+    @Test
+    void aQuestionForTheUserIsParsedWithItsSuggestedAnswers() {
+        List<ChatEvent> events = parse("""
+                <message>I need one thing before I build this.</message>
+                <ask options="Email and password|Google sign-in only|No accounts yet">How should people sign in?</ask>
+                """);
+
+        assertThat(events).extracting(ChatEvent::getType).containsExactly(ChatEventType.MESSAGE, ChatEventType.ASK);
+        assertThat(events.get(1).getContent()).isEqualTo("How should people sign in?");
+        assertThat(events.get(1).getMetadata()).isEqualTo("Email and password|Google sign-in only|No accounts yet");
+    }
+
+    @Test
+    void aQuestionWithNoSuggestedAnswersIsStillAQuestion() {
+        List<ChatEvent> events = parse("<ask>Which city is this for?</ask>");
+
+        assertThat(events).hasSize(1);
+        assertThat(events.getFirst().getType()).isEqualTo(ChatEventType.ASK);
+        assertThat(events.getFirst().getMetadata()).isNull();
+    }
+
+    @Test
+    void suggestedAnswersAreTrimmedDeduplicatedAndCapped() {
+        List<ChatEvent> events = parse(
+                "<ask options=\" One | Two ||One|Three|Four|Five|Six|Seven \">Pick one?</ask>");
+
+        assertThat(events.getFirst().getMetadata()).isEqualTo("One|Two|Three|Four|Five|Six");
+    }
+
+    @Test
+    void onlyTheFirstThreeQuestionsInATurnAreKept() {
+        List<ChatEvent> events = parse("""
+                <ask options="a|b">One?</ask>
+                <ask options="a|b">Two?</ask>
+                <ask options="a|b">Three?</ask>
+                <ask options="a|b">Four?</ask>
+                """);
+
+        assertThat(events).extracting(ChatEvent::getContent).containsExactly("One?", "Two?", "Three?");
+    }
+
+    @Test
+    void anEmptyQuestionIsDropped() {
+        assertThat(parse("<ask options=\"a|b\">   </ask>")).isEmpty();
+    }
 }

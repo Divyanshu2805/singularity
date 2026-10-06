@@ -18,7 +18,7 @@ Starts everything over from nothing: the three databases, the stored project fil
 3. **Release claimed runner pods** (skip this if you don't run previews). The pool replaces them with fresh idle pods, and preview routes in Redis expire on their own within `preview.route-ttl` (90 seconds):
 
    ```bash
-   kubectl -n vibecraft-ai delete pod -l status=busy
+   kubectl -n singularity-ai delete pod -l status=busy
    ```
 
 4. **Start the stack again.** Flyway creates each schema, account-service seeds the plans, and workspace-service recreates its buckets and uploads the starter template. Then sign in through the frontend.

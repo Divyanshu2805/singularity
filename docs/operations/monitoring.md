@@ -18,9 +18,9 @@ A failed scheduled run emails the person who last edited the workflow's schedule
 **The site check failed:**
 
 ```bash
-kubectl -n vibecraft get pods
-kubectl -n vibecraft-ai get pods
-kubectl -n vibecraft logs deploy/<failing workload> --tail=100
+kubectl -n singularity get pods
+kubectl -n singularity-ai get pods
+kubectl -n singularity logs deploy/<failing workload> --tail=100
 ```
 
 A `CrashLoopBackOff` on the first pod to restart after a password change is almost always the [stateful secret trap](deploys.md#rotating-the-postgres-or-minio-password).
@@ -28,9 +28,9 @@ A `CrashLoopBackOff` on the first pod to restart after a password change is almo
 **The backup check failed:**
 
 ```bash
-kubectl -n vibecraft get jobs -l app=nightly-backup
-kubectl -n vibecraft logs job/<newest failed job> -c pg-dump
-kubectl -n vibecraft logs job/<newest failed job> -c upload
+kubectl -n singularity get jobs -l app=nightly-backup
+kubectl -n singularity logs job/<newest failed job> -c pg-dump
+kubectl -n singularity logs job/<newest failed job> -c upload
 ```
 
 A failing CronJob alerts no one on its own — this check is the only alarm. It depends on the `LATEST` marker the backup job writes as its very last step, only on full success; never move or remove that write.

@@ -4,7 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: discovery-service
-  namespace: vibecraft
+  namespace: singularity
 spec:
   replicas: 1
   selector:
@@ -33,7 +33,7 @@ spec:
         - name: discovery-service
           # Overlay-specific: kind uses a locally built/loaded :local tag, oracle uses ghcr.io/.../<sha> - set via
           # each overlay's kustomization.yaml `images:` transformer, not hardcoded here.
-          image: vibecraft-discovery:local
+          image: singularity-discovery:local
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -68,7 +68,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: discovery-service
-  namespace: vibecraft
+  namespace: singularity
 spec:
   selector:
     app: discovery-service

@@ -15,7 +15,7 @@ Each backup is a dated full copy, not an incremental mirror, so an accidental de
 ## Taking a backup now
 
 ```bash
-kubectl -n vibecraft create job --from=cronjob/nightly-backup backup-manual-1
+kubectl -n singularity create job --from=cronjob/nightly-backup backup-manual-1
 ```
 
 Then run the uptime workflow by hand to confirm the freshness check sees it. Do this right after the first deploy of a new environment, to prove the R2 path end to end the same day.

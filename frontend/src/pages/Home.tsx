@@ -75,14 +75,13 @@
  * privacy page and a terms page - none of which exist to link to.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { BrandName, HorizonMark } from "@/components/HorizonMark";
-import { SlideLink } from "@/components/SlideLink";
 import { AppGlassCard } from "@/components/landing/AppGlassCard";
+import { ClosingCall } from "@/components/landing/ClosingCall";
 import { EclipseMark } from "@/components/landing/EclipseMark";
 import { Examples } from "@/components/landing/Examples";
 import { Faq } from "@/components/landing/Faq";
 import { FeatureChapters } from "@/components/landing/FeatureChapters";
-import { FooterWordmark } from "@/components/landing/FooterWordmark";
+import { Footer } from "@/components/landing/Footer";
 import { HeadlineWords } from "@/components/landing/HeadlineWords";
 import { HeroFabric, PULSE_SPEED, type FabricHandle } from "@/components/landing/HeroFabric";
 import { HeroSky } from "@/components/landing/HeroSky";
@@ -91,11 +90,10 @@ import { IdeaPrompt } from "@/components/landing/IdeaPrompt";
 import { CONTENT_RISE, INTRO, IntroContext, WORD_DROP, useIntro, useIntroClock, useIntroReached, useIntroStagger } from "@/components/landing/intro";
 import { LandingBackdrop } from "@/components/landing/LandingBackdrop";
 import { LandingNav, type NavLink } from "@/components/landing/LandingNav";
+import { MotionFeatures } from "@/components/landing/MotionFeatures";
 import { useInView, usePrefersReducedMotion, useSmoothScroll } from "@/components/landing/motion";
 import { PlanShowcase } from "@/components/landing/PlanShowcase";
 import { HOME_QUESTIONS } from "@/components/landing/questions";
-import { Reveal } from "@/components/landing/Reveal";
-import { SectionIntro } from "@/components/landing/SectionIntro";
 import { Understand } from "@/components/landing/Understand";
 import { revealApp } from "@/components/landing/expansion";
 import type { Zoom } from "@/lib/expansion";
@@ -263,89 +261,15 @@ function Hero() {
   );
 }
 
-function ClosingCall() {
-  return (
-    <section className="landing-wrap relative pb-24 pt-6 sm:pb-32 sm:pt-10">
-      <SectionIntro eyebrow="Your turn" title="What will you" accent="build first?" />
-      <Reveal delay={140} className="mx-auto mt-10 max-w-[44rem] sm:mt-12">
-        <IdeaPrompt label="Describe the app you want to build first" />
-      </Reveal>
-    </section>
-  );
-}
-
-const FOOTER_GROUPS: { name: string; links: { label: string; href?: string; to?: string }[] }[] = [
-  {
-    name: "Product",
-    links: [
-      { label: "How it works", href: "#workbench" },
-      { label: "What you can build", href: "#examples" },
-      { label: "Understand", href: "#understand" },
-      { label: "Features", href: "#features" },
-      { label: "Pricing", href: "#pricing" },
-      { label: "FAQ", href: "#faq" },
-    ],
-  },
-  {
-    name: "Account",
-    links: [
-      { label: "Create an account", to: "/signup" },
-      { label: "Sign in", to: "/login" },
-    ],
-  },
-];
-
-function Footer() {
-  return (
-    <footer className="relative overflow-hidden">
-      <div aria-hidden="true" className="home-rule mx-auto w-[min(72rem,88%)]" />
-      <div className="landing-wrap flex flex-col gap-10 pt-14 md:flex-row md:items-start md:justify-between">
-        <Reveal className="max-w-sm">
-          <span className="flex items-center gap-2.5">
-            <HorizonMark className="h-8 w-8" />
-            <BrandName className="text-[22px]" />
-          </span>
-          <p className="mt-3 text-[13.5px] leading-[1.65] text-muted-foreground">
-            Describe an idea, answer a few questions, and watch a real project get built, run and explained.
-          </p>
-        </Reveal>
-        <Reveal delay={90}>
-          <nav aria-label="Footer" className="grid grid-cols-2 gap-x-16 gap-y-8">
-            {FOOTER_GROUPS.map((group) => (
-              <div key={group.name}>
-                <p className="text-[13px] font-medium text-foreground/85">{group.name}</p>
-                <ul className="mt-3 space-y-2.5 text-[13.5px] text-muted-foreground">
-                  {group.links.map((link) => (
-                    <li key={link.label}>
-                      {link.to ? (
-                        <SlideLink to={link.to} className="wipe-link">
-                          {link.label}
-                        </SlideLink>
-                      ) : (
-                        <a href={link.href} className="wipe-link">
-                          {link.label}
-                        </a>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </Reveal>
-      </div>
-      <FooterWordmark className="mt-10 sm:mt-12" />
-    </footer>
-  );
-}
-
 function Stage({ children }: { children: ReactNode }) {
   const live = useIntroReached(INTRO.live);
 
   return (
-    <div data-intro={live ? "live" : "playing"} className="landing-page relative min-h-screen overflow-x-clip bg-background">
-      {children}
-    </div>
+    <MotionFeatures>
+      <div data-intro={live ? "live" : "playing"} className="landing-page relative min-h-screen overflow-x-clip bg-background">
+        {children}
+      </div>
+    </MotionFeatures>
   );
 }
 

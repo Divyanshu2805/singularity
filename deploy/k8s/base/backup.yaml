@@ -25,10 +25,10 @@
 # The credentials Secret is created by deploy/scripts/apply-secrets.sh on every deploy (from the R2_* entries in the
 # GitHub `production` environment). On the kind rehearsal cluster there is no R2, so create it by hand pointing at
 # the in-cluster MinIO instead, which speaks the same S3 API:
-#   kubectl create secret generic r2-backup-credentials -n vibecraft \
+#   kubectl create secret generic r2-backup-credentials -n singularity \
 #     --from-literal=endpoint=http://minio-service:9000 \
 #     --from-literal=access-key-id=minioadmin --from-literal=secret-access-key='<minio root password>' \
-#     --from-literal=bucket=vibecraft-backups
+#     --from-literal=bucket=singularity-backups
 # and `mc mb` that bucket first. Without the Secret the CronJob still applies fine; its pods just fail to start.
 #
 # Non-root and capability-free like every other workload here. `HOME=/tmp` for `mc`, for the same reason as
@@ -39,7 +39,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: nightly-backup
-  namespace: vibecraft
+  namespace: singularity
 spec:
   # 02:30 India time, the quietest hour for this app's audience. `timeZone` needs Kubernetes 1.27+; k3s here is 1.36.
   schedule: "30 2 * * *"
@@ -88,7 +88,7 @@ spec:
                 - name: PGHOST
                   value: postgres
                 - name: PGUSER
-                  value: vibecraft
+                  value: singularity
                 - name: PGPASSWORD
                   valueFrom:
                     secretKeyRef:
@@ -103,7 +103,7 @@ spec:
                 - |
                   set -eu
                   mkdir -p /work/pg
-                  for db in vibecraft-account-db vibecraft-workspace-db vibecraft-intelligence-db; do
+                  for db in singularity-account-db singularity-workspace-db singularity-intelligence-db; do
                     echo "Dumping $db"
                     pg_dump -d "$db" -F c -f "/work/pg/$db.dump"
                     pg_restore --list "/work/pg/$db.dump" > /dev/null

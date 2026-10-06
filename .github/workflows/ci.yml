@@ -48,10 +48,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: "25"
@@ -68,7 +68,7 @@ jobs:
         # this is what lets the image job (a separate, arm64 runner) use the exact jar this job just tested, not a
         # fresh rebuild that could theoretically differ.
         if: github.event_name == 'push'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: service-jars
           path: |
@@ -87,10 +87,10 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: npm
@@ -119,10 +119,10 @@ jobs:
       run:
         working-directory: proxy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: npm
@@ -153,9 +153,9 @@ jobs:
           - module: intelligence-service
             image: intelligence
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: service-jars
           path: .
@@ -169,23 +169,23 @@ jobs:
         # stops being true.
         run: test -f "${{ matrix.module }}/target/${{ matrix.module }}-"*.jar
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: docker/java-service.Dockerfile
           build-args: MODULE=${{ matrix.module }}
           platforms: linux/arm64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/vibecraft-${{ matrix.image }}:${{ env.DEPLOY_SHA }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/singularity-${{ matrix.image }}:${{ env.DEPLOY_SHA }}
 
   build-frontend-image:
     name: Build image (frontend)
@@ -199,25 +199,25 @@ jobs:
     # configured" even though every variable was correctly named and set - just not visible to this job).
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: frontend
           platforms: linux/arm64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/vibecraft-frontend:${{ env.DEPLOY_SHA }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/singularity-frontend:${{ env.DEPLOY_SHA }}
           # docs/deployment/configuration.md: every VITE_FIREBASE_* entry is a GitHub *variable*, not a
           # secret - none of them are sensitive, they only identify the Firebase project to the browser. Same
           # names as frontend/.env.example (VITE_FIREBASE_API_KEY/AUTH_DOMAIN/PROJECT_ID/APP_ID) - not derived
-          # from the separate, backend-only `FIREBASE_PROJECT_ID` variable, even though they happen to share a
-          # value today.
+          # from the separate, backend-only firebase-project-id in the oracle overlay's app-config.yaml, though both
+          # must name the same (production) Firebase project.
           build-args: |
             VITE_FIREBASE_API_KEY=${{ vars.VITE_FIREBASE_API_KEY }}
             VITE_FIREBASE_AUTH_DOMAIN=${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
@@ -232,19 +232,19 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: proxy
           platforms: linux/arm64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/vibecraft-preview-proxy:${{ env.DEPLOY_SHA }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/singularity-preview-proxy:${{ env.DEPLOY_SHA }}
 
   build-preview-runner-image:
     name: Build image (preview-runner)
@@ -254,20 +254,20 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: workspace-service/src/main/resources/starter-templates/react-vite-tailwind-daisyui-starter
           file: docker/preview-runner.Dockerfile
           platforms: linux/arm64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/vibecraft-preview-runner:${{ env.DEPLOY_SHA }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/singularity-preview-runner:${{ env.DEPLOY_SHA }}
 
   approve:
     name: Approve the production deploy
@@ -311,12 +311,12 @@ jobs:
       group: production-deploy
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.DEPLOY_SHA }}
 
       - name: Join the tailnet
-        uses: tailscale/github-action@v3
+        uses: tailscale/github-action@6cae46e2d796f265265cfcf628b72a32b4d7cade # v3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -349,7 +349,7 @@ jobs:
         env:
           KUBE_API_SERVER: ${{ secrets.KUBE_API_SERVER }}
 
-      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
         with:
           version: v1.31.0
 
@@ -363,7 +363,7 @@ jobs:
         run: |
           kubectl config set-cluster oracle --server="${{ secrets.KUBE_API_SERVER }}" --insecure-skip-tls-verify=true
           kubectl config set-credentials deployer --token="${{ secrets.KUBE_DEPLOYER_TOKEN }}"
-          kubectl config set-context oracle --cluster=oracle --user=deployer --namespace=vibecraft
+          kubectl config set-context oracle --cluster=oracle --user=deployer --namespace=singularity
           kubectl config use-context oracle
 
       - name: Wait for the Oracle API server to become reachable
@@ -418,20 +418,20 @@ jobs:
         # just "the deploy is unhealthy") instead of one final timeout with no clue which pod never came up.
         run: |
           set -e
-          kubectl -n vibecraft rollout status statefulset/postgres --timeout=5m
-          kubectl -n vibecraft rollout status statefulset/minio --timeout=5m
-          kubectl -n vibecraft-ai rollout status deployment/redis-server --timeout=5m
-          kubectl -n vibecraft rollout status deployment/discovery-service --timeout=5m
-          kubectl -n vibecraft rollout status deployment/account-service --timeout=5m
-          kubectl -n vibecraft rollout status deployment/workspace-service --timeout=5m
-          kubectl -n vibecraft rollout status deployment/intelligence-service --timeout=5m
-          kubectl -n vibecraft rollout status deployment/gateway-service --timeout=5m
-          kubectl -n vibecraft rollout status deployment/frontend --timeout=5m
-          kubectl -n vibecraft-ai rollout status deployment/vibecraft-proxy --timeout=5m
-          kubectl -n vibecraft-ai rollout status deployment/runner-pool --timeout=5m
+          kubectl -n singularity rollout status statefulset/postgres --timeout=5m
+          kubectl -n singularity rollout status statefulset/minio --timeout=5m
+          kubectl -n singularity-ai rollout status deployment/redis-server --timeout=5m
+          kubectl -n singularity rollout status deployment/discovery-service --timeout=5m
+          kubectl -n singularity rollout status deployment/account-service --timeout=5m
+          kubectl -n singularity rollout status deployment/workspace-service --timeout=5m
+          kubectl -n singularity rollout status deployment/intelligence-service --timeout=5m
+          kubectl -n singularity rollout status deployment/gateway-service --timeout=5m
+          kubectl -n singularity rollout status deployment/frontend --timeout=5m
+          kubectl -n singularity-ai rollout status deployment/singularity-proxy --timeout=5m
+          kubectl -n singularity-ai rollout status deployment/runner-pool --timeout=5m
 
       - name: Smoke test
-        # app and preview no longer share a domain suffix (vars.APP_DOMAIN is `vibecraft.divyanshuagrahari.dev`,
+        # app and preview no longer share a domain suffix (vars.APP_DOMAIN is `singularity.divyanshuagrahari.dev`,
         # a single-level subdomain - Cloudflare's free wildcard cert only covers one level, so previews stayed on
         # the pre-existing `*.divyanshuagrahari.dev`), so each is its own explicit GitHub variable now rather than
         # one derived from the other.
@@ -442,11 +442,11 @@ jobs:
         # is just as much "a failed rollout" as docs/deployment/'s own Phase 5 spec calls for rolling back.
         if: failure()
         run: |
-          kubectl -n vibecraft rollout undo deployment/discovery-service
-          kubectl -n vibecraft rollout undo deployment/account-service
-          kubectl -n vibecraft rollout undo deployment/workspace-service
-          kubectl -n vibecraft rollout undo deployment/intelligence-service
-          kubectl -n vibecraft rollout undo deployment/gateway-service
-          kubectl -n vibecraft rollout undo deployment/frontend
-          kubectl -n vibecraft-ai rollout undo deployment/vibecraft-proxy
-          kubectl -n vibecraft-ai rollout undo deployment/runner-pool
+          kubectl -n singularity rollout undo deployment/discovery-service
+          kubectl -n singularity rollout undo deployment/account-service
+          kubectl -n singularity rollout undo deployment/workspace-service
+          kubectl -n singularity rollout undo deployment/intelligence-service
+          kubectl -n singularity rollout undo deployment/gateway-service
+          kubectl -n singularity rollout undo deployment/frontend
+          kubectl -n singularity-ai rollout undo deployment/singularity-proxy
+          kubectl -n singularity-ai rollout undo deployment/runner-pool

@@ -2,6 +2,7 @@ package com.singularity.intelligence.service.impl;
 
 import com.singularity.intelligence.dto.code.AskCodeRequest;
 import com.singularity.intelligence.dto.code.ExplainCodeRequest;
+import com.singularity.intelligence.enums.UsageFeature;
 import com.singularity.intelligence.feign.WorkspaceServiceClient;
 import com.singularity.intelligence.llm.AiUsageRecorder;
 import com.singularity.intelligence.mapper.CodeNoteMapper;
@@ -37,7 +38,7 @@ class CodeInsightServiceImplBudgetGateTest {
             usageService, mock(CodeNoteRepository.class), mock(CodeNoteMapper.class), mock(AuthUtil.class));
 
     private void overBudget() {
-        doThrow(new IllegalStateException("over the daily allowance")).when(usageService).reserveBudget();
+        doThrow(new IllegalStateException("over the daily allowance")).when(usageService).reserveBudget(UsageFeature.EXPLAIN);
     }
 
     @Test

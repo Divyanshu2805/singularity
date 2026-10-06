@@ -77,8 +77,8 @@ def deployment_topology():
     s.group(40, 120, 230, 820, "Outside", C["gray"], "user")
     s.group(310, 120, 1060, 820, "Oracle VM · k3s", C["teal"], "k3s" if False else "layers",
             sub="VM.Standard.A1.Flex · 2 OCPU · 12 GB · Ubuntu 24.04 arm64")
-    s.group(340, 180, 640, 560, "namespace vibecraft", C["green"], "box", sub="trusted")
-    s.group(1010, 180, 330, 560, "namespace vibecraft-ai", C["purple"], "pod", sub="untrusted code")
+    s.group(340, 180, 640, 560, "namespace singularity", C["green"], "box", sub="trusted")
+    s.group(1010, 180, 330, 560, "namespace singularity-ai", C["purple"], "pod", sub="untrusted code")
     s.group(1410, 120, 200, 820, "External", C["yellow"], "sparkle")
 
     vis = s.node(62, 170, "Visitors", "browser", "HTTPS", w=186, accent=C["gray"])
