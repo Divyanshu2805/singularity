@@ -88,7 +88,7 @@ class FullChainFileAccessTest {
     private static final long PROJECT_ID = 42L;
     private static final long USER_ID = 7L;
     private static final String VALID_COOKIE = "valid-for-user-7";
-    private static final String SESSION_COOKIE_NAME = "vc_session";
+    private static final String SESSION_COOKIE_NAME = "__Host-vc_session";
 
     @Autowired
     private MockMvc mockMvc;
@@ -174,8 +174,8 @@ class FullChainFileAccessTest {
                         .param("path", "src/App.tsx")
                         .cookie(sessionCookie()))
                 .andReturn();
-        Cookie xsrfCookie = priming.getResponse().getCookie("XSRF-TOKEN");
-        assertThat(xsrfCookie).as("ServiceSecurityConfig's csrf().spa() must issue an XSRF-TOKEN cookie").isNotNull();
+        Cookie xsrfCookie = priming.getResponse().getCookie("__Host-XSRF-TOKEN");
+        assertThat(xsrfCookie).as("ServiceSecurityConfig's csrf().spa() must issue a __Host-XSRF-TOKEN cookie").isNotNull();
 
         // Not 403: the CSRF filter let this through. That path only has a @GetMapping (getFileTree), so POST
         // still ends up a 405 from the DispatcherServlet - the point here is which filter answered, not the

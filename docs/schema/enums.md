@@ -36,5 +36,5 @@ An editor's `DELETE` removes only their own membership; only the owner's delete 
 | Enum | Values | Notes |
 |---|---|---|
 | `MessageRole` | `USER`, `ASSISTANT`, `SYSTEM`, `TOOL` | |
-| `ChatEventType` | `THOUGHT`, `MESSAGE`, `TODO`, `FILE_EDIT`, `FILE_DELETE`, `LEARN`, `TOOL_LOG` | `THOUGHT` is synthesized (elapsed time), not parsed from the model. A rename or move is a `FILE_EDIT` plus a `FILE_DELETE` of the old path. |
+| `ChatEventType` | `THOUGHT`, `MESSAGE`, `TODO`, `FILE_EDIT`, `FILE_DELETE`, `LEARN`, `TOOL_LOG`, `ASK` | `ASK` is a question the model put to the user instead of building; a turn that asks writes no files. `THOUGHT` is synthesized (elapsed time), not parsed from the model. A rename or move is a `FILE_EDIT` plus a `FILE_DELETE` of the old path. |
 | `UsageFeature` | `BUILD`, `BUILD_RETRY`, `EXPLAIN`, `IDEA_INTERVIEW`, `PROJECT_NAMING` | Stored on `UsageEvent` as a plain string column, not as this enum. |

@@ -19,6 +19,10 @@ There are no cross-database transactions and no foreign keys across services. A 
 
 The browser only ever talks to one origin: the Gateway in production, and the Vite dev server in development (which proxies `/api` and strips `Origin`). No service configures CORS. If the frontend were ever served from a different origin than the API, the right place for it would be a single `globalcors` rule on the Gateway, not per-service configuration.
 
+## Previews share a registered domain with the app
+
+In production the app is `singularity.divyanshuagrahari.dev` and previews are `*.divyanshuagrahari.dev`, so a browser treats them as the same *site*: `SameSite=Strict` does not separate them, and a preview page can set cookies on the shared parent domain. The `__Host-` prefix on the session and CSRF cookies stops those cookies being overwritten, but the clean fix is to serve previews from a different registered domain (the preview cookie, the CSP frame origins, the cloudflared wildcard and `preview-public-domain` all follow from it).
+
 ## Previews are single-stack
 
 Live previews support React + Vite projects. The pod pool, bootstrapper and routing are almost entirely stack-agnostic; only the runner image, the start-up script, the readiness probe (`/@vite/client`) and the port are specific to Vite. Supporting another stack is a change to those four pieces, not to the pipeline.

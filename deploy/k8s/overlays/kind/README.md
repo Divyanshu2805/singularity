@@ -9,11 +9,11 @@ where the backend runs on your machine and only the preview pipeline lives in ki
 
 ## 1. Create a dedicated cluster
 
-Don't reuse the day-to-day dev cluster (`kind get clusters` may already show one named `vibecraft`) - this
+Don't reuse the day-to-day dev cluster (`kind get clusters` may already show one named `singularity`) - this
 rehearsal's namespaces and Deployments would collide with what's already running there. Use a separate name:
 
 ```bash
-kind create cluster --name vibecraft-rehearsal --config ../../../../k8s/kind-config.yaml
+kind create cluster --name singularity-rehearsal --config ../../../../k8s/kind-config.yaml
 ```
 
 ## 2. Build and load the 8 images
@@ -24,28 +24,28 @@ from source, so skip the separate `npm run build`):
 
 ```bash
 for m in discovery gateway account workspace intelligence; do
-  docker build -f docker/java-service.Dockerfile --build-arg MODULE=${m}-service -t vibecraft-${m}:local .
+  docker build -f docker/java-service.Dockerfile --build-arg MODULE=${m}-service -t singularity-${m}:local .
 done
-docker build -t vibecraft-preview-proxy:local proxy/
-docker build -f docker/preview-runner.Dockerfile -t vibecraft-preview-runner:local \
+docker build -t singularity-preview-proxy:local proxy/
+docker build -f docker/preview-runner.Dockerfile -t singularity-preview-runner:local \
   workspace-service/src/main/resources/starter-templates/react-vite-tailwind-daisyui-starter
 docker build \
   --build-arg VITE_FIREBASE_API_KEY=<from Firebase console> \
-  --build-arg VITE_FIREBASE_AUTH_DOMAIN=vibecraftai-5ac98.firebaseapp.com \
-  --build-arg VITE_FIREBASE_PROJECT_ID=vibecraftai-5ac98 \
+  --build-arg VITE_FIREBASE_AUTH_DOMAIN=singularity-dev0.firebaseapp.com \
+  --build-arg VITE_FIREBASE_PROJECT_ID=singularity-dev0 \
   --build-arg VITE_FIREBASE_APP_ID=<from Firebase console> \
   --build-arg VITE_CSP_FRAME_ORIGINS="http://localhost:*" \
-  -t vibecraft-frontend:local frontend/
+  -t singularity-frontend:local frontend/
 
 for img in discovery gateway account workspace intelligence preview-proxy preview-runner frontend; do
-  kind load docker-image vibecraft-${img}:local --name vibecraft-rehearsal
+  kind load docker-image singularity-${img}:local --name singularity-rehearsal
 done
 ```
 
 ## 3. Create the secrets
 
 Every `kubectl create secret` command this overlay needs is documented in the base manifest that consumes it
-(`deploy/k8s/base/*.yaml` - search for `kubectl create secret`). Run each one against the `vibecraft-rehearsal`
+(`deploy/k8s/base/*.yaml` - search for `kubectl create secret`). Run each one against the `singularity-rehearsal`
 context before applying. For a rehearsal (not real user data), dummy values are fine for Stripe/OpenRouter/Firebase
 except: Firebase must be a real service account JSON (sign-in genuinely needs it), and `PREVIEW_ACCESS_TOKEN_SECRET`/
 `INTERNAL_SERVICE_SHARED_SECRET`/`MINIO_RUNNER_SECRET` must be real random strings, not blank - the app treats a
@@ -55,21 +55,21 @@ missing one as a startup failure by design (CLAUDE.md: "every secret is a bare e
 
 ```bash
 kubectl apply -k .
-kubectl -n vibecraft get pods -w    # wait for everything Ready
-kubectl -n vibecraft-ai get pods -w
+kubectl -n singularity get pods -w    # wait for everything Ready
+kubectl -n singularity-ai get pods -w
 ```
 
 Then port-forward the three entry points a browser needs and walk through the
 [release checklist](../../../../docs/deployment/release-checklist.md) against `http://localhost:8080`:
 
 ```bash
-kubectl -n vibecraft port-forward svc/frontend 8080:80
-kubectl -n vibecraft port-forward svc/gateway-service 8000:8000
-kubectl -n vibecraft-ai port-forward svc/vibecraft-proxy-svc 8090:80
+kubectl -n singularity port-forward svc/frontend 8080:80
+kubectl -n singularity port-forward svc/gateway-service 8000:8000
+kubectl -n singularity-ai port-forward svc/singularity-proxy-svc 8090:80
 ```
 
 ## Cleanup
 
 ```bash
-kind delete cluster --name vibecraft-rehearsal
+kind delete cluster --name singularity-rehearsal
 ```

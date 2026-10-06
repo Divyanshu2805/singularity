@@ -1,8 +1,6 @@
 # account-service data model
 
-Users, plans and billing, and the sign-in audit trail. Database: `vibecraft-account-db`.
-
-![account-service entity-relationship diagram](../assets/diagrams/er-account.png)
+Users, plans and billing, and the sign-in audit trail. Database: `singularity-account-db`.
 
 ## USER
 

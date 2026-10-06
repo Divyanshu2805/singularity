@@ -74,6 +74,9 @@ export function assistantTurnText(events: ChatEvent[], fallback = "", error?: st
       case ChatEventType.TODO:
         if (event.content?.trim()) steps.push(`- ${event.content.trim()}`);
         break;
+      case ChatEventType.ASK:
+        if (event.content?.trim()) sections.push(`**Question:** ${event.content.trim()}`);
+        break;
       case ChatEventType.FILE_EDIT:
         if (event.filePath) editedFiles.push(`- \`${event.filePath}\``);
         break;

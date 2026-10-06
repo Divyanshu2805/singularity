@@ -62,8 +62,8 @@
 
 ## A rollout can deadlock on the namespace quota
 
-- **Symptom:** the deploy waits on `statefulset/postgres` until it times out; `postgres-0` doesn't exist and events show `exceeded quota: vibecraft-quota … limits.cpu`.
-- **Cause:** a rolling update keeps each old pod until its replacement is ready. After a broken deploy, both old (crash-looping) and new pods count against the `vibecraft` CPU limit (8; about 5.7 in steady state). The new pods can't become ready without Postgres, and Postgres can't be created while the old pods hold the quota.
+- **Symptom:** the deploy waits on `statefulset/postgres` until it times out; `postgres-0` doesn't exist and events show `exceeded quota: singularity-quota … limits.cpu`.
+- **Cause:** a rolling update keeps each old pod until its replacement is ready. After a broken deploy, both old (crash-looping) and new pods count against the `singularity` CPU limit (8; about 5.7 in steady state). The new pods can't become ready without Postgres, and Postgres can't be created while the old pods hold the quota.
 - **Fix:** scale the app Deployments to 0 to free the quota, then deploy. See [deploys](../../operations/deploys.md#when-a-deploy-fails).
 
 ## A failing CronJob notifies nobody

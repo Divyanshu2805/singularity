@@ -36,6 +36,22 @@ spring:
           # There is deliberately no catch-all route. /internal/** matches none of these, so the services'
           # machine-to-machine endpoints are never reachable from the browser's origin, and any other path
           # nothing owns is a 404 from the Gateway itself.
+          #
+          # The one thing every route does get is a request-size ceiling. No service limits a JSON body before it is
+          # read into memory, so without this a single large POST is held in full by whichever pod receives it. The
+          # largest legitimate body is a saved code-lens answer (60,000 characters, a few hundred KB at worst).
+          # RequestSize judges the Content-Length header, so a chunked upload is not stopped here.
+          default-filters:
+            - name: RequestSize
+              args:
+                maxSize: 1MB
+          # Without this the Gateway throws away the X-Forwarded-For its caller sent and starts a new one containing
+          # only that caller's own address, so every request would reach the services as coming from the tunnel's pod.
+          # Every caller is trusted here because the decision that matters is made later: each service reads the
+          # client from the right of the list and skips only private-range hops (forward-headers-strategy: native in
+          # its application.yaml), so entries a client forges at the left are never reached. A narrower pattern here
+          # (private ranges only) was tried and the Gateway still dropped the header; it was not diagnosed further.
+          trusted-proxies: ".*"
           routes:
             - id: intelligence-code-insight
               uri: ${routing.intelligence.uri}

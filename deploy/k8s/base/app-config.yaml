@@ -2,8 +2,9 @@
 # classifies FIREBASE_PROJECT_ID and APP_DOMAIN/CLIENT_URL as GitHub "variable" entries, not secrets.
 #
 # Values here are the kind-rehearsal ones (the more frequently-run case) - the oracle overlay patches only what
-# genuinely differs (client-url, preview-public-*). firebase-project-id is the same real project in every
-# environment (matches docs/local-development/'s local dev too), so it's never patched at all.
+# genuinely differs (client-url, preview-public-*, firebase-project-id). firebase-project-id here is the *dev*
+# Firebase project (singularity-dev0, the same one local development uses); the oracle overlay patches it to the
+# production project (singularity-prod0).
 #
 # IMPORTANT: every key here is read via configMapKeyRef, which always injects the key's actual value - there is no
 # "unset, fall through to application.yaml's own default" here the way a bare env var with no ConfigMap source
@@ -14,9 +15,9 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: app-config
-  namespace: vibecraft
+  namespace: singularity
 data:
-  firebase-project-id: vibecraftai-5ac98
+  firebase-project-id: singularity-dev0
   # The kind overlay's port-forward convention (deploy/k8s/overlays/kind/README.md) - a browser on the developer's
   # own laptop still reaches everything through kubectl port-forward even though the whole app now runs in-cluster.
   client-url: http://localhost:8080

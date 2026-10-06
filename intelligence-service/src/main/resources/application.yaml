@@ -7,7 +7,7 @@ spring:
   datasource:
     # A separate logical database on the same local Postgres server the other services use — no shared
     # tables/FKs with account-service's or workspace-service's databases.
-    url: jdbc:postgresql://localhost:9010/vibecraft-intelligence-db
+    url: jdbc:postgresql://localhost:9010/singularity-intelligence-db
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -38,13 +38,18 @@ spring:
           max-tokens: 32000
 
 usage:
-  # What reserveBudget() claims against the daily counter before a build turn starts (UsageServiceImpl). Sized off
-  # a real turn's total cost - input included - not spring.ai.openai.chat.options.max-tokens, which is only the
-  # model's output ceiling and left an ordinary two-file build (70,294 tokens observed in production) under-
-  # reserved by more than 2x. A tool-calling turn resends its whole growing conversation on every round, so input
-  # dominates; this is a conservative ceiling for a turn that reads several files across a few rounds, not a tight
-  # estimate - the true cost is still trued up afterward by reconcileBudget.
-  build-reservation-tokens: 150000
+  # What reserveBudget() claims against the daily counter before a build turn starts (UsageServiceImpl). It is an
+  # admission ticket, not a cap on the turn: the true cost is trued up afterward by reconcileBudget, and a turn that
+  # costs more than this simply leaves less for the next one. It is sized just under what an ordinary two-file build
+  # costs (70,294 tokens observed), so that a plan with a 100,000 allowance still admits a build after an idea
+  # interview has spent a little - at the earlier 150,000 it was capped to the whole allowance, and a build was
+  # only admitted while nothing at all had been used that day. Not spring.ai.openai.chat.options.max-tokens, which is
+  # only the model's output ceiling: a tool-calling turn resends its whole growing conversation on every round, so
+  # input dominates its cost.
+  build-reservation-tokens: 60000
+  # What the idea interview and the code lens reserve - a small fraction of a build, since neither writes files or loops
+  # on tool calls. Reserving the build amount for them made each one demand a whole build's room (UsageServiceImpl).
+  light-reservation-tokens: 12000
 
 internal-service:
   shared-secret: ${INTERNAL_SERVICE_SHARED_SECRET}
@@ -68,13 +73,15 @@ firebase:
 app:
   auth:
     session-cookie:
-      name: vc_session
+      name: __Host-vc_session
       max-age: 5d
       secure: true
     revocation-check-interval: 60s
 
 server:
   port: ${INTELLIGENCE_SERVICE_PORT:8083}
+  # The caller's real address from X-Forwarded-For, trusting only private-range hops - see account-service's note.
+  forward-headers-strategy: native
 
 # CODE_REVIEW.md DEP-036: liveness/readiness on a separate port from server.port, so Kubernetes probes hit the pod
 # directly and /actuator/health is never reachable through this service's own port - no Service or gateway route

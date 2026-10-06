@@ -136,7 +136,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
 
         UsageReservation reservation;
         try {
-            reservation = usageService.reserveBudget();
+            reservation = usageService.reserveBudget(UsageFeature.BUILD);
         } catch (RuntimeException e) {
             generationRegistry.remove(generation);
             throw e;
@@ -377,6 +377,17 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 .toList();
 
         StringBuilder summary = new StringBuilder(spoken);
+        List<String> asked = turnEvents.stream()
+                .filter(event -> event.getType() == ChatEventType.ASK && event.getContent() != null && !event.getContent().isBlank())
+                .map(ChatEvent::getContent)
+                .toList();
+        if (!asked.isEmpty()) {
+            if (!summary.isEmpty()) {
+                summary.append(' ');
+            }
+            summary.append("(You asked the user: ").append(String.join(" / ", asked))
+                    .append(" - their next message is the answer.)");
+        }
         if (!touched.isEmpty()) {
             if (!summary.isEmpty()) {
                 summary.append(' ');
@@ -411,7 +422,8 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 .anyMatch(e -> e.getType() == ChatEventType.TOOL_LOG || e.getType() == ChatEventType.TODO);
         boolean producedFileEdit = events.stream()
                 .anyMatch(e -> e.getType() == ChatEventType.FILE_EDIT || e.getType() == ChatEventType.FILE_DELETE);
-        return announcedEdit && !producedFileEdit;
+        boolean askedTheUser = events.stream().anyMatch(e -> e.getType() == ChatEventType.ASK);
+        return announcedEdit && !producedFileEdit && !askedTheUser;
     }
 
     void finalizeChats(String userMessage, ChatSession chatSession, String fullText, Long duration, Usage usage,

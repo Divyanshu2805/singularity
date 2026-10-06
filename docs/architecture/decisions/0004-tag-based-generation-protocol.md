@@ -12,6 +12,8 @@ The system prompt (`llm/PromptUtils.java`) defines a small XML-like tag protocol
 
 A checklist item is ticked off when a `<file>` appears whose `path` matches a `<todo>`'s `path` byte for byte.
 
+The protocol later gained `<ask options="A|B|C">`, a question for the user in place of files. It fits the same shape as the other tags, so it needed no change to how a turn is streamed or stored: one more tag name in the two parsers and one more event type.
+
 ## Consequences
 
 - Output renders progressively, and one bad block doesn't discard the rest of a turn.

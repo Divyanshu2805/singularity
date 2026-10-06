@@ -61,6 +61,7 @@ import { api, getUserInfo, isAuthenticated, loginRedirectPath, isQuotaError } fr
 import { byLastEdited, countByFilter, matchesProjectFilter, type ProjectFilter } from "@/lib/project-filters";
 import { cn } from "@/lib/utils";
 import { IDEA_SUGGESTIONS } from "@/lib/idea-suggestions";
+import { clearInterview, startInterview, useInterview } from "@/lib/idea-interview";
 import { takePendingIdea } from "@/lib/pending-idea";
 
 const QUICK_STARTS = [
@@ -220,7 +221,7 @@ export function ProjectsDashboard() {
     const [creation, setCreation] = useState<Creation | null>(null);
     const [now, setNow] = useState(() => Date.now());
     const [filter, setFilter] = useState<ProjectFilter>(null);
-    const [clarifyingIdea, setClarifyingIdea] = useState<string | null>(null);
+    const clarifyingIdea = useInterview()?.idea ?? null;
     const promptRef = useRef<HTMLTextAreaElement>(null);
 
     const isCreating = creation !== null;
@@ -303,11 +304,11 @@ export function ProjectsDashboard() {
             });
             return;
         }
-        setClarifyingIdea(description);
+        startInterview(description);
     };
 
     const createProject = async (description: string, firstMessage: string) => {
-        setClarifyingIdea(null);
+        clearInterview();
         const startedAt = Date.now();
         setNow(startedAt);
         setCreation({ description, startedAt });
@@ -396,14 +397,13 @@ export function ProjectsDashboard() {
                                     <CreationProgress creation={creation} now={now} />
                                 ) : clarifyingIdea ? (
                                     <IdeaClarifier
-                                        idea={clarifyingIdea}
                                         onEditIdea={() => {
-                                            setClarifyingIdea(null);
+                                            clearInterview();
                                             requestAnimationFrame(() => promptRef.current?.focus());
                                         }}
                                         onComplete={(firstMessage) => createProject(clarifyingIdea, firstMessage)}
                                         onQuotaExceeded={(details) => {
-                                            setClarifyingIdea(null);
+                                            clearInterview();
                                             setBlockedBy(details);
                                             void refreshBilling();
                                         }}

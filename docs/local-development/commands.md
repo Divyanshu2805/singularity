@@ -31,5 +31,5 @@ Run from `frontend/`.
 | `docker compose -f services.docker-compose.yml up -d` | Start PostgreSQL and MinIO |
 | `docker compose -f services.docker-compose.yml down -v` | **Delete** all local data — read [resetting local data](resetting-data.md) first |
 | `k8s/dev-port-forward.sh` / `.ps1` | Forward the preview proxy and Redis out of the local kind cluster |
-| `kubectl -n vibecraft-ai get pods -L status,project-id` | Inspect the preview runner pool |
+| `kubectl -n singularity-ai get pods -L status,project-id` | Inspect the preview runner pool |
 | `curl http://localhost:<management port>/actuator/health` | A service's health check ([health checks](health-checks.md)) |

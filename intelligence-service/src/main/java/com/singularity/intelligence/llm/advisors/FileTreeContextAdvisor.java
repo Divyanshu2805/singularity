@@ -25,7 +25,8 @@ import java.util.Map;
  *
  * <p>Handles: fetching the file tree and the project summary from workspace-service and inserting them as a system
  * message after the main prompt, so the model knows which files exist without being handed their contents - it reads
- * what it needs with the read tool instead.
+ * what it needs with the read tool instead. The tree is written one path per line, sorted; it was once the Java list's
+ * own toString(), which spent tokens on record syntax and gave the model nothing it could copy a path from cleanly.
  *
  * <p>It also passes on any unfinished starter-template problem, telling the model to create the missing scaffolding
  * itself rather than assuming it is there.
@@ -67,7 +68,7 @@ public class FileTreeContextAdvisor implements StreamAdvisor {
         }
 
         List<FileTreeDto.Entry> fileTree = workspaceServiceClient.getFileTree(projectId).entries();
-        StringBuilder fileTreeContext = new StringBuilder("\n\n ---- FILE_TREE ----\n").append(fileTree);
+        StringBuilder fileTreeContext = new StringBuilder("\n\n ---- FILE_TREE ----\n").append(describe(fileTree));
 
         ProjectSummaryDto summary = workspaceServiceClient.getProjectSummary(projectId);
         String issue = summary.templateInitIssue();
@@ -87,6 +88,17 @@ public class FileTreeContextAdvisor implements StreamAdvisor {
                 .mutate()
                 .prompt(new Prompt(allMessages, request.prompt().getOptions()))
                 .build();
+    }
+
+    static String describe(List<FileTreeDto.Entry> fileTree) {
+        if (fileTree == null || fileTree.isEmpty()) {
+            return "(the project has no files yet)";
+        }
+        return fileTree.stream()
+                .map(FileTreeDto.Entry::path)
+                .filter(path -> path != null && !path.isBlank())
+                .sorted()
+                .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     @Override

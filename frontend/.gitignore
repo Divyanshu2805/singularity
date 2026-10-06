@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Written by the production build (vite.config.ts); nginx includes it to serve the CSP as a header
+csp-header.conf
