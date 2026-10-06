@@ -6,7 +6,7 @@
 # Phase 0/2). None of them are secrets: see .env.example's own comment. VITE_PAYMENTS_TEST_MODE is the one that
 # isn't a value from that environment: CI sets it to `true` while the deployed app uses Stripe's test keys, which
 # makes the pricing and billing pages say so (src/lib/payments-mode.ts); it goes when the app moves to live keys.
-FROM node:20.20.2-alpine AS build
+FROM node:26.10.0-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
