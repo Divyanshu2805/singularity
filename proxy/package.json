@@ -5,7 +5,7 @@
   "main": "index.js",
   "dependencies": {
     "http-proxy": "^1.18.1",
-    "ioredis": "^5.3.5"
+    "ioredis": "^6.0.0"
   },
   "scripts": {
     "start": "node index.js",
