@@ -22,8 +22,8 @@ import java.util.regex.Pattern;
  * Turns a model's raw answer into the ordered events a turn is stored and rendered as.
  *
  * <p>Handles: recognising the tagged sections the generation prompt asks for - files to write, files to delete,
- * checklist items, teaching lessons and tool logs - and everything between them as plain message text, each assigned
- * its place in the turn; dropping every FILE_EDIT for a path but the last when the model re-outputs the same file
+ * checklist items, teaching lessons, tool logs and questions for the user (with their suggested answers, bounded in
+ * count and length) - and everything between them as plain message text, each assigned its place in the turn; dropping every FILE_EDIT for a path but the last when the model re-outputs the same file
  * (a mistake the prompt forbids but does not prevent), since only the final version is ever actually saved and an
  * earlier one left in the transcript would show a phantom extra write.
  *
@@ -41,10 +41,10 @@ import java.util.regex.Pattern;
 public class LlmResponseParser {
 
     private static final Pattern OPEN_TAG_PATTERN = Pattern.compile(
-            "<(message|file|delete|tool|todo|learn)\\b([^>]*)>", Pattern.CASE_INSENSITIVE);
+            "<(message|file|delete|tool|todo|learn|ask)\\b([^>]*)>", Pattern.CASE_INSENSITIVE);
 
     private static final Pattern ATTRIBUTE_PATTERN = Pattern.compile(
-            "(path|args|concept)=\"([^\"]+)\""
+            "(path|args|concept|options)=\"([^\"]+)\""
     );
 
     private static final Pattern LESSON_PART_PATTERN = Pattern.compile("<part\\b", Pattern.CASE_INSENSITIVE);
@@ -53,11 +53,17 @@ public class LlmResponseParser {
 
     private static final int MAX_CHECKLIST_STEPS = 12;
 
+    static final int MAX_QUESTIONS_PER_TURN = 3;
+    static final int MAX_ANSWER_OPTIONS = 6;
+    static final int MAX_ANSWER_OPTION_CHARS = 80;
+    public static final String ANSWER_OPTION_SEPARATOR = "|";
+
     public List<ChatEvent> parseChatEvents(String fullResponse, ChatMessage parentMessage) {
         List<ChatEvent> events = new ArrayList<>();
         int orderCounter = 1;
         int lastMatchEnd = 0;
         int checklistSteps = 0;
+        int questions = 0;
         Set<String> lessonPaths = new HashSet<>();
 
         String haystack = fullResponse.toLowerCase(Locale.ROOT);
@@ -143,6 +149,19 @@ public class LlmResponseParser {
                     builder.filePath(filePath);
                     builder.metadata(lessonConcepts(attrMap.get("concept"), content));
                 }
+                case "ask" -> {
+                    if (content.isBlank()) {
+                        log.warn("Skipping <ask> tag with no question text in AI response");
+                        continue;
+                    }
+                    if (++questions > MAX_QUESTIONS_PER_TURN) {
+                        log.warn("Dropping question {} - the model asked more than the {} allowed in one turn: {}",
+                                questions, MAX_QUESTIONS_PER_TURN, preview(content));
+                        continue;
+                    }
+                    builder.type(ChatEventType.ASK);
+                    builder.metadata(answerOptions(attrMap.get("options")));
+                }
                 default -> { continue; }
             }
 
@@ -186,6 +205,18 @@ public class LlmResponseParser {
         return deduped;
     }
 
+    static String answerOptions(String raw) {
+        if (raw == null) return null;
+        List<String> options = new ArrayList<>();
+        for (String option : raw.split("\\|")) {
+            String text = option.replaceAll("\\s+", " ").strip();
+            if (text.isEmpty() || options.contains(text)) continue;
+            options.add(text.length() > MAX_ANSWER_OPTION_CHARS ? text.substring(0, MAX_ANSWER_OPTION_CHARS).strip() : text);
+            if (options.size() == MAX_ANSWER_OPTIONS) break;
+        }
+        return options.isEmpty() ? null : String.join(ANSWER_OPTION_SEPARATOR, options);
+    }
+
     public static int lessonPartCount(String lessonBody) {
         if (lessonBody == null) return 0;
         return (int) LESSON_PART_PATTERN.matcher(lessonBody).results().count();
@@ -208,7 +239,7 @@ public class LlmResponseParser {
         String gap = fullResponse.substring(from, to).trim();
         if (!gap.isEmpty()) {
             log.warn("Ignoring {} character(s) of unrecognized content in AI response (model may not be " +
-                    "following the expected <message>/<todo>/<file>/<delete>/<learn>/<tool> protocol): {}", gap.length(), preview(gap));
+                    "following the expected <message>/<todo>/<file>/<delete>/<learn>/<tool>/<ask> protocol): {}", gap.length(), preview(gap));
         }
     }
 

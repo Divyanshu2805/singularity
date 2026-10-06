@@ -4,8 +4,8 @@
 
 | Suite | Command | Size | Needs |
 |---|---|---|---|
-| Backend (all modules) | `./mvnw test` | 452 tests — common-lib 24, gateway 66, account 32, workspace 205, intelligence 125 | Docker, for one integration test (below) |
-| Frontend | `cd frontend && npm test` | 377 tests in 39 files (Vitest) | — |
+| Backend (all modules) | `./mvnw test` | 488 tests — common-lib 25, gateway 67, account 32, workspace 209, intelligence 155 | Docker, for one integration test (below) |
+| Frontend | `cd frontend && npm test` | 426 tests in 44 files (Vitest) | — |
 | Preview proxy | `cd proxy && node --test` | Access-token and routing tests | — |
 
 Run the tests you changed by name while iterating:

@@ -38,7 +38,8 @@
  * The sequence waits for the web fonts before it begins (fontsSettled, capped at FONT_WAIT_MS so a slow font network
  * never holds the page black for long). The fonts load with display=swap, so on a first visit they used to arrive
  * partway through the opening: the headline reflowed mid-drop and the card and the hero's light below it jumped. While
- * it waits everything is held at its backwards fill, so the wait is only a moment more of the empty sky.
+ * it waits everything is held at its backwards fill, so the wait is only a moment more of the empty sky. The landing
+ * rebuild's opening (genesis/Opening.tsx) holds its cover on the same wait, which is why fontsSettled is exported.
  *
  * The entrances run on long, gentle curves over short distances - the words drop 0.4em through a 6px blur, the
  * navigation 36px, the card's panels 12px - each over most of a second, with the staggers widened to match; the
@@ -80,7 +81,7 @@ export const INTRO = {
 const HURRY_MS = 450;
 const FONT_WAIT_MS = 700;
 
-function fontsSettled() {
+export function fontsSettled() {
   const fonts = typeof document === "undefined" ? undefined : document.fonts;
   if (!fonts) return Promise.resolve();
   return Promise.race([fonts.ready.then(() => undefined), new Promise<void>((resolve) => window.setTimeout(resolve, FONT_WAIT_MS))]);

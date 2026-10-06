@@ -24,7 +24,7 @@ def auth():
     q.msg("gw", "ac", "route /api/auth/**")
     q.msg("ac", "fb", "verify ID token (Firebase Admin SDK)", color=Y)
     q.msg("ac", "ac", "find or create User · audit SIGN_IN")
-    q.msg("ac", "br", "Set-Cookie: vc_session (httpOnly, 5 days)", ret=True)
+    q.msg("ac", "br", "Set-Cookie: __Host-vc_session (httpOnly, 5 days)", ret=True)
     q.note(["br", "ot"], "every later request carries the cookie to the service that owns its path")
     q.msg("br", "gw", "GET /api/projects  (cookie)")
     q.msg("gw", "ot", "route /api/projects/**")

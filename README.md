@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.svg" alt="VibeCraft: describe it, watch it get built, live" width="100%">
+  <img src="docs/assets/banner.svg" alt="Singularity: describe it, watch it get built, live" width="100%">
 </p>
 
 <p align="center">
@@ -17,14 +17,14 @@
 </p>
 
 <p align="center">
-  <a href="https://vibecraft.divyanshuagrahari.dev"><b>vibecraft.divyanshuagrahari.dev</b></a>
+  <a href="https://singularity.divyanshuagrahari.dev"><b>singularity.divyanshuagrahari.dev</b></a>
 </p>
 
 ---
 
 Singularity is an AI-assisted project builder. You type a one-line idea; a short, AI-written interview turns it into a spec; an AI chat writes the project file by file while a checklist ticks off each step; and a live preview runs the result in its own Kubernetes pod as it's being built. Teammates collaborate with owner, editor and viewer roles, and usage is metered against plans billed through Stripe.
 
-**Live demo:** <https://vibecraft.divyanshuagrahari.dev> — sign in with Google or email. Payments run in Stripe test mode; use card `4242 4242 4242 4242`.
+**Live demo:** <https://singularity.divyanshuagrahari.dev> — sign in with Google or email. Payments run in Stripe test mode; use card `4242 4242 4242 4242`.
 
 ## Features
 
@@ -47,8 +47,6 @@ Singularity is an AI-assisted project builder. You type a one-line idea; a short
 
 ## Architecture
 
-![Singularity system architecture](docs/assets/diagrams/system-architecture.png)
-
 A Spring Cloud Gateway routes each URL to one of three domain services, each with its own database. Services find each other through Eureka and call each other over a private, secret-authenticated internal API. Sign-in is Firebase-only; each service verifies the session itself. **Generated code runs only inside isolated preview pods**, never in the backend.
 
 Read more: [architecture overview](docs/architecture/README.md) · [security model](docs/architecture/security-model.md) · [design decisions](docs/architecture/decisions/README.md)
@@ -69,8 +67,8 @@ Details and versions: [tech stack](docs/tech-stack.md).
 **Prerequisites:** JDK 25, Node.js 20+, Docker, and a Firebase project and OpenRouter API key. Stripe keys are optional; a local kind cluster is needed only for live previews. See [prerequisites](docs/local-development/prerequisites.md).
 
 ```bash
-git clone https://github.com/Divyanshu2805/vibecraft.git
-cd vibecraft
+git clone https://github.com/Divyanshu2805/singularity.git
+cd singularity
 
 # PostgreSQL and MinIO
 docker compose -f services.docker-compose.yml up -d
@@ -95,8 +93,8 @@ Open <http://localhost:5173>. The full guide, including live previews and troubl
 ## Testing
 
 ```bash
-./mvnw test                  # backend: 452 tests across all modules
-cd frontend && npm test      # frontend: 377 tests
+./mvnw test                  # backend: 488 tests across all modules
+cd frontend && npm test      # frontend: 426 tests
 cd proxy && node --test      # preview proxy
 ```
 
@@ -123,8 +121,6 @@ docs/                   documentation
 ## Deployment
 
 The live demo runs on a single free-tier Oracle Cloud Arm VM as single-node k3s, with no open inbound ports: visitors arrive through a Cloudflare tunnel, and deploys arrive over Tailscale. GitHub Actions tests every change, builds eight arm64 images, deploys them, smoke-tests the site and rolls back automatically on failure. A nightly job backs up the databases and object storage to Cloudflare R2.
-
-![Production deployment topology](docs/assets/diagrams/deployment-topology.png)
 
 See [deployment](docs/deployment/README.md) and [operations](docs/operations/README.md).
 

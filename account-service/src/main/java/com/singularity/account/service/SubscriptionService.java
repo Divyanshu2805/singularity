@@ -27,7 +27,7 @@ import java.util.Optional;
 public interface SubscriptionService {
 
     int FREE_TIER_PROJECTS_ALLOWED = 1;
-    int FREE_TIER_DAILY_TOKENS = 5_000;
+    int FREE_TIER_DAILY_TOKENS = 100_000;
 
     int FREE_TIER_PREVIEWS = 1;
 

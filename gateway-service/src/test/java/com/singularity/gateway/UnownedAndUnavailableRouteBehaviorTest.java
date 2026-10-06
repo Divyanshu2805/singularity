@@ -62,6 +62,32 @@ class UnownedAndUnavailableRouteBehaviorTest {
         assertThat(response.statusCode()).isGreaterThanOrEqualTo(500);
     }
 
+    @Test
+    @DisplayName("a body over the request-size ceiling is a 413 at the Gateway, before any downstream sees it")
+    void oversizedBodyIsRejectedAtTheGateway() throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/session"))
+                .timeout(Duration.ofSeconds(10))
+                .POST(HttpRequest.BodyPublishers.ofString("x".repeat(2 * 1024 * 1024)))
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.statusCode()).isEqualTo(413);
+    }
+
+    @Test
+    @DisplayName("a body under the ceiling still goes through to its route")
+    void normalBodyIsStillRouted() throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/session"))
+                .timeout(Duration.ofSeconds(10))
+                .POST(HttpRequest.BodyPublishers.ofString("{\"idToken\":\"abc\"}"))
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.statusCode()).isGreaterThanOrEqualTo(500);
+    }
+
     private HttpResponse<String> get(String path) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .timeout(Duration.ofSeconds(10))

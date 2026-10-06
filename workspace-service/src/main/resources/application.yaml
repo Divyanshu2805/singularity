@@ -6,8 +6,8 @@ spring:
 
   datasource:
     # A separate logical database on the same local Postgres server the other services use — no tables/FKs
-    # shared with account-service's vibecraft-account-db or intelligence-service's database.
-    url: jdbc:postgresql://localhost:9010/vibecraft-workspace-db
+    # shared with account-service's singularity-account-db or intelligence-service's database.
+    url: jdbc:postgresql://localhost:9010/singularity-workspace-db
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -53,7 +53,7 @@ firebase:
 app:
   auth:
     session-cookie:
-      name: vc_session
+      name: __Host-vc_session
       max-age: 5d
       secure: true
     revocation-check-interval: 60s
@@ -85,7 +85,7 @@ revision-validation:
 # The kind namespace, Redis and MinIO bucket the live-preview pipeline runs against (PreviewRouter's Redis keys
 # are per-hostname).
 preview:
-  namespace: vibecraft-ai
+  namespace: singularity-ai
   public-scheme: http
   public-domain: localhost
   public-port: 8090
@@ -116,6 +116,8 @@ client.url: http://localhost:5173
 
 server:
   port: ${WORKSPACE_SERVICE_PORT:8082}
+  # The caller's real address from X-Forwarded-For, trusting only private-range hops - see account-service's note.
+  forward-headers-strategy: native
 
 # CODE_REVIEW.md DEP-036: liveness/readiness on a separate port from server.port, so Kubernetes probes hit the pod
 # directly and /actuator/health is never reachable through this service's own port - no Service or gateway route

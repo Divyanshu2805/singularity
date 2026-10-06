@@ -4,7 +4,7 @@ AI chat and code generation. **Service:** intelligence-service · **Controller:*
 
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
-| `POST` | `/api/chat/stream` | `ChatRequest { message, projectId, teachingMode? }` | SSE of `{ text }` | `EDITOR` or `OWNER`. `teachingMode: true` adds a `<learn>` walkthrough after each file written. `402` before the stream opens if the daily token budget is spent. `409` if this user already has a generation running for this project. |
+| `POST` | `/api/chat/stream` | `ChatRequest { message, projectId, teachingMode? }` (`message` at most 16,000 characters) | SSE of `{ text }` | `EDITOR` or `OWNER`. `teachingMode: true` adds a `<learn>` walkthrough after each file written. `402` before the stream opens if the daily token budget is spent. `409` if this user already has a generation running for this project. |
 | `GET` | `/api/chat/projects/{projectId}` | — | `List<ChatResponse>` | Any role. An empty list, not an error, for a project with no chat yet. |
 | `GET` | `/api/chat/projects/{projectId}/last-turn-changes` | — | `LastTurnChangesResponse { files: [{ path, previousContent }] }` | Any role. What the latest saved turn changed, with each file's content from before the turn (`""` if the turn created it), so the editor can rebuild that turn's diffs on any page load. |
 | `GET` | `/api/chat/projects/{projectId}/active` | — | `ActiveGenerationResponse { userMessage, startedAt, teachingMode, status }`, or `204` | Any role. The caller's own generation still in progress in this project. `status` is `RUNNING` while the model writes and `SAVING` while it is being stored. |

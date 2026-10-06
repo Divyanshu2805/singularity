@@ -1,11 +1,22 @@
 /**
- * A short interview before a project is created - who it is for, the core action, must-have screens and a style -
- * with options tailored to the idea.
+ * A short interview before a project is created, asking only about what this particular idea leaves open.
  *
- * Handles: asking for the questions, collecting or skipping each answer, compiling them into a brief, and handing a
- * spent allowance to the quota dialog rather than showing an error.
+ * Handles: asking for the questions, collecting or skipping each answer, compiling them into a brief, going straight
+ * to building when the AI judges the idea needs no questions, saying so plainly when the AI could not be reached and
+ * the questions shown are the general set rather than ones written for the idea, and handing a spent allowance to the
+ * quota dialog rather than showing an error.
+ *
+ * The number of questions is the AI's decision, from none to five. The general set below is only ever a fallback, and
+ * is never shown without the notice: it was once shown silently, which made a broken AI connection look like an
+ * interview that always asked the same four things.
  *
  * The answers are compiled so the first prompt the AI sees is a clear spec instead of a one-liner.
+ *
+ * Nothing about the interview lives in this component: the questions, the answers and the position are in
+ * lib/idea-interview, and its two AI requests run there to completion. Leaving the page and coming back therefore
+ * finds the interview where it was, instead of an empty prompt. This component draws that state and reports the
+ * outcome (build with this message, or a spent allowance) to the page when there is one, including one that arrived
+ * while the page was away.
  *
  * It sits on the dashboard's glass (index.css, .app-glass): each question rises in, a chosen answer takes the app's
  * selected look - a faint gold glass fill inside a gold hairline (.row-active) and a filled number badge - and the step bar fills
@@ -15,133 +26,81 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowRight, ArrowUp, Check, PenLine, Plus, Sparkles } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { Button } from "@/components/ui/button";
-import { api, isQuotaError } from "@/lib/api";
-import type { ClarifyingQuestion, IdeaAnswer, QuotaDetails } from "@/lib/types";
+import {
+  addCustomOption,
+  advance as advanceInterview,
+  answersOf,
+  compileInterview,
+  goBack as goBackInterview,
+  goToQuestion as goToInterviewQuestion,
+  setSelection,
+  useInterview,
+} from "@/lib/idea-interview";
+import type { QuotaDetails } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-type Phase = "loading" | "asking" | "review" | "compiling";
-
-const LOCAL_QUESTIONS: ClarifyingQuestion[] = [
-  {
-    id: "audience",
-    question: "Who is this for?",
-    helper: "Knowing your users shapes every screen.",
-    options: ["Just me", "My customers", "My team at work", "Students or learners", "The general public"],
-    multiSelect: false,
-  },
-  {
-    id: "core_action",
-    question: "What's the one thing people must be able to do?",
-    helper: "Everything else gets built around this.",
-    options: ["Create and manage items", "Browse and search content", "Track progress over time", "Book or buy something", "Share with others"],
-    multiSelect: false,
-  },
-  {
-    id: "screens",
-    question: "Which screens does it need?",
-    helper: "Pick any that apply. You can always add more later.",
-    options: ["Landing page", "Dashboard", "List or feed", "Detail page", "Settings", "Sign in"],
-    multiSelect: true,
-  },
-  {
-    id: "style",
-    question: "What should it feel like?",
-    helper: "A style reference helps the design land the first time.",
-    options: ["Clean and minimal", "Bold and colorful", "Dark and techy", "Playful and friendly", "Like Notion", "Like Stripe"],
-    multiSelect: false,
-  },
-];
 
 const AUTO_ADVANCE_MS = 260;
 
-function localBrief(idea: string, answers: IdeaAnswer[]) {
-  const answered = answers.filter((answer) => answer.answers.length > 0);
-  const details = answered
-    .map((answer) => `\n- ${answer.question.trim().replace(/[?:\s]+$/, "")}: ${answer.answers.join(", ")}`)
-    .join("");
-  return `**Build:** ${idea}${details ? `\n\n**Details:**${details}` : ""}`;
-}
-
 interface IdeaClarifierProps {
-  idea: string;
   onEditIdea: () => void;
   onComplete: (firstMessage: string) => void;
   onQuotaExceeded?: (quota: QuotaDetails) => void;
 }
 
-export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }: IdeaClarifierProps) {
-  const [phase, setPhase] = useState<Phase>("loading");
-  const [questions, setQuestions] = useState<ClarifyingQuestion[]>([]);
-  const [index, setIndex] = useState(0);
-  const [selections, setSelections] = useState<Record<string, string[]>>({});
-  const [customOptions, setCustomOptions] = useState<Record<string, string[]>>({});
+export function IdeaClarifier({ onEditIdea, onComplete, onQuotaExceeded }: IdeaClarifierProps) {
+  const interview = useInterview();
   const [isWritingOwn, setIsWritingOwn] = useState(false);
   const [ownAnswer, setOwnAnswer] = useState("");
   const advanceTimerRef = useRef<number | undefined>(undefined);
-  const returnToReviewRef = useRef(false);
 
   const onQuotaExceededRef = useRef(onQuotaExceeded);
   onQuotaExceededRef.current = onQuotaExceeded;
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
+  const outcome = interview?.outcome ?? null;
   useEffect(() => {
-    let isCancelled = false;
-    api.clarifyIdea(idea)
-      .then((generated) => {
-        if (isCancelled) return;
-        setQuestions(generated.length > 0 ? generated : LOCAL_QUESTIONS);
-        setPhase("asking");
-      })
-      .catch((error) => {
-        if (isCancelled) return;
-        if (isQuotaError(error) && error.quota && onQuotaExceededRef.current) {
-          onQuotaExceededRef.current(error.quota);
-          return;
-        }
-        console.warn("Couldn't get tailored questions, using general ones", error);
-        setQuestions(LOCAL_QUESTIONS);
-        setPhase("asking");
-      });
-    return () => {
-      isCancelled = true;
-    };
-  }, [idea]);
+    if (!outcome) return;
+    if (outcome.kind === "build") onCompleteRef.current(outcome.firstMessage);
+    else onQuotaExceededRef.current?.(outcome.quota);
+  }, [outcome]);
 
   useEffect(() => () => window.clearTimeout(advanceTimerRef.current), []);
+
+  const idea = interview?.idea ?? "";
+  const questions = interview?.questions ?? [];
+  const isTailored = interview?.isTailored ?? true;
+  const index = interview?.index ?? 0;
+  const phase = !interview || interview.isLoading ? "loading" : interview.phase;
+  const selections = interview?.selections ?? {};
+  const customOptions = interview?.customOptions ?? {};
 
   const question = questions[index];
   const options = question ? [...question.options, ...(customOptions[question.id] ?? [])] : [];
   const selected = question ? selections[question.id] ?? [] : [];
 
-  const answers: IdeaAnswer[] = questions.map((q) => ({ questionId: q.id, question: q.question, answers: selections[q.id] ?? [] }));
+  const answers = interview ? answersOf(interview) : [];
   const answeredCount = answers.filter((answer) => answer.answers.length > 0).length;
 
-  const goToQuestion = (target: number, { fromReview = false } = {}) => {
+  const settle = () => {
     window.clearTimeout(advanceTimerRef.current);
-    returnToReviewRef.current = fromReview;
     setIsWritingOwn(false);
     setOwnAnswer("");
-    setIndex(target);
-    setPhase("asking");
+  };
+
+  const goToQuestion = (target: number, { fromReview = false } = {}) => {
+    settle();
+    goToInterviewQuestion(target, fromReview);
   };
 
   const next = () => {
-    window.clearTimeout(advanceTimerRef.current);
-    setIsWritingOwn(false);
-    setOwnAnswer("");
-    if (returnToReviewRef.current || index >= questions.length - 1) {
-      returnToReviewRef.current = false;
-      setPhase("review");
-      return;
-    }
-    setIndex(index + 1);
+    settle();
+    advanceInterview();
   };
 
   const back = () => {
-    if (phase === "review") {
-      goToQuestion(questions.length - 1);
-      return;
-    }
-    if (index > 0) goToQuestion(index - 1);
+    settle();
+    goBackInterview();
   };
 
   const choose = (option: string) => {
@@ -155,7 +114,7 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
       : isSelected
         ? []
         : [option];
-    setSelections((prev) => ({ ...prev, [question.id]: nextSelection }));
+    setSelection(question.id, nextSelection);
 
     window.clearTimeout(advanceTimerRef.current);
     if (!question.multiSelect && !isSelected) {
@@ -167,27 +126,13 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
     e.preventDefault();
     const text = ownAnswer.trim();
     if (!question || !text) return;
-    if (!options.includes(text)) {
-      setCustomOptions((prev) => ({ ...prev, [question.id]: [...(prev[question.id] ?? []), text] }));
-    }
+    if (!options.includes(text)) addCustomOption(question.id, text);
     setIsWritingOwn(false);
     setOwnAnswer("");
     if (!selected.includes(text)) choose(text);
   };
 
-  const build = async () => {
-    setPhase("compiling");
-    try {
-      onComplete(await api.compileIdea(idea, answers));
-    } catch (error) {
-      if (isQuotaError(error) && error.quota && onQuotaExceeded) {
-        onQuotaExceeded(error.quota);
-        return;
-      }
-      console.warn("Couldn't compile the brief on the server, using a simple one", error);
-      onComplete(localBrief(idea, answers));
-    }
-  };
+  const build = () => compileInterview();
 
   const keyboardRef = useRef({ phase, options, choose, next });
   keyboardRef.current = { phase, options, choose, next };
@@ -211,6 +156,8 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  if (!interview) return null;
 
   const stepCount = questions.length + 1;
   const currentStep = phase === "review" || phase === "compiling" ? questions.length : index;
@@ -237,11 +184,16 @@ export function IdeaClarifier({ idea, onEditIdea, onComplete, onQuotaExceeded }:
         {phase === "loading" ? (
           <div role="status" className="flex flex-col items-center gap-2 py-10 text-center">
             <OrbitSpinner className="h-7 w-7" />
-            <p className="text-shimmer mt-2 text-sm">Tailoring a few questions to your idea…</p>
-            <p className="text-xs text-muted-foreground">Only what's needed, and you can skip any of them.</p>
+            <p className="text-shimmer mt-2 text-sm">Reading your idea…</p>
+            <p className="text-xs text-muted-foreground">You'll only be asked what it leaves open, and you can skip any of it.</p>
           </div>
         ) : (
           <>
+            {!isTailored && (
+              <p role="status" className="mb-3 rounded-lg border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2 text-xs text-foreground/90">
+                The AI couldn&rsquo;t be reached just now, so these are general questions rather than ones written for your idea. You can answer them, skip them, or try again in a moment.
+              </p>
+            )}
             <div className="flex items-center justify-between gap-3">
               <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                 {phase === "asking" ? `Question ${index + 1} of ${questions.length}` : "Review"}

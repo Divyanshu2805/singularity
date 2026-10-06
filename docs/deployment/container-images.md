@@ -1,6 +1,6 @@
 # Container Images
 
-Eight arm64 images, built natively on GitHub's Arm runners (`ubuntu-24.04-arm`), tagged with the commit SHA, and published to `ghcr.io/divyanshu2805/vibecraft-<name>`. No secret is baked into any image, and every image runs as a non-root user.
+Eight arm64 images, built natively on GitHub's Arm runners (`ubuntu-24.04-arm`), tagged with the commit SHA, and published to `ghcr.io/divyanshu2805/singularity-<name>`. No secret is baked into any image, and every image runs as a non-root user.
 
 | Image | Dockerfile | Base | Notes |
 |---|---|---|---|
@@ -16,11 +16,11 @@ Eight arm64 images, built natively on GitHub's Arm runners (`ubuntu-24.04-arm`),
 ```bash
 ./mvnw clean package
 for m in discovery gateway account workspace intelligence; do
-  docker build -f docker/java-service.Dockerfile --build-arg MODULE=${m}-service -t vibecraft-${m}:local .
+  docker build -f docker/java-service.Dockerfile --build-arg MODULE=${m}-service -t singularity-${m}:local .
 done
-docker build -t vibecraft-frontend:local frontend/
-docker build -t vibecraft-preview-proxy:local proxy/
-docker build -f docker/preview-runner.Dockerfile -t vibecraft-preview-runner:local \
+docker build -t singularity-frontend:local frontend/
+docker build -t singularity-preview-proxy:local proxy/
+docker build -f docker/preview-runner.Dockerfile -t singularity-preview-runner:local \
   workspace-service/src/main/resources/starter-templates/react-vite-tailwind-daisyui-starter
 ```
 

@@ -25,6 +25,19 @@ cp .env.example .env
 
 Non-secret settings — ports, the Redis host, preview timeouts, the AI model — live in each service's `application.yaml` and can be overridden with standard Spring environment variables.
 
+### Using Gemini instead of OpenRouter
+
+The AI client speaks the OpenAI API and is pointed at OpenRouter only by configuration, so Google's OpenAI-compatible endpoint works with these lines in `.env` (the key variable keeps its name, only its value changes):
+
+```properties
+OPENROUTER_API_KEY=<your Gemini API key>
+spring.ai.openai.base-url=https://generativelanguage.googleapis.com/v1beta/openai
+spring.ai.openai.chat.completions-path=/chat/completions
+spring.ai.openai.chat.options.model=<a Gemini model id from ai.google.dev/gemini-api/docs/models>
+```
+
+Gemini 3 models reject the request that follows a tool call unless it carries the hidden "thought signature" they attached to the call, and the AI library does not send it back. `GeminiToolCallCompat` (intelligence-service) adds Google's documented bypass value to every tool call, but only while `base-url` points at Google. Without it every build that reads a file fails with `400 Function call is missing a thought_signature`, while the idea interview, which uses no tools, still works. Reasoning carried between tool steps may be slightly weaker than with real signatures.
+
 ## Frontend
 
 ```bash

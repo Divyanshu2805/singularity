@@ -8,7 +8,7 @@ Every error response from every service has the same JSON shape, produced by one
   "message": "You've used today's AI allowance on the Free plan. It refills at midnight, or you can upgrade for a bigger daily budget.",
   "timestamp": "2026-09-08T10:15:30",
   "requestId": "3f6c2a1e-8b1d-4f0e-9a52-7d4f7c1e2b90",
-  "quota": { "reason": "DAILY_TOKENS", "limit": 5000, "used": 5000, "resetsAt": "2026-09-09T00:00:00Z", "planName": "Free" }
+  "quota": { "reason": "DAILY_TOKENS", "limit": 100000, "used": 100000, "resetsAt": "2026-09-09T00:00:00Z", "planName": "Free" }
 }
 ```
 

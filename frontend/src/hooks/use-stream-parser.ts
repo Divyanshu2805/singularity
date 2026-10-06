@@ -1,7 +1,8 @@
 /**
  * Parses the model's tagged output into chat events while it is still arriving.
  *
- * Handles: recognising each tagged section and its attributes, treating everything outside the tags as message text,
+ * Handles: recognising each tagged section and its attributes (a question for the user among them, with its
+ * suggested answers), treating everything outside the tags as message text,
  * telling the smooth reveal which ranges are readable text, and where it must stop so a half-arrived tag is never
  * shown; dropping every FILE_EDIT for a path but the last when the model re-outputs the same file, matching what the
  * backend's LlmResponseParser keeps once the turn is saved.
@@ -17,10 +18,10 @@ import { useMemo } from 'react';
 import { ChatEvent, ChatEventType } from '@/lib/types';
 import type { TextRange } from './use-smooth-stream';
 
-const TAG_NAMES = ["message", "file", "delete", "tool", "todo", "learn"];
+const TAG_NAMES = ["message", "file", "delete", "tool", "todo", "learn", "ask"];
 
-const OPEN_TAG_REGEX = /<(tool|message|file|delete|todo|learn)\b([^>]*)>/gi;
-const TAG_REGEX = /<(message|file|delete|tool|todo|learn)\b[^>]*>|<\/(message|file|delete|tool|todo|learn)>/gi;
+const OPEN_TAG_REGEX = /<(tool|message|file|delete|todo|learn|ask)\b([^>]*)>/gi;
+const TAG_REGEX = /<(message|file|delete|tool|todo|learn|ask)\b[^>]*>|<\/(message|file|delete|tool|todo|learn|ask)>/gi;
 
 const readAttr = (attrs: string, name: string) =>
   new RegExp(`${name}="([^"]*)"`, "i").exec(attrs)?.[1];
@@ -68,6 +69,8 @@ function buildEvent(tag: string, attrs: string, content: string, isComplete: boo
         filePath: readAttr(attrs, "path"),
         metadata: readAttr(attrs, "concept")?.trim() || undefined,
       };
+    case "ask":
+      return { ...base, type: ChatEventType.ASK, metadata: readAttr(attrs, "options")?.trim() || undefined };
     default:
       return { ...base, type: ChatEventType.MESSAGE };
   }

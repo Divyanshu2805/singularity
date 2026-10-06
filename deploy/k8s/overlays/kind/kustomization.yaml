@@ -6,7 +6,7 @@ resources:
   - ../../namespaces # excluded from base itself - see its own comment; kind's kubeconfig has full rights
   - frontend-nginx.yaml
 
-# No `images:` transformer needed - base already references the exact `vibecraft-<name>:local` tags this
+# No `images:` transformer needed - base already references the exact `singularity-<name>:local` tags this
 # overlay's README has you build and `kind load docker-image`. A non-`latest` tag already defaults to
 # imagePullPolicy: IfNotPresent, so kind never tries (and fails) to pull these from a registry.
 #
