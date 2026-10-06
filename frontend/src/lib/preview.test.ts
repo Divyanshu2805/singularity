@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  PREVIEW_SANDBOX,
   autoStartKey,
   changedDependencies,
   describePreviewStartFailure,
@@ -182,5 +183,20 @@ describe("describePreviewStartFailure", () => {
   it("survives being handed something that isn't an error", () => {
     expect(describePreviewStartFailure(undefined)).toMatchObject({ kind: "unreachable", message: "Something went wrong." });
     expect(describePreviewStartFailure("boom")).toMatchObject({ kind: "unreachable" });
+  });
+});
+
+describe("the preview iframe sandbox", () => {
+  const tokens = PREVIEW_SANDBOX.split(" ");
+
+  it("keeps the preview on its own origin and able to run, which the message check and proxy cookie need", () => {
+    expect(tokens).toContain("allow-scripts");
+    expect(tokens).toContain("allow-same-origin");
+  });
+
+  it("never lets the previewed page navigate the app or reach the top window", () => {
+    expect(tokens).not.toContain("allow-top-navigation");
+    expect(tokens).not.toContain("allow-top-navigation-by-user-activation");
+    expect(tokens).not.toContain("allow-popups-to-escape-sandbox");
   });
 });

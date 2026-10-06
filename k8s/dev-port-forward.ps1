@@ -9,9 +9,9 @@
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File k8s\dev-port-forward.ps1
 
-$namespace = "vibecraft-ai"
+$namespace = "singularity-ai"
 $forwards = @(
-    @{ Name = "preview proxy"; Target = "svc/vibecraft-proxy-svc"; Ports = "8090:80" },
+    @{ Name = "preview proxy"; Target = "svc/singularity-proxy-svc"; Ports = "8090:80" },
     @{ Name = "redis";         Target = "svc/redis-service";         Ports = "6379:6379" }
 )
 

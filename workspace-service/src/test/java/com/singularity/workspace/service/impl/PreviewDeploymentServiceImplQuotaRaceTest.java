@@ -53,7 +53,7 @@ class PreviewDeploymentServiceImplQuotaRaceTest {
     private final AuthUtil authUtil = mock(AuthUtil.class);
 
     private final PreviewProperties properties = new PreviewProperties(
-            "vibecraft-ai", "http", "localhost", null, 5173, "myminio", "projects",
+            "singularity-ai", "http", "localhost", null, 5173, "myminio", "projects",
             Duration.ofMinutes(10), Duration.ofMinutes(2), Duration.ofSeconds(90),
             "test-secret-at-least-32-bytes-long-000000", Duration.ofHours(6));
 

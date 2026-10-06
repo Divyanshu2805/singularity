@@ -57,7 +57,7 @@ class SessionServiceImplSignOutTest {
     private final SessionServiceImpl service = new SessionServiceImpl(
             identityVerifier, userRepository, mock(UserMapper.class), sessionCookies,
             sessionCache, notifier, revokedSessionRepository, mock(AuthAuditService.class),
-            new AuthProperties(new AuthProperties.SessionCookie("vc_session", Duration.ofDays(5), false), Duration.ofSeconds(60)),
+            new AuthProperties(new AuthProperties.SessionCookie("__Host-vc_session", Duration.ofDays(5), false), Duration.ofSeconds(60)),
             authUtil, Clock.fixed(NOW, ZoneOffset.UTC));
 
     private static VerifiedIdentity identityExpiring(Instant expiresAt) {

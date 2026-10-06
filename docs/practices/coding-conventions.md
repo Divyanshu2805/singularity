@@ -41,6 +41,7 @@ Throw, or let propagate, an existing typed exception from `common-lib`'s `error`
 - Pure logic belongs in `lib/`, where it can be tested without rendering. `lib/` never imports from `components/` or `pages/`.
 - `components/ui/` is the vendored shadcn/ui set; treat it as a library.
 - Any module-level store that holds project- or user-specific data must register a reset with `onSignOut(...)` in `lib/session.ts`.
+- **Motion on the landing page is written with Motion** (`motion/react`): entrances, staggers, scroll-linked values, shared-layout and exit animations. Existing hand-written pieces (`landing/intro.ts`, `scroll-rise.ts`, the plans' entrance) move over only when they are being changed anyway. It is not used for the product films (they are scripted by elapsed time), for anything drawn on a canvas, or in the signed-in app, so it stays out of the app's bundles.
 
 ## Source-file headers
 

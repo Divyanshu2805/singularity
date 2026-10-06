@@ -19,20 +19,33 @@ credentials-file: /etc/cloudflared/creds/credentials.json
 # in Phase 0/1, which already had this right.
 metrics: 0.0.0.0:2000
 ingress:
-  # Order matters - the Gateway's own routes (api/webhooks) must be checked before the frontend catch-all. App URL
-  # is a single-level subdomain (`vibecraft.divyanshuagrahari.dev`) deliberately - Cloudflare's free wildcard
-  # certificate (`*.divyanshuagrahari.dev`) only covers one subdomain level; a two-level one (the first attempt,
-  # `vibecraft.app.divyanshuagrahari.dev`) showed as uncovered/insecure in the dashboard before this was ever
-  # deployed. Previews stay on the pre-existing `*.divyanshuagrahari.dev` wildcard below, unchanged - moving them
-  # under `vibecraft.` too would hit the exact same two-level problem.
+  # Order matters - the Gateway's own routes (api/webhooks) must be checked before the frontend catch-all, and every
+  # explicit app hostname must come before the `*.divyanshuagrahari.dev` preview wildcard at the bottom, which would
+  # otherwise swallow it and hand the app's traffic to the preview proxy. App URL is a single-level subdomain
+  # (`singularity.divyanshuagrahari.dev`) deliberately - Cloudflare's free wildcard certificate
+  # (`*.divyanshuagrahari.dev`) only covers one subdomain level; a two-level one (an earlier attempt,
+  # `vibecraft.app.divyanshuagrahari.dev`) showed as uncovered/insecure in the dashboard before it was ever
+  # deployed. Previews stay on the pre-existing `*.divyanshuagrahari.dev` wildcard, unchanged - moving them under
+  # `singularity.` too would hit the exact same two-level problem.
+  - hostname: singularity.divyanshuagrahari.dev
+    path: /api/.*
+    service: http://gateway-service.singularity.svc.cluster.local:8000
+  - hostname: singularity.divyanshuagrahari.dev
+    path: /webhooks/.*
+    service: http://gateway-service.singularity.svc.cluster.local:8000
+  - hostname: singularity.divyanshuagrahari.dev
+    service: http://frontend.singularity.svc.cluster.local:80
+  # TRANSITION (remove once the Stripe webhook endpoint, Firebase and any bookmarks have moved, or once Cloudflare
+  # redirects this hostname to the one above): the product's previous hostname, still routed to the same services so
+  # a webhook or link aimed at it keeps working during the rename.
   - hostname: vibecraft.divyanshuagrahari.dev
     path: /api/.*
-    service: http://gateway-service.vibecraft.svc.cluster.local:8000
+    service: http://gateway-service.singularity.svc.cluster.local:8000
   - hostname: vibecraft.divyanshuagrahari.dev
     path: /webhooks/.*
-    service: http://gateway-service.vibecraft.svc.cluster.local:8000
+    service: http://gateway-service.singularity.svc.cluster.local:8000
   - hostname: vibecraft.divyanshuagrahari.dev
-    service: http://frontend.vibecraft.svc.cluster.local:80
+    service: http://frontend.singularity.svc.cluster.local:80
   - hostname: "*.divyanshuagrahari.dev"
-    service: http://vibecraft-proxy-svc.vibecraft-ai.svc.cluster.local:80
+    service: http://singularity-proxy-svc.singularity-ai.svc.cluster.local:80
   - service: http_status:404

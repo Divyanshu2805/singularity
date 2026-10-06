@@ -4,8 +4,6 @@ Every change to a project's files — an AI turn or a restore — is published a
 
 ## Publishing a revision
 
-![The revision publish pipeline](../assets/diagrams/file-revisions.png)
-
 1. **Stage.** Every changed path's new content is uploaded to a dedicated MinIO bucket (`project-blobs`, `minio.blob-bucket`) under `blob/<sha256>`. Blobs are content-addressed and immutable: the same bytes written twice, even across projects, land at the same key. A failure here leaves the live file layout and every table untouched, because nothing references the new content yet.
 2. **Manifest.** One short Postgres transaction inserts a `PROJECT_FILE_REVISION` row in `STAGING` and one `PROJECT_FILE_REVISION_ENTRY` per changed path, recording both the new hash and the path's previous hash (the rollback data).
 3. **Apply.** Each entry is copied server-side from its blob onto the project's live key (`{bucket}/{projectId}/{path}` — the layout every reader, including the preview pod's `mc mirror`, depends on), or removed for a delete. Any failure rolls back every entry already applied in that call using its previous hash, and marks the revision `FAILED`.

@@ -29,8 +29,8 @@ import java.util.List;
  *
  * <p>Closing the response no longer stops a generation - it only stops watching it; stopping is its own endpoint. A
  * failure mid-stream cannot become an HTTP status, because the response has already started, so it arrives as a named
- * error event the client renders in place, with rate limiting and a user-requested stop distinguished from a genuine
- * failure. Both streams carry an {@link SseHeartbeat} so a long silent stretch of "the model is thinking" doesn't
+ * error event the client renders in place, with rate limiting, a user-requested stop and the provider refusing this
+ * server's credentials (a setup problem retrying cannot fix) each distinguished from a genuine failure. Both streams carry an {@link SseHeartbeat} so a long silent stretch of "the model is thinking" doesn't
  * outlast Cloudflare's idle-connection timeout in production.
  */
 @RestController
@@ -95,7 +95,9 @@ public class ChatController {
                         log.error("Streaming failed for projectId: {}", projectId, error);
                         message = isRateLimited(error)
                                 ? "The AI provider is currently rate-limited. Please try again in a moment."
-                                : "Something went wrong while generating a response. Please try again.";
+                                : isProviderRefusal(error)
+                                        ? "The AI service isn't available right now because of a setup problem on our side, so nothing was changed."
+                                        : "Something went wrong while generating a response. Please try again.";
                     }
                     return Flux.just(ServerSentEvent.<StreamResponse>builder()
                             .event("error")
@@ -103,6 +105,18 @@ public class ChatController {
                             .build());
                 });
         return SseHeartbeat.withHeartbeat(events);
+    }
+
+    static boolean isProviderRefusal(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof WebClientResponseException response) {
+                int status = response.getStatusCode().value();
+                if (status == 401 || status == 402 || status == 403) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean isRateLimited(Throwable error) {

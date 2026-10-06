@@ -17,9 +17,11 @@ A path no route owns is a 404 from the Gateway. `RoutingTableTest` pins every do
 
 ## Conventions
 
-**Authentication.** Requests are authenticated by an `httpOnly` session cookie (`vc_session`) issued after a Firebase sign-in. Every endpoint requires it except `GET /api/auth/csrf`, `POST /api/auth/session`, `POST /api/auth/logout`, `GET /api/plans` and `POST /webhooks/payment`. See [Authentication](authentication.md).
+**Authentication.** Requests are authenticated by an `httpOnly` session cookie (`__Host-vc_session`) issued after a Firebase sign-in. Every endpoint requires it except `GET /api/auth/csrf`, `POST /api/auth/session`, `POST /api/auth/logout`, `GET /api/plans` and `POST /webhooks/payment`. See [Authentication](authentication.md).
 
-**CSRF.** Every state-changing request (`POST`, `PUT`, `PATCH`, `DELETE`) must send the `X-XSRF-TOKEN` header, echoing the `XSRF-TOKEN` cookie. Call `GET /api/auth/csrf` once on load to obtain it.
+**CSRF.** Every state-changing request (`POST`, `PUT`, `PATCH`, `DELETE`) must send the `X-XSRF-TOKEN` header, echoing the `__Host-XSRF-TOKEN` cookie. Call `GET /api/auth/csrf` once on load to obtain it.
+
+**Request size.** The Gateway refuses a body over 1 MB with `413` before any service sees it. Individual fields have their own, smaller limits, stated on each endpoint.
 
 **Authorization.** Project-scoped endpoints check the caller's role on that project. The tables on each page state the minimum role (`VIEWER`, `EDITOR`, `OWNER`) or permission (`VIEW`, `EDIT`).
 

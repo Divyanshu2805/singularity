@@ -14,38 +14,38 @@ resources:
 # the smoke test still 404'd, because the already-running pod had never restarted to read it.
 configMapGenerator:
   - name: cloudflared-config
-    namespace: vibecraft
+    namespace: singularity
     files:
       - config.yaml=cloudflared-config.yaml
 
-# Phase 5's CI job runs `kustomize edit set image vibecraft-discovery=ghcr.io/divyanshu2805/vibecraft-discovery:$SHA`
+# Phase 5's CI job runs `kustomize edit set image singularity-discovery=ghcr.io/divyanshu2805/singularity-discovery:$SHA`
 # (one per image) before `kubectl apply -k .`, replacing the placeholder tag below with the real commit SHA Phase 2's
 # build just pushed. `REPLACED_BY_CI` is deliberately not a valid tag - applying this overlay unmodified fails loudly
 # (ImagePullBackOff) instead of silently running a stale image.
 images:
-  - name: vibecraft-discovery:local
-    newName: ghcr.io/divyanshu2805/vibecraft-discovery
+  - name: singularity-discovery:local
+    newName: ghcr.io/divyanshu2805/singularity-discovery
     newTag: REPLACED_BY_CI
-  - name: vibecraft-gateway:local
-    newName: ghcr.io/divyanshu2805/vibecraft-gateway
+  - name: singularity-gateway:local
+    newName: ghcr.io/divyanshu2805/singularity-gateway
     newTag: REPLACED_BY_CI
-  - name: vibecraft-account:local
-    newName: ghcr.io/divyanshu2805/vibecraft-account
+  - name: singularity-account:local
+    newName: ghcr.io/divyanshu2805/singularity-account
     newTag: REPLACED_BY_CI
-  - name: vibecraft-workspace:local
-    newName: ghcr.io/divyanshu2805/vibecraft-workspace
+  - name: singularity-workspace:local
+    newName: ghcr.io/divyanshu2805/singularity-workspace
     newTag: REPLACED_BY_CI
-  - name: vibecraft-intelligence:local
-    newName: ghcr.io/divyanshu2805/vibecraft-intelligence
+  - name: singularity-intelligence:local
+    newName: ghcr.io/divyanshu2805/singularity-intelligence
     newTag: REPLACED_BY_CI
-  - name: vibecraft-frontend:local
-    newName: ghcr.io/divyanshu2805/vibecraft-frontend
+  - name: singularity-frontend:local
+    newName: ghcr.io/divyanshu2805/singularity-frontend
     newTag: REPLACED_BY_CI
-  - name: vibecraft-preview-proxy:local
-    newName: ghcr.io/divyanshu2805/vibecraft-preview-proxy
+  - name: singularity-preview-proxy:local
+    newName: ghcr.io/divyanshu2805/singularity-preview-proxy
     newTag: REPLACED_BY_CI
-  - name: vibecraft-preview-runner:local
-    newName: ghcr.io/divyanshu2805/vibecraft-preview-runner
+  - name: singularity-preview-runner:local
+    newName: ghcr.io/divyanshu2805/singularity-preview-runner
     newTag: REPLACED_BY_CI
 
 patches:

@@ -1,32 +1,32 @@
-# The wildcard reverse proxy for live previews, adapted from the repo-root `k8s/vibecraft-proxy.yml` (which stays
-# as-is for local dev against the vibecraft-ai-only kind cluster).
+# The wildcard reverse proxy for live previews, adapted from the repo-root `k8s/singularity-proxy.yml` (which stays
+# as-is for local dev against the singularity-ai-only kind cluster).
 #
-# Secret needed once per cluster, in vibecraft-ai (same value as workspace.yaml's copy in vibecraft):
-#   kubectl create secret generic preview-access-token -n vibecraft-ai --from-literal=secret='<PREVIEW_ACCESS_TOKEN_SECRET>'
+# Secret needed once per cluster, in singularity-ai (same value as workspace.yaml's copy in singularity):
+#   kubectl create secret generic preview-access-token -n singularity-ai --from-literal=secret='<PREVIEW_ACCESS_TOKEN_SECRET>'
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: vibecraft-proxy
-  namespace: vibecraft-ai
+  name: singularity-proxy
+  namespace: singularity-ai
 
 ---
 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vibecraft-proxy
-  namespace: vibecraft-ai
+  name: singularity-proxy
+  namespace: singularity-ai
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: vibecraft-proxy
+      app: singularity-proxy
   template:
     metadata:
       labels:
-        app: vibecraft-proxy
+        app: singularity-proxy
     spec:
-      serviceAccountName: vibecraft-proxy
+      serviceAccountName: singularity-proxy
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -36,7 +36,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: proxy
-          image: vibecraft-preview-proxy:local
+          image: singularity-preview-proxy:local
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -73,8 +73,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: vibecraft-proxy-svc
-  namespace: vibecraft-ai
+  name: singularity-proxy-svc
+  namespace: singularity-ai
 spec:
   # ClusterIP - the Cloudflare tunnel (oracle overlay) or kubectl port-forward (kind overlay) is the only entry
   # point; a LoadBalancer would provision a public, unauthenticated IP the tunnel is meant to be the only front for.
@@ -83,4 +83,4 @@ spec:
     - port: 80
       targetPort: 8080
   selector:
-    app: vibecraft-proxy
+    app: singularity-proxy

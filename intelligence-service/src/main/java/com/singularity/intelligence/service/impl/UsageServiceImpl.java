@@ -5,6 +5,7 @@ import com.singularity.intelligence.dto.usage.LastRequestUsage;
 import com.singularity.intelligence.dto.usage.PlanLimitsResponse;
 import com.singularity.intelligence.dto.usage.UsageReservation;
 import com.singularity.intelligence.dto.usage.UsageTodayResponse;
+import com.singularity.intelligence.enums.UsageFeature;
 import com.singularity.intelligence.dto.usage.UsageRecord;
 import com.singularity.intelligence.entity.UsageEvent;
 import com.singularity.intelligence.entity.UsageLog;
@@ -37,8 +38,11 @@ import java.time.ZoneId;
  * another's. The reservation is sized off {@code usage.build-reservation-tokens} - a conservative estimate of a whole
  * build turn's cost, not {@code spring.ai.openai.chat.options.max-tokens} (the model's output ceiling alone, which
  * left an ordinary two-file build under-reserved by more than 2x since a tool-calling turn's cost is dominated by
- * input, not output) - capped at the plan's entire daily allowance so a plan smaller than that reservation (the free
- * tier's 5,000 tokens/day is well under it) can still make its one call rather than being permanently refused. The
+ * input, not output). Only a build is reserved at that size: the idea interview and the code lens are a small
+ * fraction of a build's cost, so they reserve {@code usage.light-reservation-tokens} instead - at the build size every
+ * one of them demanded a whole build's room and, on a small plan, was refused as soon as anything had been spent.
+ * Either amount is capped at the plan's entire daily allowance so a plan smaller than that reservation can still
+ * make its one call rather than being permanently refused. The
  * true cost is trued up afterward by {@code reconcileBudget}, which also accepts a null actual usage: that releases
  * the reservation in full, for a call that produced nothing chargeable.
  *
@@ -58,16 +62,19 @@ public class UsageServiceImpl implements UsageService {
     private final WorkspaceServiceClient workspaceServiceClient;
     private final AuthUtil authUtil;
     private final int reservationTokens;
+    private final int lightReservationTokens;
 
     public UsageServiceImpl(UsageLogRepository usageLogRepository, UsageEventRepository usageEventRepository,
                              AccountServiceClient accountServiceClient, WorkspaceServiceClient workspaceServiceClient,
-                             AuthUtil authUtil, @Value("${usage.build-reservation-tokens}") int reservationTokens) {
+                             AuthUtil authUtil, @Value("${usage.build-reservation-tokens}") int reservationTokens,
+                             @Value("${usage.light-reservation-tokens}") int lightReservationTokens) {
         this.usageLogRepository = usageLogRepository;
         this.usageEventRepository = usageEventRepository;
         this.accountServiceClient = accountServiceClient;
         this.workspaceServiceClient = workspaceServiceClient;
         this.authUtil = authUtil;
         this.reservationTokens = reservationTokens;
+        this.lightReservationTokens = lightReservationTokens;
     }
 
     @Override
@@ -84,7 +91,7 @@ public class UsageServiceImpl implements UsageService {
 
     @Override
     @Transactional
-    public UsageReservation reserveBudget() {
+    public UsageReservation reserveBudget(UsageFeature feature) {
         Long userId = authUtil.getCurrentUserId();
         LocalDate today = LocalDate.now();
         PlanDto plan = accountServiceClient.getPlanLimits(userId);
@@ -93,7 +100,8 @@ public class UsageServiceImpl implements UsageService {
             return new UsageReservation(userId, today, 0);
         }
 
-        int amount = Math.min(reservationTokens, plan.maxTokensPerDay());
+        int wanted = feature == UsageFeature.BUILD ? reservationTokens : lightReservationTokens;
+        int amount = Math.min(wanted, plan.maxTokensPerDay());
         usageLogRepository.ensureRowExists(userId, today);
         int reserved = usageLogRepository.tryReserve(userId, today, amount, plan.maxTokensPerDay());
         if (reserved == 0) {

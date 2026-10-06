@@ -7,14 +7,14 @@
  * expired hint reading as signed out.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildContentSecurityPolicy } from "../../csp";
+import { buildContentSecurityPolicy, buildContentSecurityPolicyHeaderDirective } from "../../csp";
 import { CSRF_HEADER, needsCsrf, readCsrfToken } from "./csrf";
 import { friendlyFirebaseError } from "./firebase";
 import { api, isAuthenticated, loginRedirectPath, startSession } from "./api";
 
 describe("csrf", () => {
   it("reads the token cookie among others, decoded", () => {
-    expect(readCsrfToken("a=1; XSRF-TOKEN=abc%3D123; b=2")).toBe("abc=123");
+    expect(readCsrfToken("a=1; __Host-XSRF-TOKEN=abc%3D123; b=2")).toBe("abc=123");
     expect(readCsrfToken("a=1")).toBeNull();
   });
 
@@ -28,11 +28,11 @@ describe("csrf", () => {
 
 describe("api writes", () => {
   beforeEach(() => {
-    document.cookie = "XSRF-TOKEN=token-1; path=/";
+    Object.defineProperty(document, "cookie", { configurable: true, get: () => "__Host-XSRF-TOKEN=token-1" });
   });
   afterEach(() => {
     vi.restoreAllMocks();
-    document.cookie = "XSRF-TOKEN=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+    delete (document as { cookie?: string }).cookie;
   });
 
   it("send the CSRF header and same-origin credentials, but never a Bearer token for a cookie session", async () => {
@@ -99,6 +99,16 @@ describe("content security policy", () => {
     expect(directive("frame-src")).toContain("https://preview.example.com");
     expect(directive("object-src")).toBe("object-src 'none'");
     expect(csp).not.toMatch(/\s{2,}/);
+  });
+
+  it("serves the same policy as a header, plus the frame-ancestors directive a meta tag cannot carry", () => {
+    const env = { VITE_API_BASE_URL: "https://api.example.com" };
+    const line = buildContentSecurityPolicyHeaderDirective(env);
+
+    expect(line).toBe(
+      `add_header Content-Security-Policy "${buildContentSecurityPolicy(env)}; frame-ancestors 'none'" always;\n`
+    );
+    expect(line).not.toContain("$");
   });
 });
 

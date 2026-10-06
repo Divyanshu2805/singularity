@@ -22,6 +22,17 @@ Features was to be the third (2026-10-04). A version was built as a development-
 
 The remaining sections still stand on the bare star sky.
 
+A rebuild of the page is under way (2026-10-05), at the owner's request, at `/genesis` - a route that exists in development only, so `/` is untouched until the owner approves the swap (`frontend/src/pages/Genesis.tsx`). The copy and the sections of this plan are unchanged. The order of work is the owner's: the background first, then all the content laid out on it, and only then animation, transitions and motion. The background is the app's own sky, which the owner chose from three (the app's sky, real space photographs, plain deep space): the landing's star field with the dashboard's wash of rose, amber and gold at the foot of the window, nearly as strong as the dashboard's behind the hero and at the strength of the app's panel pages below it (`frontend/src/components/genesis/Sky.tsx`). On it stand all the sections, as content: the hero (the mark, the headline set larger and lighter, the line, the prompt, and since the same day the project window beside them), how it works as the flat list, what you can build, Understand, the features, the plans, the questions, the closing call and the footer. They are the home page's own components; the closing call and the footer were moved out of `Home.tsx` into files of their own so both pages show the same ones. Nothing is pinned and no section has a device of its own. Motion has started with the hero only (2026-10-05), after a reference page's hero the owner recorded and asked to have matched. What stands now, after the owner cut a first, closer pass back the same day:
+
+- **The opening** (`components/genesis/Opening.tsx`, timetable and cover arithmetic in `lib/opening.ts`): the page arrives under a cover in the brand's gold with the logo's tile at its centre; the cover, a square with rounded corners, closes onto the tile over 850ms, is a thin ring round it for a moment and is gone, and the tile fades after it. It is held until the web fonts are in. It does not play under reduced motion, on a load that is already scrolled, or on a return from the sign-in pages by the page slide.
+- **The layout**: from 1280px up the hero is one screen of two columns - the logo, the headline on three lines, the line, the prompt and the note on the left; the project window on the right, whole on the screen, standing in a slight perspective. The project window is no longer a section of its own under the hero. Below 1280px the copy is centred on the first screen with the window flat under it.
+- **The entrance** behind the cover: the headline, the line, the prompt and the note come up one after another and the window comes up once, as a whole; when they have landed the logo's eclipse (the home page's `EclipseMark`), the window's film and the falling stars begin. Opacity and transform only.
+- **Falling stars** behind the hero (`components/genesis/Meteors.tsx`): the app's own shooting star given a longer, steeper fall, eight of them on cycles of their own, CSS only.
+
+Taken out at the owner's request on the way: a ribbon of gold threads behind the window (a 2D canvas; `Ribbon.tsx` and `lib/ribbon.ts`, never committed), a badge over the headline and a note that typed themselves, the headline coming out of a blur, the window's panels arriving one by one, the window following the pointer, and the window running off the right edge of the screen as the reference's does.
+
+A first approach to the rebuild was turned down the same day. It was one continuous WebGL scene behind the page: a sky with a worked-out Milky Way, a black hole above the headline that brightened as the visitor typed, and a burst of light played by the first screen of scroll. The owner saw the hero and the burst and disliked three things: the sky read as a brownish haze, and neither the black hole nor the flash was wanted. That scene's code was deleted at the owner's request; it was never committed, so it is not in the Git history.
+
 Still open from this plan:
 
 | Item | Why it is not on the page |
@@ -211,7 +222,7 @@ Three cards. Every number comes from the server, never from the page.
 |---|---|---|---|
 | Price | ₹0 | ₹499 / month | ₹1,499 / month |
 | Projects | 1 | 3 | 10 |
-| AI tokens per day | 5,000 | 100,000 | 500,000 |
+| AI tokens per day | 100,000 | 300,000 | 1,000,000 |
 | Live previews at once | 1 | 3 | 10 |
 | Also | Full editor, chat and ExplainLLM · Teaching mode | Everything in Free · Priority when the AI is busy | Everything in Free · Priority when the AI is busy |
 | Button | Start for free | Choose Pro | Choose Business |
@@ -306,7 +317,7 @@ Each has a recommendation. Nothing in the UI phase should start on a section who
 | 9 | GitHub link and maker credit in the footer | Owner's call. It is strong proof for a technical visitor. |
 | 10 | Privacy and Terms pages | Needed before wide sharing. Short, plain pages are enough. |
 
-**On decision 8.** A real two-file build was measured at about 70,000 tokens. The Free plan's 5,000 a day is far below one build, and Pro's 100,000 is about one. The landing page cannot promise "start free and build" in good conscience until the daily allowances are sized against what a build costs. This is a product decision, not a copy one.
+**On decision 8.** A real two-file build was measured at about 70,000 tokens. The allowances were first 5,000 (Free), 100,000 (Pro) and 500,000 (Business), which left Free below one build and Pro at about one. On 2026-10-06 the owner set them to 100,000, 300,000 and 1,000,000 a day, which is about one, four and fourteen builds.
 
 ---
 

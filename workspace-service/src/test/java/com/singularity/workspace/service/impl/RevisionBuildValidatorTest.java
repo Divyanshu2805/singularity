@@ -29,7 +29,7 @@ import static org.mockito.Mockito.when;
  * Covers CODE_REVIEW.md AI-09's orchestration in {@link RevisionBuildValidator}: the {@code enabled} gate, failing
  * open on a saturated warm pool rather than blocking the publish, that the claimed pod is always released - even
  * when something mid-flow throws - and the diagnostic string's tail-truncation/ANSI-stripping. The real fabric8
- * pod-exec/upload behavior and a real {@code npm install}/{@code tsc} run are verified live against the `vibecraft`
+ * pod-exec/upload behavior and a real {@code npm install}/{@code tsc} run are verified live against the `singularity`
  * kind cluster, not here (CLAUDE.md's Testing Expectations - this pipeline has no automated coverage otherwise).
  */
 class RevisionBuildValidatorTest {

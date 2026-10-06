@@ -306,3 +306,34 @@ describe("renaming a file", () => {
     ]);
   });
 });
+
+describe("questions for the user", () => {
+  const ask = (content: string, metadata?: string, isComplete = true): ChatEvent =>
+    ({ type: ChatEventType.ASK, content, metadata, isComplete });
+
+  it("groups a turn's consecutive questions into one block with their suggested answers", () => {
+    const blocks = buildBlocks(
+      [
+        { type: ChatEventType.MESSAGE, content: "Two things first." },
+        ask("How should people sign in?", "Email|Google"),
+        ask("Which city is this for?"),
+      ],
+      false
+    );
+
+    expect(blocks.map((block) => block.kind)).toEqual(["message", "ask"]);
+    expect(blocks[1]).toMatchObject({
+      kind: "ask",
+      questions: [
+        { question: "How should people sign in?", options: ["Email", "Google"], isComplete: true },
+        { question: "Which city is this for?", options: [], isComplete: true },
+      ],
+    });
+  });
+
+  it("shows no suggestions for a question that is still arriving", () => {
+    const [block] = buildBlocks([ask("How should peo", "Email|Goo", false)], true);
+
+    expect(block).toMatchObject({ kind: "ask", questions: [{ options: [], isComplete: false }] });
+  });
+});

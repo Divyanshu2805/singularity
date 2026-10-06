@@ -64,7 +64,7 @@ class FullChainChatAccessTest {
     private static final long PROJECT_ID = 42L;
     private static final long USER_ID = 7L;
     private static final String VALID_COOKIE = "valid-for-user-7";
-    private static final String SESSION_COOKIE_NAME = "vc_session";
+    private static final String SESSION_COOKIE_NAME = "__Host-vc_session";
 
     @Autowired
     private MockMvc mockMvc;
@@ -127,8 +127,8 @@ class FullChainChatAccessTest {
         MvcResult priming = mockMvc.perform(get("/api/chat/projects/{projectId}", PROJECT_ID)
                         .cookie(sessionCookie()))
                 .andReturn();
-        Cookie xsrfCookie = priming.getResponse().getCookie("XSRF-TOKEN");
-        assertThat(xsrfCookie).as("ServiceSecurityConfig's csrf().spa() must issue an XSRF-TOKEN cookie").isNotNull();
+        Cookie xsrfCookie = priming.getResponse().getCookie("__Host-XSRF-TOKEN");
+        assertThat(xsrfCookie).as("ServiceSecurityConfig's csrf().spa() must issue a __Host-XSRF-TOKEN cookie").isNotNull();
 
         mockMvc.perform(post("/api/chat/projects/{projectId}/active/stop", PROJECT_ID)
                         .cookie(sessionCookie(), xsrfCookie)

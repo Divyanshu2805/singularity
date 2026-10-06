@@ -2,8 +2,6 @@
 
 Starting a preview claims a warm Kubernetes pod, syncs the project's files into it, runs the Vite dev server there, and routes a hostname to it through Redis and a small reverse proxy. This runs entirely in workspace-service.
 
-![Live preview start sequence](../../assets/diagrams/flow-live-preview.png)
-
 ## Steps
 
 1. **`PreviewController` → `PreviewDeploymentServiceImpl`.** Start and stop are serialized per project by an in-process lock, so two collaborators opening the preview together share one runner, and a stop can't shut down a runner someone else is joining.

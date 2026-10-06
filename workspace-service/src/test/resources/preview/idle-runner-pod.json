@@ -201,7 +201,7 @@
       }
     ],
     "name": "runner-pool-6c547ccdf7-8dltz",
-    "namespace": "vibecraft-ai",
+    "namespace": "singularity-ai",
     "ownerReferences": [
       {
         "apiVersion": "apps/v1",
@@ -216,7 +216,7 @@
     "uid": "43f2156f-8516-4c43-bec6-6d3bf6a5b4a2"
   },
   "spec": {
-    "nodeName": "vibecraft-control-plane",
+    "nodeName": "singularity-control-plane",
     "containers": [
       {
         "name": "runner",

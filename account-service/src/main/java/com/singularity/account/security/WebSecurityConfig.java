@@ -1,5 +1,6 @@
 package com.singularity.account.security;
 
+import com.singularity.common.security.CsrfCookie;
 import com.singularity.common.security.InternalServiceAuthFilter;
 import com.singularity.common.security.RateLimitFilter;
 import com.singularity.common.security.RateLimiter;
@@ -58,6 +59,7 @@ public class WebSecurityConfig {
         httpSecurity
                 .csrf(csrf -> csrf
                         .spa()
+                        .csrfTokenRepository(CsrfCookie.repository())
                         .ignoringRequestMatchers("/webhooks/**", "/internal/**"))
                 .sessionManagement(sessionConfig -> sessionConfig.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .headers(headers -> headers

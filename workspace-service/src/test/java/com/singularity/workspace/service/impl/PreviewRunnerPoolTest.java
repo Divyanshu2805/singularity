@@ -54,7 +54,7 @@ class PreviewRunnerPoolTest {
     private static final Instant CLAIMED_AT = Instant.parse("2026-09-20T10:15:30Z");
 
     private static final PreviewProperties PROPERTIES = new PreviewProperties(
-            "vibecraft-ai", "http", "localhost", null, 5173, "local", "projects",
+            "singularity-ai", "http", "localhost", null, 5173, "local", "projects",
             Duration.ofMinutes(30), Duration.ofMinutes(2), Duration.ofMinutes(5), "secret", Duration.ofHours(6));
 
     @Test
@@ -89,8 +89,44 @@ class PreviewRunnerPoolTest {
         assertThat(metadata).containsOnlyKeys("resourceVersion", "labels", "annotations");
         assertThat(metadata.get("resourceVersion")).isEqualTo(listedResourceVersion).isNotNull();
         assertThat(asMap(metadata.get("labels"))).isEqualTo(Map.of("status", "busy", "project-id", "131"));
-        assertThat(asMap(metadata.get("annotations")))
-                .isEqualTo(Map.of("vibecraft.dev/claimed-at", "2026-09-20T10:15:30Z"));
+        assertThat(asMap(metadata.get("annotations"))).isEqualTo(Map.of(
+                "singularity.dev/claimed-at", "2026-09-20T10:15:30Z",
+                "vibecraft.dev/claimed-at", "2026-09-20T10:15:30Z"));
+    }
+
+    @Test
+    void theClaimTimeIsReadFromTheCurrentKey() {
+        Pod pod = podAnnotated(Map.of("singularity.dev/claimed-at", "2026-09-20T10:15:30Z"));
+
+        assertThat(PreviewRunnerPool.claimedAt(pod)).isEqualTo(CLAIMED_AT);
+    }
+
+    @Test
+    void aPodClaimedByAnOlderVersionStillHasItsClaimTimeRead() {
+        Pod pod = podAnnotated(Map.of("vibecraft.dev/claimed-at", "2026-09-20T10:15:30Z"));
+
+        assertThat(PreviewRunnerPool.claimedAt(pod)).isEqualTo(CLAIMED_AT);
+    }
+
+    @Test
+    void theCurrentKeyWinsWhenBothArePresent() {
+        Pod pod = podAnnotated(Map.of(
+                "singularity.dev/claimed-at", "2026-09-20T10:15:30Z",
+                "vibecraft.dev/claimed-at", "2020-01-01T00:00:00Z"));
+
+        assertThat(PreviewRunnerPool.claimedAt(pod)).isEqualTo(CLAIMED_AT);
+    }
+
+    @Test
+    void aPodWithNoClaimTimeOrAnUnreadableOneHasNoClaimTime() {
+        assertThat(PreviewRunnerPool.claimedAt(podAnnotated(null))).isNull();
+        assertThat(PreviewRunnerPool.claimedAt(podAnnotated(Map.of("singularity.dev/claimed-at", "not-a-time"))))
+                .isNull();
+    }
+
+    private static Pod podAnnotated(Map<String, String> annotations) {
+        return new PodBuilder().withNewMetadata().withName("runner-x").withAnnotations(annotations)
+                .endMetadata().build();
     }
 
     @Test

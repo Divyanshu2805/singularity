@@ -42,7 +42,8 @@ export enum ChatEventType {
   FILE_EDIT = 'FILE_EDIT',
   FILE_DELETE = 'FILE_DELETE',
   LEARN = 'LEARN',
-  TOOL_LOG = 'TOOL_LOG'
+  TOOL_LOG = 'TOOL_LOG',
+  ASK = 'ASK'
 }
 
 export interface ChatEvent {
@@ -93,6 +94,12 @@ export interface ClarifyingQuestion {
   helper?: string | null;
   options: string[];
   multiSelect: boolean;
+}
+
+export interface IdeaInterview {
+  questions: ClarifyingQuestion[];
+  /** False when the AI could not be reached and these are the fixed general questions, not ones written for the idea. */
+  tailored: boolean;
 }
 
 export interface IdeaAnswer {

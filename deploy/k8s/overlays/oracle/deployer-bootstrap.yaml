@@ -12,12 +12,12 @@
 #   kubectl apply -f deploy/k8s/overlays/oracle/deployer-bootstrap.yaml
 #
 # Extract its token for the `KUBE_DEPLOYER_TOKEN` GitHub secret (docs/deployment/configuration.md):
-#   kubectl get secret deployer-token -n vibecraft -o jsonpath='{.data.token}' | base64 -d
+#   kubectl get secret deployer-token -n singularity -o jsonpath='{.data.token}' | base64 -d
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: deployer
-  namespace: vibecraft
+  namespace: singularity
 
 ---
 
@@ -28,14 +28,14 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: deployer-token
-  namespace: vibecraft
+  namespace: singularity
   annotations:
     kubernetes.io/service-account.name: deployer
 type: kubernetes.io/service-account-token
 
 ---
 
-# Read-only, cluster-scoped, and ONLY for `namespaces` - lets `kubectl apply -k` see that `vibecraft`/`vibecraft-ai`
+# Read-only, cluster-scoped, and ONLY for `namespaces` - lets `kubectl apply -k` see that `singularity`/`singularity-ai`
 # already exist (created once, by hand, as part of this same bootstrap) without erroring, without granting the
 # deployer any power to create, modify or delete a namespace, or to see anything in a namespace it isn't otherwise
 # bound to.
@@ -57,7 +57,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: deployer
-    namespace: vibecraft
+    namespace: singularity
 roleRef:
   kind: ClusterRole
   name: deployer-namespace-reader
@@ -69,11 +69,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: deployer-admin
-  namespace: vibecraft
+  namespace: singularity
 subjects:
   - kind: ServiceAccount
     name: deployer
-    namespace: vibecraft
+    namespace: singularity
 roleRef:
   kind: ClusterRole
   name: admin
@@ -85,11 +85,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: deployer-admin
-  namespace: vibecraft-ai
+  namespace: singularity-ai
 subjects:
   - kind: ServiceAccount
     name: deployer
-    namespace: vibecraft
+    namespace: singularity
 roleRef:
   kind: ClusterRole
   name: admin

@@ -2,8 +2,6 @@
 
 The platform's core loop: a user asks for something in the project chat, and files actually get written. It runs in intelligence-service, which reaches workspace-service over the internal API for anything about the project.
 
-![AI generation sequence](../../assets/diagrams/flow-ai-generation.png)
-
 ## Steps
 
 All paths below are under `intelligence-service/src/main/java/com/singularity/intelligence/`.
@@ -12,7 +10,7 @@ All paths below are under `intelligence-service/src/main/java/com/singularity/in
 2. **`service/impl/AiGenerationServiceImpl.streamResponse`** — the whole pipeline lives here. It calls `UsageService.assertWithinDailyTokenBudget()` *synchronously, before building the `Flux`*, so a quota refusal is a real HTTP 402 rather than an error event inside the stream. The plan's limit comes from account-service.
 3. **`GenerationRegistry`** — the in-process record of a running generation. Closing the browser connection only stops *watching*; the generation continues and can be re-attached (`GET .../active/stream`) or stopped (`POST .../active/stop`). A second generation for the same project and user is a 409.
 4. **`llm/advisors/FileTreeContextAdvisor`** — a Spring AI `StreamAdvisor` that injects the project's current file tree as an extra system message on every request, plus a notice if the starter template failed to copy (`templateInitIssue`).
-5. **`llm/PromptUtils.getSystemPrompt(TeachingMode)`** — the system prompt defines a custom XML-tag protocol (`<tool>`, `<message>`, `<todo>`, `<file>`, `<delete>`, and `<learn>` when teaching mode is on) rather than Spring AI's structured output. See [ADR 0004](../decisions/0004-tag-based-generation-protocol.md). `llm/tools/CodeGenerationTools.readFiles` is the one tool the model can call.
+5. **`llm/PromptUtils.getSystemPrompt(TeachingMode)`** — the system prompt defines a custom XML-tag protocol (`<tool>`, `<message>`, `<todo>`, `<file>`, `<delete>`, `<ask>`, and `<learn>` when teaching mode is on) rather than Spring AI's structured output. See [ADR 0004](../decisions/0004-tag-based-generation-protocol.md). `llm/tools/CodeGenerationTools.readFiles` is the one tool the model can call.
 6. **Retries.** The whole `chatClient.prompt()...` call is wrapped in `Flux.defer(...)`. Attaching `.retryWhen(...)` to an already-built stream does not work: Spring AI's advisor chain is single-use per subscription, so resubscribing throws. `Flux.defer` rebuilds the call, advisor chain included, on each attempt. An OpenRouter 429 is retried up to 3 times with backoff.
 7. **`llm/LlmResponseParser`** — once the stream completes, extracts the tags from the raw text into typed `ChatEvent` rows (`THOUGHT`, `MESSAGE`, `TODO`, `FILE_EDIT`, `FILE_DELETE`, `LEARN`, `TOOL_LOG`). A `<todo path="...">` must match a later `<file path="...">` **byte for byte** — that string equality is the entire mechanism behind the client-side build checklist (`frontend/src/components/ChatEventRenderer.tsx`).
 8. **`finalizeChats`** — runs on `Schedulers.boundedElastic()` after the stream, off the request thread, so it carries the user id explicitly instead of reading it from a `SecurityContext` that isn't there. It:
@@ -22,6 +20,14 @@ All paths below are under `intelligence-service/src/main/java/com/singularity/in
 
    **A stopped generation never reaches this step**: its output is discarded and its tokens are not billed.
 9. **`llm/AiUsageRecorder`** — records the exchange's token usage into the daily counter and the ledger.
+
+## Asking instead of building
+
+When a request is ambiguous in a way that changes what gets built, the model may end the turn with up to three `<ask options="A|B|C">` tags instead of files. The prompt keeps this rare: it must not ask about anything it can decide well itself, and never about a message that is already a compiled brief. The parser stores each as an `ASK` event (suggested answers in `metadata`), such a turn publishes no revision and is not treated as an abandoned edit, and the question is replayed in the next turn's history so the user's answer has something to answer.
+
+## Prompt layout
+
+Everything that changes between requests sits at the end of the system prompt (today's date is its last line), so the long, otherwise identical text can be served from the provider's prompt cache. The file tree is written one path per line. The conventions describe the starter template that exists (daisyUI, `clsx`); `PromptUtilsTest` pins both properties.
 
 ## In-turn recovery
 

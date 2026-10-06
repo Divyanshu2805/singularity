@@ -31,14 +31,14 @@ The whole application runs as Kubernetes workloads on one machine.
 | The app | `https://<app domain>` — one level below the root domain |
 | Previews | `https://p<projectId>-<random>.<preview root domain>` |
 
-Both are exactly one level below the root domain on purpose: Cloudflare's free wildcard certificate covers `*.<root domain>` only, not deeper names. The live demo uses `vibecraft.divyanshuagrahari.dev` for the app and `*.divyanshuagrahari.dev` for previews.
+Both are exactly one level below the root domain on purpose: Cloudflare's free wildcard certificate covers `*.<root domain>` only, not deeper names. The live demo uses `singularity.divyanshuagrahari.dev` for the app and `*.divyanshuagrahari.dev` for previews. The product's previous hostname, `vibecraft.divyanshuagrahari.dev`, is still routed to the same services during the rename (the rules marked `TRANSITION` in `deploy/k8s/overlays/oracle/cloudflared-config.yaml`); see the [rename cutover](../operations/singularity-cutover.md).
 
 ## Namespaces
 
 | Namespace | Workloads | Trust |
 |---|---|---|
-| `vibecraft` | cloudflared, frontend, gateway, discovery, account, workspace, intelligence, Postgres, MinIO, the nightly backup CronJob | Trusted |
-| `vibecraft-ai` | preview proxy, Redis, the runner-pod pool and live previews | Runs untrusted code |
+| `singularity` | cloudflared, frontend, gateway, discovery, account, workspace, intelligence, Postgres, MinIO, the nightly backup CronJob | Trusted |
+| `singularity-ai` | preview proxy, Redis, the runner-pod pool and live previews | Runs untrusted code |
 
 Keeping untrusted runner pods in their own namespace means its network policies never have to reason about trusted workloads alongside them. workspace-service manages runner pods through a narrow cross-namespace Role (see [Kubernetes manifests](kubernetes.md#rbac)).
 

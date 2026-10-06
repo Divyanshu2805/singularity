@@ -44,7 +44,7 @@ kubectl apply -k deploy/k8s/namespaces                               # namespace
 kubectl apply -f deploy/k8s/overlays/oracle/deployer-bootstrap.yaml  # the CI deploy identity
 ```
 
-Then read the `deployer-token` Secret in `vibecraft` into the `KUBE_DEPLOYER_TOKEN` GitHub secret, and set `KUBE_API_SERVER` to `https://<tailscale hostname>:6443`.
+Then read the `deployer-token` Secret in `singularity` into the `KUBE_DEPLOYER_TOKEN` GitHub secret, and set `KUBE_API_SERVER` to `https://<tailscale hostname>:6443`.
 
 ## 5. DNS
 

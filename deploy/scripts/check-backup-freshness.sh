@@ -13,7 +13,7 @@
 # to install and it runs the same on a laptop. Expects, as env vars:
 #   R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY      (the same three the GitHub `production` environment holds)
 # and optionally:
-#   R2_BUCKET         default vibecraft-backups
+#   R2_BUCKET         default singularity-backups
 #   R2_REGION         default `auto`, which is what R2 wants; a MinIO used as a stand-in wants `us-east-1`
 #   MAX_AGE_HOURS     default 30
 set -euo pipefail
@@ -21,7 +21,7 @@ set -euo pipefail
 for var in R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
   [ -n "${!var:-}" ] || { echo "Missing required env var: $var" >&2; exit 2; }
 done
-BUCKET="${R2_BUCKET:-vibecraft-backups}"
+BUCKET="${R2_BUCKET:-singularity-backups}"
 REGION="${R2_REGION:-auto}"
 MAX_AGE_HOURS="${MAX_AGE_HOURS:-30}"
 
@@ -41,7 +41,7 @@ age_hours=$(( ($(date -u +%s) - then_epoch) / 3600 ))
 
 if [ "$age_hours" -gt "$MAX_AGE_HOURS" ]; then
   echo "BACKUP CHECK FAILED: the newest complete backup is from $stamp, ${age_hours}h ago (limit ${MAX_AGE_HOURS}h)." >&2
-  echo "Look at the CronJob: kubectl -n vibecraft get jobs -l app=nightly-backup, then logs of the newest failed one." >&2
+  echo "Look at the CronJob: kubectl -n singularity get jobs -l app=nightly-backup, then logs of the newest failed one." >&2
   exit 1
 fi
 echo "Backup is fresh: newest complete backup $stamp (${age_hours}h ago, limit ${MAX_AGE_HOURS}h)."

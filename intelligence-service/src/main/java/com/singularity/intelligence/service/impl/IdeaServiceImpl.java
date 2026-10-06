@@ -7,6 +7,7 @@ import com.singularity.intelligence.dto.idea.CompileIdeaRequest;
 import com.singularity.intelligence.dto.idea.CompileIdeaResponse;
 import com.singularity.intelligence.dto.idea.IdeaAnswer;
 import com.singularity.intelligence.dto.usage.UsageReservation;
+import com.singularity.intelligence.enums.UsageFeature;
 import com.singularity.intelligence.llm.AiUsageRecorder;
 import com.singularity.intelligence.service.IdeaService;
 import com.singularity.intelligence.service.UsageService;
@@ -18,7 +19,6 @@ import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -28,12 +28,19 @@ import java.util.stream.Collectors;
 /**
  * The pre-project idea interview and the brief compiled from it.
  *
- * <p>Handles: asking the model for a few tailored questions about an idea, validating and bounding what comes back
- * (question and helper length, option counts, the fixed question ids), turning the answers into a brief, and billing
- * both calls to the caller's usage.
+ * <p>Handles: asking the model which decisions an idea leaves open and for a question about each, validating and
+ * bounding what comes back (question and helper length, option counts, unique ids), turning the answers into a brief,
+ * and billing both calls to the caller's usage.
  *
- * <p>Every AI step has a non-AI fallback, so a model hiccup never blocks creating a project: the interview falls back
- * to a fixed set of questions and the brief to the user's own words.
+ * <p>The model decides how many questions an idea needs, from none to MAX_QUESTIONS. An earlier version fixed the
+ * count from the idea's word count and required the last question to be about style, which made every interview the
+ * same shape whatever was asked.
+ *
+ * <p>Every AI step has a non-AI fallback, so a model that cannot be reached never blocks creating a project: the
+ * interview falls back to a fixed set of general questions and the brief to the user's own words. The fallback is
+ * reported, never disguised - the response says the questions are not tailored, and the failure is logged as an error
+ * naming the cause. It was once swallowed at warn level, and a revoked provider key then looked like an interview
+ * that always asked the same four things.
  */
 @Service
 @RequiredArgsConstructor
@@ -48,14 +55,8 @@ public class IdeaServiceImpl implements IdeaService {
     private static final int MAX_OPTION_CHARS = 60;
     private static final int MAX_SPEC_CHARS = 3500;
 
-    private static final int MAX_QUESTIONS = 4;
-    private static final int MID_QUESTIONS = 3;
-    private static final int MIN_QUESTIONS = 2;
-    private static final int BRIEF_IDEA_WORDS = 10;
-    private static final int DETAILED_IDEA_WORDS = 30;
-    private static final Pattern SPECIFICITY_MARKER = Pattern.compile(
-            "[,;:\\n\\-*]|\\b(?:with|for|that|so|where|plus|including|like)\\b", Pattern.CASE_INSENSITIVE);
-    private static final int RICH_DETAIL_MARKERS = 3;
+    private static final int MAX_QUESTIONS = 5;
+    private static final int FALLBACK_QUESTION_COUNT = 4;
 
     private static final List<ClarifyingQuestion> FALLBACK_QUESTIONS = List.of(
             new ClarifyingQuestion(
@@ -104,24 +105,31 @@ public class IdeaServiceImpl implements IdeaService {
     private static final Pattern NON_SLUG = Pattern.compile("[^a-z0-9]+");
 
     private static final String CLARIFY_SYSTEM_PROMPT_TEMPLATE = """
-            You run a short interview about an app someone wants built, before any code is written.
+            You run a short interview about an app someone wants built, before any code is written. Your job is
+            to find the decisions THIS idea leaves open, and ask about those and nothing else.
 
-            Write exactly %d question(s), invented for THIS idea specifically. Do not work from a standard
-            checklist - a good question asks about a decision this particular app genuinely needs made, in the
-            vocabulary of what it actually is. A booking site raises questions a note-taking app never would.
-            If a question you are about to write is already answered by their description, throw it away and
-            ask about something they have not settled yet.
+            First decide how many questions the idea needs: anywhere from 0 to %d.
+            - A vague one-liner ("a recipe app") leaves most things open: ask more.
+            - A description that already says who it is for, what people do in it and how it should look
+              leaves little open: ask one or two, or none.
+            - If nothing that matters is undecided, return an empty list. Never pad the list to look thorough,
+              and never ask something the description already answers.
 
-            The last question must be about the look and feel - the visual direction, or a style reference.
-            That is the one thing almost no description settles, and it decides whether the first version lands.
+            Every question must be about a decision that would change what gets built, and must be invented
+            for this idea in its own vocabulary. Do not work from a standard checklist of audience, features,
+            screens and style: a booking site raises questions a note-taking app never would (how far ahead can
+            people book, what happens when a class is full), and those are the ones worth asking.
+
+            Ask about the look and feel only when the description does not already settle it. When you do ask
+            it, make it the last question.
 
             Give each question:
             - id: a short snake_case label for what it asks about, such as "seat_limits" or "visual_style".
                   Unique within your reply.
             - question: under 12 words, plain language, no jargon, answerable by someone non-technical.
             - helper: one friendly sentence on why it matters for what they are building.
-            - options: 4 to 6 concrete answers, 2 to 6 words each, specific enough that someone who has not
-                  thought about this yet would recognise one as what they meant.
+            - options: 3 to 6 concrete answers, 2 to 6 words each, specific to this app, so that someone who
+                  has not thought about it yet would recognise one as what they meant.
             - multiSelect: true when several options can sensibly apply together, false when it is one choice.
 
             Never ask about technology, frameworks, budgets, or deadlines, and never ask two questions about
@@ -146,8 +154,11 @@ public class IdeaServiceImpl implements IdeaService {
             Keep the whole brief under 220 words.
             """;
 
-    private static final BeanOutputConverter<ClarifyIdeaResponse> QUESTIONS_CONVERTER =
-            new BeanOutputConverter<>(ClarifyIdeaResponse.class);
+    record GeneratedInterview(List<ClarifyingQuestion> questions) {
+    }
+
+    private static final BeanOutputConverter<GeneratedInterview> QUESTIONS_CONVERTER =
+            new BeanOutputConverter<>(GeneratedInterview.class);
 
     private final ChatClient chatClient;
     private final AiUsageRecorder aiUsageRecorder;
@@ -155,41 +166,61 @@ public class IdeaServiceImpl implements IdeaService {
 
     @Override
     public ClarifyIdeaResponse clarify(ClarifyIdeaRequest request) {
-        UsageReservation reservation = usageService.reserveBudget();
+        UsageReservation reservation = usageService.reserveBudget(UsageFeature.IDEA_INTERVIEW);
         String idea = truncate(request.idea().strip(), MAX_IDEA_CHARS);
-        int budget = questionBudget(idea);
-        log.debug("Asking {} clarifying question(s) for an idea of {} words", budget, wordCount(idea));
         try {
             ChatResponse response = chatClient.prompt()
-                    .system(CLARIFY_SYSTEM_PROMPT_TEMPLATE.formatted(budget) + "\n\n" + QUESTIONS_CONVERTER.getFormat())
+                    .system(CLARIFY_SYSTEM_PROMPT_TEMPLATE.formatted(MAX_QUESTIONS) + "\n\n" + QUESTIONS_CONVERTER.getFormat())
                     .user(idea)
                     .call()
                     .chatResponse();
-            aiUsageRecorder.reconcile(reservation, response, com.singularity.intelligence.enums.UsageFeature.IDEA_INTERVIEW, null);
-            return new ClarifyIdeaResponse(sanitizeQuestions(QUESTIONS_CONVERTER.convert(responseText(response)), budget));
+            aiUsageRecorder.reconcile(reservation, response, UsageFeature.IDEA_INTERVIEW, null);
+            return tailoredInterview(QUESTIONS_CONVERTER.convert(responseText(response)));
         } catch (Exception e) {
             aiUsageRecorder.release(reservation);
-            log.warn("AI idea clarification failed, falling back to untailored questions", e);
-            return new ClarifyIdeaResponse(sanitizeQuestions(null, budget));
+            log.error("The AI provider could not write interview questions, so the general set is being shown and "
+                    + "flagged as untailored. Cause: {}", describeFailure(e), e);
+            return generalInterview();
         }
     }
 
-    private static int questionBudget(String idea) {
-        int words = wordCount(idea);
-        long markers = SPECIFICITY_MARKER.matcher(idea).results().count();
+    ClarifyIdeaResponse tailoredInterview(GeneratedInterview generated) {
+        if (generated == null || generated.questions() == null) {
+            log.error("The model's interview reply had no question list, so the general set is being shown and "
+                    + "flagged as untailored");
+            return generalInterview();
+        }
+        if (generated.questions().isEmpty()) {
+            log.info("The model judged this idea needs no clarifying questions");
+            return new ClarifyIdeaResponse(List.of(), true);
+        }
+        List<ClarifyingQuestion> cleaned = cleanQuestions(generated.questions());
+        if (cleaned.isEmpty()) {
+            log.error("None of the model's {} interview question(s) were usable, so the general set is being shown "
+                    + "and flagged as untailored", generated.questions().size());
+            return generalInterview();
+        }
+        return new ClarifyIdeaResponse(cleaned, true);
+    }
 
-        if (words <= BRIEF_IDEA_WORDS && markers <= 1) {
-            return MAX_QUESTIONS;
+    static ClarifyIdeaResponse generalInterview() {
+        return new ClarifyIdeaResponse(fallbackQuestions(FALLBACK_QUESTION_COUNT), false);
+    }
+
+    static String describeFailure(Exception e) {
+        String message = String.valueOf(e.getMessage());
+        if (message.contains("401") || message.contains("403")) {
+            return "the provider rejected this server's API key (check OPENROUTER_API_KEY) - " + message;
         }
-        if (words >= DETAILED_IDEA_WORDS && markers >= RICH_DETAIL_MARKERS) {
-            return MIN_QUESTIONS;
+        if (message.contains("402")) {
+            return "the provider account is out of credit - " + message;
         }
-        return MID_QUESTIONS;
+        return message;
     }
 
     @Override
     public CompileIdeaResponse compile(CompileIdeaRequest request) {
-        UsageReservation reservation = usageService.reserveBudget();
+        UsageReservation reservation = usageService.reserveBudget(UsageFeature.IDEA_INTERVIEW);
         String idea = truncate(request.idea().strip(), MAX_IDEA_CHARS);
         List<IdeaAnswer> answered = request.answers().stream()
                 .filter(answer -> !cleanAnswers(answer.answers()).isEmpty())
@@ -207,7 +238,7 @@ public class IdeaServiceImpl implements IdeaService {
                     .user("Idea: " + idea + "\n\nInterview answers:\n" + interview)
                     .call()
                     .chatResponse();
-            aiUsageRecorder.reconcile(reservation, response, com.singularity.intelligence.enums.UsageFeature.IDEA_INTERVIEW, null);
+            aiUsageRecorder.reconcile(reservation, response, UsageFeature.IDEA_INTERVIEW, null);
             String spec = responseText(response);
             if (spec != null && !spec.isBlank()) {
                 return new CompileIdeaResponse(truncate(spec.strip(), MAX_SPEC_CHARS));
@@ -215,31 +246,23 @@ public class IdeaServiceImpl implements IdeaService {
             log.warn("AI returned an empty project brief, falling back to a template brief");
         } catch (Exception e) {
             aiUsageRecorder.release(reservation);
-            log.warn("AI brief compilation failed, falling back to a template brief", e);
+            log.error("The AI provider could not compile the project brief, so the user's own words are being used. "
+                    + "Cause: {}", describeFailure(e), e);
         }
         return new CompileIdeaResponse(templateSpec(idea, answered));
     }
 
-    List<ClarifyingQuestion> sanitizeQuestions(ClarifyIdeaResponse generated, int budget) {
-        if (generated == null || generated.questions() == null) {
-            return fallbackQuestions(budget);
-        }
-
+    List<ClarifyingQuestion> cleanQuestions(List<ClarifyingQuestion> candidates) {
         Set<String> usedIds = new LinkedHashSet<>();
         List<ClarifyingQuestion> cleaned = new ArrayList<>();
-        for (ClarifyingQuestion candidate : generated.questions()) {
-            if (cleaned.size() >= budget) {
+        for (ClarifyingQuestion candidate : candidates) {
+            if (cleaned.size() >= MAX_QUESTIONS) {
                 break;
             }
             ClarifyingQuestion question = cleanQuestion(candidate, usedIds);
             if (question != null) {
                 cleaned.add(question);
             }
-        }
-
-        if (cleaned.isEmpty()) {
-            log.warn("The model returned no usable clarifying questions, falling back to generic ones");
-            return fallbackQuestions(budget);
         }
         return List.copyOf(cleaned);
     }
@@ -281,10 +304,6 @@ public class IdeaServiceImpl implements IdeaService {
             id = truncate(base, MAX_ID_CHARS - tail.length()) + tail;
         }
         return id;
-    }
-
-    private static int wordCount(String text) {
-        return (int) Arrays.stream(text.split("\\s+")).filter(word -> !word.isBlank()).count();
     }
 
     private static String slug(String text) {

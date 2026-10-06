@@ -48,6 +48,7 @@ public final class ServiceSecurityConfig {
         httpSecurity
                 .csrf(csrf -> csrf
                         .spa()
+                        .csrfTokenRepository(CsrfCookie.repository())
                         .ignoringRequestMatchers("/internal/**"))
                 .sessionManagement(sessionConfig -> sessionConfig.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .headers(headers -> headers

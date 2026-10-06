@@ -5,8 +5,11 @@ Singularity runs code written by an AI on behalf of its users, stores their proj
 ## Identity and sessions
 
 - **Firebase is the only identity provider.** Sign-in (password, Google, second factor) happens in the browser against Firebase. The backend only ever receives a Firebase ID token and exchanges it for its own session cookie. See [ADR 0002](decisions/0002-firebase-identity-with-server-sessions.md).
-- **The session is an `httpOnly` cookie** (`vc_session`, 5 days). Each service verifies it independently and caches the result for at most 60 seconds.
+- **The session is an `httpOnly` cookie** (`__Host-vc_session`, 5 days). Each service verifies it independently and caches the result for at most 60 seconds.
 - **Sign-out is revocation, not just cookie deletion.** The cookie's SHA-256 is recorded in account-service, and the other services are told to evict it immediately. See [authentication flow](flows/authentication.md).
+- **Both cookies carry the `__Host-` prefix** (`__Host-vc_session` and the CSRF token's `__Host-XSRF-TOKEN`). Live previews are served from a sibling subdomain of the app, and a page there can set cookies for the shared parent domain; a browser refuses a `__Host-` cookie that was not set by this exact host, over a secure connection, with `Path=/` and no `Domain`, so a preview page cannot plant a session or CSRF token of its own. The prefix requires `Secure`, which `CsrfCookie` forces because the services see plain http from the Gateway. A separate registered domain for previews would remove the class of problem rather than mitigate it; see [known gaps](../known-gaps/README.md).
+- **The client's address is read from `X-Forwarded-For`.** Behind cloudflared and the Gateway every request arrives from a private pod address, so each service sets `server.forward-headers-strategy: native` and Tomcat takes the first non-private address from the right of the list; entries a client forges to the left are never reached. The Gateway trusts every caller's header (`trusted-proxies`) because that decision is made at the services. Rate limiting and the security-events trail depend on this.
+- **Request bodies are capped at the Gateway** (`RequestSize`, 1 MB, judged by `Content-Length`), because no service limits a JSON body before reading it into memory. The chat message is also capped at 16,000 characters.
 - **Sign-in is rate-limited** to 10 requests per minute per IP. All other traffic is limited to 600 requests per minute per signed-in user (per IP when anonymous), by a sliding-window `RateLimiter` in each service's filter chain.
 
 ## Tenancy
@@ -36,14 +39,19 @@ The session rides in a cookie the browser attaches on its own, so every state-ch
 
 ## Untrusted-code isolation
 
-Generated project code runs only inside live-preview runner pods in the `vibecraft-ai` namespace, reached through the Kubernetes `exec` API. Runner pods:
+Generated project code runs only inside live-preview runner pods in the `singularity-ai` namespace, reached through the Kubernetes `exec` API. Runner pods:
 
 - run as a non-root user with every Linux capability dropped and no mounted service-account token;
 - are bound by a `LimitRange`, a `ResourceQuota`, and a kubelet PID limit (1024), so a fork bomb or a runaway install can't exhaust the node;
 - sit behind a `NetworkPolicy` that admits traffic only from the preview proxy, allows MinIO on its port, and blocks the cluster's private address ranges and the cloud metadata endpoint (`169.254.0.0/16`);
 - read project files with a MinIO user scoped to `GetObject` / `ListBucket` on the projects bucket only.
 
-The namespace split (`vibecraft` for trusted workloads, `vibecraft-ai` for previews) keeps network policy for untrusted pods from ever having to reason about trusted workloads in the same namespace.
+The namespace split (`singularity` for trusted workloads, `singularity-ai` for previews) keeps network policy for untrusted pods from ever having to reason about trusted workloads in the same namespace.
+
+## Browser hardening
+
+- **The SPA is served with security headers** (`frontend/nginx.conf`, `security-headers.conf`, and a build-generated `csp-header.conf`): the Content Security Policy as a header with `frame-ancestors 'none'` (so the app cannot be framed, including by a preview), HSTS, `nosniff`, `X-Frame-Options`, a referrer policy, a permissions policy, and `Cross-Origin-Opener-Policy: same-origin-allow-popups` (not `same-origin`, which would sever Google sign-in's popup). They are repeated inside each `location` because nginx drops outer-level headers once a location sets its own. The CSP is generated from `frontend/csp.ts`, the same source as the meta tag.
+- **The preview iframe is sandboxed** (`PREVIEW_SANDBOX` in `frontend/src/lib/preview.ts`): scripts, forms, popups, modals and downloads are allowed, top-level navigation is not. `allow-same-origin` stays because the message check and the proxy cookie need the preview's own origin; that is safe only because the preview origin is not the app's.
 
 ## Preview access tokens
 
@@ -61,7 +69,7 @@ Every stored project file path goes through workspace-service's `ProjectFilePath
 
 ## Sign-out data isolation (frontend)
 
-A client-side route change after sign-out does not clear module-level state: the chat, code-notes and project-leaving stores live for the page's lifetime, and `sessionStorage` survives a reload. `frontend/src/lib/session.ts` solves this in one place: stores register a reset with `onSignOut(reset)`, and `signOut()` leaves through a full document reload (`window.location.assign`), so anything that forgot to register is discarded anyway. Any new module-level store holding project- or user-specific data must register there.
+A client-side route change after sign-out does not clear module-level state: the chat, code-notes, idea-interview and project-leaving stores live for the page's lifetime, and `sessionStorage` survives a reload. `frontend/src/lib/session.ts` solves this in one place: stores register a reset with `onSignOut(reset)`, and `signOut()` leaves through a full document reload (`window.location.assign`), so anything that forgot to register is discarded anyway. Any new module-level store holding project- or user-specific data must register there.
 
 **The one deliberate exception is the landing page's pending idea** (`frontend/src/lib/pending-idea.ts`). An idea a visitor types into the landing page's prompt, or picks from its example cards, is kept in `localStorage` and is not registered with `onSignOut`, because signing *in* runs the same teardown and the idea has to survive that step to reach the dashboard's prompt. It is not account data: it can only be written while nobody is signed in, it is removed the moment the dashboard reads it, and it is ignored after an hour, so a forgotten one cannot turn up in a stranger's prompt on a shared browser. The dashboard only puts it back in the prompt; it never sends it.
 

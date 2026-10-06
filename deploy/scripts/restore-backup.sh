@@ -44,7 +44,7 @@ case "$DATE" in
 esac
 
 KC=(kubectl --context "$CONTEXT")
-K=("${KC[@]}" -n vibecraft)
+K=("${KC[@]}" -n singularity)
 SERVICES=(account-service workspace-service intelligence-service)
 
 SERVER="$("${KC[@]}" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
@@ -81,7 +81,7 @@ restore_failed() {
   echo "half-restored. Read the Job's logs, fix the cause, and either re-run this script, or, if you decide the" >&2
   echo "current data is what you want, bring the services back with:" >&2
   for i in "${!SERVICES[@]}"; do
-    echo "  kubectl --context $CONTEXT -n vibecraft scale deployment ${SERVICES[$i]} --replicas=${REPLICAS[$i]:-1}" >&2
+    echo "  kubectl --context $CONTEXT -n singularity scale deployment ${SERVICES[$i]} --replicas=${REPLICAS[$i]:-1}" >&2
   done
 }
 

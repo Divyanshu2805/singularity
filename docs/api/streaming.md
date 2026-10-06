@@ -11,6 +11,8 @@ Long-running AI responses are delivered as server-sent events (SSE). Two endpoin
 
 Each event's `data` is a `StreamResponse { text }` JSON object carrying raw model output as it is generated. The text uses the generation tag protocol (`<message>`, `<todo>`, `<file>`, `<delete>`, `<learn>`, `<tool>`), which the client parses incrementally to render messages, the build checklist and file edits as they arrive. When the stream completes, the server separately parses the full text into `ChatEvent` rows and publishes the file changes. See the [AI generation flow](../architecture/flows/ai-generation.md).
 
+A turn can also end in one to three `<ask options="A|B|C">question</ask>` tags instead of files: the model asking the user something it cannot sensibly decide for them. Such a turn writes nothing. The suggested answers are separated by `|`; the client shows them as buttons and sends the chosen one as the next message, and the user can always type an answer instead.
+
 ## Code-insight stream
 
 Each event's `data` is plain text, not JSON. Two details matter:

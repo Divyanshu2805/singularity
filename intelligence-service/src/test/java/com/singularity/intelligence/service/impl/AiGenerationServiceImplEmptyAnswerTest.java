@@ -134,4 +134,20 @@ class AiGenerationServiceImplEmptyAnswerTest {
         assertThat(events.get(1).getContent()).isEqualTo("All done.");
         verify(chatClient, never()).prompt();
     }
+
+    @Test
+    void aTurnThatReadsFilesAndThenAsksTheUserIsNotMistakenForAnAbandonedEdit() {
+        finalizeWith("""
+                <tool args="src/App.tsx">Reading App.tsx</tool>
+                <message>I need one thing before I change this.</message>
+                <ask options="A table|A set of cards">How should the orders be shown?</ask>
+                """);
+
+        List<ChatEvent> events = savedEvents();
+        assertThat(events).extracting(ChatEvent::getType).containsExactly(
+                ChatEventType.THOUGHT, ChatEventType.TOOL_LOG, ChatEventType.MESSAGE, ChatEventType.ASK);
+        assertThat(events.getFirst().getContent()).doesNotContain("retried");
+        verify(chatClient, never()).prompt();
+        verify(workspaceServiceClient, never()).publishRevision(any(), any());
+    }
 }

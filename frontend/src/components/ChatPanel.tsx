@@ -380,6 +380,11 @@ export function ChatPanel({
                     message={message}
                     isStreaming={isStreaming && !!message.isStreaming}
                     onRetry={!readOnly && !isStreaming && message.id === currentChatMessageId ? onRetry : undefined}
+                    onAnswer={
+                      !readOnly && !isStreaming && !quotaBlock && message.id === messages[messages.length - 1]?.id
+                        ? onSendMessage
+                        : undefined
+                    }
                     onOpenFile={
                       onOpenFile ? (path, target) => onOpenFile(path, message.id === currentChatMessageId, target) : undefined
                     }
@@ -441,6 +446,7 @@ export function ChatPanel({
                 onChange={handleChange}
                 onKeyDown={handleKeyDown}
                 rows={2}
+                maxLength={16000}
                 aria-label="Message Singularity"
                 placeholder={
                   isStreaming ? "Draft your next message while Singularity works…" : "Ask Singularity to build or change something…"
@@ -632,11 +638,13 @@ function AssistantMessage({
   isStreaming,
   onOpenFile,
   onRetry,
+  onAnswer,
 }: {
   message: ChatMessage;
   isStreaming: boolean;
   onOpenFile?: (path: string, target?: CodeTarget) => void;
   onRetry?: () => void;
+  onAnswer?: (answer: string) => void;
 }) {
   const content = message.content || "";
   const revealed = useSmoothStream(content, isStreaming, STREAM_OPTIONS, message.id, message.instantLength);
@@ -661,6 +669,7 @@ function AssistantMessage({
         isIdle={isIdle}
         fallbackThought={message.thoughtSeconds !== undefined ? `Worked for ${formatWorkedFor(message.thoughtSeconds)}` : undefined}
         onOpenFile={onOpenFile}
+        onAnswer={isDone ? onAnswer : undefined}
       />
       {message.error && <AssistantError message={message.error} />}
       {isEmptyAnswer && <AssistantError message="The model returned no answer, so nothing was changed" />}
