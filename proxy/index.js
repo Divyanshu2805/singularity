@@ -209,7 +209,7 @@ const server = http.createServer(async (req, res) => {
     if (isPageLoad(req)) recordVisit(hostname);
 
     const onError = (e) => {
-        console.error(`Proxy error for ${hostname}:`, e.message);
+        console.error('Proxy error for %s: %s', hostname, e.message);
         statusPage(res, 502, 'The preview is restarting', 'This page will reload in a moment.', { refreshSeconds: 3 });
     };
 
@@ -232,7 +232,7 @@ server.on('upgrade', async (req, socket, head) => {
     }
 
     proxy.ws(req, socket, head, { target: getTargetUrl(target) }, (e) => {
-        console.error(`Proxy error (ws) for ${hostname}:`, e.message);
+        console.error('Proxy error (ws) for %s: %s', hostname, e.message);
         socket.destroy();
     });
 });
