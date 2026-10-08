@@ -21,7 +21,7 @@
 # Build context is the starter template's own directory, not the repo root:
 #   docker build -f docker/preview-runner.Dockerfile \
 #     workspace-service/src/main/resources/starter-templates/react-vite-tailwind-shadcn-starter
-FROM node:20.20.2-alpine
+FROM node:26.10.0-alpine
 WORKDIR /opt/template
 COPY package.json ./
 RUN npm install --no-audit --no-fund --cache /tmp/npm-cache \
