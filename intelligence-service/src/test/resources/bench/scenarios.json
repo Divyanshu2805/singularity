@@ -1,0 +1,82 @@
+[
+  {
+    "id": "todo-build", "chain": "todo", "kind": "FIRST_BUILD",
+    "prompt": "**Build:** A distraction-free to-do list for one person's day.\n**For:** Someone who wants to plan today and nothing else.\n**Core action:** Type a task and press Enter to add it, tick it to complete it, and drag tasks to reorder them.\n**Screens:** One page: an input at the top, the open tasks, and completed tasks folded underneath.\n**Look and feel:** Monochrome and calm, generous spacing, one accent colour for the tick.\n**Data:** Tasks are kept in the browser and survive a refresh.\n**Keep it simple:**\n- No accounts or syncing\n- No due dates or priorities\n- No categories"
+  },
+  {
+    "id": "todo-dark-theme", "chain": "todo", "kind": "CHANGE",
+    "prompt": "Add a dark theme toggle in the header and remember my choice."
+  },
+  {
+    "id": "todo-due-dates", "chain": "todo", "kind": "CHANGE",
+    "prompt": "Let me set a due date on a task, and show overdue tasks in red."
+  },
+  {
+    "id": "todo-question", "chain": "todo", "kind": "QUESTION",
+    "prompt": "Where are my tasks stored?"
+  },
+  {
+    "id": "habits-build", "chain": "habits", "kind": "FIRST_BUILD",
+    "prompt": "**Build:** A habit tracker that shows a week at a glance.\n**For:** One person building two or three daily habits.\n**Core action:** Add a habit, then tick today's box for it; see the current streak beside each habit.\n**Screens:** One page: the list of habits, each with seven day boxes for this week and its streak.\n**Look and feel:** Friendly and bright, rounded shapes, a different colour per habit.\n**Data:** Kept in the browser.\n**Keep it simple:**\n- No reminders or notifications\n- No charts or history beyond this week\n- No accounts"
+  },
+  {
+    "id": "habits-rename", "chain": "habits", "kind": "CHANGE",
+    "prompt": "Call them \"Routines\" instead of \"Habits\" everywhere the app says it."
+  },
+  {
+    "id": "expenses-build", "chain": "expenses", "kind": "FIRST_BUILD",
+    "prompt": "**Build:** A personal expense tracker with a monthly summary.\n**For:** One person keeping an eye on their spending.\n**Core action:** Add an expense with an amount, a category and a date; see this month's total and a chart of spending by category.\n**Screens:** One page: the add form, the summary with its chart, and the list of expenses, newest first, each with a delete button.\n**Look and feel:** Clean and trustworthy, like a banking app; numbers are the loudest thing on the page.\n**Data:** Kept in the browser.\n**Keep it simple:**\n- No budgets or goals\n- No import or export\n- No multiple currencies"
+  },
+  {
+    "id": "expenses-filter", "chain": "expenses", "kind": "CHANGE",
+    "prompt": "Add a category filter above the list of expenses."
+  },
+  {
+    "id": "recipes-build", "chain": "recipes", "kind": "FIRST_BUILD",
+    "prompt": "**Build:** A recipe box for saving and finding my own recipes.\n**For:** A home cook with a couple of dozen recipes.\n**Core action:** Add a recipe with a name, ingredients and steps; search by name; open a recipe on its own page.\n**Screens:** A list page with the search box and recipe cards, a page for one recipe, and a page to add a recipe.\n**Look and feel:** Warm and editorial, like a cookbook: a serif for headings and plenty of white space.\n**Data:** Kept in the browser, with three example recipes on first load.\n**Keep it simple:**\n- No photos\n- No ratings or comments\n- No accounts"
+  },
+  {
+    "id": "recipes-favourites", "chain": "recipes", "kind": "CHANGE",
+    "prompt": "Let me mark a recipe as a favourite, and add a Favourites page with a link to it in the navigation."
+  },
+  {
+    "id": "recipes-question", "chain": "recipes", "kind": "QUESTION",
+    "prompt": "How does the routing work in this app?"
+  },
+  {
+    "id": "pomodoro-build", "chain": "pomodoro", "kind": "FIRST_BUILD",
+    "prompt": "a pomodoro timer"
+  },
+  {
+    "id": "pomodoro-restyle", "chain": "pomodoro", "kind": "CHANGE",
+    "prompt": "Make the time much bigger and set it in a monospace font."
+  },
+  {
+    "id": "coffee-build", "chain": "coffee", "kind": "FIRST_BUILD",
+    "prompt": "A landing page for a small neighbourhood coffee shop called Ember & Oat: a hero, the menu with prices, opening hours and where to find us."
+  },
+  {
+    "id": "flashcards-build", "chain": "flashcards", "kind": "FIRST_BUILD",
+    "prompt": "**Build:** A flashcard app for studying one deck at a time.\n**For:** A student revising for an exam.\n**Core action:** Add cards with a front and a back; study the deck by flipping each card and marking it \"got it\" or \"again\"; see the score at the end.\n**Screens:** A deck page listing the cards with an add form, and a study page that shows one card at a time.\n**Look and feel:** Focused and a little playful; the card flip is the one animation.\n**Data:** Kept in the browser.\n**Keep it simple:**\n- One deck only\n- No spaced repetition\n- No images on cards"
+  },
+  {
+    "id": "flashcards-confetti", "chain": "flashcards", "kind": "CHANGE",
+    "prompt": "Show confetti when I finish the deck. Use the canvas-confetti package."
+  },
+  {
+    "id": "kanban-build", "chain": "kanban", "kind": "FIRST_BUILD",
+    "prompt": "A kanban board with three columns - To do, Doing and Done - where I can add cards and drag them between columns."
+  },
+  {
+    "id": "kanban-clear-done", "chain": "kanban", "kind": "CHANGE",
+    "prompt": "Add a \"Clear done\" button in the Done column's header that removes every card in that column."
+  },
+  {
+    "id": "offstack-vue", "chain": "offstack-vue", "kind": "OFF_STACK",
+    "prompt": "Build me a to-do app in Vue 3 with the composition API."
+  },
+  {
+    "id": "offstack-python", "chain": "offstack-python", "kind": "OFF_STACK",
+    "prompt": "Write a Python script that downloads the front page of Hacker News and prints the titles."
+  }
+]
