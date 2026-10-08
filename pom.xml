@@ -38,7 +38,7 @@
 		<graalvm.version>25.4.4.1.1</graalvm.version>
 		<babel-parser.version>7.29.9</babel-parser.version>
 		<!-- 2025.1.2 ("Oakwood") is the first Spring Cloud release train compatible with Spring Boot 4.1.0. -->
-		<spring-cloud.version>2025.1.2</spring-cloud.version>
+		<spring-cloud.version>2025.1.3</spring-cloud.version>
 		<!--
 			Security patch overrides of versions Spring Boot 4.1.0's BOM manages (an advisory scan of the runtime
 			classpath on 2026-10-05 found each fixed in the version below). Delete one when the Boot version in use
