@@ -114,7 +114,7 @@
 		<dependency>
 			<groupId>com.squareup.okhttp3</groupId>
 			<artifactId>okhttp</artifactId>
-			<version>4.12.0</version>
+			<version>5.5.0</version>
 		</dependency>
 		<!-- Talks to the runner-pod cluster live previews run in (k8s/runner-pods.yml). Resolves correctly only
 		     because the root pom.xml already imports kubernetes-client-bom ahead of spring-cloud-dependencies -
