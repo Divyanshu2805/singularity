@@ -1,6 +1,6 @@
 # CODE_REVIEW.md OPS-01: pinned to the version this image was actually verified against, not the floating
 # `20-alpine` major-version tag.
-FROM node:20.20.2-alpine
+FROM node:26.10.0-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
