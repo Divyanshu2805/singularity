@@ -69,11 +69,52 @@ spec:
                 secretKeyRef:
                   name: openrouter-api-key
                   key: api-key
+            - name: SPRING_AI_OPENAI_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ai-base-url
+            - name: SPRING_AI_OPENAI_CHAT_COMPLETIONS_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ai-completions-path
             - name: SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL
               valueFrom:
                 configMapKeyRef:
                   name: app-config
                   key: ai-model
+            # The per-call settings (AiCallProperties); AiCallPropertiesEnvironmentTest binds these names.
+            - name: AI_CALLS_BUILD_REASONINGEFFORT
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ai-build-reasoning-effort
+            - name: AI_CALLS_REPAIR_REASONINGEFFORT
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ai-build-reasoning-effort
+            - name: AI_CALLS_INTERVIEW_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ai-light-model
+            - name: AI_CALLS_LESSON_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ai-light-model
+            - name: AI_CALLS_EXPLAIN_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ai-light-model
+            - name: AI_CALLS_SUGGEST_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ai-light-model
           volumeMounts:
             - name: firebase-credentials
               mountPath: /var/secrets/firebase

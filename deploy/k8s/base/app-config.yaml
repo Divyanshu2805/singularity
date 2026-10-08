@@ -26,6 +26,14 @@ data:
   preview-public-scheme: http
   preview-public-domain: localhost
   preview-public-port: "8090"
-  # Optional (docs/deployment/configuration.md): a cheaper model than the code default
-  # (x-ai/grok-4.5) for the demo. Matches the code default here - an overlay only needs to change this one key.
-  ai-model: x-ai/grok-4.5
+  # Which provider and models intelligence-service calls (docs/deployment/configuration.md). The code default is
+  # OpenRouter; a deployment calls Google's OpenAI-compatible endpoint directly, with the models and the reasoning
+  # effort the build benchmark was measured on (docs/practices/build-benchmark-results.md). The key in the
+  # openrouter-api-key Secret must therefore be a Gemini API key - the Secret keeps its name, only its value changes.
+  ai-base-url: https://generativelanguage.googleapis.com/v1beta/openai
+  ai-completions-path: /chat/completions
+  # Build and repair turns.
+  ai-model: gemini-3.8-flash
+  ai-build-reasoning-effort: low
+  # The idea interview, step lessons, explain and suggested next steps.
+  ai-light-model: gemini-3.5-flash-lite
