@@ -14,7 +14,7 @@ Credentials and private hostnames — the tailnet hostname, the tunnel's credent
 | `INTERNAL_SERVICE_SHARED_SECRET` | The internal-API secret — a new random value, never the local one |
 | `PREVIEW_ACCESS_TOKEN_SECRET` | Signs preview access tokens — a different random value |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | The Firebase Admin service-account key file's contents |
-| `OPENROUTER_API_KEY` | A key used only by the deployment, with a hard credit limit |
+| `OPENROUTER_API_KEY` | A Gemini API key used only by the deployment, with a spending cap. The name is historical: the deployment calls Google's API directly (below), and whatever this holds is sent to that endpoint |
 | `STRIPE_SECRET`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS` | Stripe keys and price ids |
 | `CLOUDFLARE_TUNNEL_CREDENTIALS` | The tunnel's credentials JSON |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT` | The backup bucket's token and S3 endpoint (`https://<account id>.r2.cloudflarestorage.com`) |
@@ -50,7 +50,10 @@ Non-secret settings are set as environment variables or `app-config` entries in 
 | `PREVIEW_PUBLIC_SCHEME`, `PREVIEW_PUBLIC_DOMAIN`, `PREVIEW_PUBLIC_PORT` | `https`, the preview root domain, `443` |
 | `FIREBASE_CREDENTIALS_PATH` | `/var/secrets/firebase/sa.json`, mounted from the `firebase-service-account` Secret |
 | `SPRING_JPA_SHOW_SQL` | `false` |
-| `SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL` | From `app-config`'s `ai-model` key — change that one key to use a different model |
+| `SPRING_AI_OPENAI_BASE_URL`, `SPRING_AI_OPENAI_CHAT_COMPLETIONS_PATH` | From `app-config`'s `ai-base-url` and `ai-completions-path`: Google's OpenAI-compatible endpoint, not the code default (OpenRouter) |
+| `SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL` | From `app-config`'s `ai-model` key (`gemini-3.8-flash`) — the model for build and repair turns |
+| `AI_CALLS_BUILD_REASONINGEFFORT`, `AI_CALLS_REPAIR_REASONINGEFFORT` | From `ai-build-reasoning-effort` (`low`) |
+| `AI_CALLS_INTERVIEW_MODEL`, `AI_CALLS_LESSON_MODEL`, `AI_CALLS_EXPLAIN_MODEL`, `AI_CALLS_SUGGEST_MODEL` | From `ai-light-model` (`gemini-3.5-flash-lite`). These are the models and settings the [build benchmark](../practices/build-benchmark-results.md) was measured on; `AiCallPropertiesEnvironmentTest` holds the variable names to what the service reads |
 
 The frontend image is built with `VITE_CSP_FRAME_ORIGINS=https://*.<preview root domain>` and `VITE_PAYMENTS_TEST_MODE=true` while Stripe runs in test mode.
 
