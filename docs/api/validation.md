@@ -8,7 +8,6 @@ Constraints worth knowing:
 |---|---|---|---|
 | `CreateSessionRequest`, `ReportSecurityEventRequest` | `idToken` | `@NotBlank @Size(max = 8192)` | |
 | `InviteMemberRequest` | `username` | `@NotBlank @Email` | The field is called `username` but holds the invitee's email address. |
-| `ChatRequest` | `teachingMode` | none | A boxed `Boolean`, so a missing or `null` value simply means off. |
 | `AskCodeRequest` | `path` | `@Size(max = 500)`; required only when `code` is present | The selection is optional as a pair, not per field (`@AssertTrue isSelectionComplete`). |
 | `AskCodeRequest` | `history` | `@Size(max = 40)` | The server enforces its own ceiling regardless of what the client trims. |
 | `CodeChatTurn` | `role` | `@NotBlank @Size(max = 20)`, **and** checked by value | Length alone wouldn't stop `role: "system"` from injecting instructions; anything other than `"assistant"` is treated as a user turn. See [AI prompt boundaries](../architecture/security-model.md#ai-prompt-boundaries). |

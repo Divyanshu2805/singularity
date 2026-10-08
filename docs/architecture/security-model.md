@@ -39,7 +39,9 @@ The session rides in a cookie the browser attaches on its own, so every state-ch
 
 ## Untrusted-code isolation
 
-Generated project code runs only inside live-preview runner pods in the `singularity-ai` namespace, reached through the Kubernetes `exec` API. Runner pods:
+Generated project code runs only inside live-preview runner pods in the `singularity-ai` namespace, reached through the Kubernetes `exec` API. The one place it is handled in-process is intelligence-service's syntax check (`llm/SyntaxCheck`), which **parses** a written file and never runs it: the file is passed as a string argument to the Babel parser, which runs on GraalJS in a context with no host access - no files, no network, no Java classes. The file never becomes part of a script that is evaluated. Runner pods:
+
+A build turn's files are also type-checked before they are saved (`CodeCheckServiceImpl` in workspace-service), and that happens in the same place: the files are laid out in a scratch folder of the project's own running preview pod and the TypeScript compiler reads them there. They are never written to a service's disk, and the preview's own copy of the project is not touched. A path reaches the pod only after `ProjectFilePath` has accepted it, inside single quotes with any quote escaped; a package name is put in a command only after it matches the registry's naming rule. The endpoint that asks for the check is under `/internal/**`.
 
 - run as a non-root user with every Linux capability dropped and no mounted service-account token;
 - are bound by a `LimitRange`, a `ResourceQuota`, and a kubelet PID limit (1024), so a fork bomb or a runaway install can't exhaust the node;
@@ -57,14 +59,29 @@ The namespace split (`singularity` for trusted workloads, `singularity-ai` for p
 
 A preview hostname is not a credential. Every `previewUrl` carries a short-lived HMAC-signed token that the proxy verifies statelessly, then exchanges for a cookie. The token's lifetime (6 hours by default) bounds how long a removed member's open tab keeps working. Details: [live preview flow](flows/live-preview.md#access-boundary).
 
+## What a viewer may do with a preview
+
+Any member, a viewer included, may open the preview, read its output and close their own session: looking at the running app is what viewing a project means, their session counts against their own plan, and closing it ends nobody else's. **Restarting requires `EDIT`** (`PreviewDeploymentServiceImpl.restartPreview`), because it bounces the one dev server every collaborator shares — a viewer could otherwise interrupt an editor mid-change at will. The browser hides the button from a viewer and the server refuses one who asks anyway; `PreviewAuthorizationTest` pins both directions.
+
+## Messages between the app and the preview
+
+The previewed page is model-written code on another origin, and the two sides talk only by `postMessage`.
+
+- **Into the app.** The Preview tab accepts a message only from the preview's exact origin and its own frame's window, and then reads it through `frontend/src/lib/preview-frame.ts`, which treats every field as untrusted: wrong types drop the message, text is cut to a fixed length, a batch of console lines is capped. Nothing a page sends is rendered as HTML.
+- **Into the page.** The proxy's injected script (`proxy/reporter.js`) acts only on messages from its parent window, and can only do what a person at the page's own address bar could: back, forward, reload, or open a path. A path that resolves to any other origin is ignored, on both sides — the address bar refuses it before sending, and the script refuses it on receipt — so the bar cannot load another site into the frame under the preview's cookie.
+- **The sandbox is what keeps back and forward inside the frame.** A sandboxed frame without leave to navigate its parent has a history traversal that would move the parent refused by the browser.
+
 ## File paths
 
 Every stored project file path goes through workspace-service's `ProjectFilePath`, which rejects absolute paths, backslashes, control characters, and any `.` or `..` segment. MinIO treats keys as opaque strings, so path traversal is invisible there — but stored paths later become **ZIP entry names** and the destination of the `mc mirror` into a **preview pod's `/app`**, and both of those resolve `..`. Paths are validated on the way in, and object keys are never built by string concatenation.
 
 ## AI prompt boundaries
 
-- **Code insight is read-only by construction.** The code-insight model is given exactly one tool (`read_files`) and its prompts (`llm/CodeInsightPrompts.java`) never mention the file-writing protocol. The tool implementation is typed against `ProjectFileReader` (tree and content reads only), not the write-capable workspace client, which only the generation pipeline holds. Widening `ProjectFileReader` would remove a compile-time guarantee.
+- **Code insight is read-only by construction.** The code-insight model is given exactly one tool (`read_files`) and its prompts (`llm/CodeInsightPrompts.java`) never mention the file-writing protocol. The tool implementation is typed against `ProjectFileReader` (tree and content reads only), not the write-capable workspace client, which only the generation pipeline holds. Widening `ProjectFileReader` would remove a compile-time guarantee. The "Explain in detail" a build step offers in the main chat is an ordinary question to this same read-only model: it names the step and its file, and the file is read through the tool, never pasted into the prompt. Teaching mode's step lesson is the one call that is given file text outright and no tool: the lines one step changed, bounded in length, taken from the caller's own saved turn. The request carries only the id of the saved file edit, and the lookup matches that id together with the project and the caller, so an id from another member's conversation is simply not found; the turn must also have been asked for in teaching mode.
 - **Client-supplied history is untrusted.** `AskCodeRequest.history` is replayed into the model's message list, so each turn's `role` is validated by value: anything other than `"assistant"` becomes a user message. A client sending `role: "system"` cannot smuggle instructions in. Any new endpoint that replays client history needs the same check.
+- **Project files are material, not instructions.** The build model is shown file contents — in the project brief (`llm/ProjectBrief`) and through `read_files` — fenced by marker lines and labelled as content, because a file's author is not always the person asking: a collaborator can edit a project, and a fork carries its original author's files. The build model's only capability is writing files into that same project; it has no network or shell tool. Text planted in a file can therefore do nothing its author could not have written into the project directly — the reason this is acceptable for the build path and would not be for a model that could act elsewhere.
+- **Suggestions never see a file.** The call that proposes next steps (`llm/SuggestionPrompts`) is given the caller's own last request, what the build said and file paths - no file contents and no tool - so nothing a collaborator or a fork's first author wrote in a file can become a button in someone else's chat. Its answer is read defensively: a line holding markup, a tag or code never becomes a suggestion. Only someone who may edit the project can ask.
+- **A preview error is the user's to send.** The **Fix this** button puts the error into the chat as the person's own next message (`frontend/src/lib/preview-fix.ts`); it is shown only to someone who may edit, is capped at two tries for the same error, and the error text is cut to a few hundred characters. The error comes from the preview's page, which is generated code - so it reaches the model as a user message describing a fault, under the same build prompt and with the same single capability, writing files into that project.
 - **Prompts are not logged.** No deployed service sets `logging.level.org.springframework.ai.chat.client: DEBUG`, which would log every prompt and response in full.
 
 ## Sign-out data isolation (frontend)

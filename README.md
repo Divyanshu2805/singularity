@@ -32,7 +32,7 @@ Singularity is an AI-assisted project builder. You type a one-line idea; a short
 - **Streaming code generation** — files are written live, with a build checklist and automatic recovery when a turn stops short.
 - **Live previews** — every project runs in an isolated Kubernetes pod behind a signed, expiring preview link, shared correctly between collaborators and reclaimed when idle.
 - **Atomic file revisions** — every AI turn lands as one all-or-nothing revision, and any earlier revision can be restored.
-- **Teaching mode** — an optional walkthrough of *why* each file is written the way it is.
+- **Teaching mode** — send a message in Teach mode and every step of that build can be opened for a lesson on what it changed: it starts from what you asked for, walks through only the changed lines (which the editor can jump to and mark), and hands over to the next step. Written only when you open it, so the build is no slower, and kept with the conversation.
 - **Code insight** — ask about any selection or the whole project; answers are read-only by construction and saved as private notes.
 - **Collaboration** — per-project roles, invitations, forking, pinning and starring, code search, and ZIP export.
 - **Plans and usage** — Stripe subscriptions with enforced daily-token, project and preview limits, plus a usage dashboard broken down by day, feature and project.
@@ -93,8 +93,8 @@ Open <http://localhost:5173>. The full guide, including live previews and troubl
 ## Testing
 
 ```bash
-./mvnw test                  # backend: 488 tests across all modules
-cd frontend && npm test      # frontend: 426 tests
+./mvnw test                  # backend: 956 tests across all modules
+cd frontend && npm test      # frontend: 739 tests
 cd proxy && node --test      # preview proxy
 ```
 
