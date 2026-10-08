@@ -9,6 +9,10 @@
  * answer alone would leave a question hanging. A stream that fails keeps whatever arrived rather than discarding the
  * turn.
  *
+ * It also takes the "Explain in detail" asked of a build step in the main chat: the step's name, its file and the
+ * sentence the build gave it become an ordinary question here, with no selection, so the answer is the line-by-line
+ * walkthrough the build chat deliberately leaves out and stays in the thread like any other note.
+ *
  * It registers its own reset with the session module: this is module state, which outlives a client-side route
  * change, and not clearing it once leaked one account's transcript to the next person who signed in on the same
  * browser.
@@ -38,8 +42,22 @@ export interface LensThread {
   error: string | null;
 }
 
+export interface BuildStepQuestion {
+  path: string;
+  label: string;
+  what?: string;
+}
+
 const MAX_HISTORY_TURNS = 40;
 const MAX_TURN_CHARS = 4000;
+const MAX_STEP_SUMMARY_CHARS = 400;
+
+export function stepQuestion({ path, label, what }: BuildStepQuestion): string {
+  const summary = what?.replace(/\s+/g, " ").trim().slice(0, MAX_STEP_SUMMARY_CHARS);
+  const question = `Explain in detail what the step "${label.trim()}" did in \`${path}\`. `
+    + "Walk me through the code that matters: show the lines, and say what each one does and why it is there.";
+  return summary ? `${question}\n\nThe build described this step as: ${summary}` : question;
+}
 
 const threads = new Map<string, LensThread>();
 const listeners = new Map<string, Set<() => void>>();
@@ -350,6 +368,11 @@ export const codeLens = {
     }));
 
     streamAnswer(projectId, "ask", exchangeId, text, selection, quoted, { question: text, history });
+  },
+
+  explainStep(projectId: string, step: BuildStepQuestion) {
+    openThread(projectId, null);
+    this.ask(projectId, stepQuestion(step));
   },
 
   dismissError(projectId: string) {

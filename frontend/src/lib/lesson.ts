@@ -1,11 +1,26 @@
 /**
- * Teaching-mode walkthroughs: the lesson body the AI writes after each file.
+ * Teaching-mode lessons: what the AI wrote about a file, in each of the shapes it has had.
  *
- * Handles: parsing that body into a summary and one part per important piece of code, collecting the concepts it
- * introduces, and resolving each part's quoted line back to a line number in the file as it is now.
+ * Handles: parsing the older lesson bodies in either of their two shapes, collecting the concepts they introduce,
+ * resolving a quoted line back to a line number in the file as it is now, reading a streamed walkthrough into its
+ * overview and line-ranged sections, and cutting a section's lines out of the file for display.
+ *
+ * A lesson is now two pieces of plain text written before its file - what the step adds, and why the project needs it
+ * at that point - so the steps of a build read in order. It used to be a walkthrough written after the file: a
+ * summary and one part per piece of code, each quoting a line. Conversations saved in that shape are still read and
+ * shown, which is why both are parsed here; the "what" of a new lesson and the summary of an old one land in the same
+ * field, so everything that shows a lesson's first paragraph works for both.
  *
  * The quoted line is searched for again when a lesson is opened rather than trusted as a stored line number, because
  * the file may have changed since the lesson was written.
+ *
+ * A walkthrough is the newer, separate kind: the lesson on what one step of a turn changed, asked for from the code
+ * lens endpoint when the person opens the step and streamed back as an opening followed by one section per piece of
+ * the change, each headed with the lines it is about (`### L12-18 · Title`), and a closing section under a heading
+ * with no lines (`### What happens next`). The sections come in the order the idea needs, which is not always the
+ * order of the lines, so nothing here assumes ascending ranges. It is plain headed text rather than tags, so a
+ * half-arrived answer reads sensibly at every point: only a heading line still being written is held back, and the
+ * last section is reported as not complete until the next heading or the end of the stream shows it is.
  */
 export interface CodeTarget {
   line?: number;
@@ -22,15 +37,20 @@ export interface LessonPart {
 
 export interface Lesson {
   summary: string;
+  why?: string;
   parts: LessonPart[];
   concepts: string[];
 }
+
+const STEP_STRUCTURE = /<(what|why)\b/i;
+const WHAT = /<what>([\s\S]*?)(?:<\/what>|(?=<why\b)|$)/i;
+const WHY = /<why>([\s\S]*?)(?:<\/why>|$)/i;
 
 const STRUCTURE = /<(summary|part|related)\b/i;
 const SUMMARY = /<summary>([\s\S]*?)(?:<\/summary>|(?=<part\b|<related\b)|$)/i;
 const PART = /<part\b([^>]*)>([\s\S]*?)(?:<\/part>|(?=<part\b|<related\b)|$)/gi;
 const CODE = /<code>([\s\S]*?)(?:<\/code>|$)/i;
-const STRAY_TAG = /<\/?(?:summary|part|code|related)\b[^>]*>|<\/?[a-z]*$/gi;
+const STRAY_TAG = /<\/?(?:summary|part|code|related|what|why)\b[^>]*>|<\/?[a-z]*$/gi;
 
 const readAttr = (attrs: string, name: string) =>
   new RegExp(`\\b${name}="([^"]*)"`, "i").exec(attrs)?.[1]?.trim() || undefined;
@@ -55,6 +75,16 @@ export function withoutLeadingConcept(text: string, concept: string | undefined,
 }
 
 export function parseLesson(content: string, singleConcept?: string, isComplete = true): Lesson {
+  if (STEP_STRUCTURE.test(content) && !STRUCTURE.test(content)) {
+    const why = cleanText(WHY.exec(content)?.[1] ?? "");
+    return {
+      summary: cleanText(WHAT.exec(content)?.[1] ?? ""),
+      ...(why ? { why } : {}),
+      parts: [],
+      concepts: singleConcept ? singleConcept.split(",").map((concept) => concept.trim()).filter(Boolean) : [],
+    };
+  }
+
   if (!STRUCTURE.test(content)) {
     const concepts = singleConcept ? [singleConcept] : [];
     return { summary: withoutLeadingConcept(content.trim(), singleConcept, isComplete), parts: [], concepts };
@@ -105,4 +135,76 @@ export function withLines(lesson: Lesson, fileContent: string | undefined): Less
     return line ? { ...part, line } : part;
   });
   return { ...lesson, parts };
+}
+
+export interface WalkthroughNote {
+  startLine: number;
+  endLine: number;
+  title: string;
+  text: string;
+  isComplete: boolean;
+}
+
+export interface Walkthrough {
+  overview: string;
+  notes: WalkthroughNote[];
+  closing?: { title: string; text: string };
+}
+
+const NOTE_HEADING = /^###[ \t]+L(\d+)(?:[ \t]*[-–—][ \t]*L?(\d+))?[ \t]*[·•|:–—-][ \t]*(\S.*?)[ \t]*$/;
+const ANY_HEADING = /^###[ \t]+(\S.*?)[ \t]*$/;
+
+export function parseWalkthrough(raw: string, isComplete: boolean): Walkthrough {
+  const lines = raw.replace(/\r\n/g, "\n").split("\n");
+  if (!isComplete && lines.length > 0 && /^#/.test(lines[lines.length - 1])) lines.pop();
+
+  const overview: string[] = [];
+  const headings: Omit<WalkthroughNote, "text" | "isComplete">[] = [];
+  const bodies: string[][] = [];
+  let closing: { title: string; body: string[] } | undefined;
+  let body = overview;
+
+  for (const line of lines) {
+    const note = NOTE_HEADING.exec(line);
+    if (note) {
+      const first = Number(note[1]);
+      const last = note[2] ? Number(note[2]) : first;
+      body = [];
+      bodies.push(body);
+      headings.push({
+        startLine: Math.min(first, last),
+        endLine: Math.max(first, last),
+        title: cleanText(note[3].replace(/\*\*/g, "")),
+      });
+      closing = undefined;
+      continue;
+    }
+    const other = ANY_HEADING.exec(line);
+    if (other) {
+      body = [];
+      closing = { title: cleanText(other[1].replace(/\*\*/g, "")), body };
+      continue;
+    }
+    body.push(line);
+  }
+
+  const joined = (parts: string[]) => cleanText(parts.join("\n").replace(/\n{3,}/g, "\n\n"));
+  const notes = headings.map((heading, index) => ({
+    ...heading,
+    text: joined(bodies[index]),
+    isComplete: isComplete || closing !== undefined || index < headings.length - 1,
+  }));
+
+  return {
+    overview: joined(overview),
+    notes,
+    ...(closing ? { closing: { title: closing.title, text: joined(closing.body) } } : {}),
+  };
+}
+
+export function linesOf(fileContent: string | undefined, startLine: number, endLine: number): string[] {
+  if (!fileContent) return [];
+  const lines = fileContent.replace(/\n$/, "").split("\n");
+  if (startLine < 1 || startLine > lines.length) return [];
+  return lines.slice(startLine - 1, Math.min(endLine, lines.length));
 }

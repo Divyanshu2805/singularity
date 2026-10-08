@@ -83,13 +83,28 @@ describe("ChatUsageMeter", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("says it will update rather than inventing a number while a reply streams", async () => {
+  it("says it is counting the reply as it is written, with what is left, while one streams", async () => {
     await renderMeter(usage(), true);
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /AI tokens used today/ }));
     });
-    expect(screen.getByText("Updates after this reply")).toBeTruthy();
+    expect(screen.getByText(/left · counting this reply as it.s written/)).toBeTruthy();
+    expect(screen.queryByText("Updates after this reply")).toBeNull();
     expect(screen.queryByText(/resets in/i)).toBeNull();
+  });
+
+  it("reads the figure again every few seconds while a reply streams, and not otherwise", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await renderMeter(usage(), true);
+      const callsAtStart = vi.mocked(api.getUsageToday).mock.calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(9_000);
+      });
+      expect(vi.mocked(api.getUsageToday).mock.calls.length).toBeGreaterThanOrEqual(callsAtStart + 2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("opens to the other facts: this project, the last reply, and projects", async () => {
