@@ -2,15 +2,17 @@
  * Turning a conversation into a markdown file someone can keep.
  *
  * Handles: a filename that is filesystem-safe, sorts by date and is unique enough that two exports do not collide;
- * rendering both the project chat and a code lens thread; and triggering the download.
+ * rendering both the project chat and a code lens thread; and triggering the download. A turn's thought process is
+ * kept as a quote, and a teaching lesson as the what and the why it was written as, without its tags.
  *
  * Both conversations are stored server-side, but neither in a form anyone can read outside the app - this download is
  * the readable copy. The lens turn type here is deliberately narrower than the store's: the bookkeeping the panel
  * needs has nothing to do with what the file says.
  */
-import type { ChatMessage } from "@/components/ChatPanel";
+import type { ChatMessage } from "./project-chat-store";
 import type { LensTurn } from "./code-lens-store";
 import { ChatEventType, type ChatEvent } from "./types";
+import { parseLesson } from "./lesson";
 
 export type ExportableLensTurn = Pick<LensTurn, "role" | "content" | "selection">;
 
@@ -78,14 +80,18 @@ export function assistantTurnText(events: ChatEvent[], fallback = "", error?: st
         if (event.content?.trim()) sections.push(`**Question:** ${event.content.trim()}`);
         break;
       case ChatEventType.FILE_EDIT:
-        if (event.filePath) editedFiles.push(`- \`${event.filePath}\``);
+      case ChatEventType.FILE_PATCH:
+        if (event.filePath && !editedFiles.includes(`- \`${event.filePath}\``)) editedFiles.push(`- \`${event.filePath}\``);
         break;
       case ChatEventType.FILE_DELETE:
         if (event.filePath) editedFiles.push(`- \`${event.filePath}\` (deleted)`);
         break;
       case ChatEventType.LEARN:
+        if (event.content?.trim()) sections.push(lessonText(event));
+        break;
+      case ChatEventType.THINKING:
         if (event.content?.trim()) {
-          sections.push(`**How \`${event.filePath ?? "this"}\` works**\n\n${event.content.trim()}`);
+          sections.push(`**Thought process**\n\n${event.content.trim().split("\n").map((line) => `> ${line}`).join("\n")}`);
         }
         break;
       default:
@@ -98,6 +104,15 @@ export function assistantTurnText(events: ChatEvent[], fallback = "", error?: st
   if (error) sections.push(`> Failed: ${error}`);
 
   return sections.join("\n\n");
+}
+
+function lessonText(event: ChatEvent): string {
+  const lesson = parseLesson(event.content, event.metadata || undefined);
+  const file = event.filePath ?? "this";
+  if (lesson.parts.length > 0 || !lesson.why) {
+    return `**How \`${file}\` works**\n\n${event.content.trim()}`;
+  }
+  return `**About \`${file}\`**\n\n${lesson.summary}\n\n_Why:_ ${lesson.why}`;
 }
 
 export function buildLensMarkdown(turns: ExportableLensTurn[], projectName: string): string {

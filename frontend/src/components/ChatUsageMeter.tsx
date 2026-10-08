@@ -15,9 +15,12 @@
  * the figure changes. The owner asked for usage as a planet revolving round a centre with the tone following how far
  * it has revolved; before this a planet circled a sun for decoration while a shadow crept across it.
  *
- * Honest while a reply streams: token counts only exist once a response has finished, since they arrive on its last
- * chunk, so mid-stream the planet pulses where it stands and the panel says it will update rather than guessing
- * when. Once the allowance is fully spent it steps aside, because the chat's quota banner already says everything
+ * It moves while a reply streams. The server reports what has been charged plus what the reply in progress is
+ * estimated to have spent so far, so the figure is re-read every few seconds for as long as one is being written and
+ * the planet travels with it; the provider's own count replaces the estimate when the reply ends, which moves it a
+ * little, not a lot. Before this the meter stood still until the reply was over, and a build's sixty-thousand-token
+ * hold was counted as spent while it ran - so a look at the meter mid-build showed a jump that was gone on the next
+ * refresh. Once the allowance is fully spent it steps aside, because the chat's quota banner already says everything
  * this would.
  */
 import { useEffect, useState, type CSSProperties } from "react";
@@ -33,6 +36,7 @@ import { USAGE_TRAIL, usageTone } from "@/lib/usage-tone";
 import { cn } from "@/lib/utils";
 
 const COUNTDOWN_TICK_MS = 30_000;
+const LIVE_REFRESH_MS = 4_000;
 
 function UsageOrbit({ percent, busy }: { percent: number; busy: boolean }) {
   const [placed, setPlaced] = useState(false);
@@ -69,6 +73,7 @@ export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; 
     queryFn: () => api.getUsageToday(projectId),
     enabled: signedIn && !!projectId,
     staleTime: 15_000,
+    refetchInterval: isStreaming ? LIVE_REFRESH_MS : false,
   });
 
   const [now, setNow] = useState(() => new Date());
@@ -120,7 +125,7 @@ export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; 
           </div>
           <p className="mt-1.5 text-[11px] text-muted-foreground">
             {isStreaming ? (
-              "Updates after this reply"
+              <>{formatTokens(quota.remaining)} left · counting this reply as it&rsquo;s written</>
             ) : (
               <>
                 {formatTokens(quota.remaining)} left · resets in {formatResetIn(resetsAt, now)}

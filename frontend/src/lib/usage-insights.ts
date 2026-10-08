@@ -22,6 +22,7 @@ export const FEATURES: Record<UsageFeature, FeatureMeta> = {
   BUILD_RETRY: { label: "Build retry", description: "Automatic second attempts at an unfinished build", color: "hsl(338 90% 72%)" },
   EXPLAIN: { label: "ExplainLLM", description: "Explaining and answering questions about code", color: "hsl(212 90% 70%)" },
   IDEA_INTERVIEW: { label: "Idea interview", description: "Questions and the brief before a project starts", color: "hsl(268 80% 78%)" },
+  SUGGEST: { label: "Suggestions", description: "The next steps offered under a finished build", color: "hsl(160 60% 62%)" },
   PROJECT_NAMING: { label: "Project naming", description: "Naming a new project from its idea", color: "hsl(151 80% 66%)" },
   UNATTRIBUTED: {
     label: "Earlier activity",
@@ -30,7 +31,7 @@ export const FEATURES: Record<UsageFeature, FeatureMeta> = {
   },
 };
 
-export const FEATURE_ORDER: UsageFeature[] = ["BUILD", "BUILD_RETRY", "EXPLAIN", "IDEA_INTERVIEW", "PROJECT_NAMING", "UNATTRIBUTED"];
+export const FEATURE_ORDER: UsageFeature[] = ["BUILD", "BUILD_RETRY", "EXPLAIN", "IDEA_INTERVIEW", "SUGGEST", "PROJECT_NAMING", "UNATTRIBUTED"];
 
 export const RANGES: { value: UsageRange; label: string }[] = [
   { value: "today", label: "Today" },

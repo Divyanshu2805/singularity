@@ -84,6 +84,25 @@ describe("buildChatMarkdown", () => {
     expect(markdown).toContain("`useState` stores a value across renders.");
   });
 
+  it("writes a lesson's what and why as prose, and the thought process as a quote, with no tags left in", () => {
+    const markdown = buildChatMarkdown(
+      [{
+        id: "1",
+        role: "assistant",
+        content: "",
+        events: [
+          event(ChatEventType.THINKING, "One page.\nNo router."),
+          event(ChatEventType.LEARN, "<what>Adds the list's memory.</what><why>It would empty on refresh.</why>", "src/useTasks.ts"),
+        ],
+      }],
+      "App"
+    );
+
+    expect(markdown).toContain("**Thought process**\n\n> One page.\n> No router.");
+    expect(markdown).toContain("**About `src/useTasks.ts`**\n\nAdds the list's memory.\n\n_Why:_ It would empty on refresh.");
+    expect(markdown).not.toContain("<what>");
+  });
+
   it("records a failed turn rather than exporting it as if it succeeded", () => {
     const markdown = buildChatMarkdown(
       [{ id: "1", role: "assistant", content: "", error: "Rate limited" }],

@@ -1,8 +1,10 @@
 /**
  * The mode picker on the home prompt.
  *
- * Handles: choosing how the next project is built from a small menu - Build (just the project) or Teach me (each
- * file also comes with a plain-English note on the idea it uses). Each option's explanation appears only as a hover
+ * Handles: choosing how the next message is built from a small menu - Build (just the change) or Teach me (each
+ * step of that build can be opened for a plain-English lesson on what it changed). The choice applies to messages
+ * sent while it is in force and stays with them: turns built before it was switched on do not gain lessons, and
+ * turns built with it keep theirs after it is switched off. Each option's explanation appears only as a hover
  * tooltip. The trigger names the mode in force, so it is never a guess what a build will do; the choice is the
  * teaching-mode flag (hooks/use-teaching-mode.ts), so it still resets on sign-out.
  *
@@ -26,7 +28,7 @@ interface PromptModeMenuProps {
 
 const MODES = [
   { teaching: false, label: "Build", hint: "Just build the project.", Icon: Hammer },
-  { teaching: true, label: "Teach me", hint: "A plain-English note on the idea behind each file.", Icon: GraduationCap },
+  { teaching: true, label: "Teach me", hint: "Each step of this build can explain what it changed.", Icon: GraduationCap },
 ];
 
 export function PromptModeMenu({ teaching, onChange }: PromptModeMenuProps) {

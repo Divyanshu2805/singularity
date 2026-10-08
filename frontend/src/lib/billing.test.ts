@@ -113,6 +113,20 @@ describe("toQuota", () => {
     expect(toQuota(usage({ tokensUsed: 5_000, tokensLimit: 5_000 }))!.isLow).toBe(false);
   });
 
+  it("says whether enough is left for another build, which is more than whether anything is left", () => {
+    const left = (tokensUsed: number) => toQuota(usage({ tokensUsed, tokensLimit: 100_000, buildMinimumTokens: 10_000 }))!;
+
+    expect(left(40_000)).toMatchObject({ canBuild: true, isExhausted: false });
+    expect(left(90_000).canBuild).toBe(true);
+    expect(left(90_001)).toMatchObject({ canBuild: false, isExhausted: false, remaining: 9_999 });
+    expect(left(100_000)).toMatchObject({ canBuild: false, isExhausted: true });
+  });
+
+  it("lets a build through when the server names no minimum, as an older server would not", () => {
+    expect(toQuota(usage({ tokensUsed: 4_999, tokensLimit: 5_000 }))!.canBuild).toBe(true);
+    expect(toQuota(usage({ tokensUsed: 5_000, tokensLimit: 5_000 }))!.canBuild).toBe(false);
+  });
+
   it("ignores an unparsable reset time rather than producing an invalid date", () => {
     expect(toQuota(usage({ resetsAt: "not a date" }))!.resetsAt).toBeNull();
   });
