@@ -14,7 +14,8 @@ import java.time.Instant;
  * Reads and writes each user's outstanding checkout intent.
  *
  * <p>Handles: atomically claiming or refreshing the one intent row a user can have (claimOrRefresh) and recording
- * the Stripe session it minted (recordSession). Both go through native upserts rather than JpaRepository.save():
+ * the Stripe session it minted (recordSession), and swapping a spent idempotency key for a fresh one (replaceKey).
+ * The first two go through native upserts rather than JpaRepository.save():
  * this entity's id is manually assigned (userId), so Spring Data's default new-entity check treats it as "not new"
  * and routes save() through entityManager.merge() - an upsert that can silently overwrite a concurrent request's
  * row instead of ever failing, which defeats the whole point of a claim. See CLAUDE.md's gotchas table.
@@ -52,4 +53,15 @@ public interface CheckoutIntentRepository extends JpaRepository<CheckoutIntent, 
     @Query("update CheckoutIntent c set c.stripeSessionId = :sessionId where c.userId = :userId and c.idempotencyKey = :idempotencyKey")
     void recordSession(@Param("userId") Long userId, @Param("idempotencyKey") String idempotencyKey,
                         @Param("sessionId") String sessionId);
+
+    /**
+     * Gives the intent a new idempotency key and forgets its session - only while the old key is still the row's
+     * current one. Used when Stripe refused the request made under the old key and the request is about to be sent
+     * again with different parameters, which Stripe would reject under the same key.
+     */
+    @Modifying
+    @Transactional
+    @Query("update CheckoutIntent c set c.idempotencyKey = :freshKey, c.stripeSessionId = null where c.userId = :userId and c.idempotencyKey = :currentKey")
+    int replaceKey(@Param("userId") Long userId, @Param("currentKey") String currentKey,
+                   @Param("freshKey") String freshKey);
 }

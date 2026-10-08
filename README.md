@@ -93,7 +93,7 @@ Open <http://localhost:5173>. The full guide, including live previews and troubl
 ## Testing
 
 ```bash
-./mvnw test                  # backend: 957 tests across all modules
+./mvnw test                  # backend: 960 tests across all modules
 cd frontend && npm test      # frontend: 739 tests
 cd proxy && node --test      # preview proxy
 ```

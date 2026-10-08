@@ -4,7 +4,7 @@
 
 | Suite | Command | Size | Needs |
 |---|---|---|---|
-| Backend (all modules) | `./mvnw test` | 957 tests — common-lib 29, gateway 69, account 32, workspace 303, intelligence 524 | Docker, for one integration test (below) |
+| Backend (all modules) | `./mvnw test` | 960 tests — common-lib 29, gateway 69, account 35, workspace 303, intelligence 524 | Docker, for one integration test (below) |
 | Frontend | `cd frontend && npm test` | 739 tests in 50 files (Vitest) | — |
 | Preview proxy | `cd proxy && node --test` | 30 tests: the access token, routing, and the script injected into a previewed page, run against a stand-in window | — |
 | A real preview on kind | see [below](#the-preview-pipeline-test) | 9 steps on one project (`PreviewPipelineIT`); not part of `./mvnw test` | A kind cluster and Docker |
