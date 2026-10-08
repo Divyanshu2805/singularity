@@ -36,10 +36,10 @@ import static org.mockito.Mockito.when;
 
 /**
  * QA-02's role-matrix extension for {@link PreviewDeploymentServiceImpl}, the same expression-level technique
- * {@link FileReadAuthorizationTest} established. Every browser-facing preview endpoint only needs VIEW - starting,
- * inspecting, restarting, stopping and reading logs are all available to any project member, not just an editor
- * or owner, mirroring {@link com.singularity.workspace.controller.PreviewController}'s own "any member can use the
- * preview" intent. The lifecycle/bookkeeping methods below carry no guard because they are never reached from a
+ * {@link FileReadAuthorizationTest} established. Starting, inspecting, stopping and reading logs need only VIEW -
+ * looking at the running app is what viewing a project means, and a person's Stop ends only their own session.
+ * Restarting needs EDIT: it bounces the one dev server every collaborator shares, so a viewer could otherwise
+ * interrupt an editor mid-change at will. The lifecycle/bookkeeping methods below carry no guard because they are never reached from a
  * user request: {@code getMyActivePreviews} lists the caller's own previews; the rest are called from other
  * service-layer code (soft-delete cascades, membership removal, runner-pool bookkeeping) with no per-request
  * {@code UserPrincipal} to check.
@@ -78,19 +78,23 @@ class PreviewAuthorizationTest {
 
     static Stream<Arguments> viewGated() {
         return Stream.of(
-                arguments("startPreview"), arguments("getPreview"), arguments("restartPreview"),
+                arguments("startPreview"), arguments("getPreview"),
                 arguments("stopPreview"), arguments("getPreviewLogs"));
     }
 
+    static Stream<Arguments> everyEndpoint() {
+        return Stream.concat(viewGated(), Stream.of(arguments("restartPreview")));
+    }
+
     @ParameterizedTest(name = "{0}")
-    @MethodSource("viewGated")
+    @MethodSource("everyEndpoint")
     @DisplayName("a signed-in user who is not a member is denied")
     void aNonMemberIsDenied(String method) {
         assertThat(allowed(method, PROJECT_ID)).isFalse();
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("viewGated")
+    @MethodSource("everyEndpoint")
     @DisplayName("membership of one project grants nothing on another")
     void membershipDoesNotCrossProjects(String method) {
         when(members.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID)).thenReturn(Optional.of(ProjectRole.OWNER));
@@ -100,17 +104,34 @@ class PreviewAuthorizationTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("viewGated")
-    @DisplayName("any role - viewer, editor, or owner - can use the preview")
+    @DisplayName("any role - viewer, editor, or owner - can open, watch and close the preview")
     void anyMemberCanUsePreview(String method) {
         when(members.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID)).thenReturn(Optional.of(ProjectRole.VIEWER));
 
         assertThat(allowed(method, PROJECT_ID)).isTrue();
     }
 
+    @org.junit.jupiter.api.Test
+    @DisplayName("a viewer cannot restart the dev server everyone shares")
+    void aViewerCannotRestart() {
+        when(members.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID)).thenReturn(Optional.of(ProjectRole.VIEWER));
+
+        assertThat(allowed("restartPreview", PROJECT_ID)).isFalse();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.EnumSource(value = ProjectRole.class, names = {"EDITOR", "OWNER"})
+    @DisplayName("an editor or the owner can restart it")
+    void anEditorCanRestart(ProjectRole role) {
+        when(members.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID)).thenReturn(Optional.of(role));
+
+        assertThat(allowed("restartPreview", PROJECT_ID)).isTrue();
+    }
+
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {
             "getMyActivePreviews", "countActivePreviews", "stopAllForProject",
-            "endSessionForUser", "shutDownIfUnused", "lockFor", "republishRoute"})
+            "endSessionForUser", "shutDownIfUnused", "lockFor", "republishRoute", "restartRunner"})
     @DisplayName("lifecycle and bookkeeping methods with no per-request caller carry no guard")
     void internalLifecycleMethodsStayUnguarded(String method) {
         assertThat(AnnotatedElementUtils.hasAnnotation(methodNamed(method), PreAuthorize.class))

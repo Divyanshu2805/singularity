@@ -55,7 +55,7 @@ class PreviewRunnerPoolTest {
 
     private static final PreviewProperties PROPERTIES = new PreviewProperties(
             "singularity-ai", "http", "localhost", null, 5173, "local", "projects",
-            Duration.ofMinutes(30), Duration.ofMinutes(2), Duration.ofMinutes(5), "secret", Duration.ofHours(6));
+            Duration.ofMinutes(30), Duration.ofMinutes(2), Duration.ofMinutes(5), "secret", Duration.ofHours(6), Duration.ofMinutes(5));
 
     @Test
     void theFixtureIsAPodThatCarriesTheFieldsFabric8CannotSerialize() throws IOException {

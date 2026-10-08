@@ -14,9 +14,10 @@ import java.util.Optional;
 /**
  * Reads and writes projects.
  *
- * <p>Handles: the caller's accessible projects most-recently-updated first, and one accessible project by id.
+ * <p>Handles: the caller's accessible projects most-recently-updated first, one accessible project by id, the
+ * revision a project's files currently stand at (empty for a project that has never had one), and advancing it.
  *
- * <p>Both queries fold the membership check and the soft-delete check into the lookup itself, so a project the caller
+ * <p>The two access queries fold the membership check and the soft-delete check into the lookup itself, so a project the caller
  * cannot see is indistinguishable from one that does not exist.
  */
 @Repository
@@ -47,6 +48,9 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
             """)
     Optional<Project> findAccessibleProjectById(@Param("projectId") Long projectId,
                                                 @Param("userId") Long userId);
+
+    @Query("SELECT p.currentFileRevisionId FROM Project p WHERE p.id = :projectId")
+    Optional<Long> findCurrentFileRevisionId(@Param("projectId") Long projectId);
 
     /**
      * The atomic "publish" claim (CODE_REVIEW.md AI-05): a single-statement compare-and-swap that only advances a

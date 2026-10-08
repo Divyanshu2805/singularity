@@ -3,6 +3,7 @@ package com.singularity.workspace.service.impl;
 import com.singularity.workspace.config.InstanceId;
 import com.singularity.workspace.config.PreviewProperties;
 import com.singularity.workspace.entity.Preview;
+import com.singularity.workspace.enums.PreviewFailureKind;
 import com.singularity.workspace.enums.PreviewStatus;
 import com.singularity.workspace.repository.PreviewRepository;
 import com.singularity.workspace.repository.PreviewSessionRepository;
@@ -47,14 +48,15 @@ class PreviewReaperTest {
     private final PreviewBootstrapper bootstrapper = mock(PreviewBootstrapper.class);
     private final PreviewLifecycle lifecycle = mock(PreviewLifecycle.class);
     private final PreviewDeploymentServiceImpl deploymentService = mock(PreviewDeploymentServiceImpl.class);
+    private final PreviewSynchronizer synchronizer = mock(PreviewSynchronizer.class);
     private final InstanceId instanceId = mock(InstanceId.class);
 
     private final PreviewProperties properties = new PreviewProperties(
             "singularity-ai", "http", "localhost", null, 5173, "local", "projects",
-            Duration.ofMinutes(30), Duration.ofMinutes(2), Duration.ofMinutes(5), "secret", Duration.ofHours(6));
+            Duration.ofMinutes(30), Duration.ofMinutes(2), Duration.ofMinutes(5), "secret", Duration.ofHours(6), Duration.ofMinutes(5));
 
     private final PreviewReaper reaper = new PreviewReaper(previewRepository, sessionRepository, runnerPool, router,
-            bootstrapper, lifecycle, properties, deploymentService, instanceId);
+            bootstrapper, lifecycle, properties, deploymentService, synchronizer, instanceId);
 
     private static final PreviewBootstrapper.HealthCheck HEALTHY = new PreviewBootstrapper.HealthCheck(true, true, true);
 
@@ -193,8 +195,8 @@ class PreviewReaperTest {
 
         reaper.failInterruptedStarts();
 
-        verify(lifecycle).fail(eq(neverHeartbeat), any(), eq(null));
-        verify(lifecycle).fail(eq(longStale), any(), eq(null));
+        verify(lifecycle).fail(eq(neverHeartbeat), eq(PreviewFailureKind.PLATFORM), any(), eq(null));
+        verify(lifecycle).fail(eq(longStale), eq(PreviewFailureKind.PLATFORM), any(), eq(null));
     }
 
     @Test
@@ -205,7 +207,7 @@ class PreviewReaperTest {
 
         reaper.failInterruptedStarts();
 
-        verify(lifecycle, never()).fail(any(), any(), any());
+        verify(lifecycle, never()).fail(any(), any(), any(), any());
     }
 
     @Test
@@ -223,5 +225,91 @@ class PreviewReaperTest {
 
         verify(bootstrapper, never()).checkHealth(any());
         verify(lifecycle, never()).terminate(any(), any());
+    }
+
+    @Test
+    void aHealthyPreviewSomeoneHasOpenIsCheckedAgainstTheProjectsCurrentFiles() {
+        Preview running = preview(PreviewStatus.RUNNING, "pod-a", "host-a");
+        when(previewRepository.findByStatusIn(ACTIVE)).thenReturn(List.of(running));
+        when(previewRepository.findById(PREVIEW_ID)).thenReturn(Optional.of(running));
+        when(runnerPool.isAlive("pod-a")).thenReturn(true);
+        when(router.lastVisit("host-a")).thenReturn(Optional.empty());
+        when(sessionRepository.countByPreviewIdAndEndedAtIsNull(PREVIEW_ID)).thenReturn(1);
+
+        reaper.reap();
+
+        verify(synchronizer).bringUpToDate(PROJECT_ID);
+    }
+
+    @Test
+    void aPreviewThatWasJustEndedIsNotSynced() {
+        Preview running = preview(PreviewStatus.RUNNING, "pod-a", "host-a");
+        when(previewRepository.findByStatusIn(ACTIVE)).thenReturn(List.of(running));
+        when(previewRepository.findById(PREVIEW_ID)).thenReturn(Optional.of(running));
+        when(runnerPool.isAlive("pod-a")).thenReturn(false);
+
+        reaper.reap();
+
+        verify(synchronizer, never()).bringUpToDate(any());
+    }
+
+    @Test
+    void aStartWhoseBootstrapStoppedProvingItIsAliveIsFailedOnASweepForTheTabToStartAgain() {
+        Preview abandoned = Preview.builder().id(PREVIEW_ID).projectId(PROJECT_ID).status(PreviewStatus.CREATING)
+                .podName("pod-a").startedAt(Instant.now().minusSeconds(200)).lastAccessedAt(Instant.now().minusSeconds(200))
+                .bootstrapOwner("gone").bootstrapHeartbeatAt(Instant.now().minusSeconds(150)).build();
+        when(previewRepository.findByStatusIn(ACTIVE)).thenReturn(List.of(abandoned));
+
+        reaper.reap();
+
+        verify(lifecycle).fail(eq(abandoned), eq(PreviewFailureKind.PLATFORM), any(), eq(null));
+    }
+
+    @Test
+    void aStartWhoseBootstrapIsBusyWithOneLongCommandIsLeftAlone() {
+        Preview copying = Preview.builder().id(PREVIEW_ID).projectId(PROJECT_ID).status(PreviewStatus.CREATING)
+                .podName("pod-a").startedAt(Instant.now().minusSeconds(100)).lastAccessedAt(Instant.now().minusSeconds(100))
+                .bootstrapOwner("alive").bootstrapHeartbeatAt(Instant.now().minusSeconds(50)).build();
+        when(previewRepository.findByStatusIn(ACTIVE)).thenReturn(List.of(copying));
+
+        reaper.reap();
+
+        verify(lifecycle, never()).fail(any(), any(), any(), any());
+    }
+
+    @Test
+    void aStartStillWaitingInLineIsGivenTheLinesLimitNotTheBootTimeout() {
+        Instant startedSixMinutesAgo = Instant.now().minus(Duration.ofMinutes(6));
+        Preview waiting = Preview.builder().id(PREVIEW_ID).projectId(PROJECT_ID).status(PreviewStatus.CREATING)
+                .startedAt(startedSixMinutesAgo).lastAccessedAt(startedSixMinutesAgo).build();
+        when(previewRepository.findByStatusIn(ACTIVE)).thenReturn(List.of(waiting));
+
+        reaper.reap();
+
+        verify(lifecycle, never()).fail(any(), any(), any(), any());
+    }
+
+    @Test
+    void aWaiterWhoseBootstrapDiedIsFailedAsNoRunnerComingFree() {
+        Instant startedLongAgo = Instant.now().minus(Duration.ofMinutes(8));
+        Preview waiting = Preview.builder().id(PREVIEW_ID).projectId(PROJECT_ID).status(PreviewStatus.CREATING)
+                .startedAt(startedLongAgo).lastAccessedAt(startedLongAgo).build();
+        when(previewRepository.findByStatusIn(ACTIVE)).thenReturn(List.of(waiting));
+
+        reaper.reap();
+
+        verify(lifecycle).fail(eq(waiting), eq(PreviewFailureKind.CAPACITY), any(), eq(null));
+    }
+
+    @Test
+    void aStartWithAPodThatOverranTheBootTimeoutIsStillFailedAsThePlatforms() {
+        Instant claimedFiveMinutesAgo = Instant.now().minus(Duration.ofMinutes(5));
+        Preview stuck = Preview.builder().id(PREVIEW_ID).projectId(PROJECT_ID).status(PreviewStatus.CREATING)
+                .podName("pod-a").startedAt(claimedFiveMinutesAgo).lastAccessedAt(claimedFiveMinutesAgo).build();
+        when(previewRepository.findByStatusIn(ACTIVE)).thenReturn(List.of(stuck));
+
+        reaper.reap();
+
+        verify(lifecycle).fail(eq(stuck), eq(PreviewFailureKind.PLATFORM), any(), eq(null));
     }
 }

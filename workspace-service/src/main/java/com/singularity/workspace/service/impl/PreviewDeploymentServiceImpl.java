@@ -8,7 +8,7 @@ import com.singularity.workspace.entity.Preview;
 import com.singularity.workspace.entity.PreviewSession;
 import com.singularity.workspace.entity.Project;
 import com.singularity.workspace.enums.PreviewStatus;
-import com.singularity.common.error.CapacityUnavailableException;
+import com.singularity.workspace.enums.PreviewSyncState;
 import com.singularity.common.error.ExternalServiceException;
 import com.singularity.common.error.QuotaExceededException;
 import com.singularity.common.error.ResourceNotFoundException;
@@ -29,21 +29,39 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.singularity.workspace.service.impl.PreviewBootstrapper.STARTING_RUNNER;
+import static com.singularity.workspace.service.impl.PreviewBootstrapper.WAITER_FRESHNESS;
+import static com.singularity.workspace.service.impl.PreviewBootstrapper.WAITING_FOR_RUNNER;
 
 /**
  * Live previews on the Kubernetes runner pool - the entry point the other preview classes hang off.
  *
- * <p>Handles: opening a preview for the caller (joining an existing runner or claiming a pod and starting one),
- * enforcing the plan's concurrent-preview allowance, recording visits that keep a preview alive, restarting the dev
- * server in place, closing a session and shutting the runner down once nobody has it open, reading the runner's
- * output, listing the caller's open previews, and re-publishing a route Redis has lost.
+ * <p>Handles: opening a preview for the caller (joining an existing runner, claiming a pod and starting one, or
+ * joining the line for a pod when every one is busy), enforcing the plan's concurrent-preview allowance, recording
+ * visits that keep a preview alive, restarting the dev server in place, closing a session and shutting the runner
+ * down once nobody has it open, reading the runner's output, listing the caller's open previews, re-publishing a
+ * route Redis has lost, and saying for each response where the caller stands in the line and whether the runner is
+ * showing the project's current files.
  *
  * <p>Runner per project, session per person. The preview row is the runner: collaborators share it, since they edit
  * the same files. Everything a person sees and does goes through their own session - the tab shows a preview as
  * running only while they have one open, Stop ends only theirs, and the plan allowance counts only theirs. Joining a
  * runner a collaborator already started is instant, with no second install.
+ *
+ * <p>Who may do what. Any member - a viewer included - may open the preview, read its output and close their own
+ * session: looking at the running app is what viewing a project means, their session counts against their own
+ * plan, and closing it ends nobody else's. Restarting is for those who may edit, because it bounces the one dev
+ * server every collaborator is looking at; a viewer could otherwise interrupt an editor mid-change as often as they
+ * liked. A viewer who has no session open is not refused for that - the browser simply never offers them the button.
+ *
+ * <p>No idle runner is no longer an error. The start is recorded with no pod and the bootstrap waits in line for
+ * one; "Every runner is busy, try again in a minute" asked the person to do by hand what the server can do by
+ * itself. Someone who starts while others are already waiting goes to the back rather than taking a pod that came
+ * free that instant.
  *
  * <p>Deliberately not transactional: every status change is a single conditional update, and the asynchronous
  * bootstrap must see the committed row before it starts.
@@ -65,6 +83,7 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
     static final List<PreviewStatus> ACTIVE = List.of(PreviewStatus.CREATING, PreviewStatus.RUNNING);
 
     static final String STOPPED_BY_USER = "Stopped";
+    static final String RUNNER_GONE = "The preview's runner stopped unexpectedly";
 
     private static final Duration TOUCH_THROTTLE = Duration.ofSeconds(30);
     private static final String SLUG_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
@@ -133,6 +152,11 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
         return sessionRepository.findFirstByProjectIdAndUserIdOrderByIdDesc(projectId, userId).map(session -> {
             Preview runner = session.getPreview();
             if (session.getEndedAt() == null && runner.getStatus() == PreviewStatus.RUNNING) {
+                if (endIfRunnerGone(projectId, runner)) {
+                    return sessionRepository.findById(session.getId())
+                            .map(ended -> toResponse(ended.getPreview(), ended, null))
+                            .orElseGet(() -> toResponse(runner, session, null));
+                }
                 markVisited(runner, session);
             }
             return toResponse(runner, session, null);
@@ -140,7 +164,7 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
     }
 
     @Override
-    @PreAuthorize("@security.canViewProject(#projectId)")
+    @PreAuthorize("@security.canEditProject(#projectId)")
     public PreviewResponse restartPreview(Long projectId) {
         Long userId = authUtil.getCurrentUserId();
         // Same outer-user/inner-project lock order as startPreview - this method falls through to startPreview in
@@ -156,13 +180,9 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
                 if (runner.getStatus() == PreviewStatus.CREATING) {
                     return toResponse(runner, open.get(), null);
                 }
-                if (previewRepository.markRestarting(runner.getId(), "Restarting the dev server", Instant.now()) == 0) {
+                if (!bounce(projectId, runner, "Restarting the dev server")) {
                     return startPreview(projectId);
                 }
-
-                router.remove(runner.getHostname());
-                bootstrapper.stopDevServer(runner.getPodName());
-                bootstrapper.start(runner.getId(), projectId, false);
                 log.info("User {} restarted preview {} for project {}", userId, runner.getId(), projectId);
 
                 Preview restarted = previewRepository.findById(runner.getId()).orElse(runner);
@@ -194,6 +214,9 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Preview for project", projectId.toString()));
 
         if (ACTIVE.contains(runner.getStatus())) {
+            if (runner.getPodName() == null) {
+                return new PreviewLogsResponse("Waiting for a free runner - nothing has run yet.", true);
+            }
             try {
                 return new PreviewLogsResponse(bootstrapper.readLogs(runner.getPodName()), true);
             } catch (ExternalServiceException e) {
@@ -243,6 +266,19 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
         }
     }
 
+    /**
+     * Reinstalls and restarts a running preview's dev server on behalf of the service itself - the synchronizer,
+     * once it has found package.json is no longer the one that was installed. Re-reads the row under the project's
+     * lock, so a preview stopped or already restarting in the meantime is left alone.
+     */
+    public void restartRunner(Long projectId, Long previewId, String detail) {
+        synchronized (lockFor(projectId)) {
+            previewRepository.findById(previewId)
+                    .filter(runner -> runner.getStatus() == PreviewStatus.RUNNING)
+                    .ifPresent(runner -> bounce(projectId, runner, detail));
+        }
+    }
+
     public Object lockFor(Long projectId) {
         return projectLocks.computeIfAbsent(projectId, id -> new Object());
     }
@@ -251,13 +287,38 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
         return userLocks.computeIfAbsent(userId, id -> new Object());
     }
 
+    private boolean bounce(Long projectId, Preview runner, String detail) {
+        if (previewRepository.markRestarting(runner.getId(), detail, Instant.now()) == 0) return false;
+        router.remove(runner.getHostname());
+        bootstrapper.stopDevServer(runner.getPodName());
+        bootstrapper.start(runner.getId(), projectId);
+        return true;
+    }
+
     private Optional<Preview> activeRunner(Long projectId) {
         Optional<Preview> runner = previewRepository.findFirstByProjectIdAndStatusInOrderByIdDesc(projectId, ACTIVE);
-        if (runner.isPresent() && !runnerPool.isAlive(runner.get().getPodName())) {
-            lifecycle.terminate(runner.get(), "The preview's runner stopped unexpectedly");
+        if (runner.isPresent() && runner.get().getPodName() != null && !runnerPool.isAlive(runner.get().getPodName())) {
+            lifecycle.terminate(runner.get(), RUNNER_GONE);
             return Optional.empty();
         }
         return runner;
+    }
+
+    /**
+     * Ends a running preview whose pod has gone, the moment its owner asks about it. The reaper finds the same
+     * thing, but only on its next sweep - up to a minute in which the tab showed a preview as running over a page
+     * that could only say it was restarting. The cluster not answering is not evidence the pod is gone.
+     */
+    private boolean endIfRunnerGone(Long projectId, Preview runner) {
+        try {
+            if (runnerPool.isAlive(runner.getPodName())) return false;
+        } catch (ExternalServiceException e) {
+            return false;
+        }
+        synchronized (lockFor(projectId)) {
+            lifecycle.terminate(runner, RUNNER_GONE);
+        }
+        return true;
     }
 
     private Preview startRunner(Long projectId, Long userId) {
@@ -265,26 +326,32 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
                 .filter(p -> p.getDeletedAt() == null)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", projectId.toString()));
 
-        Pod pod = runnerPool.claim(projectId).orElseThrow(() -> new CapacityUnavailableException(
-                "Every preview runner is busy right now. Try again in a minute."));
+        Instant now = Instant.now();
+        boolean othersWaiting = previewRepository.countWaitingAhead(Long.MAX_VALUE, now.minus(WAITER_FRESHNESS)) > 0;
+        String podName = othersWaiting ? null
+                : runnerPool.claim(projectId).map(pod -> pod.getMetadata().getName()).orElse(null);
 
         String hostname = previewRepository.findLatestHostname(projectId).orElseGet(() -> newHostname(projectId));
-        Instant now = Instant.now();
         Preview runner = previewRepository.save(Preview.builder()
                 .project(project)
                 .namespace(properties.namespace())
-                .podName(pod.getMetadata().getName())
+                .podName(podName)
                 .hostname(hostname)
                 .previewUrl(properties.urlFor(hostname))
                 .startedByUserId(userId)
                 .status(PreviewStatus.CREATING)
-                .detail("Starting a runner")
+                .detail(podName == null ? WAITING_FOR_RUNNER : STARTING_RUNNER)
                 .startedAt(now)
                 .lastAccessedAt(now)
+                .bootstrapHeartbeatAt(now)
                 .build());
 
-        log.info("Starting preview {} for project {} in pod {}", runner.getId(), projectId, runner.getPodName());
-        bootstrapper.start(runner.getId(), projectId, true);
+        if (podName == null) {
+            log.info("Preview {} for project {} is waiting in line for a runner", runner.getId(), projectId);
+        } else {
+            log.info("Starting preview {} for project {} in pod {}", runner.getId(), projectId, podName);
+        }
+        bootstrapper.start(runner.getId(), projectId);
         return runner;
     }
 
@@ -323,7 +390,7 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
     public void republishRoute(Preview runner) {
         Optional<String> podIp = runnerPool.podIp(runner.getPodName());
         if (podIp.isEmpty()) {
-            lifecycle.terminate(runner, "The preview's runner stopped unexpectedly");
+            lifecycle.terminate(runner, RUNNER_GONE);
             return;
         }
         router.register(runner.getHostname(), podIp.get());
@@ -332,11 +399,15 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
 
     private PreviewResponse toResponse(Preview runner, PreviewSession session, String projectName) {
         boolean open = session.getEndedAt() == null;
-        PreviewStatus status = open ? runner.getStatus()
-                : Boolean.TRUE.equals(session.getFailed()) ? PreviewStatus.FAILED : PreviewStatus.TERMINATED;
-        Instant stopsAt = open && runner.getStatus() == PreviewStatus.RUNNING && session.getLastSeenAt() != null
+        boolean failed = Boolean.TRUE.equals(session.getFailed());
+        PreviewStatus status = open ? runner.getStatus() : failed ? PreviewStatus.FAILED : PreviewStatus.TERMINATED;
+        boolean running = open && runner.getStatus() == PreviewStatus.RUNNING;
+        boolean waiting = open && runner.getStatus() == PreviewStatus.CREATING && runner.getPodName() == null;
+        Instant stopsAt = running && session.getLastSeenAt() != null
                 ? session.getLastSeenAt().plus(properties.idleTimeout())
                 : null;
+        boolean updating = running && (runner.getSyncDetail() != null || !Objects.equals(
+                projectRepository.findCurrentFileRevisionId(session.getProjectId()).orElse(null), runner.getSyncedRevisionId()));
         return new PreviewResponse(
                 session.getId(),
                 session.getProjectId(),
@@ -348,7 +419,11 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
                 open ? runner.getReadyAt() : null,
                 open ? null : session.getEndedAt(),
                 stopsAt,
-                open);
+                open,
+                !open && failed ? runner.getFailureKind() : null,
+                waiting ? previewRepository.countWaitingAhead(runner.getId(), Instant.now().minus(WAITER_FRESHNESS)) + 1 : null,
+                running ? (updating ? PreviewSyncState.UPDATING : PreviewSyncState.UP_TO_DATE) : null,
+                updating ? Optional.ofNullable(runner.getSyncDetail()).orElse(PreviewSynchronizer.APPLYING) : null);
     }
 
     /**
