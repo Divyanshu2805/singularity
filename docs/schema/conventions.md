@@ -34,7 +34,7 @@ Each service's migrations live in `src/main/resources/db/migration/`:
 |---|---|
 | account-service | `V1__init`, `V2__drop_user_password`, `V3__checkout_intents`, `V4__subscription_uniqueness`, `V5__webhook_events_and_event_ordering`, `V6__subscription_sync_and_grace_state` |
 | workspace-service | `V1__init`, `V2__unique_project_file_path`, `V3__preview_bootstrap_heartbeat`, `V4__revision_manifests` |
-| intelligence-service | `V1__init` |
+| intelligence-service | `V1__init`, `V2__teaching_turns_and_step_lessons` |
 
 The rules:
 

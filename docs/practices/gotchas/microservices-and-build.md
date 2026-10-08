@@ -6,6 +6,12 @@
 - **Cause:** `FeignClientInterceptor` attaches the shared-secret header only to paths starting `/internal/`. A client-level `path` prefix hides the path from it.
 - **Fix:** put the full `/internal/v1/...` path on each method, never on the `@FeignClient`. Testing the endpoint with `curl` and the secret proves only the callee; test through the real client.
 
+## The first Feign calls after a restart race each other
+
+- **Symptom:** the first page load after a service restarts fails with a `500`; the log shows `'messageConverters' must not be empty`. A reload works, and it does not happen again until the next restart.
+- **Cause:** Spring Cloud OpenFeign 5.0.2 builds each client's message converters lazily and without a lock: it publishes an empty list and then fills it. Two requests decoding a response for the first time at the same moment — which is what a page load does, because session authentication itself calls account-service through Feign — can see the list while it is still empty.
+- **Fix:** `FeignConverterWarmup`, registered in `CommonLibAutoConfiguration`, asks every Feign client for its converters once at startup, on one thread, before the server accepts traffic. OpenFeign 5.0.3 builds the list safely; the warm-up stays harmless when the build moves to it.
+
 ## Shared `common-lib` SNAPSHOT jar
 
 - **Symptom:** a service fails with `NoClassDefFoundError` for a class you just added to `common-lib` (Mockito reports "Could not modify all classes"), even though the reactor compiled.
@@ -37,3 +43,9 @@
 - **Symptom:** a service started with `./mvnw -pl <service> spring-boot:run` boots with blank secrets.
 - **Cause:** a forked `spring-boot:run` runs in the module's directory, but `.env` is at the repository root.
 - **Fix:** each service's `pom.xml` sets the plugin's `workingDirectory` to the repository root. A new service needs the same setting.
+
+## The Gateway reuses a connection the service has closed
+
+- **Symptom:** now and then a request through the Gateway is a `500` with `Connection prematurely closed BEFORE response` in the Gateway's log, most often the first request after a quiet spell or after a service restarted. On `POST /api/chat/stream` the browser showed "failed" for a build that was in fact running, and Retry was then refused as "already generating".
+- **Cause:** the Gateway pools its connections to each service and by default keeps an idle one for as long as it likes. The service closes idle connections on its own clock, so the Gateway can write a request onto a connection that is already gone.
+- **Fix:** the pool drops a connection idle for 15 seconds and any connection after ten minutes (`spring.cloud.gateway.server.webflux.httpclient.pool` in the Gateway's `application.yaml`). The browser no longer takes a `5xx` on that request at its word either: it asks whether its turn is running and joins it.

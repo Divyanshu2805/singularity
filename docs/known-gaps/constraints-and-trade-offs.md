@@ -9,7 +9,7 @@ Each service keeps its own `SessionCache` and `RateLimiter` counters; workspace-
 - a user's rate-limit budget is multiplied by the instance count;
 - a sign-out eviction reaches only the instances Eureka lists (each cache still expires on its own within 60 seconds);
 - the preview lock no longer serializes starts and stops — it would need a distributed lock, such as Redis `SET NX`;
-- a running generation can only be re-attached on the instance running it.
+- a running generation can only be re-attached on the instance running it, and "one generation per project" is only enforced within an instance.
 
 ## Consistency across services is best-effort
 
@@ -27,10 +27,16 @@ In production the app is `singularity.divyanshuagrahari.dev` and previews are `*
 
 Live previews support React + Vite projects. The pod pool, bootstrapper and routing are almost entirely stack-agnostic; only the runner image, the start-up script, the readiness probe (`/@vite/client`) and the port are specific to Vite. Supporting another stack is a change to those four pieces, not to the pipeline.
 
+Until then every project is React + TypeScript on Vite, created from one starter template, and the build prompt says so: asked for another framework or language, the model writes nothing and asks whether to build the same thing in React; asked for something that needs a server, it builds the front end with its data in the browser and says what is simulated. See [the stack, and requests outside it](../architecture/flows/ai-generation.md#the-stack-and-requests-outside-it).
+
+## The daily allowance is enforced on an estimate, by one instance
+
+While a reply is being written its cost is estimated at four characters a token, since the provider reports the real figure only when the call ends. A turn stopped at the limit is therefore charged that estimate, which can be a little over or under what the provider would have billed, and the meter is capped at the limit so it never reads past it. The holds that keep two calls from claiming the same room are in memory, so they are only shared within one instance of intelligence-service - which a turn in progress already requires.
+
 ## One machine in production
 
 Everything runs on a single node. Losing it means restoring from the nightly backup onto a new machine (about 1–2 hours), and preview start-ups compete with the services for two CPU cores. See [risks and growth](../deployment/risks-and-growth.md).
 
 ## The highest-risk paths are verified by hand
 
-The live-preview pipeline and Stripe billing have no end-to-end automated tests; both are verified manually against real infrastructure. See [testing](../practices/testing.md#what-automated-tests-dont-cover).
+Stripe billing has no end-to-end automated test and is verified manually. The live-preview pipeline has one — `PreviewPipelineIT`, run by CI on a kind cluster — which covers the server and proxy side; what the Preview tab itself does in a browser, and the cases that need two people or a long wait, are still verified by hand. See [testing](../practices/testing.md#what-automated-tests-dont-cover) and the [preview checklist](../local-development/preview-checklist.md).

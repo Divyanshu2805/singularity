@@ -41,3 +41,15 @@
 - **Symptom:** a script that works in a normal shell fails inside the MinIO client container.
 - **Cause:** the `mc` image has no `awk` or `sed` (only shell built-ins plus `cut`, `tr`, `wc` and `date`), and `mc alias set` rejects a secret key shorter than 8 characters before contacting the server.
 - **Fix:** write scripts for that image against those tools only, as the backup and restore scripts are.
+
+## No JDK HTTP client will send a Host header that differs from the address
+
+- **Symptom:** a test that reaches the preview proxy through a port-forward on `127.0.0.1` cannot make it route: the proxy picks the runner by `Host`, and the client either refuses to set the header or silently sends the address instead.
+- **Cause:** `java.net.http.HttpClient` treats `Host` as restricted, and resolving `p12-abc.localhost` is left to the operating system, which does not treat `*.localhost` the same everywhere.
+- **Fix:** write the request over a plain `Socket` (`PreviewPipelineIT.get`). It is twenty lines for a GET and depends on nothing.
+
+## A page the proxy rewrites must not be cacheable
+
+- **Symptom:** after a change to the script the preview proxy injects, a preview on a hostname the browser has seen before goes on behaving the old way - the address shows, back and forward stay grey, a typed address does nothing - while a fresh project works.
+- **Cause:** the dev server sends its HTML with an ETag. The browser revalidates, the dev server answers "not modified", and the browser shows its cached copy, which carries whatever was injected into it when it was cached. A project keeps its preview hostname across restarts, so the cached copy outlives the proxy that made it.
+- **Fix:** the proxy strips `If-None-Match` and `If-Modified-Since` from a page load and sends the rewritten page with no validator and `Cache-Control: no-store` (`proxy/index.js`). `PreviewPipelineIT` asks for the page with both headers and expects it whole. Anything that rewrites a response on the way out owns its caching too.

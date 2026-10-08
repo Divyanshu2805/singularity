@@ -25,6 +25,50 @@ cp .env.example .env
 
 Non-secret settings — ports, the Redis host, preview timeouts, the AI model — live in each service's `application.yaml` and can be overridden with standard Spring environment variables.
 
+### Build turn limits
+
+How long a build turn may wait, and how hard it tries, is `generation.*` in intelligence-service's `application.yaml`. Each can be overridden like any Spring property (`GENERATION_IDLE_TIMEOUT=30s`).
+
+| Property | Default | Meaning |
+|---|---|---|
+| `generation.idle-timeout` | `3m` | Silence on the model's stream before that call is abandoned |
+| `generation.attempt-timeout` | `10m` | The longest one call to the model may run |
+| `generation.turn-timeout` | `20m` | The longest a whole turn may run, across every call it makes |
+| `generation.busy-pause` | `4s` | The first wait after the provider answers `429`; it grows with each retry |
+| `generation.max-continuations` | `2` | How many times a reply that stopped early is carried on |
+| `generation.max-repairs` | `3` | How many times the model is asked to repair what a check of the written files found: an edit that could not be applied, a file that does not parse, an import that does not resolve, an error from the compiler |
+
+What each one does to a turn is in the [AI generation flow](../architecture/flows/ai-generation.md#in-turn-recovery).
+
+### Which model each kind of call uses
+
+Every call uses `spring.ai.openai.chat.options.model` unless its kind says otherwise. Each kind takes a model and a reasoning effort (`ai.calls.<kind>.model`, `ai.calls.<kind>.reasoning-effort`); a kind that sets neither runs as before.
+
+| Kind | What it is | Set by default |
+|---|---|---|
+| `build` | Writing a build turn's reply, or carrying one on | — |
+| `repair` | Mending what a check of the written files found | — |
+| `interview` | The idea interview and its brief | — |
+| `lesson` | A step lesson | `reasoning-effort: low` |
+| `explain` | An explanation or a question about code | — |
+| `suggest` | The next steps offered under a finished build | — |
+
+Reasoning effort is most of the wait for a reply's first word: a model that reasons first sends nothing while it does. Measured on `gemini-3.8-flash` over the twenty benchmark prompts, `ai.calls.build.reasoning-effort=low` took a first build's first word from 9.1 s to 2.4 s with the same twenty of twenty right. The values are the provider's own (`none`, `minimal`, `low`, `medium`, `high`), and a provider refuses one it does not know on the first call - so check a new value with one real turn before deploying it.
+
+### The code check in the preview
+
+Before a build turn is saved, workspace-service type-checks its files in the project's running preview pod (`preview.check.*`). It fails open: no preview, a slow pod or a cluster that cannot be reached means the turn is saved on the static checks alone.
+
+| Property | Default | Meaning |
+|---|---|---|
+| `preview.check.enabled` | `true` | Whether the check runs at all |
+| `preview.check.timeout` | `40s` | The longest the whole check may take before the turn is saved unchecked |
+| `preview.check.max-files` | `80` | A turn that wrote more files than this is not checked |
+| `preview.check.max-total-chars` | `600000` | Nor one whose files are larger than this together |
+| `preview.check.max-problems` | `12` | How many problems are sent back to the model |
+| `preview.check.max-new-packages` | `8` | How many newly added packages are looked up in the npm registry |
+
+
 ### Using Gemini instead of OpenRouter
 
 The AI client speaks the OpenAI API and is pointed at OpenRouter only by configuration, so Google's OpenAI-compatible endpoint works with these lines in `.env` (the key variable keeps its name, only its value changes):

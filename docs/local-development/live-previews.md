@@ -46,21 +46,45 @@ In this setup the backend runs on your machine (`spring-boot:run`) and only the 
 
    If you rebuild the proxy image locally, load it into kind first: `kind load docker-image singularity-proxy:latest --name singularity`.
 
-5. **Expose Redis and the proxy to the backend.** kind has no load balancer, so forward the ports. Either run the helper script in its own terminal (it reconnects automatically):
+5. **Start the backend** as usual. Nothing else needs to be running:
+
+   - workspace-service reaches the cluster through the kubeconfig context named in `preview.kube-context` (`kind-singularity`, what the command in step 1 creates) — not through whichever context `kubectl` currently points at, so an unset or different current context changes nothing. Override it with `PREVIEW_KUBE_CONTEXT` if your cluster has another name.
+   - kind has no load balancer, so Redis (`localhost:6379`) and the preview proxy (`localhost:8090`) have to be forwarded out of the cluster. workspace-service opens both itself at startup (`PreviewPortForwarder`, the `preview.port-forward` block in its `application.yaml`) and re-opens one within a few seconds if its pod is replaced.
+
+   To reach previews while the backend is not running, or with `PREVIEW_PORT_FORWARD_ENABLED=false`, run the helper script in its own terminal instead:
 
    ```bash
    k8s/dev-port-forward.sh     # macOS, Linux, Git Bash
    k8s/dev-port-forward.ps1    # Windows PowerShell
    ```
 
-   or set `preview.port-forward.enabled: true` in workspace-service's `application.yaml` to have the service forward them itself. Use one or the other, not both.
-
-6. **Start the backend** as usual. workspace-service reaches the cluster through your current `kubectl` context.
+   A local port the script already holds is left to it, so running both is harmless.
 
 ## What to expect
 
 - The first start of a preview is dominated by `npm install` and can take up to `preview.boot-timeout`. A warm-pool pod is already scheduled, so the wait is install time, not scheduling time.
+- When both warm pods are claimed, a start waits in line and begins by itself when a pod comes free; the panel says where you stand. Nothing needs pressing.
+- A saved change reaches the preview by itself, and the toolbar says "Updating" until it has and "Up to date" after. A change to `package.json` reinstalls and restarts the dev server on the same pod, also by itself.
+- A start that fails because of the platform — the cluster, Redis, storage, a service restarting — is tried again by the preview panel itself, three times and further apart each time, while it goes on showing "Starting your preview". Only a failure of the project's own code (the install, the dev server, a start that never answers) stops at once, with the runner's output and Try again.
 - Preview URLs look like `http://p<id>-<random>.localhost:8090/?pvt=<token>`. The token is exchanged for a cookie on first load and removed from the URL.
+
+## The proxy image
+
+The Preview tab talks to a small script the proxy injects into the page (`proxy/reporter.js`). After pulling a change to `proxy/`, rebuild the image and restart the proxy, or the tab's newer features - the address bar's back and forward, the console, blank-page detection - have nothing to talk to:
+
+```bash
+docker build -t singularity-proxy:latest proxy
+kind load docker-image singularity-proxy:latest --name singularity
+kubectl --context kind-singularity -n singularity-ai rollout restart deployment/singularity-proxy
+```
+
+## Pre-installed packages, as production has them
+
+`k8s/runner-pods.yml` gives each warm pod an empty `node_modules`, so every local start is a full install. Production seeds it from the runner image (`docker/preview-runner.Dockerfile`). To measure or work with the seeded behaviour locally, the test namespace can be stood up with it: `k8s/preview-test-cluster.sh --context kind-singularity --seed`.
+
+## The real-cluster test
+
+`PreviewPipelineIT` starts a real preview in a namespace of its own on this same cluster and leaves yours alone. See [testing](../practices/testing.md#the-preview-pipeline-test).
 
 ## Debugging
 

@@ -77,7 +77,10 @@ One attempt at running a project live (see the [live preview flow](../architectu
 | `startedByUserId` | Whose plan the preview allowance counts against. |
 | `status` | `PreviewStatus` — see below. |
 | `detail` | While `CREATING`: the step in progress. Once ended: why. |
+| `podName` | The claimed runner pod. **Null while `CREATING` means the start is waiting in line** for a runner; the order of the line is the rows' ids. |
 | `failureLog` | Tail of install/dev-server output on a failed start — the pod is gone by the time anyone reads this, so it has to be captured before that. |
+| `failureKind` | `PreviewFailureKind` — what a failed start died of. Null on rows from before migration V5, for which the browser falls back to reading `detail`. |
+| `syncedRevisionId` / `syncDetail` | The project file revision the runner's files were last brought up to, and the step under way while a newer one is being applied. A running preview is "Updating" while `syncedRevisionId` differs from `PROJECT.currentFileRevisionId` and "Up to date" when they match. Deliberately not a foreign key: it is compared, never joined. |
 | `lastAccessedAt` | Refreshed by `PreviewLifecycle` while the app polls `GET .../preview`. Distinct from the proxy's own Redis-side "seen" tracking of direct browser visits. |
 | `bootstrapOwner` / `bootstrapHeartbeatAt` | Written when a bootstrap claims a `CREATING` row and refreshed on every poll while it runs. On startup, `PreviewReaper` fails a `CREATING` row left over from before only if this heartbeat is missing or older than its own staleness grace period — not unconditionally — so a rolling deployment's new instance doesn't fail a bootstrap another, still-live instance owns. `bootstrapOwner` is a diagnostic label only; the fail/keep decision is judged by heartbeat age, not identity. |
 

@@ -45,6 +45,8 @@ Non-secret settings are set as environment variables or `app-config` entries in 
 | `MINIO_URL` | `http://minio-service:9000` |
 | `EUREKA_SERVER_URL` | `http://discovery-service:8761/eureka/` |
 | `CLIENT_URL` | `https://<app domain>` |
+| `PREVIEW_PORT_FORWARD_ENABLED` | `false` — the local-dev default opens port-forwards into a kind cluster; deployed, Redis and the proxy are reached directly |
+| `PREVIEW_KUBE_CONTEXT` | blank — use the pod's own service account. The local-dev default names the kind cluster's kubeconfig context |
 | `PREVIEW_PUBLIC_SCHEME`, `PREVIEW_PUBLIC_DOMAIN`, `PREVIEW_PUBLIC_PORT` | `https`, the preview root domain, `443` |
 | `FIREBASE_CREDENTIALS_PATH` | `/var/secrets/firebase/sa.json`, mounted from the `firebase-service-account` Secret |
 | `SPRING_JPA_SHOW_SQL` | `false` |

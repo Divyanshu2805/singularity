@@ -26,7 +26,9 @@ An editor's `DELETE` removes only their own membership; only the owner's delete 
 
 | Enum | Values | Notes |
 |---|---|---|
-| `PreviewStatus` | `CREATING`, `RUNNING`, `FAILED`, `TERMINATED` | |
+| `PreviewStatus` | `CREATING`, `RUNNING`, `FAILED`, `TERMINATED` | A `CREATING` row with no pod is waiting in line for a runner. |
+| `PreviewFailureKind` | `INSTALL`, `DEV_SERVER`, `TIMEOUT`, `CAPACITY`, `PLATFORM` | Why a start failed. Only `PLATFORM` is retried by the browser. See [when a start fails](../architecture/flows/live-preview.md#when-a-start-fails). |
+| `PreviewSyncState` | `UP_TO_DATE`, `UPDATING` | Not a column: computed for each response from `Preview.syncedRevisionId` and the project's current revision. |
 | `RevisionStatus` | `STAGING`, `APPLIED`, `FAILED`, `CONFLICT` | See [File revisions](../architecture/file-revisions.md). |
 | `RevisionSource` | `AI_GENERATION`, `MANUAL_EDIT`, `RESTORE` | `MANUAL_EDIT` is supported end to end but nothing produces it yet. |
 | `RevisionChangeType` | `EDIT`, `DELETE` | |
@@ -36,5 +38,5 @@ An editor's `DELETE` removes only their own membership; only the owner's delete 
 | Enum | Values | Notes |
 |---|---|---|
 | `MessageRole` | `USER`, `ASSISTANT`, `SYSTEM`, `TOOL` | |
-| `ChatEventType` | `THOUGHT`, `MESSAGE`, `TODO`, `FILE_EDIT`, `FILE_DELETE`, `LEARN`, `TOOL_LOG`, `ASK` | `ASK` is a question the model put to the user instead of building; a turn that asks writes no files. `THOUGHT` is synthesized (elapsed time), not parsed from the model. A rename or move is a `FILE_EDIT` plus a `FILE_DELETE` of the old path. |
-| `UsageFeature` | `BUILD`, `BUILD_RETRY`, `EXPLAIN`, `IDEA_INTERVIEW`, `PROJECT_NAMING` | Stored on `UsageEvent` as a plain string column, not as this enum. |
+| `ChatEventType` | `THOUGHT`, `MESSAGE`, `TODO`, `FILE_EDIT`, `FILE_PATCH`, `FILE_DELETE`, `LEARN`, `TOOL_LOG`, `ASK`, `THINKING` | `ASK` is a question the model put to the user, instead of building or after the part it could build without the answer. `THOUGHT` is synthesized (elapsed time and how the turn ended), not parsed from the model; `THINKING` is the model's own working-out, from its `<approach>` block. A rename or move is a `FILE_EDIT` plus a `FILE_DELETE` of the old path. `FILE_PATCH` is a change to part of a file as the model wrote it (`<edit>`); it is applied before the turn is saved and is never stored - a saved turn holds the whole resulting file as a `FILE_EDIT`. |
+| `UsageFeature` | `BUILD`, `BUILD_RETRY`, `EXPLAIN`, `IDEA_INTERVIEW`, `PROJECT_NAMING`, `SUGGEST` | Stored on `UsageEvent` as a plain string column, not as this enum. `SUGGEST` is the next steps offered under a finished build. |
