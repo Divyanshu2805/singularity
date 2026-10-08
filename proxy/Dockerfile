@@ -4,7 +4,7 @@ FROM node:20.20.2-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY index.js auth.js routing.js ./
+COPY index.js auth.js routing.js reporter.js ./
 USER node
 # index.js's own default is 80 (root-only); k8s/singularity-proxy.yml overrides PORT to 8080 so the container can
 # run as a non-root user (CODE_REVIEW.md OPS-01) - this EXPOSE reflects that actual deployment, not the code default.

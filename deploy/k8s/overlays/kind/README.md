@@ -28,7 +28,7 @@ for m in discovery gateway account workspace intelligence; do
 done
 docker build -t singularity-preview-proxy:local proxy/
 docker build -f docker/preview-runner.Dockerfile -t singularity-preview-runner:local \
-  workspace-service/src/main/resources/starter-templates/react-vite-tailwind-daisyui-starter
+  workspace-service/src/main/resources/starter-templates/react-vite-tailwind-shadcn-starter
 docker build \
   --build-arg VITE_FIREBASE_API_KEY=<from Firebase console> \
   --build-arg VITE_FIREBASE_AUTH_DOMAIN=singularity-dev0.firebaseapp.com \

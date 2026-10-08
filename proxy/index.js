@@ -4,7 +4,7 @@
  *
  * Handles: looking a hostname's route up in Redis, verifying the signed access token workspace-service appended to
  * the preview URL (CODE_REVIEW.md SEC-06) before proxying either HTTP or websockets to that pod, recording that a
- * preview was visited, rewriting a page load's HTML on the way out to inject the runtime-error reporter, and serving
+ * preview was visited, rewriting a page load's HTML on the way out to inject the reporter (reporter.js), and serving
  * a readable page when there is no route, no valid token, or the runner does not answer.
  *
  * Without the token check, a preview's hostname alone is a permanent, unauthenticated bearer link: this proxy has no
@@ -35,9 +35,15 @@
  * HTTP passes, and the manual proxyReqWs timer covers the websocket pass, which http-proxy never times out itself.
  *
  * The HTML rewrite asks for an uncompressed response, since it has to read the body - the dev server does not
- * compress, but a user's own server might. The injected reporter covers uncaught errors, unhandled rejections and the
- * dev server's compile-error overlay, which is where a syntax error the AI wrote shows up and which never reaches the
- * usual error handler.
+ * compress, but a user's own server might. What the injected reporter does inside the page, and what the status
+ * pages tell the Preview tab about themselves, is reporter.js's.
+ *
+ * A page load is never answered from the browser's cache. The dev server sends its HTML with an ETag, the browser
+ * asked "has it changed?", the dev server said no, and the browser showed the copy it had - with the reporter that
+ * was injected into that copy, however long ago. After the reporter gained back, forward and the address bar, a
+ * preview on a hostname the browser had seen before went on running the old one: the address showed, the buttons
+ * stayed grey and typing an address did nothing. The conditional headers are taken off the request, so the dev
+ * server always sends the page, and the page goes out with no validator and marked not to be stored.
  */
 const http = require('http');
 const { URL } = require('url');
@@ -45,6 +51,7 @@ const httpProxy = require('http-proxy');
 const Redis = require('ioredis');
 const { verifyToken, readCookie, accessCookieHeader, ACCESS_COOKIE_NAME, TOKEN_QUERY_PARAM } = require('./auth');
 const { ROUTER_UNAVAILABLE, classifyMissingRoute } = require('./routing');
+const { injectReporter, statusPageHtml } = require('./reporter');
 
 const redisUrl = process.env.REDIS_URL || 'redis://redis-service:6379';
 const port = Number(process.env.PORT || 80);
@@ -108,7 +115,11 @@ proxy.on('proxyReqWs', (proxyReq, req, socket) => {
     socket.once('close', clear);
 });
 
-htmlProxy.on('proxyReq', (proxyReq) => proxyReq.setHeader('accept-encoding', 'identity'));
+htmlProxy.on('proxyReq', (proxyReq) => {
+    proxyReq.setHeader('accept-encoding', 'identity');
+    proxyReq.removeHeader('if-none-match');
+    proxyReq.removeHeader('if-modified-since');
+});
 
 htmlProxy.on('proxyRes', (proxyRes, req, res) => {
     const type = String(proxyRes.headers['content-type'] || '');
@@ -124,6 +135,9 @@ htmlProxy.on('proxyRes', (proxyRes, req, res) => {
         const headers = { ...proxyRes.headers };
         delete headers['content-length'];
         delete headers['content-encoding'];
+        delete headers.etag;
+        delete headers['last-modified'];
+        headers['cache-control'] = 'no-store';
         headers['content-length'] = Buffer.byteLength(body);
         res.writeHead(proxyRes.statusCode, headers);
         res.end(body);
@@ -158,65 +172,10 @@ const getTargetUrl = (target) => (target.includes(':') ? `http://${target}` : `h
 
 const isPageLoad = (req) => req.method === 'GET' && String(req.headers.accept || '').includes('text/html');
 
-const REPORTER = `<script>(function () {
-  if (window.parent === window) return;
-  var sent = {};
-  function post(type, subType, payload) {
-    try { window.parent.postMessage({ type: type, subType: subType, payload: payload }, '*'); } catch (e) {}
-  }
-  function report(subType, payload) {
-    var key = subType + '|' + payload.message;
-    if (sent[key]) return;
-    sent[key] = true;
-    post('PreviewError', subType, payload);
-  }
-  window.addEventListener('error', function (e) {
-    if (!e.message) return;
-    report('Runtime error', { message: e.message, stack: e.error && e.error.stack, source: e.filename, lineno: e.lineno, colno: e.colno });
-  });
-  window.addEventListener('unhandledrejection', function (e) {
-    var r = e.reason || {};
-    report('Unhandled promise rejection', { message: String(r.message || r), stack: r.stack });
-  });
-  function checkOverlay(node) {
-    if (!node || node.tagName !== 'VITE-ERROR-OVERLAY' || !node.shadowRoot) return;
-    var root = node.shadowRoot;
-    var text = function (sel) { var el = root.querySelector(sel); return el ? el.textContent.trim() : undefined; };
-    report('Build error', { message: text('.message') || 'Build failed', stack: text('.frame') || text('.stack'), source: text('.file') });
-  }
-  new MutationObserver(function (records) {
-    records.forEach(function (r) { r.addedNodes.forEach(checkOverlay); });
-  }).observe(document.documentElement, { childList: true, subtree: true });
-  function location() { post('PreviewLocation', null, { path: window.location.pathname + window.location.search + window.location.hash }); }
-  ['pushState', 'replaceState'].forEach(function (name) {
-    var original = history[name];
-    history[name] = function () { var result = original.apply(this, arguments); location(); return result; };
-  });
-  window.addEventListener('popstate', location);
-  window.addEventListener('hashchange', location);
-  location();
-})();</script>`;
-
-function injectReporter(html) {
-    const head = html.search(/<head[^>]*>/i);
-    if (head === -1) return REPORTER + html;
-    const end = html.indexOf('>', head) + 1;
-    return html.slice(0, end) + REPORTER + html.slice(end);
-}
-
-function statusPage(res, status, title, message, { refreshSeconds } = {}) {
+function statusPage(res, status, title, message, options) {
     if (res.headersSent) return res.end();
-    const refresh = refreshSeconds ? `<meta http-equiv="refresh" content="${refreshSeconds}">` : '';
     res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${refresh}
-<title>${title}</title><style>
-  :root { color-scheme: light dark; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; font: 14px/1.5 system-ui, sans-serif;
-         background: Canvas; color: CanvasText; }
-  main { max-width: 360px; padding: 24px; text-align: center; }
-  h1 { font-size: 16px; font-weight: 600; margin: 0 0 6px; }
-  p { margin: 0; opacity: .7; }
-</style></head><body><main><h1>${title}</h1><p>${message}</p></main></body></html>`);
+    res.end(statusPageHtml(status, title, message, options));
 }
 
 const server = http.createServer(async (req, res) => {
