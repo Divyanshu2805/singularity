@@ -37,19 +37,47 @@ spring:
           stream-usage: true
           max-tokens: 32000
 
+# Which model, and how much reasoning, each kind of call asks for (AiCallProperties, ModelCalls). A kind left out
+# uses the model above with the provider's default reasoning. The kinds are build, repair, interview, lesson, explain
+# and suggest; each takes `model` and `reasoning-effort`. A lesson explains a few changed lines it is handed, so it
+# asks for little reasoning - which is most of the wait for its first word.
+ai:
+  calls:
+    lesson:
+      reasoning-effort: low
+
 usage:
-  # What reserveBudget() claims against the daily counter before a build turn starts (UsageServiceImpl). It is an
-  # admission ticket, not a cap on the turn: the true cost is trued up afterward by reconcileBudget, and a turn that
-  # costs more than this simply leaves less for the next one. It is sized just under what an ordinary two-file build
-  # costs (70,294 tokens observed), so that a plan with a 100,000 allowance still admits a build after an idea
-  # interview has spent a little - at the earlier 150,000 it was capped to the whole allowance, and a build was
-  # only admitted while nothing at all had been used that day. Not spring.ai.openai.chat.options.max-tokens, which is
-  # only the model's output ceiling: a tool-calling turn resends its whole growing conversation on every round, so
-  # input dominates its cost.
+  # How much of the daily allowance a build turn holds for itself while it runs (UsageServiceImpl, BudgetHolds). A hold
+  # keeps another call of the same user from claiming the same room; it is not spending and the meter never shows it.
+  # A turn is granted this much or whatever is free, whichever is less, and its hold grows while there is allowance to
+  # grow into. It used to be added to the day's counter as if spent and corrected afterwards, which made the meter jump
+  # at the start of every build, and a build was refused unless the whole amount was free.
   build-reservation-tokens: 60000
-  # What the idea interview and the code lens reserve - a small fraction of a build, since neither writes files or loops
-  # on tool calls. Reserving the build amount for them made each one demand a whole build's room (UsageServiceImpl).
+  # How much must be free for a build to be admitted at all: enough to send the prompt and the project's files and get
+  # a useful part of an answer back. Below this the request is a 402, and the chat says so before one is typed.
+  build-minimum-tokens: 10000
+  # The same two figures for the idea interview and the code lens, which are a small fraction of a build - neither
+  # writes files or loops on tool calls.
   light-reservation-tokens: 12000
+  light-minimum-tokens: 1500
+
+# The limits a build turn runs inside (GenerationProperties, BuildTurn). Every wait in a turn is bounded: a provider
+# that accepts a request and then sends nothing used to hold the project's one generation slot forever.
+generation:
+  # Silence on the model's stream before its call is abandoned. Generous on purpose - a reasoning model can think for
+  # a minute or more before its first token, and an abandoned reply is still paid for.
+  idle-timeout: 3m
+  # One model call, and the whole turn including every continuation and repair.
+  attempt-timeout: 10m
+  turn-timeout: 20m
+  # The first wait before asking a rate-limited provider again; the second and third waits are two and three times it.
+  busy-pause: 4s
+  # How many times a turn may ask the model to carry on a reply that stopped before it wrote what it planned, and how
+  # many times it may ask for what a check of the written files found to be repaired - an edit that could not be
+  # applied, a file that does not parse, an import that does not resolve, an error from the compiler when the files
+  # are type-checked in the project's running preview. Each is a further model call.
+  max-continuations: 2
+  max-repairs: 3
 
 internal-service:
   shared-secret: ${INTERNAL_SERVICE_SHARED_SECRET}

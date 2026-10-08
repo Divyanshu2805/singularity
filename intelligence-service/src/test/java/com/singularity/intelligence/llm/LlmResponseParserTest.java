@@ -3,6 +3,7 @@ package com.singularity.intelligence.llm;
 import com.singularity.intelligence.entity.ChatEvent;
 import com.singularity.intelligence.entity.ChatMessage;
 import com.singularity.intelligence.enums.ChatEventType;
+import com.singularity.intelligence.llm.LlmResponseParser.ParsedTurn;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -10,194 +11,124 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Covers CODE_REVIEW.md AI-07 and AI-08. AI-07: no-tag, empty, and truncated model output must degrade to an empty
- * or partial event list rather than crash finalization - there is no fixed-index access into a possibly-empty list
- * anywhere in this class today, but that is exactly the kind of thing a refactor could reintroduce silently, so it is
- * pinned here. AI-08: a tag's content must survive a literal occurrence of its own closing tag inside it (the model
- * documenting this very protocol, or an example), and a file the model re-outputs mid-turn must not leave a phantom
- * duplicate entry in the transcript alongside the one that is actually saved.
+ * Covers what the parser adds on top of the protocol's shared cases ({@link GenerationProtocolCasesTest}): the events
+ * it hands to the database, where an answer was cut off, and the tidying of a file's content.
+ *
+ * <p>The regression that matters most is pinned here in the words of the answer that exposed it: a todo app's hook
+ * file, containing {@code useState<Todo[]>}, was discarded whole on every attempt because the generic was read as the
+ * start of a checklist step.
  */
 class LlmResponseParserTest {
 
     private final LlmResponseParser parser = new LlmResponseParser();
     private final ChatMessage parentMessage = ChatMessage.builder().build();
 
-    private List<ChatEvent> parse(String response) {
-        return parser.parseChatEvents(response, parentMessage);
-    }
-
     @Test
-    void emptyResponseProducesNoEvents() {
-        assertThat(parse("")).isEmpty();
-    }
+    void theTodoAppsHookFileIsWrittenEvenThoughItsGenericLooksLikeAChecklistTag() {
+        String answer = """
+                <message>The missing `useTodos` hook is the only blocker - creating it now.</message>
+                <todo path="src/hooks/useTodos.ts">Creating the todos state hook</todo>
+                <file path="src/hooks/useTodos.ts">import { useCallback, useEffect, useState } from "react";
+                import type { Todo } from "../types/todo";
 
-    @Test
-    void responseWithNoRecognizedTagsProducesNoEvents() {
-        assertThat(parse("just some prose with no tags at all")).isEmpty();
-    }
-
-    @Test
-    void aTruncatedFinalTagWithNoClosingTagProducesNoEventForItButDoesNotThrow() {
-        List<ChatEvent> events = parse("<message>Planning the change.</message><file path=\"src/App.tsx\">partial content, cut off");
-
-        assertThat(events).hasSize(1);
-        assertThat(events.getFirst()).extracting(ChatEvent::getType, ChatEvent::getContent)
-                .containsExactly(ChatEventType.MESSAGE, "Planning the change.");
-    }
-
-    @Test
-    void parsesOneOfEachTagWithItsAttributesInOrder() {
-        String response = """
-                <message>Plan.</message>
-                <todo path="src/App.tsx">Wiring up the route</todo>
-                <tool args="src/App.tsx">Reading App.tsx</tool>
-                <file path="src/App.tsx">export const App = () => null;</file>
-                <delete path="src/Old.tsx">No longer needed</delete>
-                <learn path="src/App.tsx" concept="Routing">This wires up the route.</learn>
+                export function useTodos() {
+                  const [todos, setTodos] = useState<Todo[]>(() => []);
+                  return { todos, setTodos };
+                }
+                </file>
+                <message>Created the hook. The import should resolve now.</message>
                 """;
 
-        List<ChatEvent> events = parse(response);
+        List<ChatEvent> events = parser.parseChatEvents(answer, parentMessage);
 
         assertThat(events).extracting(ChatEvent::getType).containsExactly(
-                ChatEventType.MESSAGE, ChatEventType.TODO, ChatEventType.TOOL_LOG,
-                ChatEventType.FILE_EDIT, ChatEventType.FILE_DELETE, ChatEventType.LEARN);
-        assertThat(events.get(3).getFilePath()).isEqualTo("src/App.tsx");
-        assertThat(events.get(3).getContent()).isEqualTo("export const App = () => null;");
-        assertThat(events.get(5).getMetadata()).isEqualTo("Routing");
+                ChatEventType.MESSAGE, ChatEventType.TODO, ChatEventType.FILE_EDIT, ChatEventType.MESSAGE);
+        assertThat(events.get(2).getFilePath()).isEqualTo("src/hooks/useTodos.ts");
+        assertThat(events.get(2).getContent()).contains("useState<Todo[]>(() => [])").endsWith("}\n");
     }
 
     @Test
-    void tagNamesAreCaseInsensitive() {
-        List<ChatEvent> events = parse("<MESSAGE>Hi</MESSAGE><File path=\"a.tsx\">content</File>");
+    void eventsAreNumberedInTheOrderTheyAppearStartingAtOne() {
+        List<ChatEvent> events = parser.parseChatEvents(
+                "<message>Plan.</message><file path=\"a.ts\">a</file><message>Done.</message>", parentMessage);
 
-        assertThat(events).extracting(ChatEvent::getType).containsExactly(ChatEventType.MESSAGE, ChatEventType.FILE_EDIT);
+        assertThat(events).extracting(ChatEvent::getSequenceOrder).containsExactly(1, 2, 3);
+        assertThat(events).allSatisfy(event -> assertThat(event.getChatMessage()).isSameAs(parentMessage));
     }
 
     @Test
-    void aFileContainingItsOwnLiteralClosingTagIsNotCutShort() {
-        // The embedded `</file>` here is a bare closing tag with no matching fake opening tag alongside it - the
-        // case this fix actually closes. An embedded literal *opening* tag can still confuse the boundary (see this
-        // class's own header comment on the documented residual limitation) and is deliberately not exercised here.
-        String response = "<file path=\"docs/Protocol.md\">A generated file always ends with a literal `</file>` "
-                + "tag on its own line.</file><message>Done.</message>";
+    void anAnswerThatIsNullParsesAsEmptyRatherThanThrowing() {
+        ParsedTurn turn = parser.parse(null);
 
-        List<ChatEvent> events = parse(response);
-
-        assertThat(events).hasSize(2);
-        assertThat(events.getFirst().getType()).isEqualTo(ChatEventType.FILE_EDIT);
-        assertThat(events.getFirst().getContent())
-                .isEqualTo("A generated file always ends with a literal `</file>` tag on its own line.");
-        assertThat(events.get(1)).extracting(ChatEvent::getType, ChatEvent::getContent)
-                .containsExactly(ChatEventType.MESSAGE, "Done.");
+        assertThat(turn.events()).isEmpty();
+        assertThat(turn.endsMidBlock()).isFalse();
     }
 
     @Test
-    void aDeleteReasonContainingALiteralClosingTagIsNotCutShort() {
-        String response = "<delete path=\"a.tsx\">replaced, see `</delete>` in the docs</delete>";
+    void anUnclosedFileWithACompleteBlockAfterItIsNotWhereTheAnswerEnded() {
+        ParsedTurn turn = parser.parse("<file path=\"a.ts\">never closed<message>Done.</message>");
 
-        List<ChatEvent> events = parse(response);
-
-        assertThat(events).hasSize(1);
-        assertThat(events.getFirst().getContent()).isEqualTo("replaced, see `</delete>` in the docs");
+        assertThat(turn.events()).extracting(event -> event.type()).containsExactly(ChatEventType.MESSAGE);
+        assertThat(turn.cutOff()).isNotNull();
+        assertThat(turn.endsMidBlock()).isFalse();
     }
 
     @Test
-    void reOutputtingTheSameFileKeepsOnlyTheLastVersion() {
-        String response = "<file path=\"src/App.tsx\">first draft</file>"
-                + "<message>Fixing a typo.</message>"
-                + "<file path=\"src/App.tsx\">final version</file>";
+    void theWordsWrittenOutsideAnyBlockAreHandedBackBesideTheEvents() {
+        ParsedTurn turn = parser.parse(
+                "  Let me look at the hook.\n<tool args=\"a.ts\">Reading 1 file</tool>\nIt is only the hook.\n"
+                        + "<message>Fixing it.</message> ");
 
-        List<ChatEvent> events = parse(response);
-
-        List<ChatEvent> fileEdits = events.stream().filter(e -> e.getType() == ChatEventType.FILE_EDIT).toList();
-        assertThat(fileEdits).hasSize(1);
-        assertThat(fileEdits.getFirst().getContent()).isEqualTo("final version");
-        assertThat(events).extracting(ChatEvent::getType).containsExactly(ChatEventType.MESSAGE, ChatEventType.FILE_EDIT);
+        assertThat(turn.looseText()).isEqualTo("Let me look at the hook.\n\nIt is only the hook.");
+        assertThat(parser.parse("<message>Nothing outside.</message>").looseText()).isEmpty();
+        assertThat(parser.parse("An answer with no tags at all.").looseText()).isEqualTo("An answer with no tags at all.");
     }
 
     @Test
-    void reOutputtingDifferentFilesIsNotTreatedAsADuplicate() {
-        String response = "<file path=\"a.tsx\">a</file><file path=\"b.tsx\">b</file>";
+    void theLooseWordsCanBeAskedForByWhereTheySat() {
+        String answer = "I will add a toggle.\n<todo path=\"a.ts\">Adding it</todo>\nHere it is:\n"
+                + "<file path=\"a.ts\">export const a = 1;</file>\nAdded the toggle.";
+        ParsedTurn turn = parser.parse(answer);
+        int firstStep = turn.events().getFirst().start();
+        int lastStep = turn.events().getLast().end();
 
-        List<ChatEvent> events = parse(response);
-
-        assertThat(events).hasSize(2);
-        assertThat(events).extracting(ChatEvent::getFilePath).containsExactly("a.tsx", "b.tsx");
+        assertThat(turn.looseTextBetween(0, firstStep)).isEqualTo("I will add a toggle.");
+        assertThat(turn.looseTextBetween(lastStep, answer.length())).isEqualTo("Added the toggle.");
+        assertThat(turn.looseTextBetween(firstStep, lastStep)).isEqualTo("Here it is:");
+        assertThat(turn.looseText()).isEqualTo("I will add a toggle.\n\nHere it is:\n\nAdded the toggle.");
     }
 
     @Test
-    void aSecondLearnForTheSamePathIsDroppedButForADifferentPathIsKept() {
-        String response = "<learn path=\"a.tsx\">first</learn><learn path=\"a.tsx\">second</learn><learn path=\"b.tsx\">third</learn>";
-
-        List<ChatEvent> events = parse(response);
-
-        assertThat(events).hasSize(2);
-        assertThat(events).extracting(ChatEvent::getContent).containsExactly("first", "third");
+    void aBlockTheAnswerStoppedInsideIsNotCountedAsLooseWords() {
+        assertThat(parser.parse("Here it is: <file path=\"a.ts\">export const half").looseText()).isEqualTo("Here it is:");
+        assertThat(parser.parse("<file path=\"a.ts\">never closed<message>Done.</message> bye").looseText()).isEqualTo("bye");
+        assertThat(parser.parse("<file path=\"../x.ts\">refused, but a block</file>").looseText()).isEmpty();
     }
 
     @Test
-    void aTagWithNoPathAttributeIsSkippedForFileAndDelete() {
-        List<ChatEvent> events = parse("<file>no path</file><delete>no path either</delete><message>still here</message>");
+    void eachEventRemembersWhereItSatInTheAnswer() {
+        String answer = "<message>Plan.</message><file path=\"a.ts\">a</file>";
 
-        assertThat(events).hasSize(1);
-        assertThat(events.getFirst().getType()).isEqualTo(ChatEventType.MESSAGE);
+        ParsedTurn turn = parser.parse(answer);
+
+        assertThat(answer.substring(turn.events().get(1).start(), turn.events().get(1).end()))
+                .isEqualTo("<file path=\"a.ts\">a</file>");
     }
 
     @Test
-    void checklistStepsBeyondTheCapAreDropped() {
-        StringBuilder response = new StringBuilder();
-        for (int i = 1; i <= 15; i++) {
-            response.append("<todo path=\"f").append(i).append(".tsx\">step ").append(i).append("</todo>");
-        }
-
-        List<ChatEvent> events = parse(response.toString());
-
-        assertThat(events).hasSize(12);
+    void aFilesFirstLineKeepsItsIndentationAndTheFileEndsWithOneLineBreak() {
+        assertThat(LlmResponseParser.fileContent("\n\n  indented:\n    child\n\n\n")).isEqualTo("  indented:\n    child\n");
+        assertThat(LlmResponseParser.fileContent("no trailing newline")).isEqualTo("no trailing newline\n");
+        assertThat(LlmResponseParser.fileContent("   \n \n")).isEmpty();
     }
 
     @Test
-    void aQuestionForTheUserIsParsedWithItsSuggestedAnswers() {
-        List<ChatEvent> events = parse("""
-                <message>I need one thing before I build this.</message>
-                <ask options="Email and password|Google sign-in only|No accounts yet">How should people sign in?</ask>
-                """);
+    void aLessonsConceptsComeFromItsTagAndItsParts() {
+        List<ChatEvent> events = parser.parseChatEvents(
+                "<learn path=\"a.tsx\" concept=\"Props\"><part concept=\"State\">x</part><part concept=\"props\">y</part></learn>",
+                parentMessage);
 
-        assertThat(events).extracting(ChatEvent::getType).containsExactly(ChatEventType.MESSAGE, ChatEventType.ASK);
-        assertThat(events.get(1).getContent()).isEqualTo("How should people sign in?");
-        assertThat(events.get(1).getMetadata()).isEqualTo("Email and password|Google sign-in only|No accounts yet");
-    }
-
-    @Test
-    void aQuestionWithNoSuggestedAnswersIsStillAQuestion() {
-        List<ChatEvent> events = parse("<ask>Which city is this for?</ask>");
-
-        assertThat(events).hasSize(1);
-        assertThat(events.getFirst().getType()).isEqualTo(ChatEventType.ASK);
-        assertThat(events.getFirst().getMetadata()).isNull();
-    }
-
-    @Test
-    void suggestedAnswersAreTrimmedDeduplicatedAndCapped() {
-        List<ChatEvent> events = parse(
-                "<ask options=\" One | Two ||One|Three|Four|Five|Six|Seven \">Pick one?</ask>");
-
-        assertThat(events.getFirst().getMetadata()).isEqualTo("One|Two|Three|Four|Five|Six");
-    }
-
-    @Test
-    void onlyTheFirstThreeQuestionsInATurnAreKept() {
-        List<ChatEvent> events = parse("""
-                <ask options="a|b">One?</ask>
-                <ask options="a|b">Two?</ask>
-                <ask options="a|b">Three?</ask>
-                <ask options="a|b">Four?</ask>
-                """);
-
-        assertThat(events).extracting(ChatEvent::getContent).containsExactly("One?", "Two?", "Three?");
-    }
-
-    @Test
-    void anEmptyQuestionIsDropped() {
-        assertThat(parse("<ask options=\"a|b\">   </ask>")).isEmpty();
+        assertThat(events.getFirst().getMetadata()).isEqualTo("Props, State");
+        assertThat(LlmResponseParser.lessonPartCount(events.getFirst().getContent())).isEqualTo(2);
     }
 }

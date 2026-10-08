@@ -4,6 +4,7 @@ import com.singularity.intelligence.dto.code.AskCodeRequest;
 import com.singularity.intelligence.dto.code.CodeInsightResponse;
 import com.singularity.intelligence.dto.code.CodeNoteResponse;
 import com.singularity.intelligence.dto.code.ExplainCodeRequest;
+import com.singularity.intelligence.dto.code.LessonRequest;
 import com.singularity.intelligence.dto.code.SaveCodeNoteRequest;
 import com.singularity.intelligence.service.CodeInsightService;
 import com.singularity.intelligence.util.SseHeartbeat;
@@ -27,7 +28,7 @@ import java.util.List;
 /**
  * The code lens: explain a selection, then ask follow-up questions about it, and keep the thread.
  *
- * <p>Handles: the explain and ask answers both whole and streamed, and the caller's saved notes - listing them,
+ * <p>Handles: the explain and ask answers both whole and streamed, the streamed lesson on what a build step changed, and the caller's saved notes - listing them,
  * saving one finished exchange, deleting one and clearing them all.
  *
  * <p>The answering endpoints are read-only and can produce text and nothing else. The notes are the thread itself:
@@ -62,6 +63,13 @@ public class CodeInsightController {
             @PathVariable Long projectId,
             @RequestBody @Valid AskCodeRequest request) {
         return asEvents(codeInsightService.streamAsk(projectId, request), projectId);
+    }
+
+    @PostMapping(value = "/lesson/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> streamLesson(
+            @PathVariable Long projectId,
+            @RequestBody @Valid LessonRequest request) {
+        return asEvents(codeInsightService.streamLesson(projectId, request), projectId);
     }
 
     private Flux<ServerSentEvent<String>> asEvents(Flux<String> answer, Long projectId) {

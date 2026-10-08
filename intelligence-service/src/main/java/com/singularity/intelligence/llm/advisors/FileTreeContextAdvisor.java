@@ -3,6 +3,8 @@ package com.singularity.intelligence.llm.advisors;
 import com.singularity.common.dto.FileTreeDto;
 import com.singularity.common.dto.ProjectSummaryDto;
 import com.singularity.intelligence.feign.WorkspaceServiceClient;
+import com.singularity.intelligence.llm.ProjectBrief;
+import com.singularity.intelligence.llm.PromptUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClientRequest;
@@ -18,87 +20,81 @@ import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Puts the project's shape in front of the model before every build turn.
+ * Puts the project's shape in front of the model on every build call.
  *
- * <p>Handles: fetching the file tree and the project summary from workspace-service and inserting them as a system
- * message after the main prompt, so the model knows which files exist without being handed their contents - it reads
- * what it needs with the read tool instead. The tree is written one path per line, sorted; it was once the Java list's
- * own toString(), which spent tokens on record syntax and gave the model nothing it could copy a path from cleanly.
+ * <p>Handles: describing a project - fetching its file tree, the files worth showing whole and the project summary
+ * from workspace-service and handing them to {@link ProjectBrief} - and inserting that description as a system
+ * message after the main prompt.
  *
- * <p>It also passes on any unfinished starter-template problem, telling the model to create the missing scaffolding
- * itself rather than assuming it is there.
+ * <p>The description is made once per turn and passed in with each call ({@link #BRIEF}), so every call of a turn -
+ * the first, a reply being carried on, a repair - sees the same project, and the read tool can be told which files
+ * were already shown. A call that arrives without one is described on the spot.
+ *
+ * <p>A file that cannot be read is left out, never a reason to fail the call: the model can still ask for it.
+ *
+ * <p>It sits after the main prompt, never inside it, because it differs for every project and turn; the long prompt
+ * before it stays identical between calls and can be served from the provider's cache. The message closes with a
+ * short restatement of the output format, so that the format - not a page of source - is the last instruction the
+ * model reads before the request.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class FileTreeContextAdvisor implements StreamAdvisor {
 
+    public static final String BRIEF = "projectBrief";
+    public static final String PROJECT_ID = "projectId";
+
     private final WorkspaceServiceClient workspaceServiceClient;
+
+    public ProjectBrief describe(Long projectId) {
+        return describe(projectId, ProjectBrief.Focus.NONE);
+    }
+
+    public ProjectBrief describe(Long projectId, ProjectBrief.Focus focus) {
+        List<FileTreeDto.Entry> tree = workspaceServiceClient.getFileTree(projectId).entries();
+        ProjectSummaryDto summary = workspaceServiceClient.getProjectSummary(projectId);
+        return ProjectBrief.of(tree, path -> read(projectId, path), summary == null ? null : summary.templateInitIssue(),
+                focus);
+    }
+
+    private String read(Long projectId, String path) {
+        try {
+            return workspaceServiceClient.getFileContent(projectId, path).content();
+        } catch (RuntimeException e) {
+            log.warn("Couldn't read {} of project {} for the prompt - the model can still read it itself", path, projectId, e);
+            return null;
+        }
+    }
 
     @Override
     public Flux<ChatClientResponse> adviseStream(ChatClientRequest request, StreamAdvisorChain streamAdvisorChain) {
-        Map<String, Object> context = request.context();
-        Long projectId = Long.parseLong(context.getOrDefault("projectId", 0).toString());
-
-        ChatClientRequest augmentedChatClientRequest = augmentRequestWithFileTree(request, projectId);
-
-        return streamAdvisorChain.nextStream(augmentedChatClientRequest);
+        return streamAdvisorChain.nextStream(withProjectBrief(request));
     }
 
-    private ChatClientRequest augmentRequestWithFileTree(ChatClientRequest request, Long projectId) {
+    private ChatClientRequest withProjectBrief(ChatClientRequest request) {
+        List<Message> incoming = request.prompt().getInstructions();
+        List<Message> messages = new ArrayList<>(incoming.size() + 1);
 
-        List<Message> incomingMessages = request.prompt().getInstructions();
+        incoming.stream().filter(message -> message.getMessageType() == MessageType.SYSTEM).findFirst().ifPresent(messages::add);
+        messages.add(new SystemMessage(projectContext(briefFor(request))));
+        incoming.stream().filter(message -> message.getMessageType() != MessageType.SYSTEM).forEach(messages::add);
 
-        Message systemMessage = incomingMessages.stream()
-                .filter(m -> m.getMessageType() == MessageType.SYSTEM)
-                .findFirst()
-                .orElse(null);
-
-        List<Message> userMessages = incomingMessages.stream()
-                .filter(m -> m.getMessageType() != MessageType.SYSTEM)
-                .toList();
-
-        List<Message> allMessages = new ArrayList<>();
-
-        if (systemMessage != null) {
-            allMessages.add(systemMessage);
-        }
-
-        List<FileTreeDto.Entry> fileTree = workspaceServiceClient.getFileTree(projectId).entries();
-        StringBuilder fileTreeContext = new StringBuilder("\n\n ---- FILE_TREE ----\n").append(describe(fileTree));
-
-        ProjectSummaryDto summary = workspaceServiceClient.getProjectSummary(projectId);
-        String issue = summary.templateInitIssue();
-        if (issue != null && !issue.isBlank()) {
-            fileTreeContext.append("\n\n ---- NOTICE ----\n")
-                    .append("This project's starter template did not finish setting up correctly: ")
-                    .append(issue)
-                    .append(" If the project seems to be missing expected configuration or scaffold files, ")
-                    .append("create them yourself as needed.");
-        }
-
-        allMessages.add(new SystemMessage(fileTreeContext.toString()));
-
-        allMessages.addAll(userMessages);
-
-        return request
-                .mutate()
-                .prompt(new Prompt(allMessages, request.prompt().getOptions()))
-                .build();
+        return request.mutate().prompt(new Prompt(messages, request.prompt().getOptions())).build();
     }
 
-    static String describe(List<FileTreeDto.Entry> fileTree) {
-        if (fileTree == null || fileTree.isEmpty()) {
-            return "(the project has no files yet)";
+    static String projectContext(String brief) {
+        return brief + PromptUtils.closingReminder();
+    }
+
+    private String briefFor(ChatClientRequest request) {
+        if (request.context().get(BRIEF) instanceof String brief) {
+            return brief;
         }
-        return fileTree.stream()
-                .map(FileTreeDto.Entry::path)
-                .filter(path -> path != null && !path.isBlank())
-                .sorted()
-                .collect(java.util.stream.Collectors.joining("\n"));
+        Long projectId = Long.parseLong(request.context().getOrDefault(PROJECT_ID, 0).toString());
+        return describe(projectId).text();
     }
 
     @Override
@@ -111,4 +107,3 @@ public class FileTreeContextAdvisor implements StreamAdvisor {
         return 0;
     }
 }
-
