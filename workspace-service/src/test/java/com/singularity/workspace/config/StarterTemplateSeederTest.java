@@ -5,12 +5,14 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.StatObjectArgs;
+import io.minio.StatObjectResponse;
 import io.minio.errors.ErrorResponseException;
 import io.minio.messages.ErrorResponse;
 import okhttp3.Request;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.core.io.ClassPathResource;
 
 import java.io.IOException;
 
@@ -25,7 +27,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * Covers {@link StarterTemplateSeeder} against the real checked-in template resources
- * (`starter-templates/react-vite-tailwind-daisyui-starter/`, 15 files per its own MANIFEST.txt) - a fresh MinIO
+ * (`starter-templates/react-vite-tailwind-shadcn-starter/`, 30 files per its own MANIFEST.txt) - a fresh MinIO
  * gets every file uploaded, one already present is skipped, and MinIO being unreachable at any point never stops
  * the service booting. Deliberately not mocking the manifest/classpath resources themselves: this is what proves
  * the real manifest still lists exactly the real files that exist, not a fixture that could silently drift from it.
@@ -33,8 +35,8 @@ import static org.mockito.Mockito.when;
 class StarterTemplateSeederTest {
 
     private static final String TEMPLATE_BUCKET = "starter-projects";
-    private static final String TEMPLATE_NAME = "react-vite-tailwind-daisyui-starter";
-    private static final int TEMPLATE_FILE_COUNT = 15;
+    private static final String TEMPLATE_NAME = "react-vite-tailwind-shadcn-starter";
+    private static final int TEMPLATE_FILE_COUNT = 30;
 
     private final MinioClient minio = mock(MinioClient.class);
     private final StarterTemplateSeeder seeder = new StarterTemplateSeeder(minio, TEMPLATE_BUCKET, TEMPLATE_NAME);
@@ -68,6 +70,78 @@ class StarterTemplateSeederTest {
 
         verify(minio, never()).makeBucket(any(MakeBucketArgs.class));
         verify(minio, never()).putObject(any(PutObjectArgs.class));
+    }
+
+    @Test
+    @DisplayName("replaces a stored file whose content differs from the checked-in template, and only that one")
+    void replacesAFileThatChangedSinceItWasSeeded() throws Exception {
+        when(minio.bucketExists(any(BucketExistsArgs.class))).thenReturn(true);
+        when(minio.statObject(any(StatObjectArgs.class))).thenAnswer(call -> {
+            StatObjectArgs args = call.getArgument(0);
+            byte[] current = new ClassPathResource("starter-templates/" + args.object()).getInputStream().readAllBytes();
+            StatObjectResponse stored = mock(StatObjectResponse.class);
+            boolean isOutdated = args.object().endsWith("src/index.css");
+            when(stored.size()).thenReturn((long) current.length);
+            when(stored.etag()).thenReturn(isOutdated ? "\"00000000000000000000000000000000\"" : '"' + md5(current) + '"');
+            return stored;
+        });
+
+        seeder.run(null);
+
+        ArgumentCaptor<PutObjectArgs> uploaded = ArgumentCaptor.forClass(PutObjectArgs.class);
+        verify(minio, times(1)).putObject(uploaded.capture());
+        assertThat(uploaded.getValue().object()).isEqualTo(TEMPLATE_NAME + "/src/index.css");
+    }
+
+    @Test
+    @DisplayName("replaces a stored file of a different size without needing its checksum")
+    void replacesAFileOfADifferentSize() throws Exception {
+        when(minio.bucketExists(any(BucketExistsArgs.class))).thenReturn(true);
+        StatObjectResponse stored = mock(StatObjectResponse.class);
+        when(stored.size()).thenReturn(3L);
+        when(minio.statObject(any(StatObjectArgs.class))).thenReturn(stored);
+
+        seeder.run(null);
+
+        verify(minio, times(TEMPLATE_FILE_COUNT)).putObject(any(PutObjectArgs.class));
+    }
+
+    @Test
+    @DisplayName("the template is the shadcn/ui kit the build prompt describes, with nothing left of the daisyUI one")
+    void theTemplateIsTheKitThePromptDescribes() throws Exception {
+        String css = template("src/index.css");
+        String home = template("src/pages/Index.tsx");
+
+        assertThat(css).contains("@import \"tailwindcss\"").contains("--primary:").contains("--color-background: var(--background)")
+                .contains(".dark {").doesNotContain("daisyui");
+        assertThat(home).contains("bg-background").contains("text-muted-foreground").doesNotContain("bg-base-100");
+        assertThat(template("src/pages/NotFound.tsx")).contains("@/components/ui/button").doesNotContain("link-primary");
+        assertThat(template("src/lib/utils.ts")).contains("export function cn(");
+        assertThat(template("package.json")).contains("\"tailwind-merge\"").contains("\"@radix-ui/react-dialog\"")
+                .doesNotContain("daisyui").doesNotContain("eslint");
+        assertThat(template("index.html")).doesNotContain("data-theme");
+    }
+
+    @Test
+    @DisplayName("every component the build prompt names is in the template, and every one in the template is named")
+    void theKitsComponentsAreTheOnesTheManifestLists() throws Exception {
+        java.util.List<String> components = template("MANIFEST.txt").lines()
+                .filter(path -> path.startsWith("src/components/ui/"))
+                .map(path -> path.substring("src/components/ui/".length()).replace(".tsx", ""))
+                .toList();
+
+        assertThat(components).containsExactlyInAnyOrder("alert", "avatar", "badge", "button", "card", "checkbox",
+                "dialog", "dropdown-menu", "input", "label", "progress", "select", "separator", "skeleton", "switch",
+                "tabs", "textarea", "tooltip");
+    }
+
+    private static String template(String path) throws IOException {
+        return new String(new ClassPathResource("starter-templates/" + TEMPLATE_NAME + "/" + path)
+                .getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private static String md5(byte[] content) throws Exception {
+        return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("MD5").digest(content));
     }
 
     @Test

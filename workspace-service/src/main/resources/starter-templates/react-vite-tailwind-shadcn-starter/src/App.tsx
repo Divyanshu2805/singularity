@@ -1,17 +1,13 @@
-import "./App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Toaster } from "sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from 'sonner';
 
 function App() {
-
-  const queryClient = new QueryClient();
-
   return (
-    <QueryClientProvider client={queryClient}>
-      <Toaster />
+    <TooltipProvider>
+      <Toaster richColors position="top-center" />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
@@ -19,7 +15,7 @@ function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
-    </QueryClientProvider>
+    </TooltipProvider>
   );
 }
 

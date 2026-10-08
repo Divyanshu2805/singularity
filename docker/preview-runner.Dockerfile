@@ -20,7 +20,7 @@
 #
 # Build context is the starter template's own directory, not the repo root:
 #   docker build -f docker/preview-runner.Dockerfile \
-#     workspace-service/src/main/resources/starter-templates/react-vite-tailwind-daisyui-starter
+#     workspace-service/src/main/resources/starter-templates/react-vite-tailwind-shadcn-starter
 FROM node:20.20.2-alpine
 WORKDIR /opt/template
 COPY package.json ./
