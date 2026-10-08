@@ -21,6 +21,7 @@ import com.singularity.common.error.BadRequestException;
 import com.singularity.common.error.ExternalServiceException;
 import com.singularity.common.error.ResourceNotFoundException;
 import com.stripe.exception.CardException;
+import com.stripe.exception.InvalidRequestException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Invoice;
 import com.stripe.model.Price;
@@ -62,6 +63,12 @@ import java.util.UUID;
  * <p>Checkout-session creation goes through a CheckoutIntent: at most one outstanding intent per user (enforced by
  * its primary key), reused with the same Stripe idempotency key and Session id across double clicks and parallel
  * tabs until it goes stale or targets a different plan, so a retry can never mint a second Stripe session.
+ *
+ * <p>A user's stored Stripe customer can stop existing - deleted in the Stripe dashboard, or created under another
+ * Stripe account's key. Stripe then refuses every checkout for that user with "No such customer", which used to
+ * surface as "temporarily unavailable" for good while a new account worked. Checkout now forgets a customer Stripe
+ * says is missing and asks once more by email, under a fresh idempotency key, since the first key is spent on the
+ * refused request. Only that one answer is treated this way; any other refusal is still a 503.
  *
  * <p>Every webhook delivery is claimed through WebhookEventRepository before its handler runs, by Stripe's own event
  * id: an already-PROCESSED event is skipped outright, one still stuck at RECEIVED (in flight, or its own handler
@@ -128,20 +135,48 @@ public class StripePaymentProcessor implements PaymentProcessor {
                 .putMetadata("user_id", userId.toString())
                 .putMetadata("plan_id", plan.getId().toString());
 
+        String stripeCustomerId = user.getStripeCustomerId();
+        boolean knownCustomer = stripeCustomerId != null && !stripeCustomerId.isEmpty();
+        if (knownCustomer) {
+            params.setCustomer(stripeCustomerId);
+        } else {
+            params.setCustomerEmail(user.getUsername());
+        }
+
         try {
-            String stripeCustomerId = user.getStripeCustomerId();
-            if (stripeCustomerId == null || stripeCustomerId.isEmpty()) {
-                params.setCustomerEmail(user.getUsername());
-            } else {
-                params.setCustomer(stripeCustomerId);
+            return openSession(userId, params.build(), intent.getIdempotencyKey());
+        } catch (StripeException e) {
+            if (!knownCustomer || !isMissingCustomer(e)) {
+                throw new ExternalServiceException("Stripe rejected the checkout session for user " + userId, e);
             }
-            RequestOptions options = RequestOptions.builder().setIdempotencyKey(intent.getIdempotencyKey()).build();
-            Session session = Session.create(params.build(), options);
-            checkoutIntentRepository.recordSession(userId, intent.getIdempotencyKey(), session.getId());
-            return new CheckoutResponse(session.getUrl());
+        }
+
+        log.warn("Stripe no longer has customer {} for user {} - forgetting it and checking out by email",
+                stripeCustomerId, userId);
+        user.setStripeCustomerId(null);
+        userRepository.save(user);
+        String freshKey = UUID.randomUUID().toString();
+        checkoutIntentRepository.replaceKey(userId, intent.getIdempotencyKey(), freshKey);
+        params.setCustomer(null).setCustomerEmail(user.getUsername());
+        try {
+            return openSession(userId, params.build(), freshKey);
         } catch (StripeException e) {
             throw new ExternalServiceException("Stripe rejected the checkout session for user " + userId, e);
         }
+    }
+
+    private CheckoutResponse openSession(Long userId, SessionCreateParams params, String idempotencyKey)
+            throws StripeException {
+        RequestOptions options = RequestOptions.builder().setIdempotencyKey(idempotencyKey).build();
+        Session session = Session.create(params, options);
+        checkoutIntentRepository.recordSession(userId, idempotencyKey, session.getId());
+        return new CheckoutResponse(session.getUrl());
+    }
+
+    static boolean isMissingCustomer(StripeException e) {
+        return e instanceof InvalidRequestException invalid
+                && "resource_missing".equals(invalid.getCode())
+                && "customer".equals(invalid.getParam());
     }
 
     /**
