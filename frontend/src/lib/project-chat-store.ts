@@ -770,7 +770,7 @@ export const projectChat = {
         if (turn) turn.stopped = true;
         cancelStreams.delete(projectId);
         turnsInProgress.delete(projectId);
-        cancel?.();
+        if (typeof cancel === "function") cancel();
         writeFailedPrompt(projectId, null);
 
         update(projectId, (state) => ({
