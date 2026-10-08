@@ -35,6 +35,8 @@
 		<java.version>25</java.version>
 		<org.mapstruct.version>1.6.3</org.mapstruct.version>
 		<spring-ai.version>2.0.0-M1</spring-ai.version>
+		<graalvm.version>25.4.4.1.1</graalvm.version>
+		<babel-parser.version>7.29.9</babel-parser.version>
 		<!-- 2025.1.2 ("Oakwood") is the first Spring Cloud release train compatible with Spring Boot 4.1.0. -->
 		<spring-cloud.version>2025.1.2</spring-cloud.version>
 		<!--

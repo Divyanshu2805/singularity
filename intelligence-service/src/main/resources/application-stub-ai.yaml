@@ -1,0 +1,26 @@
+# The stub-ai profile (StubAiConfig, StubChatModel): every AI call is answered from a script and no provider is
+# contacted. For development, the end-to-end test and demos - never set on anything that deploys.
+#
+#   ./mvnw -pl common-lib,intelligence-service compile spring-boot:run -Dspring-boot.run.profiles=stub-ai
+#
+# The provider's auto-configuration is switched off, so the scripted model is the only one in the context. The key
+# below is not a credential: with the provider off nothing reads it, and it is set only so that a machine with no
+# OPENROUTER_API_KEY at all (a CI job) can still start the service in this profile.
+spring:
+  ai:
+    model:
+      chat: none
+      embedding: none
+      image: none
+      moderation: none
+      audio:
+        speech: none
+        transcription: none
+    openai:
+      api-key: not-used-by-the-stub
+
+ai:
+  stub:
+    # The pause between pieces of a streamed reply. A first build is about 3,500 characters in pieces of 28, so the
+    # default gives a reply that takes a second or two to arrive - long enough to see the chat fill in.
+    chunk-delay: 12ms

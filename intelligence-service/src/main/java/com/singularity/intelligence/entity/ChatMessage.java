@@ -12,10 +12,14 @@ import java.util.List;
 /**
  * One turn of the build chat - a user's message, or the assistant's reply to it.
  *
- * <p>Handles: which session it belongs to, the role, the tokens it cost, when it happened, and the ordered events
- * that make up an assistant turn.
+ * <p>Handles: which session it belongs to, the role, the tokens it cost, when it happened, whether it was asked for in
+ * teaching mode, and the ordered events that make up an assistant turn.
  *
  * <p>An assistant row carries no text content of its own: its events are the record of what it did.
+ *
+ * <p>Teaching mode is recorded on the reply because it belongs to the turn. It used to be a switch in the browser
+ * alone, so turning it on offered a lesson on every step of every earlier turn and a reload forgot which turns had
+ * been taught. Only a reply with the flag set can have lessons written about its steps.
  */
 @Entity
 @Table(name = "chat_messages")
@@ -46,6 +50,9 @@ public class ChatMessage {
     MessageRole role;
 
     Integer tokensUsed;
+
+    @Column(nullable = false)
+    boolean teaching;
 
     @CreationTimestamp
     Instant createdAt;

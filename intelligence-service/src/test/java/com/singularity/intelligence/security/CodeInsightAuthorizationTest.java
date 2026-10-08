@@ -51,7 +51,7 @@ class CodeInsightAuthorizationTest {
     private static final long USER_ID = 7L;
 
     private static final CodeInsightServiceImpl SERVICE =
-            new CodeInsightServiceImpl(null, null, null, null, null, null, null, null);
+            new CodeInsightServiceImpl(null, null, null, null, null, null, null, null, null, null, null);
 
     private final WorkspaceServiceClient workspaceServiceClient = mock(WorkspaceServiceClient.class);
     private final GenericApplicationContext context = new GenericApplicationContext();
@@ -80,6 +80,7 @@ class CodeInsightAuthorizationTest {
     static Stream<Arguments> guardedMethods() {
         return Stream.of(
                 arguments("explain"), arguments("ask"), arguments("streamExplain"), arguments("streamAsk"),
+                arguments("streamLesson"),
                 arguments("getNotes"), arguments("saveNote"), arguments("deleteNote"), arguments("clearNotes"));
     }
 

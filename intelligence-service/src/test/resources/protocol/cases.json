@@ -1,0 +1,916 @@
+[
+  {
+    "name": "an empty answer has no events",
+    "input": "",
+    "events": []
+  },
+  {
+    "name": "prose with no tags has no events",
+    "input": "just some prose with no tags at all",
+    "events": []
+  },
+  {
+    "name": "a single message",
+    "input": "<message>Plan.</message>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "Plan."
+      }
+    ]
+  },
+  {
+    "name": "a message may carry a phase attribute",
+    "input": "<message phase=\"start\">On it.</message>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "On it."
+      }
+    ]
+  },
+  {
+    "name": "one of each tag, in order, with its attributes",
+    "input": "<message>Plan.</message>\n<todo path=\"src/App.tsx\">Wiring up the route</todo>\n<tool args=\"src/App.tsx\">Reading App.tsx</tool>\n<file path=\"src/App.tsx\">export const App = () => null;</file>\n<delete path=\"src/Old.tsx\">No longer needed</delete>\n<learn path=\"src/App.tsx\" concept=\"Routing\">This wires up the route.</learn>\n",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "Plan."
+      },
+      {
+        "type": "TODO",
+        "content": "Wiring up the route",
+        "path": "src/App.tsx"
+      },
+      {
+        "type": "TOOL_LOG",
+        "content": "Reading App.tsx",
+        "metadata": "src/App.tsx"
+      },
+      {
+        "type": "FILE_EDIT",
+        "content": "export const App = () => null;\n",
+        "path": "src/App.tsx"
+      },
+      {
+        "type": "FILE_DELETE",
+        "content": "No longer needed",
+        "path": "src/Old.tsx"
+      },
+      {
+        "type": "LEARN",
+        "content": "This wires up the route.",
+        "path": "src/App.tsx",
+        "metadata": "Routing"
+      }
+    ]
+  },
+  {
+    "name": "a generic named like a tag stays inside the file that holds it",
+    "input": "<message>Adding the hook.</message><todo path=\"src/hooks/useTodos.ts\">Creating the todos state hook</todo><file path=\"src/hooks/useTodos.ts\">import { useCallback, useEffect, useState } from \"react\";\nimport type { Todo } from \"../types/todo\";\n\nexport function useTodos() {\n  const [todos, setTodos] = useState<Todo[]>(() => []);\n  const byId = new Map<string, Todo>();\n  const add = useCallback((title: string): Promise<Todo> => Promise.resolve({ id: \"1\", title }), []);\n  return { todos, add, byId };\n}\n</file><message>Done.</message>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "Adding the hook."
+      },
+      {
+        "type": "TODO",
+        "content": "Creating the todos state hook",
+        "path": "src/hooks/useTodos.ts"
+      },
+      {
+        "type": "FILE_EDIT",
+        "content": "import { useCallback, useEffect, useState } from \"react\";\nimport type { Todo } from \"../types/todo\";\n\nexport function useTodos() {\n  const [todos, setTodos] = useState<Todo[]>(() => []);\n  const byId = new Map<string, Todo>();\n  const add = useCallback((title: string): Promise<Todo> => Promise.resolve({ id: \"1\", title }), []);\n  return { todos, add, byId };\n}\n",
+        "path": "src/hooks/useTodos.ts"
+      },
+      {
+        "type": "MESSAGE",
+        "content": "Done."
+      }
+    ]
+  },
+  {
+    "name": "components and elements named like tags stay inside the file that holds them",
+    "input": "<file path=\"src/components/Chat.tsx\">import { Message } from \"./Message\";\nimport { File, Tool, Ask, Learn, Delete } from \"./icons\";\n\nexport function Chat({ items }: { items: Array<Message> }) {\n  return (\n    <section>\n      <Message text=\"hi\" />\n      <File path=\"docs/readme.md\">Readme</File>\n      <Tool />\n      <Ask>Why?</Ask>\n      <Learn />\n      <Delete />\n      <todo-list></todo-list>\n    </section>\n  );\n}\n</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "import { Message } from \"./Message\";\nimport { File, Tool, Ask, Learn, Delete } from \"./icons\";\n\nexport function Chat({ items }: { items: Array<Message> }) {\n  return (\n    <section>\n      <Message text=\"hi\" />\n      <File path=\"docs/readme.md\">Readme</File>\n      <Tool />\n      <Ask>Why?</Ask>\n      <Learn />\n      <Delete />\n      <todo-list></todo-list>\n    </section>\n  );\n}\n",
+        "path": "src/components/Chat.tsx"
+      }
+    ]
+  },
+  {
+    "name": "a lower-case tag name written inside a file is content, not a block",
+    "input": "<file path=\"public/feed.xml\"><feed>\n  <message>hello</message>\n  <todo>buy milk</todo>\n</feed></file><message>Done.</message>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "<feed>\n  <message>hello</message>\n  <todo>buy milk</todo>\n</feed>\n",
+        "path": "public/feed.xml"
+      },
+      {
+        "type": "MESSAGE",
+        "content": "Done."
+      }
+    ]
+  },
+  {
+    "name": "tag names in upper or mixed case are not tags",
+    "input": "<MESSAGE>Hi</MESSAGE><File path=\"a.tsx\">content</File>",
+    "events": []
+  },
+  {
+    "name": "a hyphenated element that starts with a tag name is not a tag",
+    "input": "Use <todo-list> and <message-box> here.<message>Real one.</message>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "Real one."
+      }
+    ]
+  },
+  {
+    "name": "a message may mention a generic without it being read as a tag",
+    "input": "<message>The hook keeps its list in `useState<Todo[]>` so every component sees the same array.</message>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "The hook keeps its list in `useState<Todo[]>` so every component sees the same array."
+      }
+    ]
+  },
+  {
+    "name": "a file containing a literal closing tag of its own is not cut short",
+    "input": "<file path=\"docs/Protocol.md\">A generated file always ends with a literal `</file>` tag on its own line.</file><message>Done.</message>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "A generated file always ends with a literal `</file>` tag on its own line.\n",
+        "path": "docs/Protocol.md"
+      },
+      {
+        "type": "MESSAGE",
+        "content": "Done."
+      }
+    ]
+  },
+  {
+    "name": "a literal closing tag on a line of its own is still content",
+    "input": "<file path=\"data/files.xml\"><files>\n<file>a.txt\n</file>\n</files></file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "<files>\n<file>a.txt\n</file>\n</files>\n",
+        "path": "data/files.xml"
+      }
+    ]
+  },
+  {
+    "name": "prose the model put between two files does not merge them",
+    "input": "<file path=\"a.ts\">export const a = 1;</file>\nNow the second one:\n<file path=\"b.ts\">export const b = 2;</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "export const a = 1;\n",
+        "path": "a.ts"
+      },
+      {
+        "type": "FILE_EDIT",
+        "content": "export const b = 2;\n",
+        "path": "b.ts"
+      }
+    ]
+  },
+  {
+    "name": "a message that mentions a closing file tag does not reach back into the file before it",
+    "input": "<file path=\"a.ts\">export const a = 1;</file><message>Every file ends with </file> here.</message>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "export const a = 1;\n",
+        "path": "a.ts"
+      },
+      {
+        "type": "MESSAGE",
+        "content": "Every file ends with </file> here."
+      }
+    ]
+  },
+  {
+    "name": "an answer cut off inside a file writes nothing for it and says where it stopped",
+    "input": "<message>Planning the change.</message><file path=\"src/App.tsx\">partial content, cut off",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "Planning the change."
+      }
+    ],
+    "cutOff": {
+      "type": "FILE_EDIT",
+      "path": "src/App.tsx"
+    }
+  },
+  {
+    "name": "an answer cut off inside a message says so",
+    "input": "<file path=\"a.ts\">export const a = 1;</file><message>All done, I have",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "export const a = 1;\n",
+        "path": "a.ts"
+      }
+    ],
+    "cutOff": {
+      "type": "MESSAGE"
+    }
+  },
+  {
+    "name": "a file that never closed does not swallow the file after it",
+    "input": "<file path=\"a.ts\">export const a = 1;\n<file path=\"b.ts\">export const b = 2;</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "export const b = 2;\n",
+        "path": "b.ts"
+      }
+    ]
+  },
+  {
+    "name": "a message left open before a read does not swallow what follows",
+    "input": "<message>Let me look at the hook<tool args=\"src/hooks/useTodos.ts\">Reading 1 file</tool><message>Found it.</message>",
+    "events": [
+      {
+        "type": "TOOL_LOG",
+        "content": "Reading 1 file",
+        "metadata": "src/hooks/useTodos.ts"
+      },
+      {
+        "type": "MESSAGE",
+        "content": "Found it."
+      }
+    ]
+  },
+  {
+    "name": "writing the same file twice keeps only the last version",
+    "input": "<file path=\"src/App.tsx\">first draft</file><message>Fixing a typo.</message><file path=\"src/App.tsx\">final version</file>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "Fixing a typo."
+      },
+      {
+        "type": "FILE_EDIT",
+        "content": "final version\n",
+        "path": "src/App.tsx"
+      }
+    ]
+  },
+  {
+    "name": "two different files are not duplicates of each other",
+    "input": "<file path=\"a.tsx\">a</file><file path=\"b.tsx\">b</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "a\n",
+        "path": "a.tsx"
+      },
+      {
+        "type": "FILE_EDIT",
+        "content": "b\n",
+        "path": "b.tsx"
+      }
+    ]
+  },
+  {
+    "name": "deleting a path and then writing it again keeps the write",
+    "input": "<delete path=\"src/App.tsx\">Starting over</delete><file path=\"src/App.tsx\">export default 1;</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "export default 1;\n",
+        "path": "src/App.tsx"
+      }
+    ]
+  },
+  {
+    "name": "writing a path and then deleting it keeps the delete",
+    "input": "<file path=\"src/Old.tsx\">export default 1;</file><delete path=\"src/Old.tsx\">Not needed after all</delete>",
+    "events": [
+      {
+        "type": "FILE_DELETE",
+        "content": "Not needed after all",
+        "path": "src/Old.tsx"
+      }
+    ]
+  },
+  {
+    "name": "a path is tidied to its stored form wherever it appears",
+    "input": "<todo path=\"./src/App.tsx\">Wiring it up</todo><file path=\"/src/App.tsx\">a</file><file path=\"src\\hooks\\useX.ts\">b</file><delete path=\"./src//Old.tsx\">gone</delete>",
+    "events": [
+      {
+        "type": "TODO",
+        "content": "Wiring it up",
+        "path": "src/App.tsx"
+      },
+      {
+        "type": "FILE_EDIT",
+        "content": "a\n",
+        "path": "src/App.tsx"
+      },
+      {
+        "type": "FILE_EDIT",
+        "content": "b\n",
+        "path": "src/hooks/useX.ts"
+      },
+      {
+        "type": "FILE_DELETE",
+        "content": "gone",
+        "path": "src/Old.tsx"
+      }
+    ]
+  },
+  {
+    "name": "a path that leaves the project is refused, and the rest of the answer is kept",
+    "input": "<file path=\"../secrets.txt\">nope</file><file path=\"src/ok.ts\">export const ok = true;</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "export const ok = true;\n",
+        "path": "src/ok.ts"
+      }
+    ],
+    "rejectedPaths": [
+      "../secrets.txt"
+    ]
+  },
+  {
+    "name": "a file or delete with no path is not a tag",
+    "input": "<file>no path</file><delete>no path either</delete><message>still here</message>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "still here"
+      }
+    ]
+  },
+  {
+    "name": "a file keeps its indentation and ends with one line break",
+    "input": "<file path=\"a.yml\">\n\n  root:\n    child: 1\n\n\n</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "  root:\n    child: 1\n",
+        "path": "a.yml"
+      }
+    ]
+  },
+  {
+    "name": "an empty file stays empty",
+    "input": "<file path=\"src/.gitkeep\">\n</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "",
+        "path": "src/.gitkeep"
+      }
+    ]
+  },
+  {
+    "name": "attributes may be single-quoted",
+    "input": "<file path='src/a.ts'>export const a = 1;</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "export const a = 1;\n",
+        "path": "src/a.ts"
+      }
+    ]
+  },
+  {
+    "name": "an attribute value may contain an angle bracket",
+    "input": "<ask options=\"More than > 10|Fewer\">How many?</ask>",
+    "events": [
+      {
+        "type": "ASK",
+        "content": "How many?",
+        "metadata": "More than > 10|Fewer"
+      }
+    ]
+  },
+  {
+    "name": "a lesson keeps its own markup whole, generics and elements included",
+    "input": "<file path=\"src/App.tsx\">x</file><learn path=\"src/App.tsx\"><summary>The app.</summary><part concept=\"State\"><code>const [todos, setTodos] = useState<Todo[]>([]);</code>Keeps the list.</part><part><code><button type=\"button\"></code>A button.</part></learn>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "x\n",
+        "path": "src/App.tsx"
+      },
+      {
+        "type": "LEARN",
+        "content": "<summary>The app.</summary><part concept=\"State\"><code>const [todos, setTodos] = useState<Todo[]>([]);</code>Keeps the list.</part><part><code><button type=\"button\"></code>A button.</part>",
+        "path": "src/App.tsx",
+        "metadata": "State"
+      }
+    ]
+  },
+  {
+    "name": "only the first lesson for a file is kept",
+    "input": "<learn path=\"a.tsx\">first</learn><learn path=\"a.tsx\">second</learn><learn path=\"b.tsx\">third</learn>",
+    "events": [
+      {
+        "type": "LEARN",
+        "content": "first",
+        "path": "a.tsx"
+      },
+      {
+        "type": "LEARN",
+        "content": "third",
+        "path": "b.tsx"
+      }
+    ]
+  },
+  {
+    "name": "checklist steps beyond the cap are dropped",
+    "input": "<todo path=\"f1.tsx\">step 1</todo><todo path=\"f2.tsx\">step 2</todo><todo path=\"f3.tsx\">step 3</todo><todo path=\"f4.tsx\">step 4</todo><todo path=\"f5.tsx\">step 5</todo><todo path=\"f6.tsx\">step 6</todo><todo path=\"f7.tsx\">step 7</todo><todo path=\"f8.tsx\">step 8</todo><todo path=\"f9.tsx\">step 9</todo><todo path=\"f10.tsx\">step 10</todo><todo path=\"f11.tsx\">step 11</todo><todo path=\"f12.tsx\">step 12</todo><todo path=\"f13.tsx\">step 13</todo><todo path=\"f14.tsx\">step 14</todo><todo path=\"f15.tsx\">step 15</todo>",
+    "events": [
+      {
+        "type": "TODO",
+        "content": "step 1",
+        "path": "f1.tsx"
+      },
+      {
+        "type": "TODO",
+        "content": "step 2",
+        "path": "f2.tsx"
+      },
+      {
+        "type": "TODO",
+        "content": "step 3",
+        "path": "f3.tsx"
+      },
+      {
+        "type": "TODO",
+        "content": "step 4",
+        "path": "f4.tsx"
+      },
+      {
+        "type": "TODO",
+        "content": "step 5",
+        "path": "f5.tsx"
+      },
+      {
+        "type": "TODO",
+        "content": "step 6",
+        "path": "f6.tsx"
+      },
+      {
+        "type": "TODO",
+        "content": "step 7",
+        "path": "f7.tsx"
+      },
+      {
+        "type": "TODO",
+        "content": "step 8",
+        "path": "f8.tsx"
+      },
+      {
+        "type": "TODO",
+        "content": "step 9",
+        "path": "f9.tsx"
+      },
+      {
+        "type": "TODO",
+        "content": "step 10",
+        "path": "f10.tsx"
+      },
+      {
+        "type": "TODO",
+        "content": "step 11",
+        "path": "f11.tsx"
+      },
+      {
+        "type": "TODO",
+        "content": "step 12",
+        "path": "f12.tsx"
+      }
+    ]
+  },
+  {
+    "name": "a question is read with its suggested answers",
+    "input": "<message>I need one thing before I build this.</message>\n<ask options=\"Email and password|Google sign-in only|No accounts yet\">How should people sign in?</ask>\n",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "I need one thing before I build this."
+      },
+      {
+        "type": "ASK",
+        "content": "How should people sign in?",
+        "metadata": "Email and password|Google sign-in only|No accounts yet"
+      }
+    ]
+  },
+  {
+    "name": "a question with no suggested answers is still a question",
+    "input": "<ask>Which city is this for?</ask>",
+    "events": [
+      {
+        "type": "ASK",
+        "content": "Which city is this for?"
+      }
+    ]
+  },
+  {
+    "name": "suggested answers are trimmed, deduplicated and capped",
+    "input": "<ask options=\" One | Two ||One|Three|Four|Five|Six|Seven \">Pick one?</ask>",
+    "events": [
+      {
+        "type": "ASK",
+        "content": "Pick one?",
+        "metadata": "One|Two|Three|Four|Five|Six"
+      }
+    ]
+  },
+  {
+    "name": "only the first three questions in an answer are kept",
+    "input": "<ask options=\"a|b\">One?</ask>\n<ask options=\"a|b\">Two?</ask>\n<ask options=\"a|b\">Three?</ask>\n<ask options=\"a|b\">Four?</ask>\n",
+    "events": [
+      {
+        "type": "ASK",
+        "content": "One?",
+        "metadata": "a|b"
+      },
+      {
+        "type": "ASK",
+        "content": "Two?",
+        "metadata": "a|b"
+      },
+      {
+        "type": "ASK",
+        "content": "Three?",
+        "metadata": "a|b"
+      }
+    ]
+  },
+  {
+    "name": "an empty question, step or message is dropped",
+    "input": "<ask options=\"a|b\">   </ask><todo path=\"a.ts\">  </todo><message>\n</message>",
+    "events": []
+  },
+  {
+    "name": "a delete reason containing a literal closing tag is not cut short",
+    "input": "<delete path=\"a.tsx\">replaced, see `</delete>` in the docs</delete>",
+    "events": [
+      {
+        "type": "FILE_DELETE",
+        "content": "replaced, see `</delete>` in the docs",
+        "path": "a.tsx"
+      }
+    ]
+  },
+  {
+    "name": "narration outside the tags is not an event",
+    "input": "The hook file is missing, so I will check how it is used.<tool args=\"src/pages/Index.tsx,src/types/todo.ts\">Reading 2 files</tool>It is only the hook.<message>Creating the missing hook now.</message><file path=\"src/hooks/useTodos.ts\">export const useTodos = () => [];</file>",
+    "events": [
+      {
+        "type": "TOOL_LOG",
+        "content": "Reading 2 files",
+        "metadata": "src/pages/Index.tsx,src/types/todo.ts"
+      },
+      {
+        "type": "MESSAGE",
+        "content": "Creating the missing hook now."
+      },
+      {
+        "type": "FILE_EDIT",
+        "content": "export const useTodos = () => [];\n",
+        "path": "src/hooks/useTodos.ts"
+      }
+    ]
+  },
+  {
+    "name": "a path holding a space other than the plain one is refused, whichever kind it is",
+    "input": "<file path=\"src/App.tsx\u00a0\">a</file><file path=\"\u2003src/B.tsx\">b</file><file path=\"src/C\u2007.tsx\">c</file><file path=\"\u001fsrc/D.tsx\">d</file><delete path=\"src/E.tsx\u2028\">gone</delete><file path=\"src/my file.ts\">export const ok = true;</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "export const ok = true;\n",
+        "path": "src/my file.ts"
+      }
+    ],
+    "rejectedPaths": [
+      "src/App.tsx\u00a0",
+      "\u2003src/B.tsx",
+      "src/C\u2007.tsx",
+      "\u001fsrc/D.tsx",
+      "src/E.tsx\u2028"
+    ]
+  },
+  {
+    "name": "a path that is nothing but an odd space is a refused path, and one that is only plain spaces is not a tag",
+    "input": "<file path=\"\u00a0\">a</file><file path=\" \t \">b</file><message>still here</message>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "still here"
+      }
+    ],
+    "rejectedPaths": [
+      "\u00a0"
+    ]
+  },
+  {
+    "name": "a path is trimmed of plain spaces only, at its ends only",
+    "input": "<file path=\" \tsrc/my file.ts\n \">a</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "a\n",
+        "path": "src/my file.ts"
+      }
+    ]
+  },
+  {
+    "name": "only the plain spaces are trimmed from text, suggested answers and lesson concepts",
+    "input": "<message> \t\u00a0Hi\u00a0\n </message><ask options=\"\u00a0One\u00a0 | \tTwo\n\">Pick one?\u2003</ask><learn path=\"a.tsx\" concept=\"\u00a0State ,  hooks\">Body.</learn>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "\u00a0Hi\u00a0"
+      },
+      {
+        "type": "ASK",
+        "content": "Pick one?\u2003",
+        "metadata": "\u00a0One\u00a0|Two"
+      },
+      {
+        "type": "LEARN",
+        "content": "Body.",
+        "path": "a.tsx",
+        "metadata": "\u00a0State hooks"
+      }
+    ]
+  },
+  {
+    "name": "the model's working-out is a block of its own, ahead of the answer",
+    "input": "<approach>One page, so no router.\nTasks live in localStorage.</approach>\n<message>Starting with the list.</message>",
+    "events": [
+      {
+        "type": "THINKING",
+        "content": "One page, so no router.\nTasks live in localStorage."
+      },
+      {
+        "type": "MESSAGE",
+        "content": "Starting with the list."
+      }
+    ]
+  },
+  {
+    "name": "a think block a model writes unprompted is read as the same working-out",
+    "input": "<think>The user wants a list.</think><message>Starting with the list.</message>",
+    "events": [
+      {
+        "type": "THINKING",
+        "content": "The user wants a list."
+      },
+      {
+        "type": "MESSAGE",
+        "content": "Starting with the list."
+      }
+    ]
+  },
+  {
+    "name": "working-out with nothing in it is not an event",
+    "input": "<think> \n </think><message>Hi.</message>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "Hi."
+      }
+    ]
+  },
+  {
+    "name": "a think tag inside a file is that file's content",
+    "input": "<file path=\"src/a.ts\">const t = \"<think>x</think>\";</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "const t = \"<think>x</think>\";\n",
+        "path": "src/a.ts"
+      }
+    ]
+  },
+  {
+    "name": "an answer that stops inside its working-out is cut off there",
+    "input": "<think>Working out where the data",
+    "events": [],
+    "cutOff": {
+      "type": "THINKING"
+    }
+  },
+  {
+    "name": "a lesson written before its file keeps its two parts whole and its concept",
+    "input": "<todo path=\"src/task.ts\">Describing a task</todo>\n<learn path=\"src/task.ts\" concept=\"Types\">\n<what>We write down what a task is.</what>\n<why>Every other file needs to agree on it.</why>\n</learn>\n<file path=\"src/task.ts\">export type Task = { id: string };</file>",
+    "events": [
+      {
+        "type": "TODO",
+        "content": "Describing a task",
+        "path": "src/task.ts"
+      },
+      {
+        "type": "LEARN",
+        "content": "<what>We write down what a task is.</what>\n<why>Every other file needs to agree on it.</why>",
+        "path": "src/task.ts",
+        "metadata": "Types"
+      },
+      {
+        "type": "FILE_EDIT",
+        "content": "export type Task = { id: string };\n",
+        "path": "src/task.ts"
+      }
+    ]
+  },
+  {
+    "name": "a question may come after the files a turn wrote",
+    "input": "<todo path=\"src/a.ts\">Adding the list</todo><file path=\"src/a.ts\">export const a = 1;</file><message>The list is in.</message><ask options=\"Cards|A table\">How should orders be shown?</ask>",
+    "events": [
+      {
+        "type": "TODO",
+        "content": "Adding the list",
+        "path": "src/a.ts"
+      },
+      {
+        "type": "FILE_EDIT",
+        "content": "export const a = 1;\n",
+        "path": "src/a.ts"
+      },
+      {
+        "type": "MESSAGE",
+        "content": "The list is in."
+      },
+      {
+        "type": "ASK",
+        "content": "How should orders be shown?",
+        "metadata": "Cards|A table"
+      }
+    ]
+  },
+  {
+    "name": "an edit to part of a file keeps its blocks as written",
+    "input": "<message>Changing the constant.</message><todo path=\"src/a.ts\">Raising the limit</todo><edit path=\"src/a.ts\">\n<<<<<<< SEARCH\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> REPLACE\n</edit><message>Done.</message>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "Changing the constant."
+      },
+      {
+        "type": "TODO",
+        "content": "Raising the limit",
+        "path": "src/a.ts"
+      },
+      {
+        "type": "FILE_PATCH",
+        "content": "<<<<<<< SEARCH\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> REPLACE\n",
+        "path": "src/a.ts"
+      },
+      {
+        "type": "MESSAGE",
+        "content": "Done."
+      }
+    ]
+  },
+  {
+    "name": "a generic or a tag name inside an edit stays inside it",
+    "input": "<edit path=\"src/hooks/useTodos.ts\">\n<<<<<<< SEARCH\n  const [todos, setTodos] = useState<Todo[]>([]);\n=======\n  const [todos, setTodos] = useState<Todo[]>(() => load());\n  const note = \"<message>not a tag</message>\";\n>>>>>>> REPLACE\n</edit><message>Done.</message>",
+    "events": [
+      {
+        "type": "FILE_PATCH",
+        "content": "<<<<<<< SEARCH\n  const [todos, setTodos] = useState<Todo[]>([]);\n=======\n  const [todos, setTodos] = useState<Todo[]>(() => load());\n  const note = \"<message>not a tag</message>\";\n>>>>>>> REPLACE\n",
+        "path": "src/hooks/useTodos.ts"
+      },
+      {
+        "type": "MESSAGE",
+        "content": "Done."
+      }
+    ]
+  },
+  {
+    "name": "two edits to one path are both kept, in order",
+    "input": "<edit path=\"src/a.ts\">\n<<<<<<< SEARCH\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> REPLACE\n</edit>\n<edit path=\"src/a.ts\">\n<<<<<<< SEARCH\nconst b = 1;\n=======\nconst b = 2;\n>>>>>>> REPLACE\n</edit>",
+    "events": [
+      {
+        "type": "FILE_PATCH",
+        "content": "<<<<<<< SEARCH\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> REPLACE\n",
+        "path": "src/a.ts"
+      },
+      {
+        "type": "FILE_PATCH",
+        "content": "<<<<<<< SEARCH\nconst b = 1;\n=======\nconst b = 2;\n>>>>>>> REPLACE\n",
+        "path": "src/a.ts"
+      }
+    ]
+  },
+  {
+    "name": "an edit after the same file was written whole is kept beside it",
+    "input": "<file path=\"src/a.ts\">const a = 1;\nconst b = 1;</file>\n<edit path=\"src/a.ts\">\n<<<<<<< SEARCH\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> REPLACE\n</edit>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "const a = 1;\nconst b = 1;\n",
+        "path": "src/a.ts"
+      },
+      {
+        "type": "FILE_PATCH",
+        "content": "<<<<<<< SEARCH\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> REPLACE\n",
+        "path": "src/a.ts"
+      }
+    ]
+  },
+  {
+    "name": "an edit is dropped when the same file is written whole after it",
+    "input": "<edit path=\"src/a.ts\">\n<<<<<<< SEARCH\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> REPLACE\n</edit>\n<file path=\"src/a.ts\">const a = 3;</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "const a = 3;\n",
+        "path": "src/a.ts"
+      }
+    ]
+  },
+  {
+    "name": "an edit is dropped when the same file is deleted after it, and one to another path is not",
+    "input": "<edit path=\"src/a.ts\">\n<<<<<<< SEARCH\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> REPLACE\n</edit><edit path=\"src/b.ts\">\n<<<<<<< SEARCH\nconst b = 1;\n=======\nconst b = 2;\n>>>>>>> REPLACE\n</edit><delete path=\"src/a.ts\">Unused</delete>",
+    "events": [
+      {
+        "type": "FILE_PATCH",
+        "content": "<<<<<<< SEARCH\nconst b = 1;\n=======\nconst b = 2;\n>>>>>>> REPLACE\n",
+        "path": "src/b.ts"
+      },
+      {
+        "type": "FILE_DELETE",
+        "content": "Unused",
+        "path": "src/a.ts"
+      }
+    ]
+  },
+  {
+    "name": "an edit with no path is not a tag",
+    "input": "<message>Nothing to change.</message><edit>\n<<<<<<< SEARCH\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> REPLACE\n</edit>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "Nothing to change."
+      }
+    ]
+  },
+  {
+    "name": "an edit whose path leaves the project is refused",
+    "input": "<edit path=\"../outside.ts\">\n<<<<<<< SEARCH\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> REPLACE\n</edit><message>Done.</message>",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "Done."
+      }
+    ],
+    "rejectedPaths": [
+      "../outside.ts"
+    ]
+  },
+  {
+    "name": "an answer cut off inside an edit changes nothing for it and says where it stopped",
+    "input": "<message>Changing it.</message><edit path=\"src/a.ts\">\n<<<<<<< SEARCH\nconst a = 1;\n=======\nconst a",
+    "events": [
+      {
+        "type": "MESSAGE",
+        "content": "Changing it."
+      }
+    ],
+    "cutOff": {
+      "type": "FILE_PATCH",
+      "path": "src/a.ts"
+    }
+  },
+  {
+    "name": "a file's closing tag is found when an edit follows it, and the edit's when a file follows",
+    "input": "<file path=\"src/a.ts\">const a = 1;</file>\n<edit path=\"src/b.ts\">\n<<<<<<< SEARCH\nconst b = 1;\n=======\nconst b = 2;\n>>>>>>> REPLACE\n</edit>\n<file path=\"src/c.ts\">const c = \"</edit>\";</file>",
+    "events": [
+      {
+        "type": "FILE_EDIT",
+        "content": "const a = 1;\n",
+        "path": "src/a.ts"
+      },
+      {
+        "type": "FILE_PATCH",
+        "content": "<<<<<<< SEARCH\nconst b = 1;\n=======\nconst b = 2;\n>>>>>>> REPLACE\n",
+        "path": "src/b.ts"
+      },
+      {
+        "type": "FILE_EDIT",
+        "content": "const c = \"</edit>\";\n",
+        "path": "src/c.ts"
+      }
+    ]
+  }
+]

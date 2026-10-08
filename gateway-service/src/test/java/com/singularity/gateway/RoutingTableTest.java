@@ -92,6 +92,7 @@ class RoutingTableTest {
                         "/api/chat/projects/7/active",
                         "/api/chat/projects/7/active/stream",
                         "/api/chat/projects/7/active/stop",
+                        "/api/chat/projects/7/suggestions",
                         "/api/ideas/clarify",
                         "/api/ideas/compile",
                         "/api/usage/today",
@@ -104,6 +105,7 @@ class RoutingTableTest {
                         "/api/projects/7/code/explain/stream",
                         "/api/projects/7/code/ask",
                         "/api/projects/7/code/ask/stream",
+                        "/api/projects/7/code/lesson/stream",
                         "/api/projects/7/code/notes",
                         "/api/projects/7/code/notes/3"),
                 NO_ROUTE, List.of(

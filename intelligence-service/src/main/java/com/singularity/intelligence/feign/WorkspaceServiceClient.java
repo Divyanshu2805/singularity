@@ -1,11 +1,14 @@
 package com.singularity.intelligence.feign;
 
+import com.singularity.common.dto.CodeCheckRequest;
+import com.singularity.common.dto.CodeCheckResponse;
 import com.singularity.common.dto.FileContentDto;
 import com.singularity.common.dto.FileTreeDto;
 import com.singularity.common.dto.ProjectMembershipDto;
 import com.singularity.common.dto.ProjectSummaryDto;
 import com.singularity.common.dto.PublishRevisionRequest;
 import com.singularity.common.dto.PublishRevisionResponse;
+import feign.Request;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,6 +47,9 @@ public interface WorkspaceServiceClient {
 
     @PostMapping("/internal/v1/projects/{projectId}/revisions")
     PublishRevisionResponse publishRevision(@PathVariable Long projectId, @RequestBody PublishRevisionRequest request);
+
+    @PostMapping("/internal/v1/projects/{projectId}/code-check")
+    CodeCheckResponse checkCode(@PathVariable Long projectId, @RequestBody CodeCheckRequest request, Request.Options options);
 
     @GetMapping("/internal/v1/projects/owned-count")
     int getOwnedProjectCount(@RequestParam Long userId);
