@@ -7,18 +7,25 @@ import com.singularity.intelligence.dto.code.CodeInsightResponse;
 import com.singularity.intelligence.dto.code.CodeNoteResponse;
 import com.singularity.intelligence.dto.code.CodeNoteSelection;
 import com.singularity.intelligence.dto.code.ExplainCodeRequest;
+import com.singularity.intelligence.dto.code.LessonRequest;
 import com.singularity.intelligence.dto.code.SaveCodeNoteRequest;
 import com.singularity.intelligence.dto.usage.UsageReservation;
+import com.singularity.intelligence.entity.ChatEvent;
+import com.singularity.intelligence.entity.ChatMessage;
 import com.singularity.intelligence.entity.CodeNote;
+import com.singularity.intelligence.enums.AiCallKind;
 import com.singularity.intelligence.enums.UsageFeature;
 import com.singularity.common.error.BadRequestException;
 import com.singularity.common.error.ResourceNotFoundException;
 import com.singularity.intelligence.feign.WorkspaceServiceClient;
 import com.singularity.intelligence.llm.AiUsageRecorder;
 import com.singularity.intelligence.llm.CodeInsightPrompts;
+import com.singularity.intelligence.llm.ModelCalls;
 import com.singularity.intelligence.llm.NarrationFilter;
 import com.singularity.intelligence.llm.tools.CodeGenerationTools;
 import com.singularity.intelligence.mapper.CodeNoteMapper;
+import com.singularity.intelligence.repository.ChatEventRepository;
+import com.singularity.intelligence.repository.ChatMessageRepository;
 import com.singularity.intelligence.repository.CodeNoteRepository;
 import com.singularity.common.security.AuthUtil;
 import com.singularity.intelligence.service.CodeInsightService;
@@ -31,6 +38,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,11 +55,20 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>Handles: building the prompts, checking the daily token budget before each answer, running the model with the
  * read-only file tool, streaming answers through the narration filter, recording usage with the caller captured on
- * the request thread, and the note reads and writes - each scoped to the caller as well as the project.
+ * the request thread, the note reads and writes - each scoped to the caller as well as the project - and teaching
+ * mode's lesson on a step of a saved turn.
  *
- * <p>Read-only by construction: the only tool given here reads files, and the prompts never mention the file-writing
- * protocol. Do not add a write-capable tool, and do not inline whole files into the prompt instead of letting the
- * model read on demand - that is also what keeps a large project from flooding the context.
+ * <p>Read-only by construction: the only tool given here reads files (a step lesson is given none), and the prompts
+ * never mention the file-writing protocol. Do not add a write-capable tool, and do not inline whole files into the
+ * prompt instead of letting the model read on demand - that is also what keeps a large project from flooding the
+ * context. A step lesson is the one bounded exception: it is given the lines one step changed in one file.
+ *
+ * <p>A step lesson is written from the caller's own saved conversation, and the browser names only which step. The
+ * file edit is found by its id, the project and the caller together; its turn must have been asked for in teaching
+ * mode; what it changed is the difference between the version the turn saved and the one it replaced, both of which
+ * the edit carries. The finished lesson is kept on the edit, so it is written and paid for once: opening the step
+ * again, in this session or any later one, returns the kept text without calling the model or touching the budget.
+ * A lesson whose stream was cut short is not kept, since half a lesson would then be the lesson for good.
  */
 @Service
 @RequiredArgsConstructor
@@ -63,11 +80,14 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     private static final int MAX_LISTED_FILES = 400;
 
     private final ChatClient chatClient;
+    private final ModelCalls modelCalls;
     private final AiUsageRecorder aiUsageRecorder;
     private final WorkspaceServiceClient workspaceServiceClient;
     private final ProjectFileReader projectFileReader;
     private final UsageService usageService;
     private final CodeNoteRepository codeNoteRepository;
+    private final ChatEventRepository chatEventRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final CodeNoteMapper codeNoteMapper;
     private final AuthUtil authUtil;
 
@@ -108,14 +128,67 @@ public class CodeInsightServiceImpl implements CodeInsightService {
                 List.of(new UserMessage(CodeInsightPrompts.selectionBlock(
                         request.path(), request.startLine(), request.endLine(), request.code()))),
                 projectId,
-                "code explanation");
+                "code explanation",
+                true,
+                AiCallKind.EXPLAIN);
     }
 
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
     public Flux<String> streamAsk(Long projectId, AskCodeRequest request) {
         UsageReservation reservation = usageService.reserveBudget(UsageFeature.EXPLAIN);
-        return streamModel(reservation, CodeInsightPrompts.askSystemPrompt(), askMessages(projectId, request), projectId, "code question");
+        return streamModel(reservation, CodeInsightPrompts.askSystemPrompt(), askMessages(projectId, request), projectId, "code question", true, AiCallKind.EXPLAIN);
+    }
+
+    @Override
+    @PreAuthorize("@security.canViewProject(#projectId)")
+    public Flux<String> streamLesson(Long projectId, LessonRequest request) {
+        Long userId = authUtil.getCurrentUserId();
+        ChatEvent edit = chatEventRepository.findOwnFileEdit(request.eventId(), projectId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Build step", String.valueOf(request.eventId())));
+        ChatMessage turn = edit.getChatMessage();
+        if (!turn.isTeaching()) {
+            throw new BadRequestException("This step wasn't built in teaching mode, so it has no lesson.");
+        }
+        if (edit.getLesson() != null && !edit.getLesson().isBlank()) {
+            return Flux.just(edit.getLesson());
+        }
+
+        String asked = chatMessageRepository.findRequestsBefore(projectId, userId, turn.getId(), PageRequest.of(0, 1))
+                .stream().findFirst().orElse(null);
+        List<CodeInsightPrompts.LessonStep> steps = chatEventRepository.findSteps(turn.getId()).stream()
+                .filter(step -> step.getContent() != null && !step.getContent().isBlank())
+                .map(step -> new CodeInsightPrompts.LessonStep(step.getContent(), step.getFilePath()))
+                .toList();
+        String change = CodeInsightPrompts.lessonBlock(
+                asked, steps, edit.getFilePath(), edit.getPreviousContent(), edit.getContent());
+
+        UsageReservation reservation = usageService.reserveBudget(UsageFeature.EXPLAIN);
+        Long eventId = edit.getId();
+        StringBuilder written = new StringBuilder();
+        return streamModel(
+                reservation,
+                CodeInsightPrompts.lessonSystemPrompt(),
+                List.of(new UserMessage(change)),
+                projectId,
+                "step lesson",
+                false,
+                AiCallKind.LESSON)
+                .doOnNext(written::append)
+                .doOnComplete(() -> Mono.fromRunnable(() -> keepLesson(eventId, written.toString()))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .subscribe());
+    }
+
+    private void keepLesson(Long eventId, String lesson) {
+        if (lesson.isBlank()) {
+            return;
+        }
+        try {
+            chatEventRepository.saveLesson(eventId, lesson.strip());
+        } catch (Exception e) {
+            log.warn("Couldn't keep the lesson written for chat event {}", eventId, e);
+        }
     }
 
     @Override
@@ -165,16 +238,19 @@ public class CodeInsightServiceImpl implements CodeInsightService {
         log.info("Cleared {} code notes on projectId: {} for userId: {}", removed, projectId, userId);
     }
 
-    private Flux<String> streamModel(UsageReservation reservation, String systemPrompt, List<Message> messages, Long projectId, String label) {
+    private Flux<String> streamModel(UsageReservation reservation, String systemPrompt, List<Message> messages, Long projectId,
+                                     String label, boolean readsFiles, AiCallKind kind) {
         AtomicReference<ChatResponse> lastWithUsage = new AtomicReference<>();
 
         return Flux.defer(() -> {
                     NarrationFilter narration = new NarrationFilter();
-                    return chatClient.prompt()
+                    ChatClient.ChatClientRequestSpec call = modelCalls.apply(chatClient.prompt(), kind)
                             .system(systemPrompt)
-                            .messages(messages)
-                            .tools(new CodeGenerationTools(projectFileReader, projectId, narration::toolInvoked))
-                            .stream()
+                            .messages(messages);
+                    if (readsFiles) {
+                        call = call.tools(new CodeGenerationTools(projectFileReader, projectId, narration::toolInvoked));
+                    }
+                    return call.stream()
                             .chatResponse()
                             .doOnNext(response -> {
                                 if (response.getMetadata() != null && response.getMetadata().getUsage() != null) {
@@ -245,7 +321,7 @@ public class CodeInsightServiceImpl implements CodeInsightService {
     private String callModel(UsageReservation reservation, String systemPrompt, List<Message> messages, Long projectId, String label) {
         ChatResponse response;
         try {
-            response = chatClient.prompt()
+            response = modelCalls.apply(chatClient.prompt(), AiCallKind.EXPLAIN)
                     .system(systemPrompt)
                     .messages(messages)
                     .tools(readOnlyTools(projectId))

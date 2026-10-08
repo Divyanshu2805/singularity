@@ -21,7 +21,7 @@ done
 docker build -t singularity-frontend:local frontend/
 docker build -t singularity-preview-proxy:local proxy/
 docker build -f docker/preview-runner.Dockerfile -t singularity-preview-runner:local \
-  workspace-service/src/main/resources/starter-templates/react-vite-tailwind-daisyui-starter
+  workspace-service/src/main/resources/starter-templates/react-vite-tailwind-shadcn-starter
 ```
 
 The [kind rehearsal README](../../deploy/k8s/overlays/kind/README.md) lists the build arguments the frontend needs and how to load the images into a cluster.

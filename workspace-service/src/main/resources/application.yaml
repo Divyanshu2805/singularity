@@ -66,7 +66,7 @@ minio:
   # Where the starter template a new project is seeded from actually lives - CODE_REVIEW.md DATA-03 flagged these as
   # hardcoded constants living apart from every other bucket name, which does come from configuration.
   template-bucket: starter-projects
-  template-name: react-vite-tailwind-daisyui-starter
+  template-name: react-vite-tailwind-shadcn-starter
   # CODE_REVIEW.md AI-05: immutable, content-addressed revision blobs - a dedicated bucket so it is structurally
   # impossible for the K8s preview syncer's `mc mirror` (scoped to project-bucket/{projectId}/) to ever touch it.
   blob-bucket: project-blobs
@@ -86,6 +86,10 @@ revision-validation:
 # are per-hostname).
 preview:
   namespace: singularity-ai
+  # The kubeconfig context of the local kind cluster. Named here so previews never depend on - or follow - whichever
+  # context kubectl happens to point at. Every deployed manifest sets PREVIEW_KUBE_CONTEXT to blank, which means the
+  # pod's own service account.
+  kube-context: ${PREVIEW_KUBE_CONTEXT:kind-singularity}
   public-scheme: http
   public-domain: localhost
   public-port: 8090
@@ -97,6 +101,10 @@ preview:
   # machine, and this is a safety ceiling, not a performance target - a longer bound costs nothing when a
   # preview boots normally in well under a minute either way.
   boot-timeout: 4m
+  # How long a start waits in line when every runner is busy before it gives up and says so. A runner comes free
+  # when a preview stops or idles out (idle-timeout), so this is long enough to outlast a burst and short enough
+  # that nobody watches a spinner for the length of someone else's session.
+  queue-timeout: 5m
   route-ttl: 90s
   # Signs the short-lived access token appended to every previewUrl this service hands out (SEC-06): a bare
   # hostname is otherwise a permanent, unauthenticated bearer link the proxy has no way to revoke. The proxy
@@ -107,10 +115,22 @@ preview:
   access-token-secret: ${PREVIEW_ACCESS_TOKEN_SECRET}
   access-token-ttl: 6h
   port-forward:
-    # Only one process should hold the local port-forwards into the kind cluster's Redis/proxy pods at a time.
-    # Off by default: the standalone k8s/dev-port-forward scripts hold them (docs/local-development/). Set
-    # true to have this service's PreviewPortForwarder open them itself instead - never both.
-    enabled: false
+    # Local development: this service opens and keeps open the forwards into the kind cluster's Redis and proxy
+    # pods itself (PreviewPortForwarder), so a preview never depends on a separate terminal having been left
+    # running. A local port something else already holds - the k8s/dev-port-forward scripts - is left to it.
+    # Every deployed manifest sets PREVIEW_PORT_FORWARD_ENABLED=false: on a real cluster both are reached directly.
+    enabled: ${PREVIEW_PORT_FORWARD_ENABLED:true}
+    forwards:
+      - name: redis
+        pod-labels:
+          app: redis
+        pod-port: 6379
+        local-port: 6379
+      - name: preview proxy
+        pod-labels:
+          app: singularity-proxy
+        pod-port: 8080
+        local-port: 8090
 
 client.url: http://localhost:5173
 

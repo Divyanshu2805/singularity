@@ -4,6 +4,7 @@ import com.singularity.workspace.config.InstanceId;
 import com.singularity.workspace.config.PreviewProperties;
 import com.singularity.workspace.entity.Preview;
 import com.singularity.workspace.entity.PreviewSession;
+import com.singularity.workspace.enums.PreviewFailureKind;
 import com.singularity.workspace.enums.PreviewStatus;
 import com.singularity.common.error.ExternalServiceException;
 import com.singularity.workspace.repository.PreviewRepository;
@@ -31,7 +32,8 @@ import static com.singularity.workspace.service.impl.PreviewDeploymentServiceImp
  * that overran its timeout, ending a preview whose pod has vanished or whose dev server has crashed or gone
  * unresponsive, relaunching a file-sync watcher that died, keeping alive a preview being visited directly through
  * the proxy (and re-publishing its route if Redis lost it), shutting down a runner once no session is left on it,
- * and releasing claimed pods that no active preview owns.
+ * releasing claimed pods that no active preview owns, and asking the synchronizer to bring level any running preview
+ * that a published revision's own notice did not reach.
  *
  * <p>A restart kills any bootstrap that was in flight, so a still-creating row from before can never finish; failing
  * those immediately is better than leaving the tab spinning until the timeout. The cluster or Redis being unreachable
@@ -49,6 +51,20 @@ import static com.singularity.workspace.service.impl.PreviewDeploymentServiceImp
  * cleared whenever a preview recovers or stops being active) before being treated as wedged, so one slow response
  * does not end a healthy preview. A dead watcher does not end the preview at all - it is relaunched and logged,
  * since the dev server can still serve whatever it already has.
+ *
+ * <p>A start whose bootstrap has stopped proving it is alive is failed on a sweep, not only at startup. The startup
+ * check leaves alone any row whose heartbeat is younger than thirty seconds, so that a rolling deployment's new
+ * instance does not fail work an older one is still doing - which also means a single instance that restarts in
+ * under thirty seconds leaves its own interrupted start untouched, and nothing looked at it again until the boot
+ * timeout and its grace had passed: six minutes of "Starting your preview" over a start nobody was running. A
+ * bootstrap touches its heartbeat every couple of seconds except while one command runs in the pod, and the longest
+ * of those is the file copy, bounded at forty-five seconds; a heartbeat seventy-five seconds old belongs to no living
+ * bootstrap. Raise the two together or not at all.
+ * The failure is the platform's, so the tab starts the preview again by itself.
+ *
+ * <p>A start that is waiting in line has no pod, and is given the line's own limit rather than the boot timeout: it is
+ * not stuck, it is waiting, and the bootstrap that owns it fails it itself when the limit passes. This sweep only
+ * catches the one whose bootstrap died without saying so.
  */
 @Component
 @RequiredArgsConstructor
@@ -58,6 +74,7 @@ public class PreviewReaper {
     private static final Duration ORPHAN_GRACE = Duration.ofMinutes(2);
     private static final Duration STUCK_GRACE = Duration.ofMinutes(2);
     private static final Duration BOOTSTRAP_HEARTBEAT_GRACE = Duration.ofSeconds(30);
+    private static final Duration ABANDONED_AFTER = Duration.ofSeconds(75);
     private static final int UNRESPONSIVE_LIMIT = 3;
 
     private final PreviewRepository previewRepository;
@@ -68,6 +85,7 @@ public class PreviewReaper {
     private final PreviewLifecycle lifecycle;
     private final PreviewProperties properties;
     private final PreviewDeploymentServiceImpl deploymentService;
+    private final PreviewSynchronizer synchronizer;
     private final InstanceId instanceId;
 
     private final ConcurrentHashMap<Long, Integer> unresponsiveStreak = new ConcurrentHashMap<>();
@@ -91,7 +109,8 @@ public class PreviewReaper {
                     .forEach(preview -> {
                         log.info("Instance {} failing preview {} abandoned by instance {} (last heartbeat {})",
                                 instanceId.value(), preview.getId(), preview.getBootstrapOwner(), preview.getBootstrapHeartbeatAt());
-                        lifecycle.fail(preview, "The server restarted while this preview was starting. Start it again.", null);
+                        lifecycle.fail(preview, PreviewFailureKind.PLATFORM,
+                                "The server restarted while this preview was starting. Start it again.", null);
                     });
         } catch (RuntimeException e) {
             log.warn("Couldn't clean up previews interrupted by a restart: {}", e.getMessage());
@@ -108,8 +127,8 @@ public class PreviewReaper {
             for (Preview preview : active) {
                 if (preview.getStatus() == PreviewStatus.CREATING) {
                     reapIfStuck(preview, now);
-                } else {
-                    reapIfUnusedOrGone(preview, now);
+                } else if (reapIfUnusedOrGone(preview, now)) {
+                    synchronizer.bringUpToDate(preview.getProjectId());
                 }
             }
             sweepOrphanPods(active, now);
@@ -132,9 +151,21 @@ public class PreviewReaper {
     }
 
     private void reapIfStuck(Preview preview, Instant now) {
+        Instant heartbeat = preview.getBootstrapHeartbeatAt();
+        if (heartbeat != null && heartbeat.plus(ABANDONED_AFTER).isBefore(now)) {
+            log.info("Instance {} failing preview {}: its bootstrap (instance {}) last proved it was alive at {}",
+                    instanceId.value(), preview.getId(), preview.getBootstrapOwner(), heartbeat);
+            lifecycle.fail(preview, PreviewFailureKind.PLATFORM,
+                    "The server restarted while this preview was starting. Start it again.", null);
+            return;
+        }
         Instant startedAt = preview.getLastAccessedAt() != null ? preview.getLastAccessedAt() : preview.getStartedAt();
-        if (startedAt != null && startedAt.plus(properties.bootTimeout()).plus(STUCK_GRACE).isBefore(now)) {
-            lifecycle.fail(preview, "The preview didn't finish starting", null);
+        boolean waiting = preview.getPodName() == null;
+        Duration limit = waiting ? properties.queueTimeout() : properties.bootTimeout();
+        if (startedAt != null && startedAt.plus(limit).plus(STUCK_GRACE).isBefore(now)) {
+            lifecycle.fail(preview, waiting ? PreviewFailureKind.CAPACITY : PreviewFailureKind.PLATFORM,
+                    waiting ? "No preview runner came free in time. Try again in a little while."
+                            : "The preview didn't finish starting", null);
         }
     }
 
@@ -146,21 +177,25 @@ public class PreviewReaper {
      * that is seconds from being deleted; nothing would ever clean that phantom route up again, since the preview is
      * no longer ACTIVE and future reap runs stop looking at it. Taking the same lock every other project-lifecycle
      * method already takes serializes this against them; like those, it is in-memory and per instance.
+     *
+     * <p>Answers whether the preview is still running, healthy and in use afterwards, which is when it is worth
+     * checking that it has the project's current files - done by the caller, outside this lock, since a copy can
+     * take a while and a restart takes the lock itself.
      */
-    private void reapIfUnusedOrGone(Preview stale, Instant now) {
+    private boolean reapIfUnusedOrGone(Preview stale, Instant now) {
         synchronized (deploymentService.lockFor(stale.getProjectId())) {
             Preview preview = previewRepository.findById(stale.getId()).orElse(null);
-            if (preview == null || !ACTIVE.contains(preview.getStatus())) return;
+            if (preview == null || !ACTIVE.contains(preview.getStatus())) return false;
 
             if (!runnerPool.isAlive(preview.getPodName())) {
                 lifecycle.terminate(preview, "The preview's runner stopped unexpectedly");
-                return;
+                return false;
             }
 
             // Restarting flips a preview back to CREATING in place; its dev server is expected to be down or
             // bouncing right now; probing it here is exactly the false positive PRE-06 must not introduce.
             if (preview.getStatus() == PreviewStatus.RUNNING && !checkProcessHealth(preview)) {
-                return;
+                return false;
             }
 
             Instant proxyVisit = router.lastVisit(preview.getHostname()).orElse(null);
@@ -169,10 +204,12 @@ public class PreviewReaper {
                 if (!router.refresh(preview.getHostname())) {
                     deploymentService.republishRoute(preview);
                 }
-                return;
+                return preview.getStatus() == PreviewStatus.RUNNING;
             }
 
             deploymentService.shutDownIfUnused(preview, "Nobody has it open");
+            return preview.getStatus() == PreviewStatus.RUNNING
+                    && sessionRepository.countByPreviewIdAndEndedAtIsNull(preview.getId()) > 0;
         }
     }
 

@@ -8,9 +8,9 @@ import java.time.Duration;
  * Where live previews run and how they are reached.
  *
  * <p>Handles: the Kubernetes namespace holding the runner pool, the scheme, domain and port previews are served on,
- * the port Vite listens on inside a runner, the storage alias and bucket the syncer mirrors from, the four
- * timeouts that bound a preview's life - idle, boot, the proxy route's expiry in Redis, and the access token's
- * lifetime - and the secret that signs that token.
+ * the port Vite listens on inside a runner, the storage alias and bucket the syncer mirrors from, the five
+ * timeouts that bound a preview's life - idle, boot, the proxy route's expiry in Redis, the access token's
+ * lifetime, and how long a start waits in line for a runner - and the secret that signs that token.
  *
  * <p>The public domain is localhost in development because browsers resolve any *.localhost name to the loopback
  * address with no hosts-file edits. The route TTL is what makes a route the backend forgot about - because it crashed
@@ -30,7 +30,8 @@ public record PreviewProperties(
         Duration bootTimeout,
         Duration routeTtl,
         String accessTokenSecret,
-        Duration accessTokenTtl
+        Duration accessTokenTtl,
+        Duration queueTimeout
 ) {
 
     public String urlFor(String hostname) {

@@ -1,11 +1,12 @@
 /**
  * Covers how an assistant turn's raw events become the blocks the chat draws.
  *
- * In particular the checklist: which steps read as done, which as still running, and how a teaching-mode walkthrough
- * is folded underneath the step that wrote its file.
+ * In particular the build card: that the steps and the files they wrote are one block and not two, which steps read as
+ * done and which as still running, where a file nobody listed ends up, and that a teaching-mode lesson sits on the
+ * step it is about whether it was written before its file (as it is now) or after it (as saved conversations have it).
  */
 import { describe, it, expect } from "vitest";
-import { buildBlocks } from "./ChatEventRenderer";
+import { activitySummary, buildBlocks, displayBlocks } from "./ChatEventRenderer";
 import { ChatEvent, ChatEventType } from "@/lib/types";
 
 const todo = (label: string, filePath?: string): ChatEvent =>
@@ -21,267 +22,142 @@ const learn = (content: string, filePath?: string, isComplete = true, concept?: 
 
 const fileWith = (filePath: string, content: string): ChatEvent => ({ type: ChatEventType.FILE_EDIT, content, filePath });
 
+const lesson = (what: string, why: string) => `<what>${what}</what>\n<why>${why}</why>`;
+
 const walkthrough = (summary: string, parts: [code: string, text: string][] = []) =>
   `<summary>${summary}</summary>\n${parts.map(([code, text]) => `<part><code>${code}</code>${text}</part>`).join("\n")}`;
 
-function checklist(events: ChatEvent[], isStreaming: boolean) {
-  const block = buildBlocks(events, isStreaming).find((b) => b.kind === "checklist");
-  return block?.kind === "checklist" ? block.items : [];
+function build(events: ChatEvent[], isStreaming: boolean) {
+  const block = buildBlocks(events, isStreaming).find((b) => b.kind === "build");
+  return block?.kind === "build" ? block : undefined;
 }
 
-const statuses = (events: ChatEvent[], isStreaming: boolean) =>
-  checklist(events, isStreaming).map((item) => item.status);
+const steps = (events: ChatEvent[], isStreaming: boolean) => build(events, isStreaming)?.steps ?? [];
 
-describe("build checklist", () => {
-  it("collapses consecutive todos into one checklist, in order", () => {
-    const items = checklist([
+const statuses = (events: ChatEvent[], isStreaming: boolean) => steps(events, isStreaming).map((step) => step.status);
+
+const kinds = (events: ChatEvent[], isStreaming = false) => buildBlocks(events, isStreaming).map((block) => block.kind);
+
+describe("the build card", () => {
+  it("is one block holding the steps and the files they wrote - never a checklist and a second list of files", () => {
+    const events = [
+      message("Starting with the navigation."),
       todo("Creating the navigation bar", "src/Navbar.tsx"),
       todo("Wiring up the routes", "src/App.tsx"),
-    ], true);
+      edit("src/Navbar.tsx"),
+      edit("src/App.tsx"),
+      message("Both are in."),
+    ];
 
-    expect(items.map((item) => item.label)).toEqual([
-      "Creating the navigation bar",
-      "Wiring up the routes",
+    expect(kinds(events)).toEqual(["message", "build", "message"]);
+    expect(steps(events, false).map((step) => [step.label, step.files.map((file) => file.path)])).toEqual([
+      ["Creating the navigation bar", ["src/Navbar.tsx"]],
+      ["Wiring up the routes", ["src/App.tsx"]],
     ]);
+  });
+
+  it("is a plan until the first file starts arriving", () => {
+    const planned = [todo("Creating the navigation bar", "src/Navbar.tsx"), todo("Wiring up the routes", "src/App.tsx")];
+
+    expect(build(planned, true)).toMatchObject({ isPlanned: true, hasStarted: false, isRunning: true });
+    expect(build([...planned, edit("src/Navbar.tsx", false)], true)).toMatchObject({ hasStarted: true });
   });
 
   it("shows the first step running and the rest waiting before anything is written", () => {
-    expect(statuses([
-      todo("Creating the navigation bar", "src/Navbar.tsx"),
-      todo("Wiring up the routes", "src/App.tsx"),
-    ], true)).toEqual(["active", "pending"]);
+    expect(statuses([todo("One", "a.tsx"), todo("Two", "b.tsx"), todo("Three", "c.tsx")], true))
+      .toEqual(["active", "pending", "pending"]);
   });
 
-  it("ticks a step off when the file it named finishes", () => {
-    expect(statuses([
-      todo("Creating the navigation bar", "src/Navbar.tsx"),
-      todo("Wiring up the routes", "src/App.tsx"),
-      edit("src/Navbar.tsx"),
-    ], true)).toEqual(["done", "active"]);
-  });
+  it("ticks a step off when the file it named finishes, and not while that file is still streaming", () => {
+    const plan = [todo("Creating the navigation bar", "src/Navbar.tsx"), todo("Wiring up the routes", "src/App.tsx")];
 
-  it("does not tick a step off while its file is still streaming", () => {
-    expect(statuses([
-      todo("Creating the navigation bar", "src/Navbar.tsx"),
-      todo("Wiring up the routes", "src/App.tsx"),
-      edit("src/Navbar.tsx", false),
-    ], true)).toEqual(["active", "pending"]);
+    expect(statuses([...plan, edit("src/Navbar.tsx")], true)).toEqual(["done", "active"]);
+    expect(statuses([...plan, edit("src/Navbar.tsx", false)], true)).toEqual(["active", "pending"]);
+    expect(steps([...plan, edit("src/Navbar.tsx", false)], true)[0].files).toEqual([
+      { path: "src/Navbar.tsx", active: true, lines: 1, content: "..." },
+    ]);
   });
 
   it("carries a step with no file of its own once a later step lands", () => {
-    expect(statuses([
-      todo("Sketching the layout"),
-      todo("Wiring up the routes", "src/App.tsx"),
-      edit("src/App.tsx"),
-    ], true)).toEqual(["done", "done"]);
+    expect(statuses([todo("Planning"), todo("Wiring up the routes", "src/App.tsx"), edit("src/App.tsx")], true))
+      .toEqual(["done", "done"]);
   });
 
   it("leaves a step whose file never arrived unticked once the response is over", () => {
-    expect(statuses([
-      todo("Creating the navigation bar", "src/Navbar.tsx"),
-      todo("Wiring up the routes", "src/App.tsx"),
-      edit("src/Navbar.tsx"),
-    ], false)).toEqual(["done", "pending"]);
+    expect(statuses([todo("One", "src/Navbar.tsx"), todo("Two", "src/App.tsx"), edit("src/Navbar.tsx")], false))
+      .toEqual(["done", "pending"]);
   });
 
   it("settles a fileless trailing step once the response is over", () => {
-    expect(statuses([
-      todo("Creating the navigation bar", "src/Navbar.tsx"),
-      todo("Tidying up"),
-      edit("src/Navbar.tsx"),
-    ], false)).toEqual(["done", "done"]);
+    expect(statuses([todo("One", "src/Navbar.tsx"), todo("Tidying up"), edit("src/Navbar.tsx")], false))
+      .toEqual(["done", "done"]);
   });
 
-  it("sees edits that arrive after it, and messages in between don't split it", () => {
+  it("counts how many lines each finished file has", () => {
+    const [step] = steps([todo("Adding the hook", "src/useTimer.ts"), fileWith("src/useTimer.ts", "a\nb\nc\n")], false);
+
+    expect(step.files).toEqual([{ path: "src/useTimer.ts", active: false, lines: 3, content: "a\nb\nc\n" }]);
+  });
+
+  it("puts a second file written for a step under that step, while later steps are still to come", () => {
     const events = [
-      message("Here's the plan."),
-      todo("Creating the navigation bar", "src/Navbar.tsx"),
-      todo("Wiring up the routes", "src/App.tsx"),
-      message("Writing the files now."),
-      edit("src/Navbar.tsx"),
+      todo("Building the like button", "src/LikeButton.tsx"),
+      todo("Showing it on the page", "src/App.tsx"),
+      edit("src/LikeButton.tsx"),
+      edit("src/hooks/useLikes.ts"),
       edit("src/App.tsx"),
     ];
+
+    expect(steps(events, false).map((step) => step.files.map((file) => file.path))).toEqual([
+      ["src/LikeButton.tsx", "src/hooks/useLikes.ts"],
+      ["src/App.tsx"],
+    ]);
     expect(statuses(events, false)).toEqual(["done", "done"]);
-    expect(buildBlocks(events, false).filter((b) => b.kind === "checklist")).toHaveLength(1);
+  });
+
+  it("gives a file written after the plan was finished a row of its own, so the card is still the whole record", () => {
+    const events = [
+      todo("Building the like button", "src/LikeButton.tsx"),
+      edit("src/LikeButton.tsx"),
+      message("Fixing an import."),
+      edit("package.json"),
+    ];
+
+    expect(kinds(events)).toEqual(["build", "message"]);
+    expect(steps(events, false)).toMatchObject([
+      { label: "Building the like button", status: "done" },
+      { label: "package.json", isExtra: true, status: "done", files: [{ path: "package.json" }] },
+    ]);
+  });
+
+  it("does not let a late extra file tick off a planned step that was never written", () => {
+    const events = [todo("One", "a.tsx"), todo("Two", "b.tsx"), edit("a.tsx"), edit("b.tsx", false), edit("zzz.json")];
+
+    expect(statuses(events, false).slice(0, 2)).toEqual(["done", "pending"]);
   });
 
   it("shows a single step for a single-file change, without padding it out", () => {
-    const items = checklist([todo("Fixing the header spacing", "src/Header.tsx")], true);
-    expect(items).toHaveLength(1);
-    expect(items[0].status).toBe("active");
+    expect(steps([todo("Fixing the title", "index.html"), edit("index.html")], false)).toHaveLength(1);
   });
 
-  it("caps a runaway checklist at the same limit the parser saves", () => {
-    const many = Array.from({ length: 30 }, (_, i) => todo(`Step ${i + 1}`, `file${i + 1}.tsx`));
-    const items = checklist(many, true);
-    expect(items).toHaveLength(12);
-    expect(items[0].label).toBe("Step 1");
+  it("caps a runaway plan at the same limit the parser saves", () => {
+    const runaway = Array.from({ length: 20 }, (_, index) => todo(`Step ${index}`, `src/${index}.tsx`));
+
+    expect(steps(runaway, true)).toHaveLength(12);
   });
 
-  it("renders no checklist at all for a response that never announced one", () => {
-    expect(buildBlocks([message("Just answering a question.")], false)
-      .some((block) => block.kind === "checklist")).toBe(false);
-  });
-});
+  it("lists the files of a response that never announced a plan, one row each", () => {
+    const events = [message("Two small fixes."), edit("src/App.tsx"), edit("src/main.tsx"), message("Done.")];
 
-describe("teaching mode walkthroughs", () => {
-  const steps = (events: ChatEvent[], isStreaming = false) => checklist(events, isStreaming);
-
-  const editsBlocks = (events: ChatEvent[], isStreaming = false) =>
-    buildBlocks(events, isStreaming).flatMap((block) => (block.kind === "edits" ? [block] : []));
-
-  const lessonBlocks = (events: ChatEvent[], isStreaming = false) =>
-    buildBlocks(events, isStreaming).flatMap((block) => (block.kind === "lessons" ? [block] : []));
-
-  const TIMER = [
-    'import { useState } from "react";',
-    "",
-    "export function useTimer(start: number) {",
-    "  const [left, setLeft] = useState(start);",
-    '  return <button type="button" onClick={() => setLeft(start)}>Reset</button>;',
-    "}",
-  ].join("\n");
-
-  it("puts each walkthrough under the build step that wrote its file", () => {
-    const events = [
-      todo("Building the timer logic", "src/hooks/useTimer.ts"),
-      todo("Wiring up the routes", "src/App.tsx"),
-      edit("src/hooks/useTimer.ts"),
-      learn(walkthrough("The timer's counting logic."), "src/hooks/useTimer.ts"),
-      edit("src/App.tsx"),
-      learn(walkthrough("The app's main screen."), "src/App.tsx"),
-    ];
-
-    expect(steps(events).map((item) => [item.label, item.lessons[0]?.lesson.summary])).toEqual([
-      ["Building the timer logic", "The timer's counting logic."],
-      ["Wiring up the routes", "The app's main screen."],
-    ]);
-  });
-
-  it("leaves the edits card a plain list of files, in one card", () => {
-    const cards = editsBlocks([
-      todo("Building the timer logic", "src/hooks/useTimer.ts"),
-      todo("Wiring up the routes", "src/App.tsx"),
-      edit("src/hooks/useTimer.ts"),
-      learn(walkthrough("The timer's counting logic."), "src/hooks/useTimer.ts"),
-      edit("src/App.tsx"),
-      learn(walkthrough("The app's main screen."), "src/App.tsx"),
-    ]);
-
-    expect(cards).toHaveLength(1);
-    expect(cards[0].items.map((item) => item.path)).toEqual(["src/hooks/useTimer.ts", "src/App.tsx"]);
-    expect(cards[0].items.every((item) => !("lesson" in item))).toBe(true);
-  });
-
-  it("finds the line each part quotes in that file, as the turn wrote it", () => {
-    const [step] = steps([
-      todo("Building the timer logic", "src/hooks/useTimer.ts"),
-      fileWith("src/hooks/useTimer.ts", TIMER),
-      learn(walkthrough("Counts down.", [
-        ["export function useTimer(start: number) {", "Creates the timer."],
-        ["const [left, setLeft] = useState(start);", "Remembers the time left."],
-        ['onClick={() => setLeft(start)}', "Puts the time back."],
-      ]), "src/hooks/useTimer.ts"),
-    ]);
-
-    expect(step.lessons[0]?.lesson.parts.map((part) => part.line)).toEqual([3, 4, 5]);
-  });
-
-  it("leaves a step with no walkthrough without one", () => {
-    const events = [
-      todo("Restyling the page", "src/App.css"),
-      todo("Wiring up the routes", "src/App.tsx"),
-      edit("src/App.css"),
-      edit("src/App.tsx"),
-      learn(walkthrough("Main screen."), "src/App.tsx"),
-    ];
-
-    expect(steps(events).map((item) => item.lessons.length > 0)).toEqual([false, true]);
-  });
-
-  it("falls back to the file a walkthrough follows when its path names no written file", () => {
-    const [step] = steps([
-      todo("Wiring up the routes", "src/App.tsx"),
-      fileWith("src/App.tsx", TIMER),
-      learn(walkthrough("Main screen.", [["useState(start)", "x"]]), "/src/app.tsx"),
-    ]);
-
-    expect(step.lessons[0]?.lesson.summary).toBe("Main screen.");
-    expect(step.lessons[0]?.lesson.parts[0].line).toBe(4);
-  });
-
-  it("keeps only the first walkthrough for a file, like the backend does", () => {
-    const [step] = steps([
-      todo("Wiring up the routes", "src/App.tsx"),
-      edit("src/App.tsx"),
-      learn(walkthrough("First."), "src/App.tsx"),
-      learn(walkthrough("Second."), "src/App.tsx"),
-    ]);
-
-    expect(step.lessons[0]?.lesson.summary).toBe("First.");
-  });
-
-  it("shows walkthroughs with no build step to sit under in their own card, after the edits", () => {
-    const blocks = buildBlocks([
-      edit("src/App.tsx"),
-      learn(walkthrough("The app's main screen."), "src/App.tsx"),
-      edit("src/main.tsx"),
-      learn(walkthrough("Starts the app."), "src/main.tsx"),
-    ], false);
-
-    expect(blocks.map((block) => block.kind)).toEqual(["edits", "lessons"]);
-    expect(lessonBlocks([
-      edit("src/App.tsx"),
-      learn(walkthrough("The app's main screen."), "src/App.tsx"),
-      edit("src/main.tsx"),
-      learn(walkthrough("Starts the app."), "src/main.tsx"),
-    ])[0].items.map((item) => [item.path, item.lesson.summary])).toEqual([
-      ["src/App.tsx", "The app's main screen."],
-      ["src/main.tsx", "Starts the app."],
-    ]);
-  });
-
-  it("shows a walkthrough about no file at all rather than dropping it", () => {
-    const blocks = buildBlocks([message("Here's the idea."), learn(walkthrough("Reusable pieces of UI."))], false);
-
-    expect(blocks.map((block) => block.kind)).toEqual(["message", "lessons"]);
-  });
-
-  it("marks a walkthrough still being written, tidying its prose but never its quoted code", () => {
-    const [step] = steps([
-      todo("Adding the page styles", "src/theme.ts"),
-      fileWith("src/theme.ts", "const styles = `\n  color: red;\n`;"),
-      learn("<summary>Holds the page's styles.</summary><part><code>const styles = `</code>Starts a block of **CSS", "src/theme.ts", false),
-    ], true);
-
-    const lesson = step.lessons[0].lesson;
-    expect(lesson.isComplete).toBe(false);
-    expect(lesson.parts[0]).toMatchObject({ code: "const styles = `", line: 1, text: "Starts a block of CSS" });
-  });
-
-  it("still shows a one-sentence lesson saved before walkthroughs existed", () => {
-    const [step] = steps([
-      todo("Wiring up the routes", "src/App.tsx"),
-      edit("src/App.tsx"),
-      learn("Composition means building a screen from smaller pieces.", "src/App.tsx", true, "Composition"),
-    ]);
-
-    expect(step.lessons[0]?.lesson).toMatchObject({
-      summary: "means building a screen from smaller pieces.",
-      parts: [],
-      concepts: ["Composition"],
+    expect(kinds(events)).toEqual(["message", "build", "message"]);
+    expect(build(events, false)).toMatchObject({
+      isPlanned: false,
+      steps: [{ label: "App.tsx", isExtra: true, status: "done" }, { label: "main.tsx", isExtra: true, status: "done" }],
     });
   });
 
-  it("does not let walkthroughs change how the checklist ticks off", () => {
-    const events = [
-      todo("Building the timer logic", "src/hooks/useTimer.ts"),
-      todo("Wiring up the routes", "src/App.tsx"),
-      edit("src/hooks/useTimer.ts"),
-      learn(walkthrough("Counts down."), "src/hooks/useTimer.ts"),
-    ];
-
-    expect(statuses(events, true)).toEqual(["done", "active"]);
+  it("renders no build card at all for a response that only talked", () => {
+    expect(kinds([message("Routing lives in App.tsx.")])).toEqual(["message"]);
   });
 });
 
@@ -293,17 +169,157 @@ describe("renaming a file", () => {
     { type: ChatEventType.FILE_DELETE, content: "Replaced by NewPage.tsx", filePath: "src/pages/OldPage.tsx" },
   ];
 
-  it("ticks off the delete step and lists the old file as deleted in the same card", () => {
-    const blocks = buildBlocks(events, false);
-    const checklist = blocks.find((b) => b.kind === "checklist");
-    const edits = blocks.filter((b) => b.kind === "edits");
-
-    expect(checklist?.kind === "checklist" && checklist.items.map((item) => item.status)).toEqual(["done", "done"]);
-    expect(edits).toHaveLength(1);
-    expect(edits[0].kind === "edits" && edits[0].items).toEqual([
-      { path: "src/pages/NewPage.tsx", active: false },
-      { path: "src/pages/OldPage.tsx", active: false, deleted: true },
+  it("ticks off the delete step and shows the old file as deleted on it", () => {
+    expect(steps(events, false)).toMatchObject([
+      { status: "done", files: [{ path: "src/pages/NewPage.tsx", active: false, lines: 1 }] },
+      { status: "done", files: [{ path: "src/pages/OldPage.tsx", active: false, deleted: true }] },
     ]);
+  });
+});
+
+describe("the model's working-out", () => {
+  const thinking = (content: string, isComplete = true): ChatEvent => ({ type: ChatEventType.THINKING, content, isComplete });
+
+  it("is a block of its own ahead of the answer, live only while it is still arriving", () => {
+    const arriving = buildBlocks([thinking("One page, so no rou", false)], true);
+    const settled = buildBlocks([thinking("One page, so no router."), message("Starting with the list.")], true);
+
+    expect(arriving).toMatchObject([{ kind: "thinking", content: "One page, so no rou", active: true }]);
+    expect(settled).toMatchObject([{ kind: "thinking", active: false }, { kind: "message" }]);
+  });
+
+  it("does not split a plan from the files written under it", () => {
+    const events = [thinking("Types first."), todo("One", "a.ts"), edit("a.ts")];
+
+    expect(kinds(events)).toEqual(["thinking", "build"]);
+  });
+});
+
+describe("teaching mode lessons", () => {
+  const TIMER = lesson("Adds the countdown's memory.", "Without it the clock would reset on every redraw.");
+  const APP = lesson("Shows the countdown on the page.", "The hook exists now, so the screen can use it.");
+
+  it("sits on the step it is about when it is written before that step's file", () => {
+    const events = [
+      todo("Adding the timer hook", "src/hooks/useTimer.ts"),
+      todo("Showing the countdown", "src/App.tsx"),
+      learn(TIMER, "src/hooks/useTimer.ts", true, "Custom hook"),
+      edit("src/hooks/useTimer.ts"),
+      learn(APP, "src/App.tsx"),
+      edit("src/App.tsx"),
+    ];
+
+    expect(kinds(events)).toEqual(["build"]);
+    expect(steps(events, false).map((step) => step.lessons.map((one) => one.lesson))).toMatchObject([
+      [{ summary: "Adds the countdown's memory.", why: "Without it the clock would reset on every redraw.", concepts: ["Custom hook"], isComplete: true }],
+      [{ summary: "Shows the countdown on the page.", why: "The hook exists now, so the screen can use it." }],
+    ]);
+  });
+
+  it("is on its step while it is still being written, before the file has begun", () => {
+    const [step] = steps([todo("Adding the timer hook", "src/useTimer.ts"), learn("<what>Adds the count", "src/useTimer.ts", false)], true);
+
+    expect(step).toMatchObject({ status: "active", files: [], lessons: [{ lesson: { summary: "Adds the count", isComplete: false } }] });
+  });
+
+  it("puts the lesson for a step's second file under the same step, each naming its file", () => {
+    const events = [
+      todo("Building the like button", "src/LikeButton.tsx"),
+      todo("Showing it on the page", "src/App.tsx"),
+      learn(TIMER, "src/LikeButton.tsx"),
+      edit("src/LikeButton.tsx"),
+      learn(APP, "src/hooks/useLikes.ts"),
+      edit("src/hooks/useLikes.ts"),
+    ];
+
+    expect(steps(events, true)[0].lessons.map((one) => one.path)).toEqual(["src/LikeButton.tsx", "src/hooks/useLikes.ts"]);
+    expect(steps(events, true)[0].files.map((file) => file.path)).toEqual(["src/LikeButton.tsx", "src/hooks/useLikes.ts"]);
+  });
+
+  it("gets a row of its own, with its file, when the response announced no plan", () => {
+    const events = [learn(TIMER, "src/useTimer.ts"), edit("src/useTimer.ts"), learn(APP, "src/App.tsx"), edit("src/App.tsx")];
+
+    expect(steps(events, false).map((step) => [step.label, step.files.length, step.lessons.length])).toEqual([
+      ["useTimer.ts", 1, 1],
+      ["App.tsx", 1, 1],
+    ]);
+  });
+
+  it("keeps only the first lesson for a file, like the backend does", () => {
+    const events = [todo("One", "src/App.tsx"), learn(TIMER, "src/App.tsx"), edit("src/App.tsx"), learn(APP, "src/App.tsx")];
+
+    expect(steps(events, false)[0].lessons).toHaveLength(1);
+    expect(steps(events, false)[0].lessons[0].lesson.summary).toBe("Adds the countdown's memory.");
+  });
+
+  it("does not change how the steps tick off", () => {
+    const events = [todo("One", "a.ts"), todo("Two", "b.ts"), learn(TIMER, "a.ts"), edit("a.ts"), learn(APP, "b.ts")];
+
+    expect(statuses(events, true)).toEqual(["done", "active"]);
+  });
+
+  it("shows a lesson about no file at all in a card of its own rather than dropping it", () => {
+    expect(buildBlocks([learn("Components are reusable pieces of a page.")], false)).toMatchObject([
+      { kind: "lessons", items: [{ lesson: { summary: "Components are reusable pieces of a page." } }] },
+    ]);
+  });
+});
+
+describe("walkthroughs saved before lessons became a what and a why", () => {
+  const TIMER_FILE = "import { useState } from 'react';\n\nexport function useTimer() {\n  const [left, setLeft] = useState(60);\n  return left;\n}\n";
+
+  it("still sit on the step that wrote their file, though they come after it", () => {
+    const events = [
+      todo("Adding the timer hook", "src/hooks/useTimer.ts"),
+      todo("Showing the countdown", "src/App.tsx"),
+      edit("src/hooks/useTimer.ts"),
+      learn(walkthrough("The countdown's memory."), "src/hooks/useTimer.ts"),
+      edit("src/App.tsx"),
+      learn(walkthrough("The screen."), "src/App.tsx"),
+    ];
+
+    expect(kinds(events)).toEqual(["build"]);
+    expect(steps(events, false).map((step) => step.lessons.map((one) => one.lesson.summary))).toEqual([
+      ["The countdown's memory."],
+      ["The screen."],
+    ]);
+  });
+
+  it("find the line each part quotes in that file, as the turn wrote it", () => {
+    const events = [
+      todo("Adding the timer hook", "src/hooks/useTimer.ts"),
+      fileWith("src/hooks/useTimer.ts", TIMER_FILE),
+      learn(walkthrough("The countdown's memory.", [["const [left, setLeft] = useState(60);", "Keeps the seconds left."]]), "src/hooks/useTimer.ts"),
+    ];
+
+    expect(steps(events, false)[0].lessons[0].lesson.parts).toMatchObject([{ line: 4, text: "Keeps the seconds left." }]);
+  });
+
+  it("fall back to the file they follow when their path names no written file", () => {
+    const events = [
+      todo("Adding the timer hook", "src/hooks/useTimer.ts"),
+      fileWith("src/hooks/useTimer.ts", TIMER_FILE),
+      learn(walkthrough("The countdown's memory.", [["export function useTimer() {", "The hook."]]), "src/hooks/timer.ts"),
+    ];
+
+    expect(steps(events, false)[0].lessons).toMatchObject([{ path: "src/hooks/useTimer.ts", lesson: { parts: [{ line: 3 }] } }]);
+  });
+
+  it("show a one-sentence lesson from before walkthroughs existed", () => {
+    const events = [todo("One", "src/App.tsx"), edit("src/App.tsx"), learn("State is memory for a component.", "src/App.tsx", true, "State")];
+
+    expect(steps(events, false)[0].lessons[0].lesson).toMatchObject({ summary: "is memory for a component.", concepts: ["State"], parts: [] });
+  });
+
+  it("are tidied while still being written, but never their quoted code", () => {
+    const events = [
+      edit("src/App.tsx"),
+      learn("<summary>Uses **bold</summary><part><code>const a = `x`;</code>Half a `name", "src/App.tsx", false),
+    ];
+    const [{ lesson: partial }] = steps(events, true)[0].lessons;
+
+    expect(partial).toMatchObject({ summary: "Uses bold", isComplete: false });
+    expect(partial.parts[0]).toMatchObject({ code: "const a = `x`;", text: "Half a name" });
   });
 });
 
@@ -335,5 +351,80 @@ describe("questions for the user", () => {
     const [block] = buildBlocks([ask("How should peo", "Email|Goo", false)], true);
 
     expect(block).toMatchObject({ kind: "ask", questions: [{ options: [], isComplete: false }] });
+  });
+
+  it("can come after the part of a build the turn did write", () => {
+    const events = [todo("Adding the list", "src/List.tsx"), edit("src/List.tsx"), message("The list is in."), ask("Cards or a table?", "Cards|A table")];
+
+    expect(kinds(events)).toEqual(["build", "message", "ask"]);
+  });
+});
+
+describe("the order a turn is shown in", () => {
+  const todo = (path: string, content: string): ChatEvent => ({ type: ChatEventType.TODO, filePath: path, content });
+  const file = (path: string, isComplete = true): ChatEvent => ({ type: ChatEventType.FILE_EDIT, filePath: path, content: "a\nb", isComplete });
+  const said = (content: string): ChatEvent => ({ type: ChatEventType.MESSAGE, content });
+  const TURN: ChatEvent[] = [
+    said("Starting with the data."),
+    todo("src/lib/notes.ts", "Keeping notes in the browser"),
+    todo("src/pages/Index.tsx", "Putting the page together"),
+    file("src/lib/notes.ts"),
+    said("The data is in place; now the page."),
+    file("src/pages/Index.tsx", false),
+  ];
+
+  it("is the order things happen while the turn is being written, with no plan card", () => {
+    const blocks = displayBlocks(TURN, true);
+
+    expect(blocks.map((block) => block.kind)).toEqual(["message", "activity", "message", "activity"]);
+    const first = blocks[1] as Extract<(typeof blocks)[number], { kind: "activity" }>;
+    expect(first.items).toHaveLength(1);
+    expect(first.items[0]).toMatchObject({ label: "Keeping notes in the browser", position: 1, total: 2 });
+    const second = blocks[3] as typeof first;
+    expect(second.items[0]).toMatchObject({ label: "Putting the page together", position: 2, total: 2 });
+    expect(second.items[0].file.active).toBe(true);
+  });
+
+  it("names a file nobody planned by what is being done to it", () => {
+    const blocks = displayBlocks([said("Fixing it."), { type: ChatEventType.FILE_PATCH, filePath: "src/App.tsx", content: "", isComplete: true }], true);
+
+    const activity = blocks[1] as Extract<(typeof blocks)[number], { kind: "activity" }>;
+    expect(activity.items[0].label).toBeUndefined();
+    expect(activity.items[0].file.edited).toBe(true);
+    expect(activity.items[0].position).toBeUndefined();
+  });
+
+  it("shows a file once however many times the turn wrote it", () => {
+    const blocks = displayBlocks([file("src/App.tsx"), said("Mending it."), file("src/App.tsx")], true);
+
+    expect(blocks.filter((block) => block.kind === "activity")).toHaveLength(1);
+  });
+
+  it("folds the files to a line each and puts the build card last once the turn is saved", () => {
+    const saved = TURN.map((event) => ({ ...event, isComplete: true }));
+    const blocks = displayBlocks([...saved, said("Type a note and press Enter.")], false);
+
+    expect(blocks.map((block) => block.kind)).toEqual(["message", "activity", "message", "activity", "message", "build"]);
+    expect(blocks.filter((block) => block.kind === "activity").every((block) => "isSummary" in block && block.isSummary)).toBe(true);
+  });
+
+  it("keeps a question last, after the card", () => {
+    const blocks = displayBlocks([file("src/App.tsx"), { type: ChatEventType.ASK, content: "Which colour?", metadata: "Red|Blue" }], false);
+
+    expect(blocks.map((block) => block.kind)).toEqual(["activity", "build", "ask"]);
+  });
+
+  it("leaves a turn that wrote nothing exactly as it was", () => {
+    const events = [said("The routing lives in src/App.tsx.")];
+
+    expect(displayBlocks(events, false)).toEqual(buildBlocks(events, false));
+  });
+
+  it("counts what a group of files did", () => {
+    const item = (deleted: boolean) => ({ key: "k", file: { path: "a", active: false, ...(deleted ? { deleted: true } : {}) } });
+
+    expect(activitySummary([item(false)])).toBe("1 file written");
+    expect(activitySummary([item(false), item(false), item(true)])).toBe("2 files written, 1 removed");
+    expect(activitySummary([item(true)])).toBe("1 removed");
   });
 });

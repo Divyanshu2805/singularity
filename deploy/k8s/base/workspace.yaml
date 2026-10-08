@@ -60,6 +60,10 @@ spec:
               value: "redis-service.singularity-ai"
             - name: PREVIEW_NAMESPACE
               value: singularity-ai
+            - name: PREVIEW_PORT_FORWARD_ENABLED
+              value: "false"
+            - name: PREVIEW_KUBE_CONTEXT
+              value: ""
             - name: MINIO_URL
               value: "http://minio-service:9000"
             - name: MINIO_ACCESS_KEY

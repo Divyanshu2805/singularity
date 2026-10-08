@@ -46,31 +46,32 @@ def auth():
 def ai_generation():
     q = Sequence("Flow — AI generation",
                  "A chat prompt becomes committed project files, published as one atomic revision",
-                 [dict(id="fe", label="Frontend", sub="ChatPanel · use-stream-parser", icon="react", color=B),
+                 [dict(id="fe", label="Frontend", sub="chat store · generation-protocol", icon="react", color=B),
                   dict(id="cc", label="ChatController", sub="SSE endpoint", icon="springboot", color=G),
-                  dict(id="ag", label="AiGenerationService", sub="the pipeline", icon="springboot", color=G),
-                  dict(id="ai", label="OpenRouter", sub="Spring AI ChatClient", icon="sparkle", color=Y, icolor="#c4b5fd"),
+                  dict(id="ag", label="BuildTurn", sub="one turn, start to saved", icon="springboot", color=G),
+                  dict(id="ai", label="AI provider", sub="Spring AI ChatClient", icon="sparkle", color=Y, icolor="#c4b5fd"),
                   dict(id="ws", label="workspace-service", sub="internal API", icon="springboot", color=P),
                   dict(id="db", label="intelligence DB", sub="PostgreSQL", icon="postgresql", color=R)],
                  col=220)
     q.msg("fe", "cc", "POST /api/chat/stream { message, projectId }")
     q.msg("cc", "ag", "streamResponse()")
     q.msg("ag", "ws", "canEditProject → GET members/{userId}", color=P)
-    q.msg("ag", "ag", "assertWithinDailyTokenBudget · 402 if spent")
-    q.msg("ag", "ws", "GET files → tree for FileTreeContextAdvisor", color=P)
+    q.msg("ag", "ag", "register the turn · 409 if one is running · reserve budget · 402 if spent")
+    q.msg("ag", "ws", "GET files + contents → ProjectBrief, once per turn", color=P)
+    q.frame_start("loop", "until the answer is complete · carried on or repaired when it is not")
     q.msg("ag", "ai", "Flux.defer(chatClient.prompt()…stream())", color=Y)
-    q.frame_start("loop", "while the model streams")
-    q.msg("ai", "ag", "tool call: read_files", ret=True)
+    q.msg("ai", "ag", "tool call: read_files · only when files were left out of the brief", ret=True)
     q.msg("ag", "ws", "GET files/content", color=P)
     q.msg("ai", "ag", "raw chunks · <message> <todo> <file> tags", ret=True)
-    q.msg("ag", "fe", "SSE { text }  (checklist ticks off live)", ret=True)
+    q.msg("ag", "fe", "SSE text · status · replace  (checklist ticks off live)", ret=True)
+    q.msg("ag", "ag", "LlmResponseParser → TurnReview · ProjectImports")
     q.frame_end()
-    q.msg("ag", "ag", "LlmResponseParser → ChatEvent rows")
     q.msg("ag", "ws", "recheck access, then POST /revisions (whole turn)", color=P)
     q.msg("ws", "ag", "APPLIED | FAILED | CONFLICT + previousContent", ret=True)
-    q.msg("ag", "db", "save ChatMessage + ChatEvents", color=R)
-    q.msg("ag", "db", "record usage · UsageLog + UsageEvent", color=R)
-    q.note(["cc", "ag"], "closing the browser only stops watching · a stopped generation is discarded, not billed")
+    q.msg("ag", "db", "save ChatMessage + ChatEvents · the outcome on its first event", color=R)
+    q.msg("ag", "db", "usage settled per model call · UsageLog + UsageEvent", color=R)
+    q.msg("ag", "fe", "SSE done { outcome } → the browser adopts the saved turn", ret=True)
+    q.note(["cc", "ag"], "closing the browser only stops watching · every turn is saved, however it ends")
     return q.render()
 
 

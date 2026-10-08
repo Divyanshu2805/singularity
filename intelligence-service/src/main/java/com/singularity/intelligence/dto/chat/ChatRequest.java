@@ -7,8 +7,8 @@ import jakarta.validation.constraints.Size;
 /**
  * A message to the build chat.
  *
- * <p>Handles: the message, the project it is about, and whether teaching mode is on for this turn. The teaching
- * toggle is per request - nothing about it is stored.
+ * <p>Handles: the message, the project it is about, and whether the turn is asked for in teaching mode - left out, it
+ * is not.
  *
  * <p>The message is capped because it is replayed to the model with the conversation and every turn re-sends it: an
  * unbounded one lets a single request spend far more than a turn is ever reserved for. The chat box and the
@@ -22,5 +22,5 @@ public record ChatRequest(
         @NotNull(message = "Project id is required")
         Long projectId,
 
-        Boolean teachingMode
+        Boolean teaching
 ) {}

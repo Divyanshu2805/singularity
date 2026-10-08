@@ -1,27 +1,27 @@
 /**
  * A project's live preview: its state, and the actions that change it.
  *
- * Handles: polling the preview, starting, restarting and stopping it, and keeping the usage meter and the
- * cross-project preview list in step afterwards.
+ * Handles: polling the preview, asking about it at once when something says it may have changed, starting,
+ * restarting and stopping it, and keeping the usage meter and the cross-project preview list in step afterwards.
  *
- * Polling is fast while starting, so the checklist ticks along, and slow once running, where each poll is just "still
- * here". The slow poll is also the heartbeat: the server stops a preview nobody has asked about for long enough.
+ * How often to poll is lib/preview's (previewPollInterval): fast while starting or taking a change in, slow once
+ * running and level. The slow poll is also the heartbeat: the server stops a preview nobody has asked about for long
+ * enough.
  */
 import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { USAGE_QUERY_KEY } from "@/hooks/use-billing";
+import { previewPollInterval } from "@/lib/preview";
 import type { Preview } from "@/lib/types";
 
 export const previewQueryKey = (projectId: string) => ["preview", projectId] as const;
 export const MY_PREVIEWS_QUERY_KEY = ["previews", "mine"] as const;
 
-const STARTING_POLL_MS = 2_000;
-const RUNNING_POLL_MS = 60_000;
-
 export interface ProjectPreview {
   preview: Preview | null | undefined;
   isLoaded: boolean;
+  refresh: () => Promise<Preview | null | undefined>;
   start: () => Promise<Preview>;
   restart: () => Promise<Preview>;
   stop: () => Promise<void>;
@@ -37,14 +37,10 @@ export function useProjectPreview(projectId: string, isActive: boolean): Project
     queryKey: previewQueryKey(projectId),
     queryFn: () => api.getPreview(projectId),
     enabled: !!projectId,
-    refetchInterval: (q) => {
-      if (!isActive) return false;
-      const status = (q.state.data as Preview | null | undefined)?.status;
-      if (status === "CREATING") return STARTING_POLL_MS;
-      if (status === "RUNNING") return RUNNING_POLL_MS;
-      return false;
-    },
+    refetchInterval: (q) => previewPollInterval(q.state.data as Preview | null | undefined, isActive),
   });
+  const { refetch } = query;
+  const refresh = useCallback(() => refetch().then((result) => result.data), [refetch]);
 
   const afterChange = useCallback(
     (preview?: Preview) => {
@@ -77,6 +73,7 @@ export function useProjectPreview(projectId: string, isActive: boolean): Project
   return {
     preview: query.data,
     isLoaded: query.isFetched,
+    refresh,
     start: startMutation.mutateAsync,
     restart: restartMutation.mutateAsync,
     stop: stopMutation.mutateAsync,

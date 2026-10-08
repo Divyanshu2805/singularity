@@ -59,7 +59,9 @@ class ProjectServiceImplRevocationTest {
         service.softDelete(PROJECT_ID);
 
         verify(intelligenceServiceClient).stopGeneration(eq(PROJECT_ID), isNull());
-        verify(previewDeploymentService).stopAllForProject(eq(PROJECT_ID), anyString());
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(projectRepository, previewDeploymentService);
+        order.verify(projectRepository).flush();
+        order.verify(previewDeploymentService).stopAllForProject(eq(PROJECT_ID), anyString());
         verify(previewDeploymentService, never()).endSessionForUser(any(), any(), anyString());
     }
 
@@ -73,7 +75,10 @@ class ProjectServiceImplRevocationTest {
 
         service.softDelete(PROJECT_ID);
 
-        verify(projectMemberRepository).deleteById(new ProjectMemberId(PROJECT_ID, EDITOR_ID));
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(projectMemberRepository, previewDeploymentService);
+        order.verify(projectMemberRepository).deleteById(new ProjectMemberId(PROJECT_ID, EDITOR_ID));
+        order.verify(projectMemberRepository).flush();
+        order.verify(previewDeploymentService).endSessionForUser(eq(PROJECT_ID), eq(EDITOR_ID), anyString());
         verify(intelligenceServiceClient).stopGeneration(PROJECT_ID, EDITOR_ID);
         verify(previewDeploymentService).endSessionForUser(eq(PROJECT_ID), eq(EDITOR_ID), anyString());
         verify(previewDeploymentService, never()).stopAllForProject(any(), anyString());

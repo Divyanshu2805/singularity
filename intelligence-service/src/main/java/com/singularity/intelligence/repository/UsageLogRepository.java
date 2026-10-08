@@ -13,14 +13,23 @@ import java.util.Optional;
 /**
  * Reads and writes the daily token counter.
  *
- * <p>Handles: finding a user's row for a given day, which is the single-row read every quota check makes; claiming a
- * reservation against it and truing one up, both as a single atomic UPDATE rather than a read-modify-write, so
- * concurrent AI calls for the same user can neither race past the same day's limit nor lose one another's increment.
+ * <p>Handles: finding a user's row for a given day, reading just the figure on it, and adding a finished call's
+ * tokens to it as a single atomic UPDATE rather than a read-modify-write, so concurrent AI calls for the same user
+ * cannot lose one another's increment.
  *
- * <p>Every write here first calls {@code ensureRowExists}, an idempotent insert-if-missing: two concurrent first-
- * calls-of-the-day both attempting it is safe (the unique constraint on user_id+date lets exactly one insert win and
- * the other no-op), and it means the UPDATE that follows always has a row to act on, on both a brand-new day and one
- * already in progress.
+ * <p>The write first calls {@code ensureRowExists}, an idempotent insert-if-missing: two concurrent first-calls-of-
+ * the-day both attempting it is safe (the unique constraint on user_id+date lets exactly one insert win and the other
+ * no-op), and it means the UPDATE that follows always has a row to act on, on both a brand-new day and one already in
+ * progress.
+ *
+ * <p>The counter holds what was spent and nothing else. It once also held reservations - an amount claimed before a
+ * call and corrected after it - through a conditional UPDATE and a signed adjustment; those are gone, because a
+ * reservation counted as spending is exactly what made the usage meter jump and fall. What a call in progress is
+ * holding now lives in memory ({@code BudgetHolds}).
+ *
+ * <p>{@code findTokensUsed} reads the number itself, not the row as an entity. The budget arithmetic reads it again
+ * straight after charging a call, on a request whose persistence context may still hold the row as it was before
+ * the charge; a scalar read cannot be answered from that stale copy.
  */
 @Repository
 public interface UsageLogRepository extends JpaRepository<UsageLog, Long> {
@@ -28,32 +37,16 @@ public interface UsageLogRepository extends JpaRepository<UsageLog, Long> {
 
     java.util.List<UsageLog> findByUserIdAndDateBetween(Long userId, LocalDate from, LocalDate to);
 
+    @Query(value = "SELECT tokens_used FROM usage_logs WHERE user_id = :userId AND date = :date", nativeQuery = true)
+    Optional<Integer> findTokensUsed(@Param("userId") Long userId, @Param("date") LocalDate date);
+
     @Modifying
     @Query(value = "INSERT INTO usage_logs (user_id, date, tokens_used) VALUES (:userId, :date, 0) "
             + "ON CONFLICT (user_id, date) DO NOTHING", nativeQuery = true)
     void ensureRowExists(@Param("userId") Long userId, @Param("date") LocalDate date);
 
-    /**
-     * Atomically adds {@code amount} only if doing so would not exceed {@code limit}. Returns the number of rows
-     * updated (0 or 1) so the caller can tell a rejected reservation from a successful one without a second read.
-     */
-    @Modifying
-    @Query(value = "UPDATE usage_logs SET tokens_used = tokens_used + :amount "
-            + "WHERE user_id = :userId AND date = :date AND tokens_used + :amount <= :limit", nativeQuery = true)
-    int tryReserve(@Param("userId") Long userId, @Param("date") LocalDate date,
-                   @Param("amount") int amount, @Param("limit") int limit);
-
     @Modifying
     @Query(value = "UPDATE usage_logs SET tokens_used = tokens_used + :amount "
             + "WHERE user_id = :userId AND date = :date", nativeQuery = true)
     void addTokens(@Param("userId") Long userId, @Param("date") LocalDate date, @Param("amount") int amount);
-
-    /**
-     * Adjusts by a delta that may be negative - reconciling a reservation down to what a call actually cost - never
-     * letting the counter fall below zero.
-     */
-    @Modifying
-    @Query(value = "UPDATE usage_logs SET tokens_used = GREATEST(0, tokens_used + :delta) "
-            + "WHERE user_id = :userId AND date = :date", nativeQuery = true)
-    void adjust(@Param("userId") Long userId, @Param("date") LocalDate date, @Param("delta") int delta);
 }

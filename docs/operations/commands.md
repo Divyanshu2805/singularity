@@ -5,6 +5,7 @@ Add `--context <prod>` to each command when more than one cluster is configured.
 ```bash
 kubectl -n singularity get pods                              # the trusted workloads
 kubectl -n singularity-ai get pods -L status,project-id      # Redis, the proxy, the runner pool and live previews
+kubectl -n singularity-ai scale deployment/runner-pool --replicas=3   # warm pool for a demo day; see deployment/capacity.md
 kubectl top nodes; kubectl top pods -A                     # resource usage (metrics-server ships with k3s)
 kubectl -n singularity rollout status deploy/<name>          # wait for a rollout
 kubectl -n singularity rollout undo deploy/<name>            # roll one workload back

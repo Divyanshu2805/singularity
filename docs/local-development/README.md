@@ -16,6 +16,7 @@ Local development runs **six processes**: Eureka, the three domain services, the
 | Page | Covers |
 |---|---|
 | [Troubleshooting](troubleshooting.md) | Symptoms you're likely to hit, and their fixes |
+| [The preview checklist](preview-checklist.md) | Every preview case, how to provoke it, and what was verified where |
 | [Useful commands](commands.md) | Build, run, test and cluster commands in one place |
 | [Health checks](health-checks.md) | The actuator endpoint on each service's management port |
 | [Resetting local data](resetting-data.md) | Starting over from empty databases and storage |

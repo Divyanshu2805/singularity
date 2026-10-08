@@ -1,7 +1,7 @@
 package com.singularity.intelligence.service;
 
 import com.singularity.intelligence.dto.chat.ActiveGenerationResponse;
-import com.singularity.intelligence.dto.chat.StreamResponse;
+import com.singularity.intelligence.dto.chat.GenerationSignal;
 import reactor.core.publisher.Flux;
 
 import java.util.Optional;
@@ -14,15 +14,19 @@ import java.util.Optional;
  * member no longer has standing to run - a deleted project or a removed member.
  *
  * <p>A generation belongs to the server, not to the connection that asked for it, so closing the response only stops
- * watching.
+ * watching. What a watcher receives is a sequence of signals - the answer's text as it is written, what the server is
+ * doing in between, and finally how the turn ended, sent only once the turn has been saved.
+ *
+ * <p>Teaching mode changes nothing about how a turn is built. The flag is only carried to the saved reply, where it
+ * decides whether the turn's steps can be opened for a lesson afterwards.
  */
 public interface AiGenerationService {
 
-    Flux<StreamResponse> streamResponse(String message, Long projectId, boolean teachingMode);
+    Flux<GenerationSignal> streamResponse(String message, Long projectId, boolean teaching);
 
     Optional<ActiveGenerationResponse> findActiveGeneration(Long projectId);
 
-    Optional<Flux<StreamResponse>> watchActiveGeneration(Long projectId);
+    Optional<Flux<GenerationSignal>> watchActiveGeneration(Long projectId);
 
     boolean stopActiveGeneration(Long projectId);
 

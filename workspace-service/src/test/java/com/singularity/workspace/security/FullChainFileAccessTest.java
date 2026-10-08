@@ -158,6 +158,25 @@ class FullChainFileAccessTest {
     }
 
     @Test
+    @DisplayName("an ordinary session cookie cannot ask for a turn's files to be type-checked in a preview pod")
+    void sessionCookieCannotReachTheCodeCheck() throws Exception {
+        mockMvc.perform(post("/internal/v1/projects/{projectId}/code-check", PROJECT_ID)
+                        .cookie(sessionCookie())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"files\":{\"src/App.tsx\":\"export {};\"},\"deleted\":[]}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("no credentials at all cannot reach the code check either")
+    void noCredentialsCannotReachTheCodeCheck() throws Exception {
+        mockMvc.perform(post("/internal/v1/projects/{projectId}/code-check", PROJECT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"files\":{},\"deleted\":[]}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("a mutating request with no CSRF token is rejected before it ever reaches a handler")
     void mutatingRequestWithNoCsrfTokenIsRejected() throws Exception {
         mockMvc.perform(post("/api/projects/{projectId}/files", PROJECT_ID)

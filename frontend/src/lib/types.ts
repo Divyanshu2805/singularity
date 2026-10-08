@@ -15,6 +15,8 @@ export interface FileNode {
 }
 
 export type PreviewStatus = "CREATING" | "RUNNING" | "FAILED" | "TERMINATED";
+export type PreviewFailureKind = "INSTALL" | "DEV_SERVER" | "TIMEOUT" | "CAPACITY" | "PLATFORM";
+export type PreviewSyncState = "UP_TO_DATE" | "UPDATING";
 
 export interface Preview {
   id: number;
@@ -28,6 +30,10 @@ export interface Preview {
   terminatedAt: string | null;
   stopsAt: string | null;
   canStop: boolean;
+  failureKind?: PreviewFailureKind | null;
+  queuePosition?: number | null;
+  syncState?: PreviewSyncState | null;
+  syncDetail?: string | null;
 }
 
 export interface PreviewLogs {
@@ -40,11 +46,15 @@ export enum ChatEventType {
   MESSAGE = 'MESSAGE',
   TODO = 'TODO',
   FILE_EDIT = 'FILE_EDIT',
+  FILE_PATCH = 'FILE_PATCH',
   FILE_DELETE = 'FILE_DELETE',
   LEARN = 'LEARN',
   TOOL_LOG = 'TOOL_LOG',
-  ASK = 'ASK'
+  ASK = 'ASK',
+  THINKING = 'THINKING'
 }
+
+export type TurnOutcome = "SAVED" | "ANSWERED" | "INCOMPLETE" | "NOT_SAVED" | "EMPTY" | "FAILED" | "STOPPED" | "OUT_OF_BUDGET";
 
 export interface ChatEvent {
   id?: number;
@@ -54,6 +64,8 @@ export interface ChatEvent {
   filePath?: string;
   sequenceOrder?: number;
   isComplete?: boolean;
+  /** The lesson teaching mode has already written about this file edit, when it has been opened before. */
+  lesson?: string | null;
 }
 
 export interface ChatMessage {
@@ -62,6 +74,8 @@ export interface ChatMessage {
   content?: string;
   events: ChatEvent[];
   createdAt?: string;
+  /** True on an assistant turn that was asked for in teaching mode: only its steps can be opened for a lesson. */
+  teaching?: boolean;
 }
 
 export interface ProjectSummaryResponse {
@@ -199,9 +213,10 @@ export interface UsageToday {
   planName: string;
   projectTokensToday?: number | null;
   lastRequest?: LastRequestUsage | null;
+  buildMinimumTokens?: number | null;
 }
 
-export type UsageFeature = "BUILD" | "BUILD_RETRY" | "EXPLAIN" | "IDEA_INTERVIEW" | "PROJECT_NAMING" | "UNATTRIBUTED";
+export type UsageFeature = "BUILD" | "BUILD_RETRY" | "EXPLAIN" | "IDEA_INTERVIEW" | "PROJECT_NAMING" | "SUGGEST" | "UNATTRIBUTED";
 
 export interface LastRequestUsage {
   feature: UsageFeature;
@@ -293,6 +308,5 @@ export interface AuthSecurityEvent {
 export interface ActiveGeneration {
   userMessage: string;
   startedAt: string;
-  teachingMode: boolean;
-  status: "RUNNING" | "SAVING";
+  status: "RUNNING" | "SAVING" | "FINISHED";
 }

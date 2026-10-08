@@ -2,7 +2,20 @@
  * A project's own page: the chat on one side, the preview and code on the other.
  *
  * Handles: loading the project, renaming it in place, switching between the preview and the code, opening a file at
- * the line a chat message points at, refreshing usage when a response ends, and the share, fork and delete actions.
+ * the line a chat message points at, handing a build step to the code lens for a detailed explanation, refreshing
+ * usage when a response ends, replacing the composer with the quota banner once the allowance is spent or too little
+ * of it is left for the server to admit another build, saying so when a request could not be
+ * sent because a response is already in progress, bringing the preview up to date when a response has changed files,
+ * and the share, fork and delete actions.
+ *
+ * After a response whose files were saved, a running preview is asked about at once, so its "Updating" shows and
+ * gives way to "Up to date" as the server brings it level (the server also installs a new package by itself; this
+ * page no longer asks for that), and it is reloaded
+ * when it had reported an error - the page inside reports each error once per load, so without a reload a fix that
+ * did not work would look exactly like one that did, and the old error screen would stay up either way. A preview
+ * with no error is left alone: the dev server hot-reloads it and whatever the person was doing inside is kept. The
+ * decision is lib/preview's (previewFollowUp); a response that failed or was stopped saved nothing, so it touches
+ * nothing.
  *
  * This is the heaviest page in the app - it pulls in the editor - which is why it is loaded on demand rather than
  * with the shell.
@@ -36,7 +49,8 @@ import { ChatPanel } from "@/components/ChatPanel";
 import { CodePanel, type OpenFileRequest } from "@/components/CodePanel";
 import { PreviewPanel } from "@/components/PreviewPanel";
 import { useProjectPreview } from "@/hooks/use-preview";
-import { changedDependencies } from "@/lib/preview";
+import { previewFollowUp, shouldStartPreviewForBuild } from "@/lib/preview";
+import { fixOffer, fixRequestFor, withFixAttempt } from "@/lib/preview-fix";
 import { buttonVariants } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -55,7 +69,7 @@ import { useProjectPreferences } from "@/hooks/use-project-preferences";
 import { useTeachingMode } from "@/hooks/use-teaching-mode";
 import { api, isAuthenticated, loginRedirectPath } from "@/lib/api";
 import { projectChat, useProjectChat } from "@/lib/project-chat-store";
-import { useCodeLens } from "@/lib/code-lens-store";
+import { codeLens, useCodeLens, type BuildStepQuestion } from "@/lib/code-lens-store";
 import { useToast } from "@/hooks/use-toast";
 import type { RuntimeError } from "@/components/RuntimeErrorAlert";
 import { generateGradient, cn } from "@/lib/utils";
@@ -77,6 +91,7 @@ const VIEW_OPTIONS: { mode: ViewMode; label: string; Icon: LucideIcon }[] = [
 ];
 
 const CHAT_PANEL_PERCENT = { sidebarCollapsed: 45, sidebarPinned: 44 };
+const PREVIEW_SYNC_GRACE_MS = 2500;
 const CHAT_PANEL_PERCENT_WITH_NOTES = 28;
 
 function HeaderIconButton({ label, onClick, disabled, destructive, star, motion = "scale(1.14)", children }: {
@@ -286,13 +301,34 @@ function ProjectWorkspace() {
     toast({ title: "Couldn't load the chat", description: chat.historyError, variant: "destructive" });
   }, [chat.historyError, toast]);
 
+  useEffect(() => {
+    if (!chat.notice || !projectId) return;
+    toast({ title: "A response is already in progress", description: chat.notice });
+    projectChat.dismissNotice(projectId);
+  }, [chat.notice, projectId, toast]);
+
   const handleOpenFile = useCallback((path: string, isFromCurrentChat: boolean, target?: CodeTarget) => {
     setViewMode("code");
     setOpenFileRequest({ path, id: Date.now(), showDiff: isFromCurrentChat, target });
   }, []);
 
+  const handleExplainStep = useCallback((step: BuildStepQuestion) => {
+    if (!projectId) return;
+    setViewMode("code");
+    setOpenFileRequest({ path: step.path, id: Date.now(), showDiff: false });
+    codeLens.explainStep(projectId, step);
+  }, [projectId]);
+
+  const previewForBuildRef = useRef({ canEdit, livePreview });
+  previewForBuildRef.current = { canEdit, livePreview };
   const handleSendMessage = useCallback((content: string) => {
-    if (projectId) projectChat.sendMessage(projectId, content, { teachingMode });
+    const sent = !!projectId && projectChat.sendMessage(projectId, content, teachingMode);
+    const { canEdit: mayEdit, livePreview: live } = previewForBuildRef.current;
+    if (sent && shouldStartPreviewForBuild({ canEdit: mayEdit, isLoaded: live.isLoaded, isStarting: live.isStarting, preview: live.preview })) {
+      live.start().catch(() => {
+      });
+    }
+    return sent;
   }, [projectId, teachingMode]);
 
   const handleStop = useCallback(() => {
@@ -300,8 +336,8 @@ function ProjectWorkspace() {
   }, [projectId]);
 
   const handleRetry = useCallback(() => {
-    if (projectId) projectChat.retryLastMessage(projectId, { teachingMode });
-  }, [projectId, teachingMode]);
+    if (projectId) projectChat.retryLastMessage(projectId);
+  }, [projectId]);
 
   const handleDiffViewed = useCallback((path: string) => {
     if (projectId) projectChat.markDiffViewed(projectId, path);
@@ -315,34 +351,52 @@ function ProjectWorkspace() {
     handleSendMessage(prompt);
   }, [chat.isHistoryLoaded, handleSendMessage, navigate, location.pathname]);
 
-  useEffect(() => setRuntimeError(null), [projectId]);
+  const [fixAttempts, setFixAttempts] = useState<ReadonlyMap<string, number>>(new Map());
+  useEffect(() => {
+    setRuntimeError(null);
+    setFixAttempts(new Map());
+  }, [projectId]);
 
-  const { preview: currentPreview, restart: restartPreview } = livePreview;
+  const handleFixError = useCallback(() => {
+    if (!runtimeError) return;
+    if (!handleSendMessage(fixRequestFor(runtimeError))) return;
+    setFixAttempts((attempts) => withFixAttempt(attempts, runtimeError));
+    setRuntimeError(null);
+  }, [runtimeError, handleSendMessage]);
+
+  const [previewReloadSignal, setPreviewReloadSignal] = useState(0);
+  const previewHadErrorRef = useRef(false);
+  const previewReloadTimerRef = useRef<number>();
+  useEffect(() => () => window.clearTimeout(previewReloadTimerRef.current), []);
+  const handleRuntimeError = useCallback((error: RuntimeError) => {
+    previewHadErrorRef.current = true;
+    setRuntimeError(error);
+  }, []);
+
+  const { preview: currentPreview, refresh: refreshPreview } = livePreview;
   const wasStreamingForPreviewRef = useRef(chat.isStreaming);
+  const lastTurnOutcome = chat.messages[chat.messages.length - 1]?.outcome;
   useEffect(() => {
     const finished = wasStreamingForPreviewRef.current && !chat.isStreaming;
     wasStreamingForPreviewRef.current = chat.isStreaming;
-    if (finished && currentPreview?.status === "RUNNING" && changedDependencies(chat.lastTurnFiles)) {
-      restartPreview().catch(() => {
+    if (!finished) return;
+
+    const followUp = previewFollowUp(
+      { outcome: lastTurnOutcome, files: chat.lastTurnFiles },
+      { isRunning: currentPreview?.status === "RUNNING", hadError: previewHadErrorRef.current }
+    );
+    if (chat.lastTurnFiles.length > 0 && currentPreview?.status === "RUNNING") {
+      refreshPreview().catch(() => {
       });
     }
-  }, [chat.isStreaming, chat.lastTurnFiles, currentPreview?.status, restartPreview]);
-
-  const handleFixError = useCallback((error: RuntimeError) => {
-    const prompt = `I encountered a ${error.source || "runtime error"} in my application:
-
-Error Message: ${error.message.slice(0, 2000)}
-${error.filename ? `File: ${error.filename.slice(0, 500)}` : ''}
-${error.lineno ? `Line: ${error.lineno}` : ''}
-
-Stack Trace:
-${error.stack ? error.stack.slice(0, 6000) : "No stack trace available"}
-
-Please analyze this error and fix the code to resolve it.`;
-
-    handleSendMessage(prompt);
-    setRuntimeError(null);
-  }, [handleSendMessage]);
+    if (followUp === "none") return;
+    previewHadErrorRef.current = false;
+    window.clearTimeout(previewReloadTimerRef.current);
+    previewReloadTimerRef.current = window.setTimeout(() => {
+      setRuntimeError(null);
+      setPreviewReloadSignal((signal) => signal + 1);
+    }, PREVIEW_SYNC_GRACE_MS);
+  }, [chat.isStreaming, chat.lastTurnFiles, lastTurnOutcome, currentPreview?.status, refreshPreview]);
 
   const handleRename = async (name: string) => {
     if (!projectId) return false;
@@ -394,7 +448,13 @@ Please analyze this error and fix the code to resolve it.`;
         resetsIn: formatResetIn(quota.resetsAt),
         onUpgrade: () => navigate("/pricing"),
       }
-    : null;
+    : quota && !quota.canBuild
+      ? {
+          message: `Only ${formatTokens(quota.remaining)} of today's ${formatTokens(quota.limit)} AI tokens are left - not enough for another build.`,
+          resetsIn: formatResetIn(quota.resetsAt),
+          onUpgrade: () => navigate("/pricing"),
+        }
+      : null;
 
   const wasStreamingRef = useRef(chat.isStreaming);
   useEffect(() => {
@@ -481,13 +541,19 @@ Please analyze this error and fix the code to resolve it.`;
           projectId={projectId}
           isVisible={viewMode === "preview"}
           preview={livePreview}
+          canRestart={canEdit}
+          isBuilding={chat.isStreaming}
           onViewCode={() => setViewMode("code")}
           onDownload={handleDownloadProject}
           runtimeError={runtimeError}
-          onRuntimeError={setRuntimeError}
+          onRuntimeError={handleRuntimeError}
+          reloadSignal={previewReloadSignal}
           onDismiss={() => setRuntimeError(null)}
-          onFix={handleFixError}
-          onAskToFix={canEdit ? handleSendMessage : undefined}
+          errorFix={
+            canEdit && runtimeError && !chat.isStreaming
+              ? { offer: fixOffer(fixAttempts, runtimeError), onFix: handleFixError }
+              : null
+          }
         />
       </div>
     </div>
@@ -634,8 +700,11 @@ Please analyze this error and fix the code to resolve it.`;
                   onBrowseCode={() => setViewMode("code")}
                   onStop={handleStop}
                   onRetry={handleRetry}
+                  onExplainStep={handleExplainStep}
                   teachingMode={teachingMode}
+                  projectId={projectId}
                   onTeachingModeChange={setTeachingMode}
+                  suggestions={chat.suggestions}
                 />
               </ResizablePanel>
 
