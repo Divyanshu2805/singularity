@@ -48,7 +48,7 @@ Client-fault statuses log at `WARN` with the message only. Only genuine server f
 | `DataIntegrityViolationException` | 409 | A database constraint violation. Logged with its cause chain, which names the constraint. | WARN + trace |
 | `HttpMediaTypeNotSupportedException` | 415 | A body in a content type the endpoint doesn't accept. | WARN |
 | `RateLimitExceededException` | 429 | Rate limit exceeded; includes `Retry-After`. | WARN |
-| `CapacityUnavailableException` | 503 | No free capacity right now (every preview runner is busy). `code: CAPACITY_UNAVAILABLE`. | WARN |
+| `CapacityUnavailableException` | 503 | No free capacity right now. `code: CAPACITY_UNAVAILABLE`. Nothing raises it at present: starting a preview with every runner busy used to, and now waits in line instead ([previews](previews.md)). | WARN |
 | `FileStorageException` | 503 | Object storage failed. `code: UPSTREAM_UNAVAILABLE`. | **ERROR + trace** |
 | `ExternalServiceException` | 503 | A dependency failed: Firebase, Stripe, OpenRouter, another service, or the Kubernetes cluster. `code: UPSTREAM_UNAVAILABLE`. | **ERROR + trace** |
 | `Exception` (anything else) | 500 | Unexpected. | **ERROR + trace** |

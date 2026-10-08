@@ -40,17 +40,19 @@ gateway-service/        Spring Cloud Gateway — the browser's single origin. Or
                         No catch-all: an unowned path is a 404. RoutingTableTest pins every path.
 account-service/        users, plans, subscriptions, Stripe, sessions and their audit trail
 workspace-service/      projects, members, files, file revisions, the live-preview pipeline
-intelligence-service/   AI generation, code insight, idea clarifier, usage metering
+intelligence-service/   AI generation, code insight, idea clarifier, usage metering, the build benchmark
   inside each service (com.singularity.<service>): entity/ enums/ repository/ mapper/ service/ service/impl/
   controller/ dto/ security/ feign/ config/ util/ (+ llm/ in intelligence); migrations in
   src/main/resources/db/migration/
 frontend/src/           pages/ components/ hooks/ lib/ — logic lives in lib/
 proxy/                  Node reverse proxy for preview hostnames
-k8s/                    LOCAL DEV ONLY — the preview pipeline on kind while the backend runs via mvnw
+k8s/                    LOCAL DEV ONLY — the preview pipeline on kind while the backend runs via mvnw;
+                        preview-test-cluster.sh stands a second one up in its own namespace for PreviewPipelineIT
 deploy/k8s/             the production topology (Kustomize: base/ + overlays/kind, overlays/oracle; namespaces/)
 deploy/scripts/         apply-secrets.sh, smoke-test.sh, restore-backup.sh, check-backup-freshness.sh
 docker/                 the shared Java service Dockerfile (MODULE build-arg) and the preview-runner image
-.github/workflows/      ci.yml (test → build 8 images → deploy → smoke test → rollback), uptime.yml
+.github/workflows/      ci.yml (test, incl. a real preview on kind → build 8 images → deploy → smoke test → rollback), uptime.yml
+scripts/                bench-verify.sh - compiles a build benchmark's projects in a throwaway container
 docs/                   documentation — start at docs/README.md
 ```
 
@@ -60,9 +62,11 @@ docs/                   documentation — start at docs/README.md
 ./mvnw -pl common-lib,<service> test -Dtest=ClassName#method   # one test, building common-lib from source
 ./mvnw -pl gateway-service test -Dtest=RoutingTableTest        # rerun after any controller or route change
 ./mvnw -pl <service> spring-boot:run                           # prove a change boots (see local setup for ports)
-./mvnw test                                                    # all backend tests (488; one needs Docker)
+./mvnw test                                                    # all backend tests (956; one needs Docker)
 ./mvnw clean package                                           # build every module
 cd frontend && npx tsc --noEmit -p tsconfig.app.json && npm run lint && npm test && npm run build
+./mvnw -pl common-lib,intelligence-service compile spring-boot:run -Dspring-boot.run.profiles=stub-ai   # no AI provider, no tokens
+k8s/preview-test-cluster.sh --context kind-singularity && ./mvnw -pl common-lib,workspace-service test -Dtest=PreviewPipelineIT -Dsurefire.failIfNoSpecifiedTests=false   # a real preview on kind; after any preview or proxy change
 ```
 
 On Windows, use `mvnw.cmd`. A bare `./mvnw spring-boot:run` at the root fails — the root `pom.xml` has no main class. Running all five services on one machine needs a distinct `MANAGEMENT_SERVER_PORT` per service; see [setup](docs/local-development/setup.md).
@@ -92,3 +96,5 @@ Silent-failure traps this stack has hit, imported in full. Check here first when
 @docs/practices/gotchas/kubernetes.md
 
 @docs/practices/gotchas/ci-and-tooling.md
+
+@docs/practices/gotchas/ai-generation.md

@@ -35,7 +35,7 @@ class IdeaServiceImplInterviewTest {
     private final ChatClient chatClient = mock(ChatClient.class);
     private final AiUsageRecorder aiUsageRecorder = mock(AiUsageRecorder.class);
     private final UsageService usageService = mock(UsageService.class);
-    private final IdeaServiceImpl service = new IdeaServiceImpl(chatClient, aiUsageRecorder, usageService);
+    private final IdeaServiceImpl service = new IdeaServiceImpl(chatClient, new com.singularity.intelligence.llm.ModelCalls(com.singularity.intelligence.config.AiCallProperties.defaults()), aiUsageRecorder, usageService);
 
     private static ClarifyingQuestion question(String id, String text, String... options) {
         return new ClarifyingQuestion(id, text, "Why it matters.", List.of(options), false);

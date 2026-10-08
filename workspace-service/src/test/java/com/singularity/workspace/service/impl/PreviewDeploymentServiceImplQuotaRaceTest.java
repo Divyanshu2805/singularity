@@ -55,7 +55,7 @@ class PreviewDeploymentServiceImplQuotaRaceTest {
     private final PreviewProperties properties = new PreviewProperties(
             "singularity-ai", "http", "localhost", null, 5173, "myminio", "projects",
             Duration.ofMinutes(10), Duration.ofMinutes(2), Duration.ofSeconds(90),
-            "test-secret-at-least-32-bytes-long-000000", Duration.ofHours(6));
+            "test-secret-at-least-32-bytes-long-000000", Duration.ofHours(6), Duration.ofMinutes(5));
 
     private final PreviewDeploymentServiceImpl service = new PreviewDeploymentServiceImpl(
             previewRepository, sessionRepository, projectRepository, runnerPool, router, bootstrapper, lifecycle,

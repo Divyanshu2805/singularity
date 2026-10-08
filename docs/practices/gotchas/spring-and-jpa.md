@@ -68,3 +68,21 @@
 - **Symptom:** a service (or a Spring-context test) fails its first Postgres connection on Windows with a time-zone error.
 - **Cause:** the Windows JVM reports the legacy `Asia/Calcutta` zone, which PostgreSQL rejects. The fix is a JVM default set in `main()`, so it doesn't carry across services — and Spring's test support bypasses `main()` entirely.
 - **Fix:** every service's `main()` calls `WindowsTimezoneWorkaround.apply()` before `SpringApplication.run(...)`. For a Spring-context test, call it in `@BeforeAll` or pass `-Duser.timezone=Asia/Kolkata`.
+
+## A test instance per class starts the Spring context before Testcontainers
+
+- **Symptom:** a `@Testcontainers` test with `@TestInstance(PER_CLASS)` fails to load its context with `Mapped port can only be obtained after the container is started`.
+- **Cause:** with one instance per class, JUnit creates the instance - and Spring builds the context for it - before the Testcontainers extension's `beforeAll` has started the static containers.
+- **Fix:** start the container by hand at the top of the `@DynamicPropertySource` method (`PreviewPipelineIT.connect`); `start()` is idempotent, so the extension finding it running is harmless.
+
+## A `%` in a shell script built with `String.formatted`
+
+- **Symptom:** a method that builds a script with a text block and `.formatted(...)` throws `UnknownFormatConversionException` at run time - not at compile time, and only on the path that builds that script.
+- **Cause:** shell parameter expansion uses `%` (`${pid%/cmdline}`), which the formatter reads as the start of a conversion.
+- **Fix:** write it `%%` inside a formatted block (`PreviewBootstrapper.resyncScript`), and leave scripts that take no arguments unformatted.
+
+## `@Modifying(clearAutomatically = true)` throws away changes that were only queued
+
+- **Symptom:** a delete or an update "succeeds" - the request answers 204, nothing is logged - and the row is unchanged. It happens only on some paths: removing a member who had the preview open, leaving or deleting a project whose preview was running.
+- **Cause:** `repository.delete(entity)` and `save(entity)` queue their SQL until the transaction flushes. A `@Modifying(clearAutomatically = true)` query later in the same transaction clears the persistence context when it finishes, queued work included, and Hibernate does not flush first unless the query touches the same table. Every preview status update is such a query.
+- **Fix:** `flush()` the change before calling anything that may run one (`ProjectMemberServiceImpl.removeProjectMember`, `ProjectServiceImpl.softDelete`). A unit test with mocked repositories cannot see this; the tests pin the order - written, then flushed, then the preview call - and the proof is the SQL log showing the `delete`.

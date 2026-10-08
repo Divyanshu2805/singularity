@@ -11,10 +11,14 @@ import lombok.experimental.FieldDefaults;
  *
  * <p>Handles: its type and order within the turn, its content, the file it concerns, any metadata (a lesson's concept
  * name, a tool's arguments), and for a file edit the version that file had immediately before this turn saved over
- * it.
+ * it and the lesson teaching mode wrote about that change.
  *
  * <p>The previous version is stored because object storage keeps only a file's current version: without it, the last
- * turn's diff lived only in the browser and was gone after signing out.
+ * turn's diff lived only in the browser and was gone after signing out. It is also what a lesson is written from: a
+ * lesson explains what the step changed, which is the difference between the two versions.
+ *
+ * <p>The lesson is written once, the first time the step is opened in a turn that was asked for in teaching mode,
+ * and kept here so it stays in the conversation and is never paid for twice.
  *
  * <p>The type column is declared with an explicit column definition so Hibernate does not generate a check constraint
  * listing today's enum values. Such a constraint is created once and never widened, so adding an event type left
@@ -56,5 +60,8 @@ public class ChatEvent {
 
     @Column(columnDefinition = "text")
     String previousContent;
+
+    @Column(columnDefinition = "text")
+    String lesson;
 
 }

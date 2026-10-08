@@ -71,3 +71,21 @@
 - **Symptom:** backups silently stop while every service stays healthy.
 - **Cause:** Kubernetes doesn't alert on a failed Job.
 - **Fix:** the backup job writes a `LATEST` marker as its very last step, only on full success, and a daily workflow checks its age. Don't move or remove that write. See [monitoring](../../operations/monitoring.md).
+
+## Two databases must never share a runner namespace
+
+- **Symptom:** a preview started by a test, or by a second copy of the stack, dies two minutes after it starts; its pod is gone and nothing in its own log says why. The other service's log says `Releasing runner pod …, which no active preview owns`.
+- **Cause:** `PreviewReaper`'s orphan sweep lists every claimed pod in `preview.namespace` and releases any that no active preview **in its own database** owns. A second database looking at the same namespace is, to the first, a source of orphans - and the reverse.
+- **Fix:** one namespace per database. `PreviewPipelineIT` runs in `singularity-it`, which `k8s/preview-test-cluster.sh` creates; never point it, or a second workspace-service, at a namespace another one is using.
+
+## A second writer beside the file watcher
+
+- **Symptom:** a copy of the project's files into a runner (`mc mirror`) hangs until the exec times out two minutes later, with no output, on some change and not on others. Seen once in seven copies on kind; not reproducible by hand.
+- **Cause:** the copy ran while the pod's own `mc mirror --watch` was running, and both went for the same file. An exec that times out also leaves its command running in the container, so a hung copy stayed there.
+- **Fix:** a copy is one command that stops the watcher, mirrors once under `timeout`, and starts the watcher again (`PreviewBootstrapper.mirrorOnce`). Anything else that writes into `/app` while a preview runs must do the same or go through that method. A time limit that matters belongs inside the script, not only on the exec.
+
+## `kubectl exec` of a Windows program's path under Git Bash, with path conversion off
+
+- **Symptom:** a script that sets `MSYS_NO_PATHCONV=1` (so `kubectl exec … /bin/sh` works) then fails at `docker build … /c/Users/…` with "path not found".
+- **Cause:** with conversion off, `docker` and `kind` - Windows programs - receive the Git Bash path as it is and cannot read it.
+- **Fix:** take the directory with `pwd -W` when it exists (`k8s/preview-test-cluster.sh`), which gives `C:/…` under Git Bash and fails harmlessly everywhere else.

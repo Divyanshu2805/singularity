@@ -22,7 +22,7 @@ vi.mock("./api", () => ({
 }));
 
 import { api } from "./api";
-import { codeLens, forgetLoadedThreadsForTests, useCodeLens } from "./code-lens-store";
+import { codeLens, forgetLoadedThreadsForTests, stepQuestion, useCodeLens } from "./code-lens-store";
 import { clearSignedInState } from "./session";
 import type { CodeSelection } from "./types";
 
@@ -520,6 +520,33 @@ describe("codeLens thread", () => {
 
     expect(api.getCodeNotes).toHaveBeenCalledTimes(2);
     expect(result.current?.turns).toEqual([]);
+  });
+
+  it("takes a build step from the chat as an ordinary question about its file, with nothing selected", async () => {
+    const { result } = renderHook(() => useCodeLens(projectId));
+
+    act(() => codeLens.explainStep(projectId, {
+      path: "src/hooks/useTasks.ts",
+      label: "Remembering the tasks",
+      what: "Adds the list's memory.",
+    }));
+    await flush();
+
+    const stream = lastStream();
+    expect(result.current?.isOpen).toBe(true);
+    expect(stream.kind).toBe("ask");
+    expect(stream.body.code).toBeUndefined();
+    expect(stream.body.question).toBe(stepQuestion({ path: "src/hooks/useTasks.ts", label: "Remembering the tasks", what: "Adds the list's memory." }));
+    expect(stream.body.question).toContain('the step "Remembering the tasks" did in `src/hooks/useTasks.ts`');
+    expect(stream.body.question).toContain("The build described this step as: Adds the list's memory.");
+    expect(result.current?.turns[0]).toMatchObject({ role: "user", content: stream.body.question });
+  });
+
+  it("keeps a step's question within what the server accepts, however long the step's description", () => {
+    const question = stepQuestion({ path: "src/App.tsx", label: "Wiring it up", what: "word ".repeat(600) });
+
+    expect(question.length).toBeLessThan(2000);
+    expect(stepQuestion({ path: "src/App.tsx", label: "Wiring it up" })).not.toContain("The build described");
   });
 
   it("keeps threads separate per project", async () => {

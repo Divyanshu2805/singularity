@@ -1,128 +1,223 @@
 package com.singularity.intelligence.service.impl;
 
-import com.singularity.intelligence.dto.chat.StreamResponse;
+import com.singularity.intelligence.dto.chat.GenerationSignal;
 import com.singularity.intelligence.dto.usage.UsageReservation;
-import reactor.core.Disposable;
+import com.singularity.intelligence.llm.GeneratedPath;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
- * One AI response being generated, owned by the server rather than by whichever browser asked for it.
+ * One build turn in progress, owned by the server rather than by whichever browser asked for it.
  *
- * <p>Handles: accumulating the model's output, fanning each chunk out to every attached viewer, replaying everything
- * written so far to a viewer that attaches late, ending every viewer's stream on completion or failure, and stopping
- * the underlying model call.
+ * <p>Handles: holding the turn's text as it stands, fanning each new piece, status line and correction out to every
+ * attached viewer, replaying where things are to a viewer that attaches late, moving the turn from running to saving
+ * to finished, taking a request to stop, and letting a caller wait until the turn has really ended.
  *
- * <p>It used to be the other way round: the model call was the HTTP response's own stream, so a refresh closed the
- * connection, the stream was cancelled, the model call went with it, and the turn - which is only saved on completion
- * - was never stored at all. Now the generation runs to the end regardless and a connection is just a viewer, so a
- * refreshed page or a second tab picks up exactly where the response is.
+ * <p>A viewer's stream now stays open until the turn has been saved and ends with the outcome. It used to end the
+ * moment the model stopped writing, while the server went on to parse, possibly re-ask the model, and save - none of
+ * which a viewer could see. So the browser kept showing its own reading of the text, could not tell a turn that saved
+ * from one that did not, and raced the still-running save with a retry of its own.
+ *
+ * <p>Stopping is only possible while the turn is running. Once it has begun saving it is past the point where
+ * stopping means anything - its files publish as one revision or not at all - so a late stop is refused and the turn
+ * finishes. The stop itself does not save anything: it cancels the model call and leaves the thread running the turn
+ * to record what happened, which keeps one writer for the turn's record.
+ *
+ * <p>A turn can also be abandoned, which is the same stop asked for by the server itself as it shuts down. It is kept
+ * apart from a person's stop only so the record can say which it was: "you stopped this" would be untrue of a turn
+ * that a deploy cut short.
  *
  * <p>Every mutation and every new viewer goes through this object's monitor, which is what guarantees a viewer sees
- * each chunk exactly once - replayed if it arrived before they attached, live if after, never both or neither.
+ * each piece exactly once - replayed if it arrived before they attached, live if after, never both or neither.
  *
- * <p>Also carries the usage reservation claimed before this generation started, and the text accumulated so far, so a
- * stop or a mid-stream provider error - both of which end this outside the model stream's own completion/error
- * signal - can still reconcile that reservation to an estimate of what was actually produced, rather than losing the
- * charge entirely or leaving it stuck at the full reservation forever.
+ * <p>It also carries the usage reservation claimed before the turn started, handed back exactly once, so a stop and
+ * the turn's own completion can never both settle it.
  */
 public final class ActiveGeneration {
 
     public enum Status {
         RUNNING,
-        SAVING
+        SAVING,
+        FINISHED
     }
 
     private final Long projectId;
     private final Long userId;
     private final String userMessage;
-    private final boolean teachingMode;
-    private final Instant startedAt = Instant.now();
+    private final Instant startedAt;
 
     private final StringBuilder text = new StringBuilder();
-    private final List<FluxSink<StreamResponse>> viewers = new CopyOnWriteArrayList<>();
+    private final List<FluxSink<GenerationSignal>> viewers = new CopyOnWriteArrayList<>();
+    private final CountDownLatch finished = new CountDownLatch(1);
     private Status status = Status.RUNNING;
-    private boolean streamEnded;
+    private String statusLine;
+    private String outcome;
     private Throwable failure;
-    private volatile Disposable subscription;
+    private boolean stopRequested;
+    private boolean abandoned;
+    private Runnable cancelCurrentCall;
     private UsageReservation reservation;
 
-    ActiveGeneration(Long projectId, Long userId, String userMessage, boolean teachingMode) {
+    ActiveGeneration(Long projectId, Long userId, String userMessage, Instant startedAt) {
         this.projectId = projectId;
         this.userId = userId;
         this.userMessage = userMessage;
-        this.teachingMode = teachingMode;
+        this.startedAt = startedAt;
     }
 
     synchronized void append(String chunk) {
-        if (streamEnded || chunk == null || chunk.isEmpty()) return;
+        if (status != Status.RUNNING || stopRequested || chunk == null || chunk.isEmpty()) return;
         text.append(chunk);
-        StreamResponse response = new StreamResponse(chunk);
-        viewers.forEach(viewer -> viewer.next(response));
+        emit(GenerationSignal.text(chunk));
     }
 
-    synchronized void markStreamComplete() {
-        if (streamEnded) return;
-        streamEnded = true;
+    synchronized void replaceText(String wholeText) {
+        if (status != Status.RUNNING) return;
+        text.setLength(0);
+        text.append(wholeText);
+        emit(GenerationSignal.replace(wholeText));
+    }
+
+    synchronized void announce(String line) {
+        if (status == Status.FINISHED) return;
+        statusLine = line;
+        emit(GenerationSignal.status(line));
+    }
+
+    synchronized void filesRead(List<String> paths) {
+        List<String> shown = paths.stream()
+                .map(GeneratedPath::normalize)
+                .flatMap(Optional::stream)
+                .filter(path -> path.chars().noneMatch(character -> "\",<>".indexOf(character) >= 0))
+                .distinct()
+                .toList();
+        if (shown.isEmpty()) return;
+        String label = "Reading " + shown.size() + (shown.size() == 1 ? " file" : " files");
+        append("<tool args=\"" + String.join(",", shown) + "\">" + label + "</tool>");
+        announce(label);
+    }
+
+    synchronized boolean beginSaving() {
+        if (status != Status.RUNNING || stopRequested) return false;
         status = Status.SAVING;
-        viewers.forEach(FluxSink::complete);
-        viewers.clear();
+        return true;
     }
 
-    synchronized void markFailed(Throwable error) {
-        if (streamEnded) return;
-        streamEnded = true;
+    synchronized void finish(String turnOutcome) {
+        if (status == Status.FINISHED) return;
+        status = Status.FINISHED;
+        outcome = turnOutcome;
+        viewers.forEach(viewer -> {
+            viewer.next(GenerationSignal.done(turnOutcome));
+            viewer.complete();
+        });
+        viewers.clear();
+        finished.countDown();
+    }
+
+    synchronized void fail(Throwable error) {
+        if (status == Status.FINISHED) return;
+        status = Status.FINISHED;
         failure = error;
         viewers.forEach(viewer -> viewer.error(error));
         viewers.clear();
+        finished.countDown();
     }
 
-    Flux<StreamResponse> watch() {
+    boolean requestStop() {
+        return stop(false);
+    }
+
+    boolean abandon() {
+        return stop(true);
+    }
+
+    private boolean stop(boolean byTheServer) {
+        Runnable cancel;
+        synchronized (this) {
+            if (status != Status.RUNNING || stopRequested) return false;
+            stopRequested = true;
+            abandoned = byTheServer;
+            cancel = cancelCurrentCall;
+        }
+        if (cancel != null) cancel.run();
+        return true;
+    }
+
+    synchronized boolean abandoned() {
+        return abandoned;
+    }
+
+    void onCancel(Runnable cancel) {
+        boolean alreadyStopped;
+        synchronized (this) {
+            cancelCurrentCall = cancel;
+            alreadyStopped = stopRequested;
+        }
+        if (alreadyStopped && cancel != null) cancel.run();
+    }
+
+    synchronized boolean stopRequested() {
+        return stopRequested;
+    }
+
+    boolean awaitFinished(Duration timeout) {
+        try {
+            return finished.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    Flux<GenerationSignal> watch() {
         return Flux.create(sink -> {
             synchronized (this) {
-                if (!text.isEmpty()) sink.next(new StreamResponse(text.toString()));
-                if (streamEnded) {
-                    if (failure != null) sink.error(failure);
-                    else sink.complete();
+                if (!text.isEmpty()) sink.next(GenerationSignal.text(text.toString()));
+                if (status == Status.FINISHED) {
+                    if (failure != null) {
+                        sink.error(failure);
+                    } else {
+                        sink.next(GenerationSignal.done(outcome));
+                        sink.complete();
+                    }
                     return;
                 }
+                if (statusLine != null) sink.next(GenerationSignal.status(statusLine));
                 viewers.add(sink);
             }
             sink.onDispose(() -> viewers.remove(sink));
         }, FluxSink.OverflowStrategy.BUFFER);
     }
 
-    void setSubscription(Disposable subscription) {
-        this.subscription = subscription;
+    private void emit(GenerationSignal signal) {
+        viewers.forEach(viewer -> viewer.next(signal));
     }
 
     synchronized void setReservation(UsageReservation reservation) {
         this.reservation = reservation;
     }
 
-    /**
-     * Hands back the reservation exactly once and clears it, so a stop/error path and this generation's own natural
-     * completion can never both reconcile the same reservation - whichever asks first gets it, and the other gets
-     * {@code null}, which every reconcile/release call already treats as a no-op.
-     */
+    synchronized UsageReservation reservation() {
+        return reservation;
+    }
+
     synchronized UsageReservation takeReservation() {
         UsageReservation taken = reservation;
         reservation = null;
         return taken;
     }
 
-    synchronized String textSoFar() {
+    synchronized String text() {
         return text.toString();
-    }
-
-    void stop(Throwable reason) {
-        Disposable current = subscription;
-        if (current != null) current.dispose();
-        markFailed(reason);
     }
 
     public Long projectId() {
@@ -135,10 +230,6 @@ public final class ActiveGeneration {
 
     public String userMessage() {
         return userMessage;
-    }
-
-    public boolean teachingMode() {
-        return teachingMode;
     }
 
     public Instant startedAt() {

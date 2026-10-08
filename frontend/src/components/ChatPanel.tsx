@@ -3,8 +3,11 @@
  *
  * Handles: rendering saved and streaming turns, revealing a streamed answer at a readable pace, the scroll rail down
  * the side, the composer with its teaching-mode toggle and example prompts, the usage meter above it, retrying an
- * unfinished turn, exporting the conversation, and the quota banner that replaces the composer once the allowance is
- * spent.
+ * unfinished turn, the next steps suggested under a finished build, exporting the conversation, and the quota banner
+ * that replaces the composer once the allowance is spent. The suggested next steps are the same cards the empty
+ * conversation offers (.prompt-card), and like those they put their text in the composer to be edited or sent, not
+ * straight into the conversation - they were first drawn as plain pills, which neither lit on hover nor looked
+ * like anything else on the screen.
  *
  * An assistant turn carries no text of its own once saved - its events are the record - so the raw text is only used
  * while one is still streaming.
@@ -13,6 +16,13 @@
  * turn carries (a reloaded one gets its "Worked for" line from a saved event instead): a live turn is the model
  * returning an empty completion - offered a Retry, since nothing was written - while a reloaded one means its events
  * failed to save even though any files it wrote did.
+ *
+ * Retry is offered on the newest turn whenever the server recorded it as anything but done - unfinished, not saved,
+ * empty, failed, stopped or cut short by the daily allowance - and that record travels with the saved turn, so the
+ * offer is still there after a reload. It is not offered while the quota banner is up: a retry the server would
+ * refuse is not an offer.
+ * While a turn is in progress the line under it says what the server is doing between pieces of the answer (reading
+ * files, carrying on a reply that stopped early, saving), since those stretches used to be a bare "Working".
  *
  * It is set like the dashboard (index.css, under .dash-night): the panel is a rounded window of the workspace with a
  * low gold glow at its foot, each turn rises in as it arrives (.chat-enter), the person's turns sit in a deeper
@@ -27,17 +37,23 @@
  * turn as one column of equal-width cards (.prompt-card - an icon tile, the prompt, an arrow; well-rounded, and lit on hover by the gold light
  * that follows the pointer, as the buttons are - lib/button-light.ts) - centred pills of
  * ragged widths looked uneven, and the explanatory line under the headline was removed, both at the owner's request.
+ * Teaching mode is a property of each turn, not of the panel: the menu beside the send button only decides how the
+ * next message is sent, and a reply offers its lessons when it was asked for with the mode on, whatever the menu
+ * says now. It used to be one switch for the whole transcript, so turning it on put a lesson under every step of
+ * every earlier turn, and turning it off took them all away.
  * The person's own turns are rendered as markdown too, each single line break kept as a break - the first message of
  * a new project is the brief the idea interview wrote, and its bold labels and lists showed as raw asterisks before.
+ * That brief is shown as its one "Build" sentence with the rest behind "Full brief", and any other long message is
+ * folded after a few lines (lib/brief.ts): the brief used to fill the window before the answer had started.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, CodeXml, Eye, ListChecks, Lock, Moon, PenLine, Rocket, RotateCcw, Sparkles, Square, Zap, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, ChevronDown, CodeXml, Eye, ListChecks, Lock, Moon, PenLine, Rocket, RotateCcw, Sparkles, Square, Zap, type LucideIcon } from "lucide-react";
 import { HorizonMark } from "@/components/HorizonMark";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { Button } from "@/components/ui/button";
 import { findSafeEnd, findVisibleRanges, useStreamParser } from "@/hooks/use-stream-parser";
 import { useSmoothStream } from "@/hooks/use-smooth-stream";
-import { AssistantError, AssistantEvents } from "./ChatEventRenderer";
+import { AssistantError, AssistantEvents, type StepToExplain } from "./ChatEventRenderer";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { PromptModeMenu } from "./PromptModeMenu";
 import { MessageActions } from "./MessageActions";
@@ -45,8 +61,10 @@ import { assistantTurnText } from "@/lib/chat-export";
 
 import { ChatScrollRail } from "./ChatScrollRail";
 import { messageLabel } from "@/lib/chat-rail";
-import { ChatEvent, ProjectRole } from "@/lib/types";
+import { ProjectRole } from "@/lib/types";
+import { isWorthRetrying, type ChatMessage } from "@/lib/project-chat-store";
 import type { CodeTarget } from "@/lib/lesson";
+import { isLongMessage, splitBrief } from "@/lib/brief";
 import { cn, formatWorkedFor, generateGradient } from "@/lib/utils";
 
 const EMPTY_STATE_SUGGESTIONS: { text: string; Icon: LucideIcon }[] = [
@@ -69,21 +87,7 @@ const MAX_INPUT_HEIGHT = 200;
 const JUMP_HIGHLIGHT_MS = 1400;
 const JUMP_SCROLL_MS = 1200;
 
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  isStreaming?: boolean;
-  createdAt?: string;
-  thoughtSeconds?: number;
-  unfinishedSteps?: number;
-  notSent?: boolean;
-  wasStopped?: boolean;
-  instantLength?: number;
-  events?: ChatEvent[];
-  editedFiles?: string[];
-  error?: string;
-}
+export type { ChatMessage };
 
 export interface SharedProjectInfo {
   projectName: string;
@@ -104,8 +108,11 @@ interface ChatPanelProps {
   onBrowseCode?: () => void;
   onStop?: () => void;
   onRetry?: () => void;
+  onExplainStep?: (step: StepToExplain) => void;
   teachingMode?: boolean;
+  projectId?: string;
   onTeachingModeChange?: (enabled: boolean) => void;
+  suggestions?: readonly string[];
 }
 
 function useIsIdle(signal: unknown, delayMs: number, enabled: boolean) {
@@ -145,7 +152,10 @@ export function ChatPanel({
   onOpenFile,
   sharedWith,
   onBrowseCode,
+  onExplainStep,
+  suggestions = [],
   teachingMode,
+  projectId,
   onTeachingModeChange,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
@@ -379,7 +389,7 @@ export function ChatPanel({
                     key={message.id}
                     message={message}
                     isStreaming={isStreaming && !!message.isStreaming}
-                    onRetry={!readOnly && !isStreaming && message.id === currentChatMessageId ? onRetry : undefined}
+                    onRetry={!readOnly && !isStreaming && !quotaBlock && message.id === currentChatMessageId ? onRetry : undefined}
                     onAnswer={
                       !readOnly && !isStreaming && !quotaBlock && message.id === messages[messages.length - 1]?.id
                         ? onSendMessage
@@ -388,8 +398,26 @@ export function ChatPanel({
                     onOpenFile={
                       onOpenFile ? (path, target) => onOpenFile(path, message.id === currentChatMessageId, target) : undefined
                     }
+                    onExplainStep={onExplainStep}
+                    teaching={!!message.teaching}
+                    projectId={projectId}
                   />
                 )
+              )}
+              {suggestions.length > 0 && !readOnly && !isStreaming && !quotaBlock && (
+                <ul aria-label="Suggested next steps" className="flex w-full max-w-[26rem] flex-col gap-2">
+                  {suggestions.map((suggestion, index) => (
+                    <li key={suggestion} className="app-rise" style={{ "--i": index } as CSSProperties}>
+                      <button type="button" onClick={() => applySuggestion(suggestion)} className="prompt-card">
+                        <span aria-hidden="true" className="prompt-card-icon">
+                          <Sparkles className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="min-w-0 flex-1 py-1 leading-snug">{suggestion}</span>
+                        <ArrowUpRight aria-hidden="true" className="prompt-card-arrow h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           )}
@@ -611,6 +639,21 @@ function UserMessage({ message, highlightToken, onEdit }: {
   highlightToken: number | null;
   onEdit?: (content: string) => void;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const brief = splitBrief(message.content);
+  const isFolded = !brief && !isOpen && isLongMessage(message.content);
+  const toggle = brief || isLongMessage(message.content) ? (
+    <button
+      type="button"
+      aria-expanded={isOpen}
+      onClick={() => setIsOpen((open) => !open)}
+      className="mt-1 flex h-6 items-center gap-1 rounded-md text-[11.5px] font-medium text-white/70 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {brief ? (isOpen ? "Hide the full brief" : "Full brief") : isOpen ? "Show less" : "Show more"}
+      <ChevronDown className={cn("h-3 w-3 transition-transform", isOpen && "rotate-180")} />
+    </button>
+  ) : null;
+
   return (
     <div data-user-message={message.id} className="chat-enter group/message flex flex-col items-end gap-0">
       <div
@@ -620,7 +663,21 @@ function UserMessage({ message, highlightToken, onEdit }: {
           highlightToken !== null && "shadow-[0_0_0_2px_hsl(var(--primary)/0.6)]"
         )}
       >
-        <ChatMarkdown className="text-[14px] leading-6 text-white">{keepLineBreaks(message.content)}</ChatMarkdown>
+        {brief ? (
+          <>
+            <ChatMarkdown className="text-[14px] leading-6 text-white">{brief.headline}</ChatMarkdown>
+            {isOpen && (
+              <ChatMarkdown className="mt-2 border-t border-white/15 pt-2 text-[13px] leading-6 text-white/90">
+                {keepLineBreaks(brief.rest)}
+              </ChatMarkdown>
+            )}
+          </>
+        ) : (
+          <div className={cn(isFolded && "max-h-[9.5rem] overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]")}>
+            <ChatMarkdown className="text-[14px] leading-6 text-white">{keepLineBreaks(message.content)}</ChatMarkdown>
+          </div>
+        )}
+        {toggle}
       </div>
       <MessageActions
         at={message.createdAt}
@@ -639,12 +696,18 @@ function AssistantMessage({
   onOpenFile,
   onRetry,
   onAnswer,
+  onExplainStep,
+  teaching,
+  projectId,
 }: {
   message: ChatMessage;
   isStreaming: boolean;
   onOpenFile?: (path: string, target?: CodeTarget) => void;
   onRetry?: () => void;
   onAnswer?: (answer: string) => void;
+  onExplainStep?: (step: StepToExplain) => void;
+  teaching?: boolean;
+  projectId?: string;
 }) {
   const content = message.content || "";
   const revealed = useSmoothStream(content, isStreaming, STREAM_OPTIONS, message.id, message.instantLength);
@@ -658,8 +721,8 @@ function AssistantMessage({
   const hasNothingToShow = isDone && !hasSavedEvents && events.length === 0 && !message.error;
   const isEmptyAnswer = hasNothingToShow && message.thoughtSeconds !== undefined;
   const isUnrecorded = hasNothingToShow && !isEmptyAnswer;
-  const unfinished = message.unfinishedSteps ?? 0;
-  const canRetry = isDone && !!onRetry && (unfinished > 0 || !!message.error || !!message.wasStopped || isEmptyAnswer);
+  const endedShort = isWorthRetrying(message.outcome);
+  const canRetry = isDone && !!onRetry && (endedShort || !!message.error || !!message.wasStopped || isEmptyAnswer);
 
   return (
     <div className="chat-enter group/message flex min-w-0 flex-col gap-3">
@@ -667,9 +730,14 @@ function AssistantMessage({
         events={events}
         isStreaming={!hasSavedEvents && isActive}
         isIdle={isIdle}
+        status={message.status}
+        startedAt={message.startedAt}
         fallbackThought={message.thoughtSeconds !== undefined ? `Worked for ${formatWorkedFor(message.thoughtSeconds)}` : undefined}
         onOpenFile={onOpenFile}
         onAnswer={isDone ? onAnswer : undefined}
+        onExplainStep={isDone ? onExplainStep : undefined}
+        teaching={teaching}
+        projectId={projectId}
       />
       {message.error && <AssistantError message={message.error} />}
       {isEmptyAnswer && <AssistantError message="The model returned no answer, so nothing was changed" />}
@@ -677,13 +745,17 @@ function AssistantMessage({
       {canRetry && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>
-            {message.wasStopped
+            {message.wasStopped || message.outcome === "STOPPED"
               ? "You stopped this answer."
               : message.notSent
                 ? "Your message wasn't sent. Retry it, or use Edit on it to change it first."
-                : unfinished > 0
-                  ? `${unfinished} ${unfinished === 1 ? "step" : "steps"} of this plan weren't written.`
-                  : "This answer didn't finish."}
+                : message.outcome === "OUT_OF_BUDGET"
+                  ? "Today's AI allowance ran out before this finished."
+                  : message.outcome === "INCOMPLETE"
+                  ? "Part of this plan wasn't written."
+                  : message.outcome === "NOT_SAVED"
+                    ? "These changes weren't saved."
+                    : "This answer didn't finish."}
           </span>
           <button
             type="button"

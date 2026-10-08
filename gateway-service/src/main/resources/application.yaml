@@ -24,6 +24,15 @@ spring:
     gateway:
       server:
         webflux:
+          # Connections to the services are pooled and reused. One left idle is dropped here after 15 seconds,
+          # well inside the time a service keeps an idle connection open itself, and none is kept for more than
+          # ten minutes. Without this the Gateway could write a request onto a connection the service had just
+          # closed: "Connection prematurely closed BEFORE response", a 500 to the browser - seen on
+          # POST /api/chat/stream, where the browser was told the build had failed while it was in fact running.
+          httpclient:
+            pool:
+              max-idle-time: 15s
+              max-life-time: 10m
           # The browser's traffic goes to the three domain services, resolved through Eureka (lb://). A
           # transparent passthrough - no path rewriting, no header/cookie manipulation, no auth logic here;
           # every service runs its own full Firebase/session/CSRF chain.

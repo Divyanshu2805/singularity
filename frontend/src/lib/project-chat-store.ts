@@ -1,32 +1,71 @@
 /**
  * The project build chat, per project, outside React so it survives switching tabs and panels.
  *
- * Handles: loading history, sending a message and streaming the answer, parsing files out of the stream as they are
- * written, reattaching to a generation already running on the server, stopping one, retrying an unfinished turn, and
- * exposing all of it to components through a subscription.
+ * Handles: loading history, sending a message and following the answer as it streams, showing the files a turn is
+ * writing while it writes them, taking the saved turn from the server the moment it is saved, reattaching to a turn
+ * already running on the server (after a refresh, or after the connection dropped), stopping one, retrying one that
+ * did not finish, and exposing all of it to components through a subscription.
  *
- * Files still being written are kept here so opening one mid-response shows what has arrived, instead of asking the
- * server for a file it will not store until the turn finishes. They are cleared when the response ends: whatever is
- * left is a tag that never closed, so the backend has not saved it either.
+ * The server owns a turn and says how it ended. While the answer streams this store reads the text itself
+ * (lib/generation-protocol.ts) so the chat and the editor can show work in progress, but that reading is a preview:
+ * the stream ends with the turn's outcome, sent only after the turn is saved, and the saved turn then replaces the
+ * preview - its events, and exactly the files it wrote. Before that, a finished answer kept showing the browser's own
+ * reading for the rest of the session, which is how a file the server had discarded stayed on screen with a tick
+ * beside it.
  *
- * Server history replaces the live copy only once it has really caught up - a final assistant turn with no events
- * means the events did not save, and taking that copy would blank a response the reader is looking at.
+ * It no longer sends a request again by itself. An answer that stopped short of its plan used to be retried from
+ * here, racing the server, which was still saving the same turn and refused the retry. The server now carries an
+ * unfinished reply on within the turn; what is left for this store is the Retry the person can press on a turn that
+ * still ended unfinished, failed or stopped.
  *
- * A retry (automatic, on an answer that looks unfinished, or an explicit click) can reach the server while it is
- * still finalizing the turn that just finished streaming - GenerationRegistry allows only one generation per project
- * at a time, and that slot is not freed until saving (and the server's own internal retry, if it runs one) is done.
- * The server answers that race with a 409, which is not a real failure: the optimistic pair added for the retry is
- * dropped rather than shown with an error, and history is reloaded shortly after to pick up what the server actually
- * ended up saving.
+ * A request whose stream fails to open with a server error is not assumed lost. The gateway once dropped a stale
+ * connection on exactly such a request: the browser was told it had failed while the server had started the turn,
+ * so the person saw "failed", pressed Retry and was told a response was already running. The store now asks
+ * whether a turn for that very request is running and joins it; only when there is none is it a failure.
+ *
+ * A request the server refuses because a turn is already running is not dropped silently: the placeholder pair is
+ * removed, a notice says why, and the conversation is reloaded - which reattaches to the running turn when it is this
+ * person's own. A connection that breaks mid-answer is not a failed turn either, since the turn carries on without a
+ * viewer: the store asks whether it is still running and either reattaches or collects the saved result. When it
+ * can do neither - the server restarted mid-turn and has no trace of it, or cannot be reached at all - the question is
+ * kept in this browser with the reason, so a reload brings it back with Retry instead of an empty conversation; a
+ * reload that finds the turn saved after all drops the kept copy. A turn that was stopped is never reattached to by a
+ * reconnect that was already under way.
+ *
+ * Files changed by the turn in progress are layered over the files as they were when it started, and rebuilt from the
+ * text every time it changes. So when the server takes something back - a file cut off half-way, before it carries
+ * the reply on - the editor stops showing it too.
+ *
+ * Teaching mode belongs to a turn. A message is sent with the mode that was chosen when it was sent, the reply is
+ * marked with it at once so the chat need not wait for the saved turn, the saved turn carries the same mark back
+ * after a reload, and a retry is sent the way the turn it retries was.
  *
  * It registers its own reset with the session module: module state outlives a client-side route change, and not
  * clearing it once leaked one account's chat to the next person who signed in on the same browser.
  */
 import { useCallback, useSyncExternalStore } from "react";
-import type { ChatMessage } from "@/components/ChatPanel";
-import { api, ApiRequestError, getUserInfo } from "./api";
-import type { ActiveGeneration } from "./types";
+import { api, ApiRequestError, GenerationFailedError, StreamInterruptedError, getUserInfo, type ChatStreamHandlers } from "./api";
+import { parseGenerationText, turnFiles } from "./generation-protocol";
+import { ChatEventType, type ActiveGeneration, type ChatEvent, type TurnOutcome } from "./types";
 import { onSignOut } from "./session";
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  isStreaming?: boolean;
+  createdAt?: string;
+  startedAt?: string;
+  thoughtSeconds?: number;
+  status?: string;
+  outcome?: TurnOutcome;
+  notSent?: boolean;
+  wasStopped?: boolean;
+  instantLength?: number;
+  events?: ChatEvent[];
+  error?: string;
+  teaching?: boolean;
+}
 
 export interface ProjectChatState {
     messages: ChatMessage[];
@@ -40,6 +79,21 @@ export interface ProjectChatState {
     lastTurnFiles: readonly string[];
     hasUnsavedTurn: boolean;
     lastSentMessage: string | null;
+    notice: string | null;
+    suggestions: readonly string[];
+}
+
+interface TurnInProgress {
+    projectId: string;
+    turnId: number;
+    aiMessageId: string;
+    userMessageId: string;
+    askedAt: number;
+    prompt: string;
+    completedBefore: ReadonlyMap<string, string>;
+    deletedBefore: ReadonlySet<string>;
+    reconnects: number;
+    stopped: boolean;
 }
 
 const EMPTY_FILES: ReadonlyMap<string, string> = new Map();
@@ -56,13 +110,35 @@ const INITIAL_STATE: ProjectChatState = {
     lastTurnFiles: [],
     hasUnsavedTurn: false,
     lastSentMessage: null,
+    notice: null,
+    suggestions: [],
 };
+
+export const STILL_WORKING_NOTICE = "Singularity is still working on your last request. Wait for it to finish, or stop it first.";
+const CONNECTION_LOST = "The connection was lost and couldn't be restored. Reload the page to see whether your request finished.";
+const TURN_LOST = "This response was interrupted before it could be saved, so nothing was changed. Use Retry to send it again.";
+const SAVED_TURN_RETRIES = 3;
+const RECONNECT_RETRIES = 5;
+const MAX_RECONNECTS = 12;
+
+const pause = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const TURN_OUTCOMES: readonly TurnOutcome[] = ["SAVED", "ANSWERED", "INCOMPLETE", "NOT_SAVED", "EMPTY", "FAILED", "STOPPED", "OUT_OF_BUDGET"];
+
+export const asTurnOutcome = (value: string | undefined | null): TurnOutcome | undefined =>
+    TURN_OUTCOMES.find((outcome) => outcome === value);
+
+export const turnOutcome = (events: readonly ChatEvent[] | undefined): TurnOutcome | undefined =>
+    asTurnOutcome(events?.find((event) => event.type === ChatEventType.THOUGHT)?.metadata);
+
+export const isWorthRetrying = (outcome: TurnOutcome | undefined) =>
+    !!outcome && outcome !== "SAVED" && outcome !== "ANSWERED";
 
 const states = new Map<string, ProjectChatState>();
 const listeners = new Map<string, Set<() => void>>();
 const latestTurnIds = new Map<string, number>();
 const cancelStreams = new Map<string, () => void>();
-const isAutoRetry = new Map<string, boolean>();
+const turnsInProgress = new Map<string, TurnInProgress>();
 let lastMessageId = Date.now();
 
 const baselineKey = (projectId: string) => `diff_baselines_${projectId}`;
@@ -131,7 +207,7 @@ onSignOut(() => {
         }
     });
     cancelStreams.clear();
-    isAutoRetry.clear();
+    turnsInProgress.clear();
     latestTurnIds.clear();
 
     const projectIds = [...states.keys()];
@@ -153,13 +229,10 @@ function subscribe(projectId: string, listener: () => void) {
 
 const nextMessageId = () => String(++lastMessageId);
 
-const DELETED_FILE = /<delete\s+path="([^"]+)"[^>]*>[\s\S]*?<\/delete>/g;
-
 interface FailedPrompt {
     content: string;
     error: string;
     failedAt: number;
-    teachingMode: boolean;
     notSent: boolean;
 }
 
@@ -185,15 +258,6 @@ function writeFailedPrompt(projectId: string, prompt: FailedPrompt | null) {
     }
 }
 
-const PLANNED_STEP = /<todo\s+path="([^"]+)"/g;
-
-function unfinishedStepCount(content: string, writtenPaths: readonly string[]): number {
-    const planned = [...content.matchAll(PLANNED_STEP)].map((match) => match[1]);
-    if (planned.length === 0) return 0;
-    const written = new Set(writtenPaths);
-    return planned.filter((path) => !written.has(path)).length;
-}
-
 const updateMessage = (messages: ChatMessage[], id: string, change: (message: ChatMessage) => Partial<ChatMessage>) =>
     messages.map((message) => (message.id === id ? { ...message, ...change(message) } : message));
 
@@ -211,6 +275,8 @@ const toChatMessages = (history: Awaited<ReturnType<typeof api.getChatHistory>>)
         content: message.content ?? "",
         createdAt: message.createdAt,
         events: message.events,
+        outcome: message.role === "ASSISTANT" ? turnOutcome(message.events) : undefined,
+        teaching: message.role === "ASSISTANT" && !!message.teaching,
     }));
 
 function historyHasTurn(messages: ChatMessage[], active: ActiveGeneration) {
@@ -238,30 +304,179 @@ function restoredFailedTurn(failed: FailedPrompt): ChatMessage[] {
     ];
 }
 
-type StreamHandlers = {
-    onChunk: (chunk: string) => void;
-    onFile: (path: string, content: string, isComplete: boolean) => void;
-    onComplete: () => void;
-    onError: (error: Error) => void;
-    onGone: () => void;
-};
+function withTurnFiles(turn: TurnInProgress, events: readonly ChatEvent[]) {
+    const files = turnFiles(events);
+    const completedFiles = new Map(turn.completedBefore);
+    const deletedFiles = new Set(turn.deletedBefore);
+    files.deleted.forEach((path) => {
+        deletedFiles.add(path);
+        completedFiles.delete(path);
+    });
+    files.written.forEach((content, path) => {
+        completedFiles.set(path, content);
+        deletedFiles.delete(path);
+    });
+    if (files.arriving) deletedFiles.delete(files.arriving.path);
+    return { files, completedFiles, deletedFiles };
+}
 
-function followTurn(
-    projectId: string,
-    aiMessageId: string,
-    askedAt: number,
-    openStream: (handlers: StreamHandlers) => () => void,
-    options: { teachingMode?: boolean },
-    prompt: string,
-    isResume = false,
-    userMessageId?: string
-) {
+function isCurrent(turn: TurnInProgress) {
+    return latestTurnIds.get(turn.projectId) === turn.turnId;
+}
+
+async function suggestNextSteps(turn: TurnInProgress) {
+    try {
+        const suggestions = await api.getNextSteps(turn.projectId);
+        if (!isCurrent(turn)) return;
+        update(turn.projectId, (state) => (state.isStreaming ? {} : { suggestions }));
+    } catch {
+        return;
+    }
+}
+
+function isLive(turn: TurnInProgress) {
+    return isCurrent(turn) && !turn.stopped;
+}
+
+function endTurn(turn: TurnInProgress) {
+    cancelStreams.delete(turn.projectId);
+    if (turnsInProgress.get(turn.projectId) === turn) turnsInProgress.delete(turn.projectId);
+}
+
+type Adoption = "adopted" | "absent" | "unreachable";
+
+async function adoptSavedTurn(turn: TurnInProgress, attempt = 0): Promise<Adoption> {
+    const { projectId, aiMessageId, userMessageId } = turn;
+    let reachable = false;
+    try {
+        const history = toChatMessages(await api.getChatHistory(projectId));
+        reachable = true;
+        const reply = history[history.length - 1];
+        const question = history[history.length - 2];
+        if (!reply || reply.role !== "assistant" || !reply.events?.length || question?.content !== turn.prompt) {
+            throw new Error("The turn is not in the saved conversation yet");
+        }
+        if (!isCurrent(turn)) return "adopted";
+
+        update(projectId, (state) => {
+            if (!state.messages.some((message) => message.id === aiMessageId)) return {};
+            const { files, completedFiles, deletedFiles } = withTurnFiles(turn, reply.events ?? []);
+            const lastTurnFiles = [...files.written.keys()];
+            return {
+                hasUnsavedTurn: false,
+                isStreaming: false,
+                streamingFiles: EMPTY_FILES,
+                completedFiles,
+                deletedFiles,
+                lastTurnFiles,
+                diffBaselines: new Map([...state.diffBaselines].filter(([path]) => lastTurnFiles.includes(path))),
+                messages: state.messages.map((message) => {
+                    if (message.id === aiMessageId) {
+                        return {
+                            ...message,
+                            content: "",
+                            events: reply.events,
+                            outcome: reply.outcome ?? message.outcome,
+                            teaching: reply.teaching || message.teaching,
+                            createdAt: reply.createdAt ?? message.createdAt,
+                            isStreaming: false,
+                            status: undefined,
+                            error: undefined,
+                            wasStopped: undefined,
+                        };
+                    }
+                    if (message.id === userMessageId && question?.role === "user") {
+                        return { ...message, createdAt: question.createdAt ?? message.createdAt };
+                    }
+                    return message;
+                }),
+            };
+        });
+        return "adopted";
+    } catch {
+        if (attempt >= SAVED_TURN_RETRIES || !isCurrent(turn)) return reachable ? "absent" : "unreachable";
+        await pause(1200 * (attempt + 1));
+        return adoptSavedTurn(turn, attempt + 1);
+    }
+}
+
+function failTurn(turn: TurnInProgress, message: string, notSent: boolean) {
+    endTurn(turn);
+    update(turn.projectId, (state) => ({
+        isStreaming: false,
+        streamingFiles: EMPTY_FILES,
+        completedFiles: turn.completedBefore,
+        deletedFiles: turn.deletedBefore,
+        lastTurnFiles: [],
+        diffBaselines: EMPTY_FILES,
+        messages: updateMessage(state.messages, turn.aiMessageId, () => ({
+            isStreaming: false,
+            status: undefined,
+            createdAt: new Date().toISOString(),
+            error: message,
+            notSent,
+        })),
+    }));
+}
+
+function giveUp(turn: TurnInProgress, message: string) {
+    writeFailedPrompt(turn.projectId, {
+        content: turn.prompt,
+        error: message,
+        failedAt: turn.askedAt,
+        notSent: false,
+    });
+    failTurn(turn, message, false);
+}
+
+async function reconnect(turn: TurnInProgress, attempt = 0): Promise<void> {
+    const { projectId, aiMessageId } = turn;
+    if (!isLive(turn)) return;
+    cancelStreams.delete(projectId);
+    if (++turn.reconnects > MAX_RECONNECTS) {
+        giveUp(turn, CONNECTION_LOST);
+        return;
+    }
+    update(projectId, (state) => ({
+        messages: updateMessage(state.messages, aiMessageId, () => ({ status: "Reconnecting" })),
+    }));
+
+    try {
+        if (turn.reconnects > 1) await pause(Math.min(5000, 400 * turn.reconnects));
+        const active = await api.getActiveGeneration(projectId);
+        if (!isLive(turn)) return;
+        if (active) {
+            update(projectId, (state) => ({
+                messages: updateMessage(state.messages, aiMessageId, () => ({ content: "", instantLength: 0 })),
+            }));
+            follow(turn, (handlers) => api.resumeChat(projectId, handlers), true);
+            return;
+        }
+        const adoption = await adoptSavedTurn(turn);
+        if (!isLive(turn)) return;
+        if (adoption === "adopted") {
+            endTurn(turn);
+            return;
+        }
+        giveUp(turn, adoption === "absent" ? TURN_LOST : CONNECTION_LOST);
+    } catch {
+        if (!isLive(turn)) return;
+        if (attempt >= RECONNECT_RETRIES) {
+            giveUp(turn, CONNECTION_LOST);
+            return;
+        }
+        await pause(Math.min(8000, 1000 * 2 ** attempt));
+        return reconnect(turn, attempt + 1);
+    }
+}
+
+function follow(turn: TurnInProgress, openStream: (handlers: ChatStreamHandlers) => () => void, isResume: boolean) {
+    const { projectId, aiMessageId, userMessageId } = turn;
     let awaitingBacklog = isResume;
-    const turnId = (latestTurnIds.get(projectId) ?? 0) + 1;
-    latestTurnIds.set(projectId, turnId);
-
-    const turnFiles: string[] = [];
+    let recoveredOnce = false;
     const baselines = new Map<string, Promise<string>>();
+    const published = new Set<string>();
+
     const captureBaseline = (path: string) => {
         let baseline = baselines.get(path);
         if (!baseline) {
@@ -271,7 +486,28 @@ function followTurn(
         return baseline;
     };
 
-    const deletedThisTurn = new Set<string>();
+    const syncFiles = () => {
+        const answer = getState(projectId).messages.find((message) => message.id === aiMessageId)?.content ?? "";
+        const { files, completedFiles, deletedFiles } = withTurnFiles(turn, parseGenerationText(answer, { streaming: true }));
+
+        if (files.arriving) captureBaseline(files.arriving.path);
+        for (const path of [...files.written.keys(), ...files.edited]) {
+            const baseline = captureBaseline(path);
+            if (published.has(path)) continue;
+            published.add(path);
+            baseline.then((original) => {
+                if (!isCurrent(turn)) return;
+                update(projectId, (state) => ({ diffBaselines: new Map(state.diffBaselines).set(path, original) }));
+            });
+        }
+
+        update(projectId, () => ({
+            completedFiles,
+            deletedFiles,
+            streamingFiles: files.arriving ? new Map([[files.arriving.path, files.arriving.content]]) : EMPTY_FILES,
+            lastTurnFiles: [...new Set([...files.written.keys(), ...files.edited])],
+        }));
+    };
 
     const cancel = openStream({
         onChunk: (chunk) => {
@@ -280,130 +516,125 @@ function followTurn(
             update(projectId, (state) => ({
                 messages: updateMessage(state.messages, aiMessageId, (message) => ({
                     content: message.content + chunk,
+                    status: undefined,
                     ...(isBacklog ? { instantLength: message.content.length + chunk.length } : {}),
                 })),
             }));
-
-            const answer = getState(projectId).messages.find((message) => message.id === aiMessageId)?.content ?? "";
-            const newlyDeleted = [...answer.matchAll(DELETED_FILE)].map((match) => match[1]).filter((path) => !deletedThisTurn.has(path));
-            if (newlyDeleted.length > 0) {
-                newlyDeleted.forEach((path) => deletedThisTurn.add(path));
-                update(projectId, (state) => {
-                    const deletedFiles = new Set(state.deletedFiles);
-                    const completedFiles = new Map(state.completedFiles);
-                    const streamingFiles = new Map(state.streamingFiles);
-                    newlyDeleted.forEach((path) => {
-                        deletedFiles.add(path);
-                        completedFiles.delete(path);
-                        streamingFiles.delete(path);
-                    });
-                    return { deletedFiles, completedFiles, streamingFiles };
-                });
-            }
+            syncFiles();
         },
-        onFile: (path, fileContent, isComplete) => {
-            if (!isComplete) {
-                captureBaseline(path);
-                update(projectId, (state) => ({
-                    streamingFiles: new Map(state.streamingFiles).set(path, fileContent),
-                }));
+        onStatus: (line) => {
+            update(projectId, (state) => ({
+                messages: updateMessage(state.messages, aiMessageId, () => ({ status: line })),
+            }));
+        },
+        onReplace: (text) => {
+            awaitingBacklog = false;
+            update(projectId, (state) => ({
+                messages: updateMessage(state.messages, aiMessageId, () => ({ content: text, instantLength: text.length })),
+            }));
+            syncFiles();
+        },
+        onDone: (outcome) => {
+            endTurn(turn);
+            writeFailedPrompt(projectId, null);
+            update(projectId, (state) => ({
+                isStreaming: false,
+                streamingFiles: EMPTY_FILES,
+                hasUnsavedTurn: true,
+                messages: updateMessage(state.messages, aiMessageId, () => ({
+                    isStreaming: false,
+                    status: undefined,
+                    createdAt: new Date().toISOString(),
+                    thoughtSeconds: Math.round((Date.now() - turn.askedAt) / 1000),
+                    outcome: asTurnOutcome(outcome),
+                })),
+            }));
+            void adoptSavedTurn(turn);
+            if (asTurnOutcome(outcome) === "SAVED") void suggestNextSteps(turn);
+        },
+        onClosed: () => void reconnect(turn),
+        onGone: () => void reconnect(turn),
+        onError: (error) => {
+            if (error instanceof StreamInterruptedError) {
+                void reconnect(turn);
                 return;
             }
-
-            if (!turnFiles.includes(path)) turnFiles.push(path);
-            const baseline = captureBaseline(path);
-            update(projectId, (state) => {
-                const streamingFiles = new Map(state.streamingFiles);
-                streamingFiles.delete(path);
-                const deletedFiles = new Set(state.deletedFiles);
-                deletedFiles.delete(path);
-                return {
-                    deletedFiles,
-                    completedFiles: new Map(state.completedFiles).set(path, fileContent),
-                    streamingFiles,
-                    lastTurnFiles: [...turnFiles],
-                    messages: updateMessage(state.messages, aiMessageId, () => ({ editedFiles: [...turnFiles] })),
-                };
-            });
-            baseline.then((original) => {
-                if (latestTurnIds.get(projectId) !== turnId) return;
-                update(projectId, (state) => ({ diffBaselines: new Map(state.diffBaselines).set(path, original) }));
-            });
-        },
-        onComplete: () => {
-            cancelStreams.delete(projectId);
-            let unfinished = 0;
-            update(projectId, (state) => {
-                const answer = state.messages.find((message) => message.id === aiMessageId);
-                unfinished = unfinishedStepCount(answer?.content ?? "", turnFiles);
-                return {
-                    isStreaming: false,
-                    streamingFiles: EMPTY_FILES,
-                    hasUnsavedTurn: true,
-                    messages: updateMessage(state.messages, aiMessageId, () => ({
-                        isStreaming: false,
-                        createdAt: new Date().toISOString(),
-                        thoughtSeconds: Math.round((Date.now() - askedAt) / 1000),
-                        unfinishedSteps: unfinished,
-                    })),
-                };
-            });
-            writeFailedPrompt(projectId, null);
-            if (unfinished > 0 && !isAutoRetry.get(projectId)) {
-                projectChat.retryLastMessage(projectId, options);
+            if (!isResume && !recoveredOnce && error instanceof ApiRequestError && error.status >= 500) {
+                recoveredOnce = true;
+                void attachIfItStarted(turn, error);
+                return;
             }
+            failOpening(error);
         },
-        onError: (error) => {
-            cancelStreams.delete(projectId);
+    });
 
-            // A 409 here means the server was still finalizing the turn that just finished streaming - saving its
-            // events, possibly committing files, possibly running its own internal retry - when this request (an
-            // automatic or a fast manual retry) reached GenerationRegistry's one-per-project lock before that slot
-            // was freed. The turn itself did not fail; showing it as a failed prompt with a stale error would be
-            // actively wrong once the server catches up, so this reconciles from history instead of guessing.
+    const failOpening = (error: Error) => {
+            endTurn(turn);
+
             if (error instanceof ApiRequestError && error.status === 409) {
                 update(projectId, (state) => ({
                     isStreaming: false,
                     streamingFiles: EMPTY_FILES,
-                    // This turn was never accepted by the server at all - unlike every other error path, its
-                    // optimistic placeholder pair is removed rather than kept-with-an-error, so it doesn't
-                    // permanently desync the live view from server history (which will never contain a turn the
-                    // server rejected at the door).
+                    notice: error.message || STILL_WORKING_NOTICE,
                     messages: state.messages.filter((message) => message.id !== aiMessageId && message.id !== userMessageId),
                 }));
-                window.setTimeout(() => void projectChat.loadHistory(projectId), 1500);
+                void projectChat.loadHistory(projectId);
                 return;
             }
 
-            const notSent = error instanceof ApiRequestError;
+            const notSent = !(error instanceof GenerationFailedError);
             if (!(error instanceof ApiRequestError && error.status === 401)) {
                 writeFailedPrompt(projectId, {
-                    content: prompt,
+                    content: turn.prompt,
                     error: error.message || "Something went wrong",
                     failedAt: Date.now(),
-                    teachingMode: options.teachingMode === true,
                     notSent,
                 });
             }
-            update(projectId, (state) => ({
-                isStreaming: false,
-                streamingFiles: EMPTY_FILES,
-                messages: updateMessage(state.messages, aiMessageId, () => ({
-                    isStreaming: false,
-                    createdAt: new Date().toISOString(),
-                    error: error.message || "Something went wrong",
-                    notSent,
-                })),
-            }));
-        },
-        onGone: () => {
-            cancelStreams.delete(projectId);
-            update(projectId, () => ({ isStreaming: false, streamingFiles: EMPTY_FILES }));
-            void projectChat.loadHistory(projectId);
-        },
-    });
+            failTurn(turn, error.message || "Something went wrong", notSent);
+    };
+
+    const attachIfItStarted = async (failed: TurnInProgress, error: Error) => {
+        try {
+            const active = await api.getActiveGeneration(projectId);
+            if (!isLive(failed)) return;
+            if (active && active.userMessage === failed.prompt) {
+                follow(failed, (handlers) => api.resumeChat(projectId, handlers), true);
+                return;
+            }
+        } catch {
+            if (!isLive(failed)) return;
+        }
+        failOpening(error);
+    };
 
     cancelStreams.set(projectId, cancel);
+}
+
+function beginTurn(
+    projectId: string,
+    aiMessageId: string,
+    userMessageId: string,
+    askedAt: number,
+    prompt: string
+): TurnInProgress {
+    const turnId = (latestTurnIds.get(projectId) ?? 0) + 1;
+    latestTurnIds.set(projectId, turnId);
+    const state = getState(projectId);
+    const turn: TurnInProgress = {
+        projectId,
+        turnId,
+        aiMessageId,
+        userMessageId,
+        askedAt,
+        prompt,
+        completedBefore: state.completedFiles,
+        deletedBefore: state.deletedFiles,
+        reconnects: 0,
+        stopped: false,
+    };
+    turnsInProgress.set(projectId, turn);
+    return turn;
 }
 
 export function useProjectChat(projectId: string): ProjectChatState {
@@ -478,15 +709,15 @@ export const projectChat = {
 
     resumeGeneration(projectId: string, history: ChatMessage[], active: ActiveGeneration) {
         if (getState(projectId).isStreaming) return;
-        isAutoRetry.set(projectId, false);
 
         const askedAt = Date.parse(active.startedAt) || Date.now();
+        const userMessageId = nextMessageId();
         const aiMessageId = nextMessageId();
         update(projectId, () => ({
             messages: [
                 ...history,
-                { id: nextMessageId(), role: "user", content: active.userMessage, createdAt: new Date(askedAt).toISOString() },
-                { id: aiMessageId, role: "assistant", content: "", isStreaming: true, editedFiles: [] },
+                { id: userMessageId, role: "user", content: active.userMessage, createdAt: new Date(askedAt).toISOString() },
+                { id: aiMessageId, role: "assistant", content: "", isStreaming: true, startedAt: new Date(askedAt).toISOString() },
             ],
             isHistoryLoaded: true,
             historyError: null,
@@ -497,21 +728,15 @@ export const projectChat = {
             lastTurnFiles: [],
         }));
 
-        followTurn(
-            projectId,
-            aiMessageId,
-            askedAt,
-            ({ onChunk, onFile, onComplete, onError, onGone }) =>
-                api.resumeChat(projectId, onChunk, onFile, onComplete, onError, onGone),
-            { teachingMode: active.teachingMode },
-            active.userMessage,
-            true
-        );
+        const turn = beginTurn(projectId, aiMessageId, userMessageId, askedAt, active.userMessage);
+        follow(turn, (handlers) => api.resumeChat(projectId, handlers), true);
     },
 
-    sendMessage(projectId: string, content: string, options: { teachingMode?: boolean; isRetry?: boolean } = {}) {
-        if (getState(projectId).isStreaming) return;
-        isAutoRetry.set(projectId, options.isRetry === true);
+    sendMessage(projectId: string, content: string, teaching = false): boolean {
+        if (getState(projectId).isStreaming) {
+            update(projectId, () => ({ notice: STILL_WORKING_NOTICE }));
+            return false;
+        }
         writeFailedPrompt(projectId, null);
 
         const userMessageId = nextMessageId();
@@ -522,51 +747,63 @@ export const projectChat = {
             messages: [
                 ...state.messages,
                 { id: userMessageId, role: "user", content, createdAt: new Date(askedAt).toISOString() },
-                { id: aiMessageId, role: "assistant", content: "", isStreaming: true, editedFiles: [] },
+                { id: aiMessageId, role: "assistant", content: "", isStreaming: true, startedAt: new Date(askedAt).toISOString(), teaching },
             ],
             isStreaming: true,
             lastSentMessage: content,
             streamingFiles: EMPTY_FILES,
             diffBaselines: EMPTY_FILES,
             lastTurnFiles: [],
+            notice: null,
+            suggestions: [],
         }));
 
-        followTurn(
-            projectId,
-            aiMessageId,
-            askedAt,
-            ({ onChunk, onFile, onComplete, onError }) =>
-                api.streamChat(projectId, content, onChunk, onFile, onComplete, onError, { teachingMode: options.teachingMode === true }),
-            options,
-            content,
-            false,
-            userMessageId
-        );
+        const turn = beginTurn(projectId, aiMessageId, userMessageId, askedAt, content);
+        follow(turn, (handlers) => api.streamChat(projectId, content, handlers, teaching), false);
+        return true;
     },
 
     stopStreaming(projectId: string) {
+        const turn = turnsInProgress.get(projectId);
         const cancel = cancelStreams.get(projectId);
-        if (!cancel) return;
+        if (!turn && !cancel) return;
+        if (turn) turn.stopped = true;
         cancelStreams.delete(projectId);
-        cancel();
+        turnsInProgress.delete(projectId);
+        if (typeof cancel === "function") cancel();
         writeFailedPrompt(projectId, null);
-        api.stopGeneration(projectId).catch((error) => console.error("Couldn't stop the response on the server:", error));
 
         update(projectId, (state) => ({
             isStreaming: false,
             streamingFiles: EMPTY_FILES,
+            ...(turn
+                ? { completedFiles: turn.completedBefore, deletedFiles: turn.deletedBefore, lastTurnFiles: [], diffBaselines: EMPTY_FILES }
+                : {}),
             messages: state.messages.map((message, index) =>
                 index === state.messages.length - 1 && message.role === "assistant"
-                    ? { ...message, isStreaming: false, wasStopped: true, createdAt: new Date().toISOString() }
+                    ? { ...message, isStreaming: false, wasStopped: true, status: undefined, createdAt: new Date().toISOString() }
                     : message
             ),
         }));
+
+        api.stopGeneration(projectId).then(
+            () => {
+                void (turn ? adoptSavedTurn(turn) : projectChat.loadHistory(projectId));
+            },
+            (error) => console.error("Couldn't stop the response on the server:", error)
+        );
     },
 
-    retryLastMessage(projectId: string, options: { teachingMode?: boolean } = {}) {
-        const { lastSentMessage, isStreaming } = getState(projectId);
-        if (!lastSentMessage || isStreaming) return;
-        projectChat.sendMessage(projectId, lastSentMessage, { ...options, isRetry: true });
+    retryLastMessage(projectId: string) {
+        const { lastSentMessage, messages, isStreaming } = getState(projectId);
+        const prompt = lastSentMessage ?? [...messages].reverse().find((message) => message.role === "user")?.content;
+        if (!prompt || isStreaming) return;
+        const wasTeaching = [...messages].reverse().find((message) => message.role === "assistant")?.teaching;
+        void projectChat.sendMessage(projectId, prompt, !!wasTeaching);
+    },
+
+    dismissNotice(projectId: string) {
+        if (getState(projectId).notice !== null) update(projectId, () => ({ notice: null }));
     },
 
     markDiffViewed(projectId: string, path: string) {

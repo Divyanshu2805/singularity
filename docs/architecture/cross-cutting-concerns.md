@@ -17,7 +17,7 @@ Every error response has one shape (`ApiError`), produced in one place: `common-
 
 ## Quotas and cost control
 
-Plan limits (daily AI tokens, owned projects, concurrent previews) are enforced before any expensive work starts, as a `402` with a structured `quota` body. Every AI call path checks the caller's daily token budget first (`UsageService.assertWithinDailyTokenBudget`), so a user who is out of budget never pays for a partial attempt. Limits come from account-service; see [billing](../api/billing.md) and [usage](../api/usage.md).
+Plan limits (daily AI tokens, owned projects, concurrent previews) are enforced before any expensive work starts, as a `402` with a structured `quota` body. Every AI call path is admitted against the caller's daily token allowance first (`UsageService.reserveBudget`) and holds part of what is free for as long as it runs, so two calls cannot claim the same room. A hold is not spending: the day's counter holds only what finished calls cost, and the holds live in memory (`BudgetHolds`). A build turn's spend is also watched while it runs - when the allowance is gone the turn stops there, keeps the files it finished and ends `OUT_OF_BUDGET` - so a turn cannot finish past the limit. See [the daily allowance](flows/ai-generation.md#the-daily-allowance). Limits come from account-service; see [billing](../api/billing.md) and [usage](../api/usage.md).
 
 ## Schema ownership
 

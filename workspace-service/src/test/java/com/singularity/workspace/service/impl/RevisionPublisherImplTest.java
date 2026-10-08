@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -48,10 +49,11 @@ class RevisionPublisherImplTest {
     private final RevisionManifestStore manifestStore = mock(RevisionManifestStore.class);
     private final BlobStore blobStore = mock(BlobStore.class);
     private final MinioClient minioClient = mock(MinioClient.class);
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
 
     private final RevisionPublisherImpl publisher = new RevisionPublisherImpl(
             projectRepository, projectFileRepository, manifestStore, blobStore, List.<RevisionValidator>of(),
-            minioClient, "projects");
+            minioClient, "projects", events);
 
     @BeforeEach
     void stubProject() {

@@ -2,9 +2,41 @@
  * The live preview: the project's files running in a dev server on a runner pod, loaded in an iframe from its own
  * origin.
  *
- * Handles: starting and stopping it, the start-up checklist while the runner installs, the idle countdown, the
- * runner's logs when something fails, reporting runtime errors from the page inside, and hot-reloading as the AI
- * saves files - the runner syncs them from storage, so nothing here has to push changes.
+ * Handles: starting and stopping it, the start-up checklist while the runner installs, the place in the line when
+ * every runner is busy, the idle countdown, the runner's output and the app's own console in one panel, reporting
+ * runtime errors and a blank page from the page inside, saying whether the preview is showing the latest saved
+ * change, an address bar with back and forward for apps with several pages, holding the frame to a phone's or a
+ * tablet's width, and hot-reloading as the AI saves files - the runner syncs them from storage, so nothing here has
+ * to push changes. The page above can ask for the frame to be reloaded, which it does after a fix for an error the
+ * preview had reported.
+ *
+ * The frame is covered until the page inside says it is up. A frame that loaded tells the tab nothing about what it
+ * loaded: one of the proxy's own pages - the runner restarting, the link run out, no route - used to sit in the
+ * frame looking like the app had turned into an error. The page and the proxy's pages both say what they are
+ * (lib/preview-frame), and the tab acts on it without being asked: a link that has run out is replaced and the frame
+ * loaded again, a missing route makes it ask the server what happened - which is how a runner that died is noticed
+ * and started again - and a restart is waited out. Only when a frame has loaded and said nothing at all, or a fresh
+ * link was refused more than once, is the person told, with Reload and the output one click away.
+ *
+ * Back, forward and the address go to the page as messages, since a frame on another origin cannot be driven any
+ * other way; the page says whether there is anywhere to go, and the buttons are live only then. Reload stays the
+ * tab's own - it remounts the frame with a fresh link - so it works on a frame that has stopped answering.
+ *
+ * An error the page reports while a change is on its way in is held back (lib/preview's holdsPreviewErrors) and shown
+ * only if it is still there once the preview is level. A response that adds a package first delivers files that
+ * import it, the page fails on the import, and seconds later the server installs it and restarts: showing "The
+ * preview hit an error" in between told the person about a fault that was already being dealt with.
+ *
+ * The starting screen shows its steps and no clock. A count of seconds was there and was taken out at the owner's
+ * request.
+ *
+ * Restarting bounces the dev server everyone on the project shares, so the button is shown only to someone who may
+ * edit; the server refuses a viewer who asks anyway.
+ *
+ * A start that failed because of the platform rather than the project is tried again by itself (lib/preview's
+ * autoRetryDelay), and the panel goes on showing a preview that is starting; the failure is shown only once those
+ * tries are used up. A failed start offers Try again and View code and nothing else: the "Ask AI to fix" button that
+ * used to sit under every failure, including ones no edit could mend, was removed at the owner's request.
  *
  * Per person: it starts when you press Start, a collaborator running theirs does not start yours, and it comes back
  * by itself only if yours stopped for inactivity.
@@ -24,11 +56,13 @@
  * light, the title and the action - the explanatory sentence under the title was removed at the owner's request, so
  * a stopped preview shows a line only when it has a real reason (an idle timeout, say).
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
   Check,
   CodeXml,
   Download,
@@ -43,81 +77,163 @@ import {
   Sparkles,
   Square,
   SquareTerminal,
-  Wrench,
+  Tablet,
+  Trash2,
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { RuntimeErrorAlert, type RuntimeError } from "@/components/RuntimeErrorAlert";
+import { blankPageError, isBlankPage, type FixOffer } from "@/lib/preview-fix";
+import {
+  FRAME_LOADING,
+  FRAME_SILENCE_MS,
+  addressToPath,
+  appendConsole,
+  errorConsoleLine,
+  frameCommand,
+  frameReducer,
+  navigateCommand,
+  readFrameMessage,
+  statusPageAction,
+  statusPageCaption,
+  type ConsoleLine,
+  type FrameCommand,
+  type FramePlace,
+} from "@/lib/preview-frame";
 import { api, ApiRequestError, isQuotaError } from "@/lib/api";
 import { MY_PREVIEWS_QUERY_KEY, type ProjectPreview } from "@/hooks/use-preview";
 import { useCopyFeedback } from "@/hooks/use-copy-feedback";
 import { useToast } from "@/hooks/use-toast";
 import {
+  PREVIEW_DEVICES,
   PREVIEW_SANDBOX,
   PREVIEW_STEPS,
+  autoRetryDelay,
   autoStartKey,
   describePreviewStartFailure,
+  holdsPreviewErrors,
   formatStopsIn,
+  isWaitingForRunner,
+  nextPreviewDevice,
   previewAddressFor,
+  previewDeviceWidth,
+  previewFailureTitle,
   previewOrigin,
   previewStepIndex,
+  previewSync,
+  queueMessage,
   shouldAutoStartPreview,
+  type PreviewDevice,
+  type PreviewSync,
 } from "@/lib/preview";
+import type { PreviewFailureKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface PreviewPanelProps {
   projectId: string;
   isVisible: boolean;
   preview: ProjectPreview;
+  canRestart: boolean;
+  isBuilding?: boolean;
   runtimeError: RuntimeError | null;
   onRuntimeError: (error: RuntimeError) => void;
   onDismiss: () => void;
-  onFix: (error: RuntimeError) => void;
-  onAskToFix?: (message: string) => void;
+  errorFix?: { offer: FixOffer; onFix: () => void } | null;
   onViewCode: () => void;
   onDownload: () => void;
+  reloadSignal?: number;
 }
 
-type Device = "desktop" | "mobile";
+type OutputTab = "server" | "console";
 
 const LOG_POLL_MS = 3_000;
+const STATUS_PAGE_THROTTLE_MS = 3_000;
+const MAX_LINK_REFRESHES = 3;
+const ROOT_PLACE: FramePlace = { path: "/", canGoBack: false, canGoForward: false };
+const DEVICE_ICONS: Record<PreviewDevice, ReactNode> = {
+  desktop: <Monitor />,
+  tablet: <Tablet />,
+  mobile: <Smartphone />,
+};
 
 export function PreviewPanel({
   projectId,
   isVisible,
   preview: controller,
+  canRestart,
+  isBuilding = false,
   runtimeError,
   onRuntimeError,
   onDismiss,
-  onFix,
-  onAskToFix,
+  errorFix = null,
   onViewCode,
   onDownload,
+  reloadSignal = 0,
 }: PreviewPanelProps) {
-  const { preview, isLoaded, start, restart, stop, isStarting, isStopping, startError, resetStartError } = controller;
+  const { preview, isLoaded, refresh, start, restart, stop, isStarting, isStopping, startError, resetStartError } = controller;
   const { toast } = useToast();
 
   const [stoppedByUser, setStoppedByUser] = useState(false);
   const lastAutoStartRef = useRef<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
-  const [device, setDevice] = useState<Device>("desktop");
+  const [outputTab, setOutputTab] = useState<OutputTab>("server");
+  const [device, setDevice] = useState<PreviewDevice>("desktop");
   const [reloadKey, setReloadKey] = useState(0);
-  const [isFrameLoading, setIsFrameLoading] = useState(true);
-  const [path, setPath] = useState("/");
+  const [frame, dispatchFrame] = useReducer(frameReducer, FRAME_LOADING);
+  const [place, setPlace] = useState<FramePlace>(ROOT_PLACE);
+  const [consoleLines, setConsoleLines] = useState<ConsoleLine[]>([]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const lastStatusPageAtRef = useRef(0);
+  const linkRefreshesRef = useRef(0);
+
+  const [isSettling, setIsSettling] = useState(false);
+  const wasBuildingRef = useRef(isBuilding);
+  useEffect(() => {
+    const finished = wasBuildingRef.current && !isBuilding;
+    wasBuildingRef.current = isBuilding;
+    if (!finished) return;
+    setIsSettling(true);
+    refresh().catch(() => {
+    }).finally(() => setIsSettling(false));
+  }, [isBuilding, refresh]);
+
+  const holdsErrors = holdsPreviewErrors({ isBuilding, isSettling, preview });
+  const holdsErrorsRef = useRef(holdsErrors);
+  holdsErrorsRef.current = holdsErrors;
+  const heldErrorRef = useRef<RuntimeError | null>(null);
+  useEffect(() => {
+    if (holdsErrors || !heldErrorRef.current) return;
+    const held = heldErrorRef.current;
+    heldErrorRef.current = null;
+    onRuntimeError(held);
+  }, [holdsErrors, onRuntimeError]);
+
+  const runtimeErrorRef = useRef(runtimeError);
+  runtimeErrorRef.current = runtimeError;
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
 
   useEffect(() => {
     setStoppedByUser(false);
     lastAutoStartRef.current = null;
+    setRetryCount(0);
     setIsLogsOpen(false);
-    setPath("/");
+    setOutputTab("server");
+    setConsoleLines([]);
   }, [projectId]);
 
   useEffect(() => {
-    setIsFrameLoading(true);
-    setPath("/");
+    dispatchFrame({ type: "mounted" });
+    setPlace(ROOT_PLACE);
+    heldErrorRef.current = null;
+  }, [preview?.id, preview?.readyAt, reloadKey]);
+
+  useEffect(() => {
+    setConsoleLines([]);
+    linkRefreshesRef.current = 0;
   }, [preview?.id, preview?.readyAt]);
 
   const runStart = useCallback(
@@ -139,13 +255,13 @@ export function PreviewPanel({
 
   const handleStart = () => {
     resetStartError();
+    setRetryCount(0);
     setStoppedByUser(false);
     runStart(start);
   };
 
   const handleRestart = () => {
     resetStartError();
-    setIsFrameLoading(true);
     runStart(restart);
   };
 
@@ -162,38 +278,129 @@ export function PreviewPanel({
     }
   };
 
-  const handleReload = () => {
-    setIsFrameLoading(true);
+  const handleReload = useCallback(() => {
+    refresh().catch(() => {
+    }).finally(() => setReloadKey((key) => key + 1));
+  }, [refresh]);
+
+  const handledReloadSignalRef = useRef(reloadSignal);
+  useEffect(() => {
+    if (reloadSignal === handledReloadSignalRef.current) return;
+    handledReloadSignalRef.current = reloadSignal;
     setReloadKey((key) => key + 1);
-  };
+  }, [reloadSignal]);
+
+  const handleStatusPage = useCallback((status: number) => {
+    const now = Date.now();
+    if (now - lastStatusPageAtRef.current < STATUS_PAGE_THROTTLE_MS) return;
+    lastStatusPageAtRef.current = now;
+    const needsFreshLink = statusPageAction(status) === "fresh-link";
+    if (needsFreshLink && linkRefreshesRef.current >= MAX_LINK_REFRESHES) {
+      dispatchFrame({ type: "gave-up" });
+      return;
+    }
+    refresh()
+      .then((fresh) => {
+        if (!needsFreshLink || fresh?.status !== "RUNNING") return;
+        linkRefreshesRef.current += 1;
+        setReloadKey((key) => key + 1);
+      })
+      .catch(() => {
+      });
+  }, [refresh]);
 
   const origin = previewOrigin(preview?.previewUrl);
   useEffect(() => {
     if (!origin) return;
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== origin || event.source !== iframeRef.current?.contentWindow) return;
-      const data = event.data;
-      if (data?.type === "PreviewError" && data.payload) {
-        onRuntimeError({
-          message: String(data.payload.message ?? "Unknown error"),
-          source: data.subType,
-          stack: data.payload.stack,
-          filename: data.payload.source,
-          lineno: data.payload.lineno,
-          colno: data.payload.colno,
-        });
-      } else if (data?.type === "PreviewLocation" && typeof data.payload?.path === "string") {
-        setPath(data.payload.path);
+      const message = readFrameMessage(event.data);
+      if (!message) return;
+      switch (message.kind) {
+        case "ready":
+        case "location":
+          linkRefreshesRef.current = 0;
+          dispatchFrame({ type: "ready" });
+          setPlace(message.place);
+          break;
+        case "error":
+          if (holdsErrorsRef.current) heldErrorRef.current = message.error;
+          else onRuntimeError(message.error);
+          setConsoleLines((lines) => appendConsole(lines, [errorConsoleLine(message.error)]));
+          break;
+        case "error-cleared":
+          if (heldErrorRef.current?.source === message.source) heldErrorRef.current = null;
+          if (runtimeErrorRef.current?.source === message.source) onDismissRef.current();
+          break;
+        case "blank":
+          if (holdsErrorsRef.current) heldErrorRef.current ??= blankPageError();
+          else if (!runtimeErrorRef.current) onRuntimeError(blankPageError());
+          break;
+        case "rendered":
+          if (isBlankPage(heldErrorRef.current)) heldErrorRef.current = null;
+          if (isBlankPage(runtimeErrorRef.current)) onDismissRef.current();
+          break;
+        case "console":
+          setConsoleLines((lines) => appendConsole(lines, message.lines));
+          break;
+        case "status-page":
+          dispatchFrame({ type: "status-page", status: message.status });
+          handleStatusPage(message.status);
+          break;
       }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [origin, onRuntimeError]);
+  }, [origin, onRuntimeError, handleStatusPage]);
+
+  const sendToFrame = useCallback((command: FrameCommand) => {
+    if (origin) iframeRef.current?.contentWindow?.postMessage(command, origin);
+  }, [origin]);
 
   const status = preview?.status;
   const isRunning = status === "RUNNING";
   const isCreating = status === "CREATING";
-  const hasLogs = !!preview && (isRunning || isCreating || status === "FAILED");
+  const hasServerLogs = !!preview && (isRunning || isCreating || status === "FAILED");
+  const hasLogs = hasServerLogs || consoleLines.length > 0;
+
+  useEffect(() => {
+    if (!isCreating) return;
+    heldErrorRef.current = null;
+    onDismissRef.current();
+  }, [isCreating]);
+
+  const isAwaitingFrame = isRunning && frame.view === "loading";
+  useEffect(() => {
+    if (!isAwaitingFrame) return;
+    const timer = window.setTimeout(() => dispatchFrame({ type: "silence" }), FRAME_SILENCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [isAwaitingFrame, preview?.id, preview?.readyAt, reloadKey]);
+
+  const showOutput = useCallback((tab: OutputTab) => {
+    setOutputTab(tab);
+    setIsLogsOpen(true);
+  }, []);
+
+  const failureKey = isCreating || isRunning ? null : startError ? "start-error" : status === "FAILED" ? `failed-${preview?.id}` : null;
+  const retryDelay =
+    failureKey && isVisible && !isStarting && !stoppedByUser
+      ? autoRetryDelay(retryCount, startError ? { startError } : { detail: preview?.detail, kind: preview?.failureKind })
+      : null;
+  const isRecovering = retryDelay !== null || (isStarting && retryCount > 0 && !isCreating && !isRunning);
+
+  useEffect(() => {
+    if (retryDelay === null) return;
+    const timer = window.setTimeout(() => {
+      setRetryCount((count) => count + 1);
+      resetStartError();
+      runStart(start);
+    }, retryDelay);
+    return () => window.clearTimeout(timer);
+  }, [retryDelay, failureKey, resetStartError, runStart, start]);
+
+  useEffect(() => {
+    if (isRunning) setRetryCount(0);
+  }, [isRunning]);
 
   // previewUrl carries a fresh, short-lived access token on every poll (CODE_REVIEW.md SEC-06). Snapshot it only
   // when the iframe would remount anyway - a new session or an explicit reload - so a routine background poll
@@ -204,30 +411,46 @@ export function PreviewPanel({
   const frameSrc = useMemo(() => preview?.previewUrl, [preview?.id, reloadKey]);
 
   let body: ReactNode;
-  if (startError && !isCreating && !isRunning) {
+  if (isRecovering) {
+    body = <StartingState detail={null} />;
+  } else if (startError && !isCreating && !isRunning) {
     body = <StartErrorState error={startError} onRetry={handleStart} onDownload={onDownload} />;
   } else if (!isLoaded || (isStarting && !preview)) {
-    body = <StartingState detail={null} startedAt={null} />;
+    body = <StartingState detail={null} />;
   } else if (isCreating) {
-    body = <StartingState detail={preview.detail} startedAt={preview.startedAt} />;
+    body = isWaitingForRunner(preview)
+      ? <WaitingState position={preview.queuePosition} />
+      : <StartingState detail={preview.detail} />;
   } else if (isRunning) {
+    const frameWidth = previewDeviceWidth(device);
     body = (
-      <div className={cn("relative flex min-h-0 flex-1 justify-center overflow-hidden", device === "mobile" && "bg-[hsl(var(--ws-well))] py-4")}>
+      <div className={cn("relative flex min-h-0 flex-1 justify-center overflow-hidden", frameWidth !== null && "bg-[hsl(var(--ws-well))] py-4")}>
         <iframe
           ref={iframeRef}
           key={`${preview.id}-${reloadKey}`}
           src={frameSrc}
           title="Live preview"
           sandbox={PREVIEW_SANDBOX}
-          onLoad={() => setIsFrameLoading(false)}
+          style={frameWidth !== null ? { width: frameWidth } : undefined}
           className={cn(
             "h-full border-0 bg-white",
-            device === "desktop" ? "w-full" : "w-[390px] max-w-full rounded-2xl shadow-[0_30px_70px_-30px_rgb(0_0_0/0.9)] ring-1 ring-white/10"
+            frameWidth === null ? "w-full" : "max-w-full rounded-2xl shadow-[0_30px_70px_-30px_rgb(0_0_0/0.9)] ring-1 ring-white/10"
           )}
         />
-        {isFrameLoading && (
+        {frame.view === "loading" && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[hsl(var(--ws-window)/0.7)] animate-in fade-in-0">
             <OrbitSpinner className="h-6 w-6" label="Loading the preview" />
+          </div>
+        )}
+        {frame.view === "status-page" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[hsl(var(--ws-window))] animate-in fade-in-0">
+            <OrbitSpinner className="h-6 w-6" />
+            <p className="text-xs text-muted-foreground">{statusPageCaption(frame.status ?? 502)}</p>
+          </div>
+        )}
+        {frame.view === "silent" && (
+          <div className="absolute inset-0 flex bg-[hsl(var(--ws-window))] animate-in fade-in-0">
+            <SilentFrameState onReload={handleReload} onShowOutput={() => showOutput("server")} />
           </div>
         )}
       </div>
@@ -236,10 +459,10 @@ export function PreviewPanel({
     body = (
       <FailedState
         detail={preview.detail}
+        kind={preview.failureKind}
         projectId={projectId}
         previewId={preview.id}
         onRetry={handleStart}
-        onAskToFix={onAskToFix}
         onViewCode={onViewCode}
       />
     );
@@ -258,11 +481,16 @@ export function PreviewPanel({
     <div className="relative flex h-full flex-col">
       <PreviewToolbar
         preview={preview}
-        path={path}
+        origin={origin}
+        place={place}
+        isFrameLive={isRunning && frame.view === "app"}
         device={device}
         onDeviceChange={setDevice}
+        onBack={() => sendToFrame(frameCommand("back"))}
+        onForward={() => sendToFrame(frameCommand("forward"))}
+        onNavigate={(path) => sendToFrame(navigateCommand(path))}
         onReload={handleReload}
-        onRestart={handleRestart}
+        onRestart={canRestart ? handleRestart : null}
         onStop={() => void handleStop()}
         onToggleLogs={() => setIsLogsOpen((open) => !open)}
         isLogsOpen={isLogsOpen}
@@ -274,10 +502,24 @@ export function PreviewPanel({
       {body}
 
       {isLogsOpen && hasLogs && (
-        <LogsDrawer projectId={projectId} isLive={isRunning || isCreating} onClose={() => setIsLogsOpen(false)} />
+        <LogsDrawer
+          projectId={projectId}
+          isLive={isRunning || isCreating}
+          hasServerLogs={hasServerLogs}
+          tab={outputTab}
+          onTabChange={setOutputTab}
+          consoleLines={consoleLines}
+          onClearConsole={() => setConsoleLines([])}
+          onClose={() => setIsLogsOpen(false)}
+        />
       )}
 
-      <RuntimeErrorAlert error={runtimeError} onDismiss={onDismiss} onFix={onFix} />
+      <RuntimeErrorAlert
+        error={runtimeError}
+        onDismiss={onDismiss}
+        fix={errorFix}
+        onShowOutput={() => showOutput(runtimeError?.source === "Build error" || isBlankPage(runtimeError) ? "server" : "console")}
+      />
 
       {status === "TERMINATED" || (!preview && isLoaded && !isStarting) ? (
         <div className="flex shrink-0 justify-center gap-2 pb-4">
@@ -321,11 +563,86 @@ function ToolbarButton({ label, onClick, disabled, active, motion, children }: {
   );
 }
 
+function SyncChip({ sync }: { sync: PreviewSync }) {
+  return (
+    <span
+      role="status"
+      title={sync.detail ?? undefined}
+      className={cn(
+        "flex shrink-0 items-center gap-1.5 whitespace-nowrap pl-2 text-[11px]",
+        sync.isUpdating ? "text-primary" : "text-muted-foreground"
+      )}
+    >
+      {sync.isUpdating ? <OrbitSpinner className="h-3 w-3" /> : <Check className="h-3 w-3 text-syntax-string" />}
+      {sync.label}
+    </span>
+  );
+}
+
+function AddressField({ host, path, isLive, onNavigate, origin }: {
+  host: string | null;
+  path: string;
+  isLive: boolean;
+  onNavigate: (path: string) => void;
+  origin: string | null;
+}) {
+  const [draft, setDraft] = useState(path);
+  const [isEditing, setIsEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isEditing) setDraft(path);
+  }, [path, isEditing]);
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const target = addressToPath(draft, origin);
+    if (target) onNavigate(target);
+    else setDraft(path);
+    inputRef.current?.blur();
+  };
+
+  if (!host) {
+    return <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">Live preview</span>;
+  }
+  return (
+    <form onSubmit={submit} className="flex min-w-0 flex-1 items-center font-mono text-[11px]">
+      <span className="hidden shrink truncate text-muted-foreground min-[900px]:inline">{host}</span>
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onFocus={(event) => {
+          setIsEditing(true);
+          event.target.select();
+        }}
+        onBlur={() => setIsEditing(false)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setDraft(path);
+            inputRef.current?.blur();
+          }
+        }}
+        disabled={!isLive}
+        spellCheck={false}
+        autoComplete="off"
+        aria-label="Address inside the preview"
+        className="min-w-0 flex-1 bg-transparent text-foreground/85 outline-none placeholder:text-muted-foreground disabled:text-muted-foreground"
+      />
+    </form>
+  );
+}
+
 function PreviewToolbar({
   preview,
-  path,
+  origin,
+  place,
+  isFrameLive,
   device,
   onDeviceChange,
+  onBack,
+  onForward,
+  onNavigate,
   onReload,
   onRestart,
   onStop,
@@ -336,11 +653,16 @@ function PreviewToolbar({
   isStarting,
 }: {
   preview: ProjectPreview["preview"];
-  path: string;
-  device: Device;
-  onDeviceChange: (device: Device) => void;
+  origin: string | null;
+  place: FramePlace;
+  isFrameLive: boolean;
+  device: PreviewDevice;
+  onDeviceChange: (device: PreviewDevice) => void;
+  onBack: () => void;
+  onForward: () => void;
+  onNavigate: (path: string) => void;
   onReload: () => void;
-  onRestart: () => void;
+  onRestart: (() => void) | null;
   onStop: () => void;
   onToggleLogs: () => void;
   isLogsOpen: boolean;
@@ -351,11 +673,21 @@ function PreviewToolbar({
   const [copied, copy] = useCopyFeedback();
   const isRunning = preview?.status === "RUNNING";
   const isActive = isRunning || preview?.status === "CREATING";
-  const { address, shareableLink } = preview ? previewAddressFor(path, preview.previewUrl) : { address: null, shareableLink: null };
+  const shareableLink = preview ? previewAddressFor(place.path, preview.previewUrl).shareableLink : null;
+  const host = preview && origin ? new URL(origin).host : null;
   const stopsIn = isRunning ? formatStopsIn(preview?.stopsAt) : null;
+  const sync = previewSync(preview);
+  const nextDevice = nextPreviewDevice(device);
+  const nextDeviceLabel = PREVIEW_DEVICES.find((entry) => entry.device === nextDevice)?.label ?? "Full width";
 
   return (
     <div className="ws-bar flex h-11 shrink-0 items-center gap-1 px-2 text-xs text-muted-foreground">
+      <ToolbarButton label="Back" motion="translateX(-1.5px)" onClick={onBack} disabled={!isFrameLive || !place.canGoBack}>
+        <ArrowLeft />
+      </ToolbarButton>
+      <ToolbarButton label="Forward" motion="translateX(1.5px)" onClick={onForward} disabled={!isFrameLive || !place.canGoForward}>
+        <ArrowRight />
+      </ToolbarButton>
       <ToolbarButton label="Reload" motion="rotate(180deg)" onClick={onReload} disabled={!isRunning}>
         <RotateCw />
       </ToolbarButton>
@@ -371,13 +703,12 @@ function PreviewToolbar({
             isRunning ? "bg-syntax-string shadow-[0_0_0_3px_hsl(var(--syntax-string)/0.18)]" : preview?.status === "CREATING" ? "animate-pulse bg-primary" : preview?.status === "FAILED" ? "bg-destructive" : "bg-muted-foreground/60"
           )}
         />
-        <span className={cn("min-w-0 flex-1 truncate font-mono text-[11px]", address ? "text-foreground/85" : "text-muted-foreground")}>
-          {address ?? "Live preview"}
-        </span>
+        <AddressField host={isActive ? host : null} path={place.path} isLive={isFrameLive} onNavigate={onNavigate} origin={origin} />
+        {sync && <SyncChip sync={sync} />}
       </div>
 
-      <ToolbarButton label={device === "desktop" ? "Phone width" : "Full width"} motion="scale(1.15)" onClick={() => onDeviceChange(device === "desktop" ? "mobile" : "desktop")} disabled={!isRunning} active={device === "mobile"}>
-        {device === "desktop" ? <Smartphone /> : <Monitor />}
+      <ToolbarButton label={nextDeviceLabel} motion="scale(1.15)" onClick={() => onDeviceChange(nextDevice)} disabled={!isRunning} active={device !== "desktop"}>
+        {DEVICE_ICONS[nextDevice]}
       </ToolbarButton>
       <ToolbarButton label={copied ? "Copied" : "Copy link"} motion="rotate(-25deg)" onClick={() => shareableLink && void copy(shareableLink)} disabled={!isRunning}>
         {copied ? <Check className="text-syntax-string" /> : <Link2 />}
@@ -388,9 +719,11 @@ function PreviewToolbar({
       <ToolbarButton label={isLogsOpen ? "Hide output" : "Show output"} motion="scale(1.08)" onClick={onToggleLogs} disabled={!canShowLogs} active={isLogsOpen && canShowLogs}>
         <SquareTerminal />
       </ToolbarButton>
-      <ToolbarButton label="Reinstall and restart" motion="rotate(-180deg)" onClick={onRestart} disabled={!isRunning || isStarting}>
-        <RotateCcw />
-      </ToolbarButton>
+      {onRestart && (
+        <ToolbarButton label="Reinstall and restart" motion="rotate(-180deg)" onClick={onRestart} disabled={!isRunning || isStarting}>
+          <RotateCcw />
+        </ToolbarButton>
+      )}
       {isActive && preview?.canStop && (
         <ToolbarButton label="Stop preview" motion="scale(0.85)" onClick={onStop} disabled={isStopping}>
           {isStopping ? <OrbitSpinner className="h-3.5 w-3.5" /> : <Square />}
@@ -426,20 +759,8 @@ function CenteredState({ icon, title, children, tone = "default" }: {
   );
 }
 
-function useElapsedSeconds(since: string | null): number | null {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!since) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [since]);
-  if (!since) return null;
-  return Math.max(0, Math.floor((now - Date.parse(since)) / 1000));
-}
-
-function StartingState({ detail, startedAt }: { detail: string | null; startedAt: string | null }) {
+function StartingState({ detail }: { detail: string | null }) {
   const current = previewStepIndex(detail);
-  const elapsed = useElapsedSeconds(startedAt);
 
   return (
     <CenteredState icon={<OrbitSpinner className="h-6 w-6" />} title="Starting your preview">
@@ -463,9 +784,35 @@ function StartingState({ detail, startedAt }: { detail: string | null; startedAt
           );
         })}
       </ol>
-      {elapsed !== null && (
-        <p className="font-mono text-[11px] tabular-nums text-muted-foreground">{elapsed}s</p>
-      )}
+    </CenteredState>
+  );
+}
+
+function WaitingState({ position }: { position: number | null | undefined }) {
+  return (
+    <CenteredState icon={<OrbitSpinner className="h-6 w-6" />} title="Every runner is busy right now">
+      <p className="-mt-1 max-w-[320px] text-xs leading-5 text-muted-foreground">
+        {queueMessage(position)} Your preview starts by itself as soon as one is free.
+      </p>
+    </CenteredState>
+  );
+}
+
+function SilentFrameState({ onReload, onShowOutput }: { onReload: () => void; onShowOutput: () => void }) {
+  return (
+    <CenteredState icon={<AlertTriangle className="h-5 w-5" />} title="The preview isn't showing your app" tone="error">
+      <p className="max-w-[340px] text-xs leading-5 text-muted-foreground">
+        The page loaded but the app never answered. Reloading usually brings it back; the output says what the dev
+        server is doing.
+      </p>
+      <div className="flex flex-wrap justify-center gap-2">
+        <Button size="sm" onClick={onReload} style={{ "--icon-hover": "rotate(180deg)" } as CSSProperties} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
+          <RotateCw /> Reload
+        </Button>
+        <Button variant="outline" size="sm" onClick={onShowOutput} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
+          <SquareTerminal /> Show output
+        </Button>
+      </div>
     </CenteredState>
   );
 }
@@ -489,12 +836,12 @@ function StoppedState({ reason, hasStartedBefore, onStart, isStarting }: {
   );
 }
 
-function FailedState({ detail, projectId, previewId, onRetry, onAskToFix, onViewCode }: {
+function FailedState({ detail, kind, projectId, previewId, onRetry, onViewCode }: {
   detail: string | null;
+  kind: PreviewFailureKind | null | undefined;
   projectId: string;
   previewId: number;
   onRetry: () => void;
-  onAskToFix?: (message: string) => void;
   onViewCode: () => void;
 }) {
   const { data: logs } = useQuery({
@@ -503,21 +850,8 @@ function FailedState({ detail, projectId, previewId, onRetry, onAskToFix, onView
   });
   const output = logs?.log?.trim();
 
-  const askToFix = () => {
-    if (!onAskToFix) return;
-    onAskToFix(`The live preview failed to start: ${detail ?? "unknown error"}.
-
-Here is the end of the output:
-
-\`\`\`
-${(output ?? "No output was captured.").slice(-3000)}
-\`\`\`
-
-Please find the cause in the project's files (package.json, vite.config, the entry files) and fix it.`);
-  };
-
   return (
-    <CenteredState icon={<AlertTriangle className="h-5 w-5" />} title="The preview couldn't start" tone="error">
+    <CenteredState icon={<AlertTriangle className="h-5 w-5" />} title={previewFailureTitle(kind)} tone="error">
       <p className="max-w-[360px] text-xs leading-5 text-muted-foreground">{detail ?? "Something went wrong."}</p>
       {output && (
         <pre className="max-h-48 w-full max-w-[520px] overflow-auto whitespace-pre-wrap rounded-xl border border-white/[0.1] bg-[hsl(var(--ws-well))] p-3 text-left font-mono text-[11px] leading-4 text-muted-foreground">
@@ -525,11 +859,6 @@ Please find the cause in the project's files (package.json, vite.config, the ent
         </pre>
       )}
       <div className="flex flex-wrap justify-center gap-2">
-        {onAskToFix && (
-          <Button size="sm" onClick={askToFix} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
-            <Wrench /> Ask AI to fix
-          </Button>
-        )}
         <Button variant="outline" size="sm" onClick={onRetry} style={{ "--icon-hover": "rotate(-180deg)" } as CSSProperties} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
           <RotateCcw /> Try again
         </Button>
@@ -621,36 +950,94 @@ function StartErrorState({ error, onRetry, onDownload }: { error: unknown; onRet
   );
 }
 
-function LogsDrawer({ projectId, isLive, onClose }: { projectId: string; isLive: boolean; onClose: () => void }) {
+const CONSOLE_LEVEL_CLASS: Record<ConsoleLine["level"], string> = {
+  log: "text-foreground/80",
+  info: "text-foreground/80",
+  debug: "text-muted-foreground",
+  warn: "text-primary",
+  error: "text-destructive",
+};
+
+function LogsDrawer({ projectId, isLive, hasServerLogs, tab, onTabChange, consoleLines, onClearConsole, onClose }: {
+  projectId: string;
+  isLive: boolean;
+  hasServerLogs: boolean;
+  tab: OutputTab;
+  onTabChange: (tab: OutputTab) => void;
+  consoleLines: readonly ConsoleLine[];
+  onClearConsole: () => void;
+  onClose: () => void;
+}) {
+  const activeTab: OutputTab = hasServerLogs ? tab : "console";
   const { data, isLoading, error } = useQuery({
     queryKey: ["preview-logs", projectId, isLive ? "live" : "saved"],
     queryFn: () => api.getPreviewLogs(projectId),
-    refetchInterval: isLive ? LOG_POLL_MS : false,
+    refetchInterval: isLive && activeTab === "server" ? LOG_POLL_MS : false,
+    enabled: hasServerLogs && activeTab === "server",
   });
   const scrollRef = useRef<HTMLPreElement>(null);
+  const consoleErrors = consoleLines.filter((line) => line.level === "error").length;
 
   useEffect(() => {
     const element = scrollRef.current;
     if (element) element.scrollTop = element.scrollHeight;
-  }, [data?.log]);
+  }, [data?.log, consoleLines, activeTab]);
+
+  const tabButton = (value: OutputTab, label: ReactNode) => (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={activeTab === value}
+      onClick={() => onTabChange(value)}
+      className={cn(
+        "rounded-md px-2 py-1 transition-colors",
+        activeTab === value ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="flex h-56 shrink-0 flex-col bg-[hsl(var(--ws-well))] animate-in slide-in-from-bottom-2 fade-in-0 duration-300">
       <div className="ws-bar ws-bar-top flex h-9 shrink-0 items-center gap-2 px-3 text-[11px] font-medium text-foreground/85">
         <SquareTerminal className="h-3.5 w-3.5" />
-        Output
-        {isLive && (
+        <div role="tablist" aria-label="Output" className="flex items-center gap-1">
+          {hasServerLogs && tabButton("server", "Server")}
+          {tabButton("console", (
+            <span className="flex items-center gap-1.5">
+              Console
+              {consoleErrors > 0 && (
+                <span className="rounded-full bg-destructive/20 px-1.5 text-[10px] tabular-nums text-destructive">{consoleErrors}</span>
+              )}
+            </span>
+          ))}
+        </div>
+        {isLive && activeTab === "server" && (
           <span className="flex items-center gap-1.5 font-normal text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-syntax-string" />
             live
           </span>
         )}
-        <button type="button" onClick={onClose} aria-label="Hide output" style={{ "--icon-hover": "scale(0.8)" } as CSSProperties} className="icon-btn ml-auto h-6 w-6 rounded-md">
-          <X className="h-3.5 w-3.5" />
-        </button>
+        <div className="ml-auto flex items-center gap-1">
+          {activeTab === "console" && consoleLines.length > 0 && (
+            <button type="button" onClick={onClearConsole} aria-label="Clear the console" style={{ "--icon-hover": "scale(0.85)" } as CSSProperties} className="icon-btn h-6 w-6 rounded-md">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button type="button" onClick={onClose} aria-label="Hide output" style={{ "--icon-hover": "scale(0.8)" } as CSSProperties} className="icon-btn h-6 w-6 rounded-md">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
-      <pre ref={scrollRef} className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-3 font-mono text-[11.5px] leading-[1.6] text-foreground/80">
-        {isLoading ? "Loading…" : error instanceof Error ? error.message : data?.log?.trim() || "No output yet."}
+      <pre ref={scrollRef} role="tabpanel" className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-3 font-mono text-[11.5px] leading-[1.6] text-foreground/80">
+        {activeTab === "server"
+          ? isLoading ? "Loading…" : error instanceof Error ? error.message : data?.log?.trim() || "No output yet."
+          : consoleLines.length === 0
+            ? "Nothing yet. What the app writes with console.log, and any error it throws, shows up here."
+            : consoleLines.map((line, index) => (
+              <span key={index} className={cn("block", CONSOLE_LEVEL_CLASS[line.level])}>{line.text}</span>
+            ))}
       </pre>
     </div>
   );

@@ -7,8 +7,10 @@ import com.singularity.intelligence.dto.idea.CompileIdeaRequest;
 import com.singularity.intelligence.dto.idea.CompileIdeaResponse;
 import com.singularity.intelligence.dto.idea.IdeaAnswer;
 import com.singularity.intelligence.dto.usage.UsageReservation;
+import com.singularity.intelligence.enums.AiCallKind;
 import com.singularity.intelligence.enums.UsageFeature;
 import com.singularity.intelligence.llm.AiUsageRecorder;
+import com.singularity.intelligence.llm.ModelCalls;
 import com.singularity.intelligence.service.IdeaService;
 import com.singularity.intelligence.service.UsageService;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +43,13 @@ import java.util.stream.Collectors;
  * reported, never disguised - the response says the questions are not tailored, and the failure is logged as an error
  * naming the cause. It was once swallowed at warn level, and a revoked provider key then looked like an interview
  * that always asked the same four things.
+ *
+ * <p>Both prompts say what the product can build: an app that runs in the browser, with no accounts, payments,
+ * shared data or notifications. Run on real ideas, the interview offered "client login", "deposit required" and
+ * "photo proof" as answers and the brief then promised a client portal and a card form - things the build can only
+ * fake or refuse. The brief is also held to three screens and 180 words: a four-screen brief was a first build of
+ * twelve files and two and a half minutes, watched by someone waiting for their first result. What has to be
+ * simulated is said in the brief itself, so the person reads it before the build and not after.
  */
 @Service
 @RequiredArgsConstructor
@@ -55,7 +64,7 @@ public class IdeaServiceImpl implements IdeaService {
     private static final int MAX_OPTION_CHARS = 60;
     private static final int MAX_SPEC_CHARS = 3500;
 
-    private static final int MAX_QUESTIONS = 5;
+    static final int MAX_QUESTIONS = 5;
     private static final int FALLBACK_QUESTION_COUNT = 4;
 
     private static final List<ClarifyingQuestion> FALLBACK_QUESTIONS = List.of(
@@ -104,7 +113,7 @@ public class IdeaServiceImpl implements IdeaService {
     private static final int MAX_ID_CHARS = 50;
     private static final Pattern NON_SLUG = Pattern.compile("[^a-z0-9]+");
 
-    private static final String CLARIFY_SYSTEM_PROMPT_TEMPLATE = """
+    static final String CLARIFY_SYSTEM_PROMPT_TEMPLATE = """
             You run a short interview about an app someone wants built, before any code is written. Your job is
             to find the decisions THIS idea leaves open, and ask about those and nothing else.
 
@@ -123,6 +132,15 @@ public class IdeaServiceImpl implements IdeaService {
             Ask about the look and feel only when the description does not already settle it. When you do ask
             it, make it the last question.
 
+            What gets built is a web app that runs entirely in the visitor's own browser. It has no accounts or
+            sign-in, takes no payments, shares no data between people or devices, and cannot send email, texts
+            or notifications or use the camera, microphone, voice or location. So never ask about any of
+            those, and never offer an option that needs one - not "client login", "password-protected link",
+            "deposit required", "photo proof", "community-shared", "pay by card". When the idea itself is
+            about such a thing (a shop, a booking, a leaderboard among friends), ask about the part a person
+            sees and does - what they browse, what they pick, what the form asks for, how things are ranked -
+            because the first version keeps its data on the device and shows the rest as it would look.
+
             Give each question:
             - id: a short snake_case label for what it asks about, such as "seat_limits" or "visual_style".
                   Unique within your reply.
@@ -136,7 +154,7 @@ public class IdeaServiceImpl implements IdeaService {
             the same decision.
             """;
 
-    private static final String COMPILE_SYSTEM_PROMPT = """
+    static final String COMPILE_SYSTEM_PROMPT = """
             You turn an app idea and the answers from a short interview into a clear, concise brief that an AI app
             builder will follow to build the first version. Reply with plain markdown in exactly this shape and
             nothing else - no preamble, no closing remarks:
@@ -151,16 +169,26 @@ public class IdeaServiceImpl implements IdeaService {
             Stay faithful to the answers. The interview is deliberately short and won't have covered every
             section above - where it didn't, or where a question was skipped, infer a sensible choice from the
             idea itself rather than leaving the section out.
-            Keep the whole brief under 220 words.
+
+            This is a first version that someone watches being built, so keep it small enough to finish well:
+            - At most three screens, and one is often right. A screen's bullet names at most three things on it.
+            - It runs entirely in the browser: no accounts or sign-in, no payments, no data shared between
+              people, no email or notifications. Where the idea needs one of those, describe what the person
+              sees instead - a booking form that confirms on screen, a cart whose checkout shows an order
+              summary, a leaderboard of names kept on this device - and make the FIRST "Keep it simple" bullet
+              say plainly what is simulated ("Bookings are saved on this device only; nothing is sent").
+            - Never promise a login, a client portal, card payment or anything else from that list.
+            Keep the whole brief under 180 words.
             """;
 
     record GeneratedInterview(List<ClarifyingQuestion> questions) {
     }
 
-    private static final BeanOutputConverter<GeneratedInterview> QUESTIONS_CONVERTER =
+    static final BeanOutputConverter<GeneratedInterview> QUESTIONS_CONVERTER =
             new BeanOutputConverter<>(GeneratedInterview.class);
 
     private final ChatClient chatClient;
+    private final ModelCalls modelCalls;
     private final AiUsageRecorder aiUsageRecorder;
     private final UsageService usageService;
 
@@ -169,7 +197,7 @@ public class IdeaServiceImpl implements IdeaService {
         UsageReservation reservation = usageService.reserveBudget(UsageFeature.IDEA_INTERVIEW);
         String idea = truncate(request.idea().strip(), MAX_IDEA_CHARS);
         try {
-            ChatResponse response = chatClient.prompt()
+            ChatResponse response = modelCalls.apply(chatClient.prompt(), AiCallKind.INTERVIEW)
                     .system(CLARIFY_SYSTEM_PROMPT_TEMPLATE.formatted(MAX_QUESTIONS) + "\n\n" + QUESTIONS_CONVERTER.getFormat())
                     .user(idea)
                     .call()
@@ -233,7 +261,7 @@ public class IdeaServiceImpl implements IdeaService {
                         .collect(Collectors.joining("\n"));
 
         try {
-            ChatResponse response = chatClient.prompt()
+            ChatResponse response = modelCalls.apply(chatClient.prompt(), AiCallKind.INTERVIEW)
                     .system(COMPILE_SYSTEM_PROMPT)
                     .user("Idea: " + idea + "\n\nInterview answers:\n" + interview)
                     .call()

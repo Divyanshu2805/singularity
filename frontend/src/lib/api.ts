@@ -5,6 +5,14 @@
  * turning a failed response into a typed error the UI can react to, the SSE streams behind the build chat and the
  * code lens, and the typed methods for projects, files, previews, chat, code notes, ideas, billing, usage and auth.
  *
+ * The build chat's stream is read here and nothing more: its events are handed on by kind - a piece of the answer, a
+ * status line, the whole text again after the server corrected it, and the outcome that closes the stream - and what
+ * the text means is left to lib/generation-protocol.ts. It used to pick files out of the text itself with its own
+ * regular expression, one of four readings of that text that did not agree. A stream that ends without an outcome is
+ * reported as closed, and one that breaks part-way as interrupted, so the chat can tell a turn that failed from a
+ * connection that dropped while the turn carried on. Reading stops at the outcome and the connection is let go there,
+ * rather than waiting for the far end to close it: a proxy that held it open would leave the turn looking unfinished.
+ *
  * The session is an httpOnly cookie, so a write must also carry the readable CSRF token in a header - fetched first
  * if this browser has none, and re-fetched once if the server rejects it, which is what a stale token looks like. A
  * network failure is rewritten into a clear sentence rather than the browser's vague default, and a 401 takes the app
@@ -14,7 +22,7 @@
  * to one origin and the SameSite cookie is always sent.
  */
 import { Preview, PreviewLogs, ActiveGeneration, AuthSecurityEvent, AuthSecurityEventType, SessionResponse, ChatMessage, ClarifyingQuestion, CodeNote, CodeSearchResponse, CodeSelection, FileNode, Plan, QuotaDetails, Subscription, UsageEventPage, UsageInsights, UsageRange, UsageToday, IdeaAnswer, IdeaInterview, ProjectSummaryResponse, ProjectResponse, ProjectMember, ProjectRole } from "./types";
-import { createSseParser } from "./sse";
+import { createSseParser, type SseEvent } from "./sse";
 import { CSRF_HEADER, ensureCsrfToken, needsCsrf, readCsrfToken } from "./csrf";
 import { clearSignedInState, signOutRedirect } from "./session";
 
@@ -201,49 +209,45 @@ export function buildFileTree(paths: string[]): FileNode[] {
   return root;
 }
 
-interface ChatStreamHandlers {
+export interface ChatStreamHandlers {
   onChunk: (chunk: string) => void;
-  onFile: (path: string, content: string, isComplete: boolean) => void;
-  onComplete: () => void;
+  onStatus: (line: string) => void;
+  onReplace: (text: string) => void;
+  onDone: (outcome: string) => void;
+  onClosed: () => void;
   onError: (error: Error) => void;
   onGone?: () => void;
 }
 
-function consumeChatStream(request: Promise<Response>, { onChunk, onFile, onComplete, onError, onGone }: ChatStreamHandlers) {
-  const FILE_TAG_REGEX = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g;
-  const OPEN_FILE_TAG_REGEX = /<file\s+path="([^"]+)">/g;
-  const emittedFilePaths = new Set<string>();
+export class GenerationFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GenerationFailedError";
+  }
+}
 
-  const emitFileProgress = (buffer: string) => {
-    FILE_TAG_REGEX.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = FILE_TAG_REGEX.exec(buffer)) !== null) {
-      const [, path, content] = match;
-      if (emittedFilePaths.has(path)) continue;
-      emittedFilePaths.add(path);
-      onFile(path, content.trim(), true);
-    }
+export class StreamInterruptedError extends Error {
+  constructor() {
+    super("The connection to the response was lost.");
+    this.name = "StreamInterruptedError";
+  }
+}
 
-    OPEN_FILE_TAG_REGEX.lastIndex = 0;
-    let lastOpenMatch: RegExpExecArray | null = null;
-    let openMatch: RegExpExecArray | null;
-    while ((openMatch = OPEN_FILE_TAG_REGEX.exec(buffer)) !== null) {
-      lastOpenMatch = openMatch;
-    }
-    if (lastOpenMatch) {
-      const path = lastOpenMatch[1];
-      const partial = buffer.slice(lastOpenMatch.index + lastOpenMatch[0].length);
-      if (!partial.includes("</file>") && !emittedFilePaths.has(path)) {
-        onFile(path, partial, false);
-      }
-    }
-  };
+const readStreamText = (data: string): string | null => {
+  try {
+    const text = (JSON.parse(data) as { text?: unknown }).text;
+    return typeof text === "string" ? text : "";
+  } catch {
+    return null;
+  }
+};
 
+function consumeChatStream(request: Promise<Response>, handlers: ChatStreamHandlers) {
   request
     .then(async (response) => {
       await ensureOk(response, "Chat stream failed");
       if (response.status === 204) {
-        onGone?.();
+        handlers.onGone?.();
         return;
       }
 
@@ -251,58 +255,51 @@ function consumeChatStream(request: Promise<Response>, { onChunk, onFile, onComp
       if (!reader) throw new Error("No reader available");
 
       const decoder = new TextDecoder();
-      let sseBuffer = "";
-      let fullContentBuffer = "";
-      let eventName = "message";
+      const pending: SseEvent[] = [];
+      const parser = createSseParser((event) => pending.push(event));
+      const turn: { outcome: string | null } = { outcome: null };
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        sseBuffer += decoder.decode(value, { stream: true });
-        const lines = sseBuffer.split("\n");
-        sseBuffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmedLine = line.trim();
-          if (!trimmedLine) {
-            eventName = "message";
-            continue;
+      const deliver = async () => {
+        for (const { event, data } of pending.splice(0)) {
+          const text = readStreamText(data);
+          if (text === null) continue;
+          if (event === "error") {
+            await reader.cancel().catch(() => undefined);
+            throw new GenerationFailedError(text || "This response couldn't be saved, so nothing was changed.");
           }
-          if (trimmedLine.startsWith("event:")) {
-            eventName = trimmedLine.slice(6).trim();
-            continue;
-          }
-          if (!trimmedLine.startsWith("data:")) continue;
-
-          const dataStr = trimmedLine.slice(5).trim();
-          if (!dataStr) continue;
-
-          let text: string;
-          try {
-            text = JSON.parse(dataStr).text ?? "";
-          } catch (e) {
-            console.error("Failed to parse SSE JSON:", e);
-            continue;
-          }
-
-          if (eventName === "error") {
-            await reader.cancel();
-            throw new Error(text || "Something went wrong while generating a response.");
-          }
-
-          onChunk(text);
-          fullContentBuffer += text;
-          emitFileProgress(fullContentBuffer);
+          if (event === "status") handlers.onStatus(text);
+          else if (event === "replace") handlers.onReplace(text);
+          else if (event === "done") turn.outcome = text;
+          else if (event === "message" && text) handlers.onChunk(text);
         }
-      }
+      };
 
-      onComplete();
+      while (turn.outcome === null) {
+        let chunk: ReadableStreamReadResult<Uint8Array>;
+        try {
+          chunk = await reader.read();
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") throw error;
+          throw new StreamInterruptedError();
+        }
+        if (chunk.done) break;
+        parser.push(decoder.decode(chunk.value, { stream: true }));
+        await deliver();
+      }
+      parser.end();
+      await deliver();
+
+      if (turn.outcome === null) {
+        handlers.onClosed();
+        return;
+      }
+      await reader.cancel().catch(() => undefined);
+      handlers.onDone(turn.outcome);
     })
     .catch((error) => {
-      if (error.name !== "AbortError") {
+      if (error?.name !== "AbortError") {
         console.error("Stream error:", error);
-        onError(error);
+        handlers.onError(error instanceof Error ? error : new Error(String(error)));
       }
     });
 }
@@ -493,7 +490,7 @@ export const api = {
 
   streamCodeInsight(
     projectId: string,
-    kind: "explain" | "ask",
+    kind: "explain" | "ask" | "lesson",
     body: Record<string, unknown>,
     onChunk: (text: string) => void,
     onComplete: () => void,
@@ -726,6 +723,13 @@ export const api = {
     return response.json();
   },
 
+  async getNextSteps(projectId: string): Promise<string[]> {
+    const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/suggestions`, { method: "POST" });
+    if (!response.ok) return [];
+    const body = (await response.json()) as { suggestions?: unknown };
+    return Array.isArray(body.suggestions) ? body.suggestions.filter((item): item is string => typeof item === "string") : [];
+  },
+
   async getLastTurnChanges(projectId: string): Promise<{ files: { path: string; previousContent: string }[] }> {
     const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/last-turn-changes`, {
     });
@@ -747,39 +751,24 @@ export const api = {
     await ensureOk(response, "Couldn't stop the response");
   },
 
-  streamChat(
-    projectId: string,
-    message: string,
-    onChunk: (chunk: string) => void,
-    onFile: (path: string, content: string, isComplete: boolean) => void,
-    onComplete: () => void,
-    onError: (error: Error) => void,
-    options: { teachingMode?: boolean } = {}
-  ) {
+  streamChat(projectId: string, message: string, handlers: ChatStreamHandlers, teaching = false) {
     const controller = new AbortController();
     const request = apiFetch(`${BASE_URL}/api/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, projectId, teachingMode: options.teachingMode === true }),
+      body: JSON.stringify({ message, projectId, ...(teaching ? { teaching: true } : {}) }),
       signal: controller.signal,
     });
-    consumeChatStream(request, { onChunk, onFile, onComplete, onError });
+    consumeChatStream(request, handlers);
     return () => controller.abort();
   },
 
-  resumeChat(
-    projectId: string,
-    onChunk: (chunk: string) => void,
-    onFile: (path: string, content: string, isComplete: boolean) => void,
-    onComplete: () => void,
-    onError: (error: Error) => void,
-    onGone: () => void
-  ) {
+  resumeChat(projectId: string, handlers: ChatStreamHandlers) {
     const controller = new AbortController();
     const request = apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/active/stream`, {
       signal: controller.signal,
     });
-    consumeChatStream(request, { onChunk, onFile, onComplete, onError, onGone });
+    consumeChatStream(request, handlers);
     return () => controller.abort();
   }
 

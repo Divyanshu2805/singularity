@@ -9,14 +9,15 @@ Everything is one workflow, `.github/workflows/ci.yml`.
 | `backend` | push, pull request | Builds and tests the Maven reactor; uploads the tested jars for the image build |
 | `frontend` | push, pull request | Type-check, lint, tests and production build |
 | `proxy` | push, pull request | The preview proxy's `node --test` suite |
+| `preview-pipeline` | push, pull request | Creates a kind cluster, stands the preview pipeline up in its own namespace (`k8s/preview-test-cluster.sh`) and runs `PreviewPipelineIT`: a real preview started, fetched through the proxy, edited, given a new package, killed, queued for and stopped. Its start timings go to the job summary |
 | `build-java-images` | push, after `backend` | Five images from the tested jars (a matrix over the services) |
 | `build-frontend-image` | push, after `frontend` | The frontend image, with the public `VITE_*` values as build arguments |
 | `build-proxy-image` | push, after `proxy` | The preview-proxy image |
 | `build-preview-runner-image` | push | The preview-runner image (starter-template `node_modules`); no test gate |
-| `approve` | push, manual; after all four image jobs | The release gate: waits for the owner to approve in the Actions UI |
+| `approve` | push, manual; after all four image jobs and `preview-pipeline` | The release gate: waits for the owner to approve in the Actions UI |
 | `deploy` | push, manual; after `approve` | Deploys, smoke-tests and, on failure, rolls back |
 
-Each test job gates only its own image, so a frontend failure never blocks the Java images from building — but the approval, and so the deploy, waits for all four image jobs. On a push it runs only if all four succeeded; on a manual run only if all four were skipped, as they are by design there. A failed test also leaves its image job skipped, so accepting "skipped" on a push would deploy image tags that were never built.
+Each test job gates only its own image, so a frontend failure never blocks the Java images from building — but the approval, and so the deploy, waits for all four image jobs and for `preview-pipeline`, which gates no image of its own and would otherwise not hold a deploy back. On a push it runs only if all five succeeded; on a manual run only if all five were skipped, as they are by design there. A failed test also leaves its image job skipped, so accepting "skipped" on a push would deploy image tags that were never built.
 
 A pull request runs only the three test jobs; it never sees a secret and never deploys.
 

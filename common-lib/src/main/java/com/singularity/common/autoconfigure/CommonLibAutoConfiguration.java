@@ -3,6 +3,7 @@ package com.singularity.common.autoconfigure;
 import com.google.firebase.auth.FirebaseAuth;
 import com.singularity.common.config.AsyncConfig;
 import com.singularity.common.config.ClockConfig;
+import com.singularity.common.config.FeignConverterWarmup;
 import com.singularity.common.config.FeignResilienceConfig;
 import com.singularity.common.config.FirebaseConfig;
 import com.singularity.common.error.GlobalExceptionHandler;
@@ -19,6 +20,7 @@ import com.singularity.common.security.SessionAuthenticator;
 import com.singularity.common.security.SessionCache;
 import com.singularity.common.security.ServiceSecurityConfig;
 import com.singularity.common.security.SessionCookies;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -27,6 +29,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.cloud.openfeign.FeignClientFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
@@ -44,7 +47,8 @@ import java.time.Clock;
  * service-to-service authentication, the outbound Feign interceptor and the inbound InternalServiceAuthFilter; and
  * the bounded Feign retry policy every outbound call gets (FeignResilienceConfig) - per-service connect/read
  * timeouts live in each service's own application.yaml (feign.client.config.default) instead, since that's plain
- * Spring Cloud OpenFeign configuration with nothing shared to centralize.
+ * Spring Cloud OpenFeign configuration with nothing shared to centralize - and the startup step that builds each
+ * Feign client's decoder before traffic arrives (FeignConverterWarmup).
  * Resolved through Spring Boot's auto-configuration mechanism
  * (META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports), so these beans exist in every
  * service even though they live outside com.singularity.&lt;service&gt;.
@@ -103,6 +107,11 @@ public class CommonLibAutoConfiguration {
                                                           InternalServiceAuthFilter internalServiceAuthFilter) {
         return ServiceSecurityConfig.build(httpSecurity, sessionAuthenticator, sessionCookies,
                 handlerExceptionResolver, internalServiceAuthFilter);
+    }
+
+    @Bean
+    public FeignConverterWarmup feignConverterWarmup(ObjectProvider<FeignClientFactory> feignClientFactory) {
+        return new FeignConverterWarmup(feignClientFactory);
     }
 
     @Bean

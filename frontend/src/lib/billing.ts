@@ -1,7 +1,8 @@
 /**
  * The arithmetic and wording behind every quota meter, banner and plan card.
  *
- * Handles: turning today's usage into a quota with a clamped percentage and low and exhausted flags, formatting a
+ * Handles: turning today's usage into a quota with a clamped percentage, low and exhausted flags and whether enough
+ * is left for the server to admit another build, formatting a
  * countdown to the refill, formatting prices and token counts, the feature list each plan card shows (built from the
  * plan's own numbers) and which plan is recommended (the first paid one), deciding whether a plan is an upgrade, a downgrade,
  * the current one or a cancellation, and the copy for confirming any of those.
@@ -21,6 +22,7 @@ export interface Quota {
   percent: number;
   isExhausted: boolean;
   isLow: boolean;
+  canBuild: boolean;
   resetsAt: Date | null;
 }
 
@@ -40,6 +42,7 @@ export function toQuota(usage: UsageToday | undefined): Quota | null {
     percent,
     isExhausted: used >= limit,
     isLow: used < limit && used / limit >= LOW_QUOTA_THRESHOLD,
+    canBuild: used < limit && remaining >= Math.max(0, usage.buildMinimumTokens ?? 0),
     resetsAt: resetsAt && !Number.isNaN(resetsAt.getTime()) ? resetsAt : null,
   };
 }

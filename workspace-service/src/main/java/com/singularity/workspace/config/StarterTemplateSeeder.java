@@ -6,6 +6,7 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.StatObjectArgs;
+import io.minio.StatObjectResponse;
 import io.minio.errors.ErrorResponseException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +21,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 
 /**
@@ -30,10 +33,17 @@ import java.util.List;
  * <p>Handles: reading the template's file list from a checked-in {@code MANIFEST.txt} (one relative path per line),
  * then uploading each listed file from the jar's own classpath resources under {@code starter-templates/<name>/} -
  * never a filesystem path, since this has to work identically whether the app runs exploded (tests, an IDE) or
- * packaged as a jar. Skips a file that's already there, so this is safe to run on every boot regardless of whether
- * the target MinIO already has the template: previously this repo carried no copy of the template at all - it
+ * packaged as a jar. Skips a file that is already there with the same content, and replaces one whose content has
+ * changed, so this is safe to run on every boot regardless of whether the target MinIO already has the template: previously this repo carried no copy of the template at all - it
  * existed only inside one developer's long-lived local MinIO volume - so a fresh server, or `docker compose down -v`
  * against local MinIO, had nothing to seed a first project from.
+ *
+ * <p>A file already in storage used to be skipped whatever it held, so a change to the template in this repository
+ * never reached a server that had been seeded once - every new project there went on starting from the first version,
+ * including a default stylesheet that centred and padded the whole page and a placeholder page written in class names
+ * the template does not have. The stored copy is now compared with the checked-in one, by size and then by the MD5
+ * that object storage reports as its ETag, and replaced when they differ. Nothing is ever removed from storage here,
+ * and projects that already exist keep the files they were created with.
  *
  * <p>Best effort on purpose, like {@link StorageBucketInitializer}: a MinIO this can't reach yet doesn't stop the
  * service booting - project creation reports the real problem ("the starter template has no files") when it
@@ -77,7 +87,7 @@ public class StarterTemplateSeeder implements ApplicationRunner {
         int uploaded = 0;
         for (String relativePath : manifest) {
             try {
-                if (uploadIfMissing(relativePath)) {
+                if (uploadIfMissingOrChanged(relativePath)) {
                     uploaded++;
                 }
             } catch (Exception e) {
@@ -98,16 +108,15 @@ public class StarterTemplateSeeder implements ApplicationRunner {
         }
     }
 
-    private boolean uploadIfMissing(String relativePath) throws Exception {
+    private boolean uploadIfMissingOrChanged(String relativePath) throws Exception {
         String objectKey = templateName + "/" + relativePath;
-
-        if (objectExists(objectKey)) {
-            return false;
-        }
 
         try (InputStream in = new ClassPathResource("starter-templates/" + templateName + "/" + relativePath)
                 .getInputStream()) {
             byte[] content = in.readAllBytes();
+            if (isStoredUnchanged(objectKey, content)) {
+                return false;
+            }
             try (InputStream body = new ByteArrayInputStream(content)) {
                 minioClient.putObject(PutObjectArgs.builder()
                         .bucket(templateBucket)
@@ -120,16 +129,27 @@ public class StarterTemplateSeeder implements ApplicationRunner {
         return true;
     }
 
-    private boolean objectExists(String objectKey) throws Exception {
+    private boolean isStoredUnchanged(String objectKey, byte[] content) throws Exception {
+        StatObjectResponse stored;
         try {
-            minioClient.statObject(StatObjectArgs.builder().bucket(templateBucket).object(objectKey).build());
-            return true;
+            stored = minioClient.statObject(StatObjectArgs.builder().bucket(templateBucket).object(objectKey).build());
         } catch (ErrorResponseException e) {
             if ("NoSuchKey".equals(e.errorResponse().code())) {
                 return false;
             }
             throw e;
         }
+        if (stored == null) {
+            return true;
+        }
+        if (stored.size() != content.length) {
+            return false;
+        }
+        String etag = stored.etag() == null ? "" : stored.etag().replace("\"", "");
+        if (etag.isEmpty() || etag.contains("-")) {
+            return true;
+        }
+        return etag.equalsIgnoreCase(HexFormat.of().formatHex(MessageDigest.getInstance("MD5").digest(content)));
     }
 
     private List<String> readManifest() throws IOException {

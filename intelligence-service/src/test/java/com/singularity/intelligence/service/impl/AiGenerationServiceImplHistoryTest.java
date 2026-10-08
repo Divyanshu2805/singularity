@@ -7,21 +7,16 @@ import com.singularity.intelligence.entity.ChatSession;
 import com.singularity.intelligence.entity.ChatSessionId;
 import com.singularity.intelligence.enums.ChatEventType;
 import com.singularity.intelligence.enums.MessageRole;
-import com.singularity.intelligence.feign.WorkspaceServiceClient;
 import com.singularity.intelligence.llm.AiUsageRecorder;
-import com.singularity.intelligence.llm.LlmResponseParser;
-import com.singularity.intelligence.llm.advisors.FileTreeContextAdvisor;
-import com.singularity.intelligence.repository.ChatEventRepository;
 import com.singularity.intelligence.repository.ChatMessageRepository;
 import com.singularity.intelligence.repository.ChatSessionRepository;
-import com.singularity.intelligence.service.ProjectFileReader;
 import com.singularity.intelligence.service.UsageService;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,10 +35,9 @@ class AiGenerationServiceImplHistoryTest {
     private final ChatMessageRepository chatMessageRepository = mock(ChatMessageRepository.class);
 
     private final AiGenerationServiceImpl service = new AiGenerationServiceImpl(
-            mock(ChatClient.class), mock(AuthUtil.class), mock(WorkspaceServiceClient.class), mock(ProjectFileReader.class),
-            mock(FileTreeContextAdvisor.class), mock(ChatSessionRepository.class), mock(LlmResponseParser.class),
-            chatMessageRepository, mock(ChatEventRepository.class), mock(UsageService.class), mock(AiUsageRecorder.class),
-            new GenerationRegistry());
+            mock(AuthUtil.class), mock(ChatSessionRepository.class), chatMessageRepository,
+            mock(UsageService.class), mock(AiUsageRecorder.class), new GenerationRegistry(Clock.systemUTC()),
+            mock(BuildTurn.class), Runnable::run);
 
     private final ChatSession chatSession = ChatSession.builder().id(new ChatSessionId(1L, 10L)).build();
 
@@ -120,9 +114,11 @@ class AiGenerationServiceImplHistoryTest {
 
         List<Message> history = service.recentHistory(chatSession);
 
-        assertThat(history).hasSizeLessThanOrEqualTo(20);
+        assertThat(history).hasSizeLessThanOrEqualTo(8);
         assertThat(history.getLast().getText()).isEqualTo("turn 29");
-        assertThat(history.getFirst().getText()).isNotEqualTo("turn 0");
+        assertThat(history.getFirst().getText()).isEqualTo("turn 0");
+        assertThat(history.get(1).getText()).contains("later requests are not shown");
+        assertThat(history.get(2).getText()).isEqualTo("turn 24");
     }
 
     @Test
