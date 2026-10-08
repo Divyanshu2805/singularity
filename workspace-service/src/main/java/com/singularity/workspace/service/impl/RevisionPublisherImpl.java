@@ -12,6 +12,7 @@ import com.singularity.workspace.enums.RevisionChangeType;
 import com.singularity.workspace.repository.ProjectFileRepository;
 import com.singularity.workspace.repository.ProjectRepository;
 import com.singularity.workspace.service.BlobStore;
+import com.singularity.workspace.service.ProjectFilesChanged;
 import com.singularity.workspace.service.RevisionPublisher;
 import com.singularity.workspace.service.RevisionValidator;
 import com.singularity.workspace.util.ContentTypeUtils;
@@ -21,6 +22,7 @@ import io.minio.MinioClient;
 import io.minio.errors.ErrorResponseException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -50,6 +52,9 @@ import java.util.Optional;
  * short transaction bracketing the MinIO calls here, per CODE_REVIEW.md DATA-06 - a transaction must never wrap
  * external I/O it cannot roll back, and a same-class {@code this.method()} call would have silently dropped
  * {@code @Transactional} entirely (Spring's proxy-based AOP only intercepts calls through the bean's proxy).
+ *
+ * <p>A revision that lands is announced ({@link ProjectFilesChanged}), which is how a running preview learns it has
+ * a change to take in. Only a published one: a failed or conflicting publish left the live files as they were.
  */
 @Service
 @Slf4j
@@ -62,11 +67,13 @@ public class RevisionPublisherImpl implements RevisionPublisher {
     private final List<RevisionValidator> validators;
     private final MinioClient minioClient;
     private final String projectBucket;
+    private final ApplicationEventPublisher events;
 
     public RevisionPublisherImpl(ProjectRepository projectRepository, ProjectFileRepository projectFileRepository,
                                   RevisionManifestStore manifestStore, BlobStore blobStore,
                                   List<RevisionValidator> validators, MinioClient minioClient,
-                                  @Value("${minio.project-bucket}") String projectBucket) {
+                                  @Value("${minio.project-bucket}") String projectBucket,
+                                  ApplicationEventPublisher events) {
         this.projectRepository = projectRepository;
         this.projectFileRepository = projectFileRepository;
         this.manifestStore = manifestStore;
@@ -74,6 +81,7 @@ public class RevisionPublisherImpl implements RevisionPublisher {
         this.validators = validators;
         this.minioClient = minioClient;
         this.projectBucket = projectBucket;
+        this.events = events;
     }
 
     record StagedEntry(String path, RevisionChangeType changeType, String contentHash,
@@ -146,6 +154,7 @@ public class RevisionPublisherImpl implements RevisionPublisher {
             return new PublishRevisionResponse(revisionId, PublishRevisionResponse.Status.CONFLICT, realCurrent, changedPaths, previousContent);
         }
 
+        events.publishEvent(new ProjectFilesChanged(projectId));
         return new PublishRevisionResponse(revisionId, PublishRevisionResponse.Status.APPLIED, revisionId, List.of(), previousContent);
     }
 

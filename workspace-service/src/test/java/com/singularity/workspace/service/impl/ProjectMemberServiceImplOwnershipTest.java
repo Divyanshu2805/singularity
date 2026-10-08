@@ -165,6 +165,20 @@ class ProjectMemberServiceImplOwnershipTest {
     }
 
     @Test
+    void theRemovalIsWrittenToTheDatabaseBeforeTheirPreviewSessionIsEnded() {
+        ProjectMemberId memberId = new ProjectMemberId(PROJECT_ID, OTHER_MEMBER_ID);
+        ProjectMember member = ProjectMember.builder().id(memberId).projectRole(ProjectRole.VIEWER).build();
+        when(projectMemberRepository.findById(memberId)).thenReturn(Optional.of(member));
+
+        service.removeProjectMember(PROJECT_ID, OTHER_MEMBER_ID);
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(projectMemberRepository, previewDeploymentService);
+        order.verify(projectMemberRepository).delete(member);
+        order.verify(projectMemberRepository).flush();
+        order.verify(previewDeploymentService).endSessionForUser(eq(PROJECT_ID), eq(OTHER_MEMBER_ID), anyString());
+    }
+
+    @Test
     void removingTheOwnerDoesNotRevokeAnythingSinceItIsRejectedFirst() {
         ProjectMemberId ownerId = new ProjectMemberId(PROJECT_ID, OWNER_ID);
         ProjectMember owner = ProjectMember.builder().id(ownerId).projectRole(ProjectRole.OWNER).build();

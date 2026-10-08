@@ -1,5 +1,6 @@
 package com.singularity.workspace.entity;
 
+import com.singularity.workspace.enums.PreviewFailureKind;
 import com.singularity.workspace.enums.PreviewStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -21,7 +22,12 @@ import java.time.Instant;
  * and the step or failure reason behind that, the tail of the output when a start fails, the lifecycle timestamps
  * including the last time anyone looked at it, and which service instance's bootstrap owns it and when that
  * bootstrap last proved it was still alive - CODE_REVIEW.md PRE-03, so a rolling deployment's new instance can tell
- * a still-running bootstrap apart from one truly abandoned by a crashed process.
+ * a still-running bootstrap apart from one truly abandoned by a crashed process. Also what kind of thing a failed
+ * start died of, the project file revision the runner's files were last brought up to, and the step under way while
+ * a newer one is being applied.
+ *
+ * <p>A row that is still creating and has no pod is waiting in line for a runner: every runner was busy when it was
+ * started, and it takes the next one that comes free.
  *
  * <p>A new row per start, so a failure stays readable after a retry. The hostname is reused by every later preview of
  * the same project, so a shared link keeps working across stops and restarts, and is random so it cannot be guessed
@@ -68,6 +74,15 @@ public class Preview {
 
     @Column(columnDefinition = "text")
     String failureLog;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    PreviewFailureKind failureKind;
+
+    Long syncedRevisionId;
+
+    @Column(length = 200)
+    String syncDetail;
 
     Instant startedAt;
     Instant readyAt;

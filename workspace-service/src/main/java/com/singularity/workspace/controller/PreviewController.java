@@ -18,7 +18,9 @@ import java.util.List;
  * output, and listing every preview the caller has open across projects.
  *
  * <p>Starting and restarting answer 202: the runner comes up asynchronously, and the client polls until it is
- * running.
+ * running. That includes a start that found every runner busy - it answers 202 with a place in the line, not an
+ * error. Who may call what is the service's to enforce: any member may start, watch and stop, and only someone who
+ * may edit may restart.
  */
 @RestController
 @RequiredArgsConstructor

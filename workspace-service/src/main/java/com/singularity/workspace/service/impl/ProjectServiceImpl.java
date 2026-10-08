@@ -58,6 +58,11 @@ import java.util.stream.Collectors;
  * <p>Either shape of delete also revokes standing, not just access: it best-effort stops in-flight AI generation the
  * project or membership can no longer authorize (intelligence-service's own recheck before committing is the actual
  * backstop if that call fails) and stops the preview(s) that lost their reason to keep running.
+ *
+ * <p>Leaving or deleting a project writes its change to the database before it stops anyone's preview. Stopping a
+ * preview runs updates that clear the persistence context afterwards, and a change that had only been queued there -
+ * the membership row's delete, the project's deleted-at - was thrown away with it, so a project with a preview
+ * running could not be deleted or left: the request answered 204 and nothing had changed.
  */
 @Service
 @RequiredArgsConstructor
@@ -257,6 +262,7 @@ public class ProjectServiceImpl implements ProjectService {
 
         if (getRole(id, userId) != ProjectRole.OWNER) {
             projectMemberRepository.deleteById(new ProjectMemberId(id, userId));
+            projectMemberRepository.flush();
             log.info("User {} removed project {} from their projects (left as a non-owner)", userId, id);
             revokeOngoingWork(id, userId);
             previewDeploymentService.endSessionForUser(id, userId, "No longer a member of this project");
@@ -265,6 +271,7 @@ public class ProjectServiceImpl implements ProjectService {
 
         project.setDeletedAt(Instant.now());
         projectRepository.save(project);
+        projectRepository.flush();
         log.info("Owner {} deleted project {} for all its members", userId, id);
 
         revokeOngoingWork(id, null);

@@ -48,6 +48,11 @@ import java.util.List;
  * <p>Removal also revokes standing, not just the row: it best-effort asks intelligence-service to stop that member's
  * in-flight generation and ends their open preview session, so losing access takes effect immediately rather than
  * only once whatever they were doing happens to finish.
+ *
+ * <p>The row is deleted and flushed before any of that revoking. Ending a preview session runs an update that clears
+ * the persistence context when it is done, and a delete that had only been queued there was thrown away with it: a
+ * member who had the preview open when they were removed was not removed at all, the request answered 204, and they
+ * were back in the list on the next load. Only someone with a preview open was affected, which is why it went unseen.
  */
 @Service
 @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
@@ -175,6 +180,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         }
 
         projectMemberRepository.delete(projectMember);
+        projectMemberRepository.flush();
         revokeAccessFor(projectId, memberId);
     }
 

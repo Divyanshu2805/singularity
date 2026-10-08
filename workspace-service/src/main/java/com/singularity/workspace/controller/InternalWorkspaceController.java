@@ -1,5 +1,7 @@
 package com.singularity.workspace.controller;
 
+import com.singularity.common.dto.CodeCheckRequest;
+import com.singularity.common.dto.CodeCheckResponse;
 import com.singularity.common.dto.FileContentDto;
 import com.singularity.common.dto.FileTreeDto;
 import com.singularity.common.dto.ProjectMembershipDto;
@@ -12,6 +14,7 @@ import com.singularity.workspace.entity.Project;
 import com.singularity.workspace.repository.ProjectFileRepository;
 import com.singularity.workspace.repository.ProjectMemberRepository;
 import com.singularity.workspace.repository.ProjectRepository;
+import com.singularity.workspace.service.CodeCheckService;
 import com.singularity.workspace.service.PreviewDeploymentService;
 import com.singularity.workspace.service.ProjectFileService;
 import com.singularity.workspace.service.RevisionPublisher;
@@ -31,8 +34,8 @@ import java.util.List;
  *
  * <p>Handles: the membership lookup behind every cross-service permission check, project summaries singly and in
  * batch, the file tree and file content that AI prompts and code insight read, the atomic revision publish a
- * generated turn commits through (CODE_REVIEW.md AI-05), and the two counts the usage meter shows - projects owned
- * and previews running.
+ * generated turn commits through (CODE_REVIEW.md AI-05), the type-check of a turn's files in the project's running
+ * preview before they are saved, and the two counts the usage meter shows - projects owned and previews running.
  *
  * <p>Guarded by the shared internal-service secret rather than a caller's permissions, exactly like account-service's
  * equivalent: the caller is intelligence-service acting on a request it has already authorized itself. These
@@ -54,6 +57,7 @@ public class InternalWorkspaceController {
     private final ProjectFileService projectFileService;
     private final PreviewDeploymentService previewDeploymentService;
     private final RevisionPublisher revisionPublisher;
+    private final CodeCheckService codeCheckService;
 
     @GetMapping("/projects/{projectId}/members/{userId}")
     public ProjectMembershipDto getMembership(@PathVariable Long projectId, @PathVariable Long userId) {
@@ -93,6 +97,12 @@ public class InternalWorkspaceController {
     @PostMapping("/projects/{projectId}/revisions")
     public PublishRevisionResponse publishRevision(@PathVariable Long projectId, @RequestBody PublishRevisionRequest request) {
         return revisionPublisher.publish(projectId, request);
+    }
+
+    @PostMapping("/projects/{projectId}/code-check")
+    public CodeCheckResponse checkCode(@PathVariable Long projectId, @RequestBody CodeCheckRequest request) {
+        assertProjectExists(projectId);
+        return codeCheckService.check(projectId, request);
     }
 
     @GetMapping("/projects/owned-count")
