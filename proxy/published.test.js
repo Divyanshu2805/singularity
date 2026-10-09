@@ -75,7 +75,7 @@ test('the query string and fragment are not part of the path', () => {
 
 test('a path that tries to climb out of the build is refused, however it is spelled', () => {
     for (const url of ['/../x', '/a/../../x', '/%2e%2e/x', '/%2E%2E/x', '/a/%2e%2e/b', '/./x', '/a\\b', '/a%5Cb', '/a%00b',
-        '/a%0Ab', '/%2e%2e%2fx'.replace('%2f', '/%2e%2e/'), 'no-leading-slash', '/%E0%A4%A']) {
+        '/a%0Ab', '/%2e%2e/%2e%2e/x', 'no-leading-slash', '/%E0%A4%A']) {
         assert.strictEqual(pathSegments(url), null, url);
     }
 });
@@ -152,7 +152,7 @@ test('a page with no closing body tag gets the mark at the end, and a hostile ap
     const marked = injectBadge('<p>bare</p>', 'https://x/"><script>alert(1)</script>');
 
     assert.ok(marked.startsWith('<p>bare</p><a '));
-    assert.doesNotMatch(marked, /<script>/);
+    assert.ok(!marked.toLowerCase().includes('<script'));
 });
 
 test('only the last closing body tag is used', () => {

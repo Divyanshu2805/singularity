@@ -10,6 +10,7 @@ import com.singularity.common.util.WindowsTimezoneWorkaround;
 import com.singularity.workspace.config.InstanceId;
 import com.singularity.workspace.config.KubernetesConfig;
 import com.singularity.workspace.config.PreviewProperties;
+import com.singularity.workspace.config.ProjectFileLimits;
 import com.singularity.workspace.config.StorageConfig;
 import com.singularity.workspace.dto.deploy.PreviewLogsResponse;
 import com.singularity.workspace.dto.deploy.PreviewResponse;
@@ -242,7 +243,7 @@ class PreviewPipelineIT {
     }
 
     @EnableAsync
-    @EnableConfigurationProperties(PreviewProperties.class)
+    @EnableConfigurationProperties({PreviewProperties.class, ProjectFileLimits.class})
     static class TestBeans {
 
         @Bean
