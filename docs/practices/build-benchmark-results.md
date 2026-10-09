@@ -64,3 +64,16 @@ The same 5,563-token build prompt, sent three times in a row to Google's own API
 | `gemini-3.5-flash-lite` | 2,034 tokens |
 
 So the model that builds does not serve the prompt from cache, however it is laid out; every build call pays for the whole prompt. Google's explicit cache (a stored prompt referred to by name) would change that and is not built.
+
+### A rule that every screen fits its window (2026-10-08)
+
+A kanban board built in the app came out as three fixed columns wider than the preview, so the page scrolled sideways. The Design section of the build prompt now ends with a rule no style overrides: phone layout first, side-by-side things stack or wrap on a narrow screen, no fixed width wider than a phone, and anything that truly needs the room scrolls in a box of its own. Four turns were run with it on `gemini-3.8-flash` at low reasoning, not the full twenty:
+
+| Scenario | Outcome | Right | First word | Total | Calls | Out |
+|---|---|---|---|---|---|---|
+| todo-build | SAVED | yes | 5.8 s | 33.1 s | 1 | 4,505 |
+| todo-dark-theme | SAVED | yes | 3.2 s | 9.6 s | 1 | 1,106 |
+| kanban-build | SAVED | yes | 8.3 s | 42.0 s | 1 | 5,904 |
+| kanban-clear-done | SAVED | yes | 2.1 s | 9.6 s | 1 | 1,323 |
+
+The board now lays its columns out as `grid grid-cols-1 md:grid-cols-3` with no fixed widths. The prompt grew by about 190 tokens. It was not compiled with `scripts/bench-verify.sh`, and it was not looked at in a preview at phone width.

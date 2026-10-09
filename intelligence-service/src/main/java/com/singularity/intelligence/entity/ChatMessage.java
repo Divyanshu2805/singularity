@@ -20,6 +20,14 @@ import java.util.List;
  * <p>Teaching mode is recorded on the reply because it belongs to the turn. It used to be a switch in the browser
  * alone, so turning it on offered a lesson on every step of every earlier turn and a reload forgot which turns had
  * been taught. Only a reply with the flag set can have lessons written about its steps.
+ *
+ * <p>Such a reply also keeps its overview - the big picture of what the turn built, shown before any step's lesson.
+ * It is written once, the first time it is shown, and kept here for the same reason a step's lesson is kept on its
+ * file edit.
+ *
+ * <p>A reply whose files were saved records the revision they were published as. The revision belongs to
+ * workspace-service, so it is a plain id and no foreign key; it is what lets the chat undo exactly this turn. It is
+ * null on a turn that wrote nothing and on turns saved before it was recorded.
  */
 @Entity
 @Table(name = "chat_messages")
@@ -53,6 +61,11 @@ public class ChatMessage {
 
     @Column(nullable = false)
     boolean teaching;
+
+    @Column(columnDefinition = "text")
+    String overview;
+
+    Long revisionId;
 
     @CreationTimestamp
     Instant createdAt;

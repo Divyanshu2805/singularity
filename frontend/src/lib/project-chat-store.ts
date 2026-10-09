@@ -40,6 +40,12 @@
  * marked with it at once so the chat need not wait for the saved turn, the saved turn carries the same mark back
  * after a reload, and a retry is sent the way the turn it retries was.
  *
+ * The files a turn wrote are kept here so the editor can show them without asking the server again. Something else
+ * can change those files - a save by hand, a restore from the history - and then this copy is the stale one, so
+ * filesChangedOutside drops it (for the paths named, or for all of them) and the editor reads from the server. A
+ * saved reply also carries the revision its files were published as, which is what Undo on that turn sends back.
+ * Clearing the chat deletes the caller's conversation on the server and empties it here; the files are not touched.
+ *
  * It registers its own reset with the session module: module state outlives a client-side route change, and not
  * clearing it once leaked one account's chat to the next person who signed in on the same browser.
  */
@@ -65,6 +71,9 @@ export interface ChatMessage {
   events?: ChatEvent[];
   error?: string;
   teaching?: boolean;
+  turnId?: number;
+  overview?: string;
+  revisionId?: number | null;
 }
 
 export interface ProjectChatState {
@@ -80,7 +89,6 @@ export interface ProjectChatState {
     hasUnsavedTurn: boolean;
     lastSentMessage: string | null;
     notice: string | null;
-    suggestions: readonly string[];
 }
 
 interface TurnInProgress {
@@ -111,7 +119,6 @@ const INITIAL_STATE: ProjectChatState = {
     hasUnsavedTurn: false,
     lastSentMessage: null,
     notice: null,
-    suggestions: [],
 };
 
 export const STILL_WORKING_NOTICE = "Singularity is still working on your last request. Wait for it to finish, or stop it first.";
@@ -277,6 +284,8 @@ const toChatMessages = (history: Awaited<ReturnType<typeof api.getChatHistory>>)
         events: message.events,
         outcome: message.role === "ASSISTANT" ? turnOutcome(message.events) : undefined,
         teaching: message.role === "ASSISTANT" && !!message.teaching,
+        ...(message.role === "ASSISTANT" ? { turnId: message.id, overview: message.overview || undefined } : {}),
+        revisionId: message.role === "ASSISTANT" ? message.revisionId ?? null : undefined,
     }));
 
 function historyHasTurn(messages: ChatMessage[], active: ActiveGeneration) {
@@ -324,16 +333,6 @@ function isCurrent(turn: TurnInProgress) {
     return latestTurnIds.get(turn.projectId) === turn.turnId;
 }
 
-async function suggestNextSteps(turn: TurnInProgress) {
-    try {
-        const suggestions = await api.getNextSteps(turn.projectId);
-        if (!isCurrent(turn)) return;
-        update(turn.projectId, (state) => (state.isStreaming ? {} : { suggestions }));
-    } catch {
-        return;
-    }
-}
-
 function isLive(turn: TurnInProgress) {
     return isCurrent(turn) && !turn.stopped;
 }
@@ -378,6 +377,9 @@ async function adoptSavedTurn(turn: TurnInProgress, attempt = 0): Promise<Adopti
                             events: reply.events,
                             outcome: reply.outcome ?? message.outcome,
                             teaching: reply.teaching || message.teaching,
+                            turnId: reply.turnId,
+                            overview: reply.overview,
+                            revisionId: reply.revisionId ?? null,
                             createdAt: reply.createdAt ?? message.createdAt,
                             isStreaming: false,
                             status: undefined,
@@ -550,7 +552,6 @@ function follow(turn: TurnInProgress, openStream: (handlers: ChatStreamHandlers)
                 })),
             }));
             void adoptSavedTurn(turn);
-            if (asTurnOutcome(outcome) === "SAVED") void suggestNextSteps(turn);
         },
         onClosed: () => void reconnect(turn),
         onGone: () => void reconnect(turn),
@@ -755,7 +756,6 @@ export const projectChat = {
             diffBaselines: EMPTY_FILES,
             lastTurnFiles: [],
             notice: null,
-            suggestions: [],
         }));
 
         const turn = beginTurn(projectId, aiMessageId, userMessageId, askedAt, content);
@@ -800,6 +800,38 @@ export const projectChat = {
         if (!prompt || isStreaming) return;
         const wasTeaching = [...messages].reverse().find((message) => message.role === "assistant")?.teaching;
         void projectChat.sendMessage(projectId, prompt, !!wasTeaching);
+    },
+
+    filesChangedOutside(projectId: string, paths?: readonly string[]) {
+        update(projectId, (state) => {
+            if (state.isStreaming) return {};
+            if (!paths) {
+                return { completedFiles: EMPTY_FILES, deletedFiles: new Set<string>(), diffBaselines: EMPTY_FILES, lastTurnFiles: [] };
+            }
+            const completedFiles = new Map(state.completedFiles);
+            const diffBaselines = new Map(state.diffBaselines);
+            paths.forEach((path) => {
+                completedFiles.delete(path);
+                diffBaselines.delete(path);
+            });
+            return { completedFiles, diffBaselines, lastTurnFiles: state.lastTurnFiles.filter((path) => !paths.includes(path)) };
+        });
+    },
+
+    async clearChat(projectId: string) {
+        if (getState(projectId).isStreaming) throw new Error(STILL_WORKING_NOTICE);
+        await api.clearChat(projectId);
+        writeFailedPrompt(projectId, null);
+        update(projectId, () => ({
+            messages: [],
+            lastSentMessage: null,
+            hasUnsavedTurn: false,
+            historyError: null,
+            notice: null,
+            suggestions: [],
+            diffBaselines: EMPTY_FILES,
+            lastTurnFiles: [],
+        }));
     },
 
     dismissNotice(projectId: string) {

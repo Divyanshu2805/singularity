@@ -3,7 +3,9 @@
  *
  * Handles: a filename that is filesystem-safe, sorts by date and is unique enough that two exports do not collide;
  * rendering both the project chat and a code lens thread; and triggering the download. A turn's thought process is
- * kept as a quote, and a teaching lesson as the what and the why it was written as, without its tags.
+ * kept as a quote, and a teaching lesson as the what and the why it was written as, without its tags. What teaching
+ * mode has written about a turn goes into the file too - its big picture, and the lesson on each step that has been
+ * opened - under the turn they belong to, so the download is the learner's notes on the project as well as its chat.
  *
  * Both conversations are stored server-side, but neither in a form anyone can read outside the app - this download is
  * the readable copy. The lens turn type here is deliberately narrower than the store's: the bookkeeping the panel
@@ -56,10 +58,12 @@ export function buildChatMarkdown(messages: ChatMessage[], projectName: string):
 }
 
 function assistantBody(message: ChatMessage): string {
-  return assistantTurnText(message.events ?? [], message.content, message.error);
+  return assistantTurnText(message.events ?? [], message.content, message.error, message.overview);
 }
 
-export function assistantTurnText(events: ChatEvent[], fallback = "", error?: string): string {
+const nested = (taught: string) => taught.trim().replace(/^###(?=[ \t])/gm, "####");
+
+export function assistantTurnText(events: ChatEvent[], fallback = "", error?: string, overview?: string): string {
   if (events.length === 0) {
     return error ? `> Failed: ${error}` : fallback.trim();
   }
@@ -67,6 +71,7 @@ export function assistantTurnText(events: ChatEvent[], fallback = "", error?: st
   const sections: string[] = [];
   const editedFiles: string[] = [];
   const steps: string[] = [];
+  const stepLessons: string[] = [];
 
   for (const event of events) {
     switch (event.type) {
@@ -82,6 +87,9 @@ export function assistantTurnText(events: ChatEvent[], fallback = "", error?: st
       case ChatEventType.FILE_EDIT:
       case ChatEventType.FILE_PATCH:
         if (event.filePath && !editedFiles.includes(`- \`${event.filePath}\``)) editedFiles.push(`- \`${event.filePath}\``);
+        if (event.filePath && event.lesson?.trim()) {
+          stepLessons.push(`### Lesson: \`${event.filePath}\`\n\n${nested(event.lesson)}`);
+        }
         break;
       case ChatEventType.FILE_DELETE:
         if (event.filePath) editedFiles.push(`- \`${event.filePath}\` (deleted)`);
@@ -101,6 +109,8 @@ export function assistantTurnText(events: ChatEvent[], fallback = "", error?: st
 
   if (steps.length > 0) sections.unshift(`**Build steps**\n\n${steps.join("\n")}`);
   if (editedFiles.length > 0) sections.push(`**Files changed**\n\n${editedFiles.join("\n")}`);
+  if (overview?.trim()) sections.push(`### The big picture\n\n${nested(overview)}`);
+  sections.push(...stepLessons);
   if (error) sections.push(`> Failed: ${error}`);
 
   return sections.join("\n\n");
