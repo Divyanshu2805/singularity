@@ -237,6 +237,7 @@ export function Pricing() {
                                             order={position}
                                             landed={Boolean(landed[position])}
                                             columns={columns}
+                                            nameAs="h2"
                                             cellRef={(node) => {
                                                 cells.current[position] = node;
                                             }}

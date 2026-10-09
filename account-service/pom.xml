@@ -18,6 +18,11 @@
 		evictions to them on sign-out.
 	</description>
 
+	<properties>
+		<!-- The least of this module's lines the tests must run; `./mvnw verify` fails under it (root pom). -->
+		<coverage.minimum.lines>0.40</coverage.minimum.lines>
+	</properties>
+
 	<dependencies>
 		<!-- CODE_REVIEW.md DEP-036: liveness/readiness for the Kubernetes deploy pipeline, exposed only on
 		     management.server.port (below in application.yaml) - never reachable through the public gateway path
