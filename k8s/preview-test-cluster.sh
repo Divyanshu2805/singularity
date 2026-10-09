@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stands up a complete, separate preview pipeline in its own namespace of a kind cluster, for PreviewPipelineIT:
-# Redis, an in-cluster MinIO with its read-only runner user, the warm runner pool and the preview proxy built from
-# this checkout. CI runs this on a fresh kind cluster (.github/workflows/ci.yml, job `preview-pipeline`); locally it
+# Redis, an in-cluster MinIO with its read-only runner user and the one the proxy serves published apps with, the warm
+# runner pool and the preview proxy built from this checkout. CI runs this on a fresh kind cluster (.github/workflows/ci.yml, job `preview-pipeline`); locally it
 # runs beside the `singularity-ai` namespace your own previews use, and touches nothing in it.
 #
 # Why its own namespace rather than the one local development already has: workspace-service's reaper releases every
@@ -104,11 +104,13 @@ runner_password="$(random_secret)"
 ensure_secret minio-root-credentials --from-literal=username=minio-it-root --from-literal=password="$(random_secret)"
 ensure_secret minio-runner-credentials --from-literal=password="$runner_password" \
   --from-literal=host-uri="http://previewreader:${runner_password}@minio-service:9000"
+ensure_secret minio-published-credentials --from-literal=password="$(random_secret)"
 ensure_secret preview-access-token --from-literal=secret="$(random_secret)"
 
 render "$ROOT/k8s/minio.yml" | $K apply -f - > /dev/null
 $KN rollout status statefulset/minio --timeout=180s
 $KN wait --for=condition=complete job/minio-bootstrap-preview-reader --timeout=180s
+$KN wait --for=condition=complete job/minio-bootstrap-published-reader --timeout=180s
 
 render "$ROOT/k8s/runner-pods.yml" | $K apply -f - > /dev/null
 if $SEED; then

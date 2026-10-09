@@ -1,0 +1,25 @@
+# Production's values for the preview proxy's published-apps settings (base/preview-proxy.yaml has the local ones).
+# PUBLISHED_DOMAIN is the same apex as app-config's preview-public-domain, so workspace-service's published links and
+# the proxy's idea of which hostnames are published apps agree. The Cloudflare tunnel's existing `*.<domain>` rule already
+# sends every such hostname to this proxy; published apps need no new tunnel entry while they share the domain.
+# Moving them to a registered domain of their own means changing PUBLISHED_DOMAIN here, PUBLISHING_PUBLIC_DOMAIN on
+# workspace-service, and adding that domain's wildcard to the tunnel (docs/architecture/security-model.md).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: singularity-proxy
+  namespace: singularity-ai
+spec:
+  template:
+    spec:
+      containers:
+        - name: proxy
+          env:
+            - name: PUBLISHED_DOMAIN
+              value: "divyanshuagrahari.dev"
+            - name: PUBLISHED_SCHEME
+              value: "https"
+            - name: PUBLISHED_APP_URL
+              value: "https://singularity.divyanshuagrahari.dev/"
+            - name: PUBLISHED_FRAME_ANCESTORS
+              value: "https://singularity.divyanshuagrahari.dev"
