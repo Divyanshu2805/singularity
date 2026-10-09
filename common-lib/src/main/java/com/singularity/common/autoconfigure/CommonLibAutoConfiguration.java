@@ -36,6 +36,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.time.Clock;
+import java.util.List;
 
 /**
  * Registers everything common-lib contributes to a consuming service, without that service widening its own component
@@ -52,6 +53,9 @@ import java.time.Clock;
  * Resolved through Spring Boot's auto-configuration mechanism
  * (META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports), so these beans exist in every
  * service even though they live outside com.singularity.&lt;service&gt;.
+ *
+ * <p>The default chain reads {@code app.security.public-get-paths} (empty unless a service sets it): path patterns on
+ * which a GET needs no session. Only workspace-service sets it, for the public page of a shared app.
  *
  * <p>Two things here are load-bearing and easy to undo by accident. internalServiceAuthFilterRegistration DISABLES
  * the servlet registration Spring Boot performs for every Filter bean: without it the filter would also run outside
@@ -104,9 +108,10 @@ public class CommonLibAutoConfiguration {
                                                           SessionAuthenticator sessionAuthenticator,
                                                           SessionCookies sessionCookies,
                                                           HandlerExceptionResolver handlerExceptionResolver,
-                                                          InternalServiceAuthFilter internalServiceAuthFilter) {
+                                                          InternalServiceAuthFilter internalServiceAuthFilter,
+                                                          @Value("${app.security.public-get-paths:}") List<String> publicGetPaths) {
         return ServiceSecurityConfig.build(httpSecurity, sessionAuthenticator, sessionCookies,
-                handlerExceptionResolver, internalServiceAuthFilter);
+                handlerExceptionResolver, internalServiceAuthFilter, publicGetPaths);
     }
 
     @Bean

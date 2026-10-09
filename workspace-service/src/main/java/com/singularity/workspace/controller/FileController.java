@@ -4,7 +4,12 @@ import com.singularity.workspace.dto.code.CodeSearchResponse;
 import com.singularity.workspace.dto.project.FileContentResponse;
 import com.singularity.workspace.dto.project.FileTreeResponse;
 import com.singularity.workspace.dto.project.ProjectZipResult;
+import com.singularity.workspace.dto.project.SaveFileRequest;
+import com.singularity.workspace.dto.project.SaveFileResponse;
+import com.singularity.common.security.AuthUtil;
+import com.singularity.workspace.service.FileEditService;
 import com.singularity.workspace.service.ProjectFileService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -16,7 +21,9 @@ import org.springframework.web.bind.annotation.*;
 /**
  * A project's files, for the browser.
  *
- * <p>Handles: the file tree, one file's content, plain-text search across the project, and a ZIP of the whole thing.
+ * <p>Handles: the file tree, one file's content, saving one file's content changed by hand, plain-text search across
+ * the project, and a ZIP of the whole thing. A save needs the edit permission and is published as a revision; it is
+ * the only way a browser writes a file.
  *
  * <p>The tree and content reads are guarded here rather than on the service, unlike search and download: the internal
  * API reads file content through the same service as a machine caller with no user id, so a caller-based check on the
@@ -29,6 +36,8 @@ import org.springframework.web.bind.annotation.*;
 public class FileController {
 
     private final ProjectFileService projectFileService;
+    private final FileEditService fileEditService;
+    private final AuthUtil authUtil;
 
     @GetMapping
     @PreAuthorize("@security.canViewProject(#projectId)")
@@ -42,6 +51,14 @@ public class FileController {
             @PathVariable Long projectId,
             @RequestParam String path) {
         return ResponseEntity.ok(projectFileService.getFileContent(projectId, path));
+    }
+
+    @PutMapping("/content")
+    @PreAuthorize("@security.canEditProject(#projectId)")
+    public ResponseEntity<SaveFileResponse> saveFile(
+            @PathVariable Long projectId,
+            @RequestBody @Valid SaveFileRequest request) {
+        return ResponseEntity.ok(fileEditService.saveFile(projectId, request, authUtil.getCurrentUserId()));
     }
 
     @GetMapping("/search")

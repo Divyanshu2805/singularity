@@ -5,7 +5,7 @@ Long-running AI responses are delivered as server-sent events (SSE). Two endpoin
 | Endpoints | Payload | Client reader |
 |---|---|---|
 | `POST /api/chat/stream`, `GET /api/chat/projects/{id}/active/stream` | JSON `{ "text": "..." }` per event, in five kinds told apart by the event name | `consumeChatStream` in `frontend/src/lib/api.ts`; the text itself is read by `frontend/src/lib/generation-protocol.ts` |
-| `POST /api/projects/{id}/code/explain/stream`, `.../code/ask/stream`, `.../code/lesson/stream` | Plain text per event | `frontend/src/lib/sse.ts` |
+| `POST /api/projects/{id}/code/explain/stream`, `.../code/ask/stream`, `.../code/lesson/stream`, `.../code/overview/stream`, `.../code/tour/stream`, `.../code/glossary/stream`, `.../code/task/stream`, `.../code/task-check/stream` | Plain text per event | `frontend/src/lib/sse.ts` |
 
 ## Chat stream
 

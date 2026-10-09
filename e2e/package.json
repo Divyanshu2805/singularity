@@ -1,0 +1,18 @@
+{
+  "name": "singularity-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "numbers": "playwright test --config playwright.real.config.ts",
+    "load": "node load.mjs",
+    "lighthouse": "node lighthouse.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@types/node": "^22.16.5",
+    "firebase-tools": "15.33.0",
+    "lighthouse": "^12.8.2"
+  }
+}

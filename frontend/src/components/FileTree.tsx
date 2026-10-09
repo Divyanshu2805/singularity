@@ -146,7 +146,7 @@ export function FileTree({ files, selectedPath, onSelectFile, isLoading, changed
   }
 
   if (files.length === 0) {
-    return <div className="p-4 text-center text-xs text-muted-foreground">No files yet</div>;
+    return <div className="p-4 text-center text-xs leading-relaxed text-muted-foreground">No files yet. Ask for something in the chat and they will appear here.</div>;
   }
 
   return (

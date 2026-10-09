@@ -142,13 +142,36 @@ class TurnRecorderTest {
     }
 
     @Test
+    void aSavedTurnRecordsTheRevisionItsFilesWerePublishedAs() {
+        publishAnswers(PublishRevisionResponse.Status.APPLIED, Map.of());
+
+        record(TWO_CHANGES, null);
+
+        ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
+        verify(chatMessageRepository, times(3)).save(captor.capture());
+        assertThat(captor.getAllValues().get(2).getRole()).isEqualTo(MessageRole.ASSISTANT);
+        assertThat(captor.getAllValues().get(2).getRevisionId()).isEqualTo(10L);
+    }
+
+    @Test
+    void aTurnWhoseFilesDidNotLandRecordsNoRevision() {
+        publishAnswers(PublishRevisionResponse.Status.FAILED, Map.of());
+
+        record(TWO_CHANGES, null);
+
+        ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
+        verify(chatMessageRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues()).allSatisfy(message -> assertThat(message.getRevisionId()).isNull());
+    }
+
+    @Test
     void bothMessagesOfTheTurnAreStoredWithWhatTheyCost() {
         publishAnswers(PublishRevisionResponse.Status.APPLIED, Map.of());
 
         record(TWO_CHANGES, null);
 
         ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
-        verify(chatMessageRepository, times(2)).save(captor.capture());
+        verify(chatMessageRepository, times(3)).save(captor.capture());
         ChatMessage question = captor.getAllValues().get(0);
         ChatMessage reply = captor.getAllValues().get(1);
         assertThat(question.getRole()).isEqualTo(MessageRole.USER);
@@ -167,7 +190,7 @@ class TurnRecorderTest {
                 List.of(), 39, 1200, 300, true));
 
         ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
-        verify(chatMessageRepository, times(2)).save(captor.capture());
+        verify(chatMessageRepository, times(3)).save(captor.capture());
         assertThat(captor.getAllValues().get(0).isTeaching()).isFalse();
         assertThat(captor.getAllValues().get(1).isTeaching()).isTrue();
     }

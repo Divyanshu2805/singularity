@@ -246,7 +246,7 @@ public final class TurnReview {
                     .append("same quotes, no \"...\", each line on a line of its own - with enough lines to match one ")
                     .append("place only, and keep them few: the lines that change and one or two beside them.\n");
             filesAsTheyAre.forEach((path, content) -> text.append("\n--- ").append(path).append(", exactly as it is now ---\n")
-                    .append(content).append(content.endsWith("\n") ? "" : "\n").append("--- end of ").append(path).append(" ---\n"));
+                    .append(FileFence.guard(content)).append(content.endsWith("\n") ? "" : "\n").append("--- end of ").append(path).append(" ---\n"));
             if (edits.stream().anyMatch(problem -> !filesAsTheyAre.containsKey(problem.path()))) {
                 text.append("A file not printed here is as shown under FILES; if it is not shown there either, read it ")
                         .append("with read_files first.\n");

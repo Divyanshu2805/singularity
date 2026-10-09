@@ -34,6 +34,8 @@ import {
   previewFailureTitle,
   previewPollInterval,
   holdsPreviewErrors,
+  frameMissedAnUpdate,
+  FRAME_SETTLE_MS,
   previewSync,
   queueMessage,
 } from "./preview";
@@ -429,5 +431,25 @@ describe("holding back an error from a page that is between two states", () => {
     expect(holdsPreviewErrors({ isBuilding: false, isSettling: false, preview: level })).toBe(false);
     expect(holdsPreviewErrors({ isBuilding: false, isSettling: false, preview: preview({ status: "RUNNING" }) })).toBe(false);
     expect(holdsPreviewErrors({ isBuilding: false, isSettling: false, preview: null })).toBe(false);
+  });
+});
+
+describe("a frame that loaded as the first build's files arrived", () => {
+  const loadingSince = 1_000_000;
+
+  it("is loaded again when the runner's revision changes moments after it started loading", () => {
+    expect(frameMissedAnUpdate({ loadingSince, revisionAtLoad: null, revisionNow: 31, now: loadingSince + 1_500 })).toBe(true);
+    expect(frameMissedAnUpdate({ loadingSince, revisionAtLoad: 30, revisionNow: 31, now: loadingSince + FRAME_SETTLE_MS })).toBe(true);
+  });
+
+  it("is left to hot reload once it has been up a while, so the page keeps its state", () => {
+    expect(frameMissedAnUpdate({ loadingSince, revisionAtLoad: 30, revisionNow: 31, now: loadingSince + FRAME_SETTLE_MS + 1 })).toBe(false);
+    expect(frameMissedAnUpdate({ loadingSince, revisionAtLoad: null, revisionNow: 31, now: loadingSince + 60_000 })).toBe(false);
+  });
+
+  it("is left alone while the revision is the one it loaded with, or the server names none", () => {
+    expect(frameMissedAnUpdate({ loadingSince, revisionAtLoad: 31, revisionNow: 31, now: loadingSince + 500 })).toBe(false);
+    expect(frameMissedAnUpdate({ loadingSince, revisionAtLoad: null, revisionNow: null, now: loadingSince + 500 })).toBe(false);
+    expect(frameMissedAnUpdate({ loadingSince, revisionAtLoad: 31, revisionNow: undefined, now: loadingSince + 500 })).toBe(false);
   });
 });

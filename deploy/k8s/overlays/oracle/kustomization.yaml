@@ -53,3 +53,7 @@ patches:
     target:
       kind: ConfigMap
       name: app-config
+  - path: proxy-patch.yaml
+    target:
+      kind: Deployment
+      name: singularity-proxy

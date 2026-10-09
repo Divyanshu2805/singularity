@@ -40,10 +40,10 @@ import static org.mockito.Mockito.when;
  * {@link FileReadAuthorizationTest} established, applied to the methods {@link com.singularity.workspace.controller.ProjectController}
  * delegates to (its own controller methods carry no {@code @PreAuthorize} themselves; every guard lives here).
  *
- * <p>Unlike file access, which only ever needs VIEW, this service has three distinct gates worth telling apart:
- * VIEW-gated methods any member can call, EDIT-gated methods that also admit an editor (whose permission set
- * includes DELETE, per {@link ProjectRole#EDITOR} - not a bug in this test, the role definition itself grants it),
- * and the one DELETE-gated method, {@code softDelete}, which a viewer alone cannot reach.
+ * <p>Unlike file access, which only ever needs VIEW, this service has two gates worth telling apart: VIEW-gated
+ * methods any member can call, and EDIT-gated methods that need an editor or the owner. {@code softDelete} is
+ * VIEW-gated because for everyone but the owner it means leaving, which a viewer must be able to do; that only the
+ * owner's call deletes the project is decided inside the method and pinned by ProjectServiceImplRevocationTest.
  */
 class ProjectAuthorizationTest {
 
@@ -52,7 +52,7 @@ class ProjectAuthorizationTest {
     private static final long USER_ID = 7L;
 
     private static final ProjectServiceImpl SERVICE =
-            new ProjectServiceImpl(null, null, null, null, null, null, null, null, null);
+            new ProjectServiceImpl(null, null, null, null, null, null, null, null, null, null);
 
     private final ProjectMemberRepository members = mock(ProjectMemberRepository.class);
     private final GenericApplicationContext context = new GenericApplicationContext();
@@ -78,7 +78,8 @@ class ProjectAuthorizationTest {
     }
 
     static Stream<Arguments> viewGated() {
-        return Stream.of(arguments("getUserProjectById"), arguments("setPinned"), arguments("setStarred"));
+        return Stream.of(arguments("getUserProjectById"), arguments("setPinned"), arguments("setStarred"),
+                arguments("softDelete"));
     }
 
     static Stream<Arguments> editGated() {
@@ -86,7 +87,7 @@ class ProjectAuthorizationTest {
     }
 
     static Stream<Arguments> allGuarded() {
-        return Stream.concat(Stream.concat(viewGated(), editGated()), Stream.of(arguments("softDelete")));
+        return Stream.concat(viewGated(), editGated());
     }
 
     @ParameterizedTest(name = "{0}")
@@ -132,26 +133,11 @@ class ProjectAuthorizationTest {
         assertThat(allowed(method, PROJECT_ID)).isTrue();
     }
 
-    @Test
-    @DisplayName("a viewer cannot soft-delete")
-    void viewerCannotSoftDelete() {
-        when(members.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID)).thenReturn(Optional.of(ProjectRole.VIEWER));
-
-        assertThat(allowed("softDelete", PROJECT_ID)).isFalse();
-    }
-
-    @Test
-    @DisplayName("an editor can soft-delete - EDITOR's permission set includes DELETE")
-    void editorCanSoftDelete() {
-        when(members.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID)).thenReturn(Optional.of(ProjectRole.EDITOR));
-
-        assertThat(allowed("softDelete", PROJECT_ID)).isTrue();
-    }
-
-    @Test
-    @DisplayName("an owner can soft-delete")
-    void ownerCanSoftDelete() {
-        when(members.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID)).thenReturn(Optional.of(ProjectRole.OWNER));
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"VIEWER", "EDITOR", "OWNER"})
+    @DisplayName("every member can reach softDelete - for anyone but the owner it only leaves the project")
+    void everyMemberCanReachSoftDelete(String role) {
+        when(members.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID)).thenReturn(Optional.of(ProjectRole.valueOf(role)));
 
         assertThat(allowed("softDelete", PROJECT_ID)).isTrue();
     }

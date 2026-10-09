@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository. It exists so an agent 
 
 ## Project overview
 
-Singularity is an AI-assisted project builder: a user describes an idea, answers a short AI-written interview, and gets a real project built through an AI chat — generated files are published to object storage as atomic revisions, a Kubernetes-backed live preview runs the result, and collaborators work together with per-project roles. Billing runs on Stripe with enforced daily-token, project and preview limits.
+Singularity is an AI-assisted project builder: a user describes an idea, answers a short AI-written interview, and gets a real project built through an AI chat — generated files are published to object storage as atomic revisions, a Kubernetes-backed live preview runs the result, the owner can publish it at a public link anyone can open (a production build made in a runner pod and served from storage by the preview proxy), and collaborators work together with per-project roles. Billing runs on Stripe with enforced daily-token, project and preview limits.
 
 - **Two codebases, one repository:** a Spring Boot 4.1 (Java 25) backend and a React 18 + TypeScript SPA in `frontend/`. Several features (the streaming chat, sign-out data isolation, the live-preview panel) span both.
 - **The backend is a set of microservices** in a multi-module Maven reactor: a Gateway in front of `account-service`, `workspace-service` and `intelligence-service`, each with its own database, plus `common-lib` and `discovery-service`. Don't assume which service owns a class, endpoint or table — check the docs below.
@@ -39,20 +39,25 @@ gateway-service/        Spring Cloud Gateway — the browser's single origin. Or
                         order is load-bearing (/api/projects/*/code/** → intelligence sits under /api/projects/**).
                         No catch-all: an unowned path is a 404. RoutingTableTest pins every path.
 account-service/        users, plans, subscriptions, Stripe, sessions and their audit trail
-workspace-service/      projects, members, files, file revisions, the live-preview pipeline
+workspace-service/      projects, members, files, file revisions, the live-preview pipeline, publishing
 intelligence-service/   AI generation, code insight, idea clarifier, usage metering, the build benchmark
   inside each service (com.singularity.<service>): entity/ enums/ repository/ mapper/ service/ service/impl/
   controller/ dto/ security/ feign/ config/ util/ (+ llm/ in intelligence); migrations in
   src/main/resources/db/migration/
 frontend/src/           pages/ components/ hooks/ lib/ — logic lives in lib/
-proxy/                  Node reverse proxy for preview hostnames
+proxy/                  Node reverse proxy for preview hostnames; also serves published apps from storage (published*.js, s3.js)
+e2e/                    the browser journey test (Playwright) and what it stands on: stack.sh starts the whole
+                        application on ports of its own with the scripted model and the Firebase Auth emulator;
+                        load.mjs, lighthouse.mjs and real/ are measurements, run only when asked for
 k8s/                    LOCAL DEV ONLY — the preview pipeline on kind while the backend runs via mvnw;
                         preview-test-cluster.sh stands a second one up in its own namespace for PreviewPipelineIT
-deploy/k8s/             the production topology (Kustomize: base/ + overlays/kind, overlays/oracle; namespaces/)
-deploy/scripts/         apply-secrets.sh, smoke-test.sh, restore-backup.sh, check-backup-freshness.sh
+deploy/k8s/             the production topology (Kustomize: base/ + overlays/kind, overlays/oracle; namespaces/;
+                        network-policies/ - applied by hand, not by CI)
+deploy/scripts/         apply-secrets.sh, deploy-revisions.sh, smoke-test.sh, restore-backup.sh, check-backup-freshness.sh
 docker/                 the shared Java service Dockerfile (MODULE build-arg) and the preview-runner image
-.github/workflows/      ci.yml (test, incl. a real preview on kind → build 8 images → deploy → smoke test → rollback), uptime.yml
-scripts/                bench-verify.sh - compiles a build benchmark's projects in a throwaway container
+.github/workflows/      ci.yml (test, incl. a real preview and the browser journey on kind → build 8 images → deploy → smoke test → rollback), uptime.yml
+scripts/                bench-verify.sh - compiles a build benchmark's projects in a throwaway container;
+                        coverage-summary.sh - the backend's coverage per module, after `./mvnw verify`
 docs/                   documentation — start at docs/README.md
 ```
 
@@ -62,11 +67,18 @@ docs/                   documentation — start at docs/README.md
 ./mvnw -pl common-lib,<service> test -Dtest=ClassName#method   # one test, building common-lib from source
 ./mvnw -pl gateway-service test -Dtest=RoutingTableTest        # rerun after any controller or route change
 ./mvnw -pl <service> spring-boot:run                           # prove a change boots (see local setup for ports)
-./mvnw test                                                    # all backend tests (960; one needs Docker)
+./mvnw test                                                    # all backend tests (1,308; one needs Docker)
+./mvnw verify                                                  # the same, and each module held to its coverage floor (what CI runs)
 ./mvnw clean package                                           # build every module
-cd frontend && npx tsc --noEmit -p tsconfig.app.json && npm run lint && npm test && npm run build
+cd frontend && npx tsc --noEmit -p tsconfig.app.json && npm run lint && npm run coverage && npm run build
 ./mvnw -pl common-lib,intelligence-service compile spring-boot:run -Dspring-boot.run.profiles=stub-ai   # no AI provider, no tokens
 k8s/preview-test-cluster.sh --context kind-singularity && ./mvnw -pl common-lib,workspace-service test -Dtest=PreviewPipelineIT -Dsurefire.failIfNoSpecifiedTests=false   # a real preview on kind; after any preview or proxy change
+./mvnw -pl common-lib,workspace-service test -Dtest=PublishPipelineIT -Dsurefire.failIfNoSpecifiedTests=false   # a real publish on that cluster; after any publishing or proxy change
+cd proxy && node --test                                         # the preview proxy and the published-app server
+```
+
+```bash
+./mvnw -DskipTests package && e2e/stack.sh up --context kind-singularity && (cd e2e && npm test); e2e/stack.sh down --context kind-singularity   # the browser journey; after a change that crosses services, or touches sign-in, chat, preview or lessons
 ```
 
 On Windows, use `mvnw.cmd`. A bare `./mvnw spring-boot:run` at the root fails — the root `pom.xml` has no main class. Running all five services on one machine needs a distinct `MANAGEMENT_SERVER_PORT` per service; see [setup](docs/local-development/setup.md).

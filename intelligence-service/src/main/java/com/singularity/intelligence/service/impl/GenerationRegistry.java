@@ -23,9 +23,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * the same project can't both observe "nothing running yet". Removal targets the exact turn, so a late cleanup can
  * never remove a newer one that replaced it.
  *
- * <p>Lookups by (project, user) - reattaching to or stopping a turn after a refresh - stay scoped to the caller's own
- * entry: each member's chat is its own conversation, so a member asking after their own turn must never be handed
- * the content of someone else's, even though only one can run at a time.
+ * <p>Lookups by (project, user) - reattaching to a turn after a refresh - stay scoped to the caller's own entry:
+ * each member's chat is its own conversation, so a member asking after their own turn must never be handed the
+ * content of someone else's, even though only one can run at a time. Stopping is by project, since whoever is
+ * refused because a turn is running has to be able to end it; it reads nothing of the turn.
  *
  * <p>An entry that outlives {@link #STALE_AFTER} is treated as abandoned and replaced. A turn is bounded well inside
  * that by its own timeouts, so this should never fire; it exists because the one time an entry was left behind - a

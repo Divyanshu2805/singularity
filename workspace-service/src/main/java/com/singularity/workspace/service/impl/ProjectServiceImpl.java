@@ -1,12 +1,11 @@
 package com.singularity.workspace.service.impl;
 
-import com.singularity.common.dto.PlanDto;
 import com.singularity.workspace.dto.project.CreateProjectFromPromptRequest;
 import com.singularity.workspace.dto.project.ForkProjectRequest;
 import com.singularity.common.error.FileStorageException;
 import com.singularity.common.error.ForbiddenException;
-import com.singularity.common.feign.AccountServiceClient;
 import com.singularity.workspace.feign.IntelligenceServiceClient;
+import com.singularity.workspace.service.PublishService;
 import com.singularity.workspace.service.PreviewDeploymentService;
 import com.singularity.workspace.service.ProjectFileService;
 import com.singularity.workspace.dto.project.ProjectRequest;
@@ -17,7 +16,6 @@ import com.singularity.workspace.entity.Project;
 import com.singularity.workspace.entity.ProjectMember;
 import com.singularity.workspace.entity.ProjectMemberId;
 import com.singularity.workspace.enums.ProjectRole;
-import com.singularity.common.error.QuotaExceededException;
 import com.singularity.common.error.ResourceNotFoundException;
 import com.singularity.workspace.mapper.ProjectMapper;
 import com.singularity.workspace.repository.ProjectMemberRepository;
@@ -53,11 +51,16 @@ import java.util.stream.Collectors;
  *
  * <p>Forking is refused to the owner, who can already change the project however they like, and the fork is deleted
  * again if any file failed to copy - a fork quietly missing files would look like the original and then break
- * inexplicably. Deleting is the owner's for everyone; an editor's delete only removes their own membership.
+ * inexplicably. Deleting is the owner's for everyone; anyone else's delete only removes their own membership, which
+ * is why the method is open to every member and decides by role inside: a viewer has to be able to leave a project
+ * they were added to, and only the owner's call ever reaches the line that deletes it.
  *
  * <p>Either shape of delete also revokes standing, not just access: it best-effort stops in-flight AI generation the
  * project or membership can no longer authorize (intelligence-service's own recheck before committing is the actual
- * backstop if that call fails) and stops the preview(s) that lost their reason to keep running.
+ * backstop if that call fails) and stops the preview(s) that lost their reason to keep running. The owner deleting the
+ * project also takes its published app down; an editor leaving does not, since the project carries on.
+ *
+ * <p>The project list carries the link of each project's live published app, looked up in one query for the whole list.
  *
  * <p>Leaving or deleting a project writes its change to the database before it stops anyone's preview. Stopping a
  * preview runs updates that clear the persistence context afterwards, and a change that had only been queued there -
@@ -75,11 +78,12 @@ public class ProjectServiceImpl implements ProjectService {
     ProjectMapper projectMapper;
     ProjectMemberRepository projectMemberRepository;
     AuthUtil authUtil;
-    AccountServiceClient accountServiceClient;
+    ProjectQuota projectQuota;
     ProjectTemplateService projectTemplateService;
     ProjectFileService projectFileService;
     PreviewDeploymentService previewDeploymentService;
     IntelligenceServiceClient intelligenceServiceClient;
+    PublishService publishService;
 
     static final int MAX_NAME_LENGTH = 255;
 
@@ -95,37 +99,14 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     public ProjectResponse createProject(ProjectRequest request) {
-        assertCanCreateProject();
+        projectQuota.assertCanCreateProject();
         return createOwnedProject(request.name());
     }
 
     @Override
     public ProjectResponse createProjectFromPrompt(CreateProjectFromPromptRequest request) {
-        assertCanCreateProject();
+        projectQuota.assertCanCreateProject();
         return createOwnedProject(ProjectNameHeuristic.nameFor(request.prompt()));
-    }
-
-    private void assertCanCreateProject() {
-        Long userId = authUtil.getCurrentUserId();
-        PlanDto plan = accountServiceClient.getPlanLimits(userId);
-        int allowance = plan.maxProjects();
-
-        // Serializes this user's own concurrent creates/forks so two requests that both read "under the limit"
-        // can't both be admitted before either has committed - held for the rest of this transaction, which
-        // includes the project insert that follows a passing check, and released automatically at commit/rollback.
-        projectMemberRepository.lockProjectQuota(userId);
-        int owned = projectMemberRepository.countProjectOwnedByUser(userId);
-
-        if (owned < allowance) {
-            return;
-        }
-
-        String planName = plan.name();
-        throw new QuotaExceededException(
-                "The " + planName + " plan includes " + allowance + (allowance == 1 ? " project" : " projects")
-                        + ". Upgrade, or delete one to make room.",
-                QuotaExceededException.Reason.PROJECT_LIMIT,
-                allowance, owned, null, planName);
     }
 
     @Override
@@ -136,7 +117,7 @@ public class ProjectServiceImpl implements ProjectService {
         if (getRole(id, userId) == ProjectRole.OWNER) {
             throw new ForbiddenException("You own this project, so there's nothing to fork - you can already change it however you like.");
         }
-        assertCanCreateProject();
+        projectQuota.assertCanCreateProject();
 
         String requested = request == null || request.name() == null ? "" : request.name().strip();
         String name = requested.isEmpty() ? source.getName() + " (fork)" : requested;
@@ -201,11 +182,13 @@ public class ProjectServiceImpl implements ProjectService {
         Map<Long, ProjectMember> membershipsByProjectId = projectMemberRepository.findByIdUserId(userId).stream()
                 .collect(Collectors.toMap(pm -> pm.getId().getProjectId(), Function.identity()));
 
+        Map<Long, String> publishedUrls = publishService.liveUrls(projects.stream().map(Project::getId).toList());
+
         return projects.stream()
                 .map(project -> {
                     ProjectMember membership = membershipsByProjectId.get(project.getId());
                     return projectMapper.toProjectSummaryResponse(project, membership.getProjectRole(),
-                            membership.getPinnedAt(), membership.getStarredAt());
+                            membership.getPinnedAt(), membership.getStarredAt(), publishedUrls.get(project.getId()));
                 })
                 .toList();
     }
@@ -254,7 +237,7 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    @PreAuthorize("@security.canDeleteProject(#id)")
+    @PreAuthorize("@security.canViewProject(#id)")
     public void softDelete(Long id) {
 
         Long userId = authUtil.getCurrentUserId();
@@ -276,6 +259,7 @@ public class ProjectServiceImpl implements ProjectService {
 
         revokeOngoingWork(id, null);
         previewDeploymentService.stopAllForProject(id, "The project was deleted");
+        publishService.takeDown(id);
     }
 
     /**

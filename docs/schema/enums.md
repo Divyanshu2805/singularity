@@ -6,11 +6,11 @@ Every enum is stored as a plain string column with no `CHECK` constraint, so add
 
 `ProjectRole` lives in workspace-service, with a wire copy in `common-lib` that must use the same mapping. Each role maps to a set of `ProjectPermission`s:
 
-| Role | `VIEW` | `VIEW_MEMBERS` | `EDIT` | `DELETE` | `MANAGE_MEMBERS` |
-|---|:---:|:---:|:---:|:---:|:---:|
-| `OWNER` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `EDITOR` | ✓ | ✓ | ✓ | ✓ | |
-| `VIEWER` | ✓ | ✓ | | | |
+| Role | `VIEW` | `VIEW_MEMBERS` | `EDIT` | `DELETE` | `MANAGE_MEMBERS` | `PUBLISH` |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| `OWNER` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `EDITOR` | ✓ | ✓ | ✓ | ✓ | | |
+| `VIEWER` | ✓ | ✓ | | | | |
 
 An editor's `DELETE` removes only their own membership; only the owner's delete removes the project for everyone.
 
@@ -29,6 +29,9 @@ An editor's `DELETE` removes only their own membership; only the owner's delete 
 | `PreviewStatus` | `CREATING`, `RUNNING`, `FAILED`, `TERMINATED` | A `CREATING` row with no pod is waiting in line for a runner. |
 | `PreviewFailureKind` | `INSTALL`, `DEV_SERVER`, `TIMEOUT`, `CAPACITY`, `PLATFORM` | Why a start failed. Only `PLATFORM` is retried by the browser. See [when a start fails](../architecture/flows/live-preview.md#when-a-start-fails). |
 | `PreviewSyncState` | `UP_TO_DATE`, `UPDATING` | Not a column: computed for each response from `Preview.syncedRevisionId` and the project's current revision. |
+| `PublishStatus` | `LIVE`, `UNPUBLISHED` | Whether a published app is being served. See [`PUBLISHED_APP`](workspace-service.md#published_app). |
+| `PublishBuildStatus` | `BUILDING`, `FAILED` | A build's state; null on the row means none is under way. |
+| `PublishFailureKind` | `INSTALL`, `BUILD`, `NO_OUTPUT`, `TOO_LARGE`, `TIMEOUT`, `CAPACITY`, `PLATFORM` | Why a publish failed. Only `PLATFORM` and `CAPACITY` are worth trying again unchanged. See [when a publish fails](../architecture/flows/publishing.md#when-a-publish-fails). |
 | `RevisionStatus` | `STAGING`, `APPLIED`, `FAILED`, `CONFLICT` | See [File revisions](../architecture/file-revisions.md). |
 | `RevisionSource` | `AI_GENERATION`, `MANUAL_EDIT`, `RESTORE` | `MANUAL_EDIT` is supported end to end but nothing produces it yet. |
 | `RevisionChangeType` | `EDIT`, `DELETE` | |

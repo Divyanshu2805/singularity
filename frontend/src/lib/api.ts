@@ -3,7 +3,10 @@
  *
  * Handles: the one fetch wrapper all of them go through, the session cookie and CSRF token that ride along with it,
  * turning a failed response into a typed error the UI can react to, the SSE streams behind the build chat and the
- * code lens, and the typed methods for projects, files, previews, chat, code notes, ideas, billing, usage and auth.
+ * code lens, and the typed methods for projects, files and saving one by hand, the revision history and restoring,
+ * previews, publishing (and the public page of a shared app, which needs no session), chat, code notes, the kept
+ * tour and glossary of a project (their writing is a code-insight stream like a lesson's), ideas,
+ * billing, usage and auth.
  *
  * The build chat's stream is read here and nothing more: its events are handed on by kind - a piece of the answer, a
  * status line, the whole text again after the server corrected it, and the outcome that closes the stream - and what
@@ -15,20 +18,24 @@
  *
  * The session is an httpOnly cookie, so a write must also carry the readable CSRF token in a header - fetched first
  * if this browser has none, and re-fetched once if the server rejects it, which is what a stale token looks like. A
- * network failure is rewritten into a clear sentence rather than the browser's vague default, and a 401 takes the app
+ * network failure is rewritten into a clear sentence rather than the browser's vague default (one that names the
+ * Gateway's port only in development - a visitor to the deployed app was once told to start a backend), and a 401 takes the app
  * through a full sign-out so no stale state survives.
  *
  * Requests are relative by default: in development Vite proxies them to the Gateway, so the browser only ever talks
  * to one origin and the SameSite cookie is always sent.
  */
-import { Preview, PreviewLogs, ActiveGeneration, AuthSecurityEvent, AuthSecurityEventType, SessionResponse, ChatMessage, ClarifyingQuestion, CodeNote, CodeSearchResponse, CodeSelection, FileNode, Plan, QuotaDetails, Subscription, UsageEventPage, UsageInsights, UsageRange, UsageToday, IdeaAnswer, IdeaInterview, ProjectSummaryResponse, ProjectResponse, ProjectMember, ProjectRole } from "./types";
+import { Preview, PreviewLogs, ProjectInvitation, PublishState, PublicApp, PublicFile, PublicFileContent, FileContent, SavedFile, RevisionSummary, RevisionChange, RestoreResult, ActiveGeneration, AuthSecurityEvent, AuthSecurityEventType, SessionResponse, ChatMessage, ClarifyingQuestion, CodeNote, CodeSearchResponse, GlossaryEntry, ProjectTour, CodeSelection, FileNode, Plan, QuotaDetails, Subscription, UsageEventPage, UsageInsights, UsageRange, UsageToday, IdeaAnswer, IdeaInterview, ProjectSummaryResponse, ProjectResponse, ProjectMember, ProjectRole } from "./types";
+import { splitPeople, type ProjectPeople } from "./members";
 import { createSseParser, type SseEvent } from "./sse";
 import { CSRF_HEADER, ensureCsrfToken, needsCsrf, readCsrfToken } from "./csrf";
 import { clearSignedInState, signOutRedirect } from "./session";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
-const SERVER_UNREACHABLE = "Can't reach the Singularity server. Make sure the backend is running (the Gateway listens on port 8000).";
+const SERVER_UNREACHABLE = import.meta.env.DEV
+  ? "Can't reach the Singularity server. Make sure the backend is running (the Gateway listens on port 8000)."
+  : "Can't reach Singularity right now. Check your internet connection and try again in a moment.";
 
 const rawFetch = (input: string, init?: RequestInit) =>
   fetch(input, { credentials: "same-origin", ...init }).catch((error: unknown) => {
@@ -304,6 +311,8 @@ function consumeChatStream(request: Promise<Response>, handlers: ChatStreamHandl
     });
 }
 
+export type CodeInsightKind = "explain" | "ask" | "lesson" | "overview" | "tour" | "glossary" | "task" | "task-check";
+
 export const api = {
   async createSession(idToken: string): Promise<SessionResponse> {
     const response = await apiFetch(`${BASE_URL}/api/auth/session`, {
@@ -350,6 +359,48 @@ export const api = {
     await ensureOk(response, "Failed to fetch file content");
     const data = await response.json();
     return data.content;
+  },
+
+  async getFile(projectId: string, path: string): Promise<FileContent> {
+    const response = await apiFetch(
+      `${BASE_URL}/api/projects/${projectId}/files/content?path=${encodeURIComponent(path)}`
+    );
+    await ensureOk(response, "Couldn't open this file");
+    return response.json();
+  },
+
+  async saveFile(projectId: string, path: string, content: string, baseHash: string): Promise<SavedFile> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/files/content`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, content, baseHash }),
+    });
+    await ensureOk(response, "Couldn't save this file");
+    return response.json();
+  },
+
+  async getRevisions(projectId: string): Promise<RevisionSummary[]> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/revisions`);
+    await ensureOk(response, "Couldn't load this project's history");
+    return response.json();
+  },
+
+  async previewRestore(projectId: string, revisionId: number, before: boolean): Promise<RevisionChange[]> {
+    const response = await apiFetch(
+      `${BASE_URL}/api/projects/${projectId}/revisions/${revisionId}/preview${before ? "?before=true" : ""}`
+    );
+    await ensureOk(response, "Couldn't work out what this would change");
+    const data = (await response.json()) as { changes?: RevisionChange[] };
+    return data.changes ?? [];
+  },
+
+  async restoreRevision(projectId: string, revisionId: number, before: boolean): Promise<RestoreResult> {
+    const response = await apiFetch(
+      `${BASE_URL}/api/projects/${projectId}/revisions/${revisionId}/restore${before ? "?before=true" : ""}`,
+      { method: "POST" }
+    );
+    await ensureOk(response, "Couldn't restore this version");
+    return response.json();
   },
 
   async getProjects(): Promise<ProjectSummaryResponse[]> {
@@ -474,6 +525,73 @@ export const api = {
     return response.json();
   },
 
+  async getPublish(projectId: string): Promise<PublishState> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/publish`);
+    await ensureOk(response, "Couldn't check whether the app is published");
+    return response.json();
+  },
+
+  async publish(projectId: string, slug?: string): Promise<PublishState> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug: slug?.trim() || null }),
+    });
+    await ensureOk(response, "Couldn't start publishing");
+    return response.json();
+  },
+
+  async unpublish(projectId: string): Promise<void> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/publish`, { method: "DELETE" });
+    await ensureOk(response, "Couldn't unpublish the app");
+  },
+
+  async setCodeShared(projectId: string, shared: boolean): Promise<PublishState> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/publish/sharing`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shared }),
+    });
+    await ensureOk(response, shared ? "Couldn't share the code" : "Couldn't stop sharing the code");
+    return response.json();
+  },
+
+  async getPublishLog(projectId: string): Promise<string | null> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/publish/log`);
+    await ensureOk(response, "Couldn't load the build output");
+    return (await response.json()).log ?? null;
+  },
+
+  async getPublicApp(slug: string): Promise<PublicApp> {
+    const response = await apiFetch(`${BASE_URL}/api/public/apps/${encodeURIComponent(slug)}`);
+    await ensureOk(response, "Couldn't load this app");
+    return response.json();
+  },
+
+  async getPublicFiles(slug: string): Promise<PublicFile[]> {
+    const response = await apiFetch(`${BASE_URL}/api/public/apps/${encodeURIComponent(slug)}/files`);
+    await ensureOk(response, "Couldn't load the code");
+    return response.json();
+  },
+
+  async getPublicFile(slug: string, path: string): Promise<PublicFileContent> {
+    const response = await apiFetch(
+      `${BASE_URL}/api/public/apps/${encodeURIComponent(slug)}/files/content?path=${encodeURIComponent(path)}`
+    );
+    await ensureOk(response, "Couldn't load this file");
+    return response.json();
+  },
+
+  async forkPublicApp(slug: string, name?: string): Promise<ProjectResponse> {
+    const response = await apiFetch(`${BASE_URL}/api/public/apps/${encodeURIComponent(slug)}/fork`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name?.trim() || null }),
+    });
+    await ensureOk(response, "Couldn't fork this app");
+    return response.json();
+  },
+
   async getMyPreviews(): Promise<Preview[]> {
     const response = await apiFetch(`${BASE_URL}/api/previews`);
     await ensureOk(response, "Couldn't load your running previews");
@@ -490,7 +608,7 @@ export const api = {
 
   streamCodeInsight(
     projectId: string,
-    kind: "explain" | "ask" | "lesson",
+    kind: CodeInsightKind,
     body: Record<string, unknown>,
     onChunk: (text: string) => void,
     onComplete: () => void,
@@ -614,6 +732,25 @@ export const api = {
     return response.json();
   },
 
+  async getProjectTour(projectId: string): Promise<ProjectTour | null> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/tour`);
+    await ensureOk(response, "Couldn't load the tour");
+    return response.status === 204 ? null : response.json();
+  },
+
+  async getGlossary(projectId: string): Promise<GlossaryEntry[]> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/glossary`);
+    await ensureOk(response, "Couldn't load the glossary");
+    return response.json();
+  },
+
+  async deleteGlossaryEntry(projectId: string, entryId: number): Promise<void> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/glossary/${entryId}`, {
+      method: "DELETE",
+    });
+    await ensureOk(response, "Couldn't remove this word");
+  },
+
   async getCodeNotes(projectId: string): Promise<CodeNote[]> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/code/notes`, {
     });
@@ -684,11 +821,43 @@ export const api = {
     return data.answer;
   },
 
-  async getProjectMembers(projectId: string): Promise<ProjectMember[]> {
+  async getProjectPeople(projectId: string): Promise<ProjectPeople> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/members`, {
     });
     await ensureOk(response, "Failed to fetch project members");
+    return splitPeople(await response.json());
+  },
+
+  async getProjectMembers(projectId: string): Promise<ProjectMember[]> {
+    return (await this.getProjectPeople(projectId)).members;
+  },
+
+  async withdrawInvite(projectId: string, inviteId: number): Promise<void> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/members/invites/${inviteId}`, {
+      method: "DELETE",
+    });
+    await ensureOk(response, "Failed to withdraw the invitation");
+  },
+
+  async getMyInvitations(): Promise<ProjectInvitation[]> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/invitations`, {
+    });
+    await ensureOk(response, "Failed to fetch invitations");
     return response.json();
+  },
+
+  async acceptInvitation(projectId: string): Promise<void> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/members/accept`, {
+      method: "POST",
+    });
+    await ensureOk(response, "Failed to accept the invitation");
+  },
+
+  async declineInvitation(projectId: string): Promise<void> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/members/decline`, {
+      method: "POST",
+    });
+    await ensureOk(response, "Failed to decline the invitation");
   },
 
   async inviteMember(projectId: string, username: string, role: ProjectRole): Promise<void> {
@@ -723,11 +892,9 @@ export const api = {
     return response.json();
   },
 
-  async getNextSteps(projectId: string): Promise<string[]> {
-    const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/suggestions`, { method: "POST" });
-    if (!response.ok) return [];
-    const body = (await response.json()) as { suggestions?: unknown };
-    return Array.isArray(body.suggestions) ? body.suggestions.filter((item): item is string => typeof item === "string") : [];
+  async clearChat(projectId: string): Promise<void> {
+    const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}`, { method: "DELETE" });
+    await ensureOk(response, "Couldn't clear the chat");
   },
 
   async getLastTurnChanges(projectId: string): Promise<{ files: { path: string; previousContent: string }[] }> {

@@ -1,0 +1,38 @@
+# Settings laid over every service's own application.yaml while the browser journey test runs (e2e/stack.sh passes
+# this folder as spring.config.additional-location). One file for all five services: a service ignores the keys it
+# has no use for. Everything that differs per run - ports, the namespace - comes from the environment stack.sh sets,
+# so nothing here is a secret and nothing here is a default a deployed service could pick up.
+spring:
+  jpa:
+    show-sql: false
+  data:
+    redis:
+      host: 127.0.0.1
+      port: ${E2E_REDIS_PORT}
+
+minio:
+  url: http://127.0.0.1:${E2E_MINIO_PORT}
+
+preview:
+  namespace: ${E2E_NAMESPACE}
+  kube-context: ${E2E_KUBE_CONTEXT}
+  public-port: ${E2E_PROXY_PORT}
+  port-forward:
+    enabled: true
+    forwards:
+      - name: redis
+        pod-labels:
+          app: redis
+        pod-port: 6379
+        local-port: ${E2E_REDIS_PORT}
+      - name: preview proxy
+        pod-labels:
+          app: singularity-proxy
+        pod-port: 8080
+        local-port: ${E2E_PROXY_PORT}
+
+client.url: ${E2E_FRONTEND_URL}
+
+ai:
+  stub:
+    chunk-delay: 4ms

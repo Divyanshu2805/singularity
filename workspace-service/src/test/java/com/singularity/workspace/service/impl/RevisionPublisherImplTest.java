@@ -53,7 +53,7 @@ class RevisionPublisherImplTest {
 
     private final RevisionPublisherImpl publisher = new RevisionPublisherImpl(
             projectRepository, projectFileRepository, manifestStore, blobStore, List.<RevisionValidator>of(),
-            minioClient, "projects", events);
+            minioClient, "projects", events, new com.singularity.workspace.config.ProjectFileLimits(500, 1_048_576, 26_214_400));
 
     @BeforeEach
     void stubProject() {
@@ -67,6 +67,22 @@ class RevisionPublisherImplTest {
 
     private FileChangeDto edit(String path, String content) {
         return new FileChangeDto(path, FileChangeDto.ChangeType.EDIT, content);
+    }
+
+    @Test
+    @DisplayName("a change that would take the project past its size limits is refused with its reason, and nothing is stored")
+    void aChangeOverTheSizeLimitsIsRefusedBeforeAnythingIsStored() {
+        RevisionPublisherImpl small = new RevisionPublisherImpl(
+                projectRepository, projectFileRepository, manifestStore, blobStore, List.<RevisionValidator>of(),
+                minioClient, "projects", events, new com.singularity.workspace.config.ProjectFileLimits(500, 10, 26_214_400));
+
+        PublishRevisionResponse response = small.publish(PROJECT_ID, new PublishRevisionRequest(null, USER_ID, "AI_GENERATION",
+                List.of(new FileChangeDto("src/big.ts", FileChangeDto.ChangeType.EDIT, "x".repeat(11)))));
+
+        assertThat(response.status()).isEqualTo(PublishRevisionResponse.Status.FAILED);
+        assertThat(response.reason()).contains("src/big.ts");
+        assertThat(response.failedPaths()).containsExactly("src/big.ts");
+        org.mockito.Mockito.verifyNoInteractions(blobStore, manifestStore);
     }
 
     @Test

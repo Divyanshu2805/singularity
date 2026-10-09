@@ -1,6 +1,6 @@
 # File Revisions
 
-Every change to a project's files — an AI turn or a restore — is published as one atomic, immutable **revision**. A revision either lands completely or not at all, and any earlier revision can be restored. The implementation lives in workspace-service: `RevisionPublisherImpl`, `RevisionManifestStore`, `RevisionServiceImpl` and `RevisionSnapshotReader`. The design rationale is in [ADR 0005](decisions/0005-content-addressed-file-revisions.md).
+Every change to a project's files — an AI turn, a file saved by hand or a restore — is published as one atomic, immutable **revision**. A revision either lands completely or not at all, and any earlier revision can be restored. The implementation lives in workspace-service: `RevisionPublisherImpl`, `RevisionManifestStore`, `RevisionServiceImpl` and `RevisionSnapshotReader`. The design rationale is in [ADR 0005](decisions/0005-content-addressed-file-revisions.md).
 
 ## Publishing a revision
 
@@ -17,7 +17,15 @@ Restore is not a special code path. `RevisionServiceImpl.restore` reconstructs t
 
 A snapshot at any revision is reconstructed by walking `parentRevisionId` back to the root and keeping each path's most recent entry (`ProjectFileRevisionRepository.reconstructSnapshot`, a recursive CTE).
 
+**What a project held at a revision is more than that revision's snapshot.** The starter template's files, and the files a fork copied, are written with no revision, so a snapshot holds only the paths some revision has changed. `RevisionServiceImpl` therefore restores to the snapshot laid over each path's *original content* - the previous hash recorded by the first applied revision to touch that path (`ProjectFileRevisionRepository.findOriginalContent`) - and leaves alone any current file with no hash at all, which no revision has ever changed. Restoring from the snapshot alone would delete `package.json` and the whole component kit, and delete (rather than put back) a template file first changed after the restore point.
+
+**Undo is a restore to just before a revision** (`before=true`): the same thing built from that revision's parent, and from the original content alone when the revision was the project's first. The chat offers it on every saved turn, which records its revision id for exactly this.
+
 The restore endpoints are in the [revisions API](../api/revisions.md). They answer 404 unless the revision belongs to the project in the path and is `APPLIED`.
+
+## Saving a file by hand
+
+`FileEditServiceImpl` publishes one file's new text as a `MANUAL_EDIT` revision through the same pipeline (`PUT /api/projects/{id}/files/content`, [files API](../api/files.md)). It only saves a file that already exists, and only when the caller's `baseHash` is the hash of what the file holds now - a per-file check, so a build that changed other files does not refuse the save. Because it is a revision, a save by hand is in the history, can be undone, and brings a running preview level with it.
 
 ## Files created before revisions existed
 
@@ -43,6 +51,6 @@ It is **off by default** (`revision-validation.enabled: false`) because every ru
 
 - **No blob garbage collection.** Blobs are never deleted, so storage grows monotonically. That is what keeps every revision restorable; reference counting can be added when real usage calls for it.
 - **No crash recovery mid-apply.** An in-request failure rolls back cleanly, but a process crash between two apply steps leaves a revision stuck in `STAGING` with no automatic reconciliation.
-- **No user interface yet.** The list, preview-restore and restore endpoints exist and are tested, but the frontend doesn't call them.
+- **A save by hand and a build do not lock each other.** The generation lock lives in intelligence-service; a save made while someone else's build is running lands, and the build - which read the files when it started - then publishes over it. The save is still in the history. The editor holds saving while the person's own response is being written.
 
 These are tracked in [not yet built](../known-gaps/not-yet-built.md).

@@ -78,7 +78,7 @@ spring:
               uri: ${routing.workspace.uri}
               order: 30
               predicates:
-                - Path=/api/projects/**,/api/previews/**
+                - Path=/api/projects/**,/api/previews/**,/api/public/**
 
             - id: account
               uri: ${routing.account.uri}

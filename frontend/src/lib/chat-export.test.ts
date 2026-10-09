@@ -7,7 +7,7 @@
  * Also covers the code-lens export, where each snippet is quoted inline where it was first asked about.
  */
 import { describe, it, expect } from "vitest";
-import { buildChatMarkdown, buildLensMarkdown, exportFilename } from "./chat-export";
+import { assistantTurnText, buildChatMarkdown, buildLensMarkdown, exportFilename } from "./chat-export";
 import { ChatEventType } from "./types";
 import type { ChatEvent, CodeSelection } from "./types";
 
@@ -194,5 +194,25 @@ describe("exportFilename", () => {
 
   it("falls back to a usable name when the project name has nothing safe in it", () => {
     expect(exportFilename("///", "chat")).toMatch(/^project_chat_/);
+  });
+});
+
+describe("what teaching mode wrote about a turn", () => {
+  it("goes into the export under that turn: its big picture, then each opened step's lesson", () => {
+    const text = assistantTurnText(
+      [
+        { type: ChatEventType.TODO, content: "Building the button", filePath: "src/Button.tsx" },
+        { type: ChatEventType.FILE_EDIT, filePath: "src/Button.tsx", content: "x", lesson: "You asked for a button.\n\n### L1 · The start\nIt begins here.\n" },
+        { type: ChatEventType.FILE_EDIT, filePath: "src/App.tsx", content: "y" },
+      ],
+      "",
+      undefined,
+      "A button now exists.\n\n### The pieces\n- `src/Button.tsx` - The button.\n"
+    );
+
+    expect(text).toContain("### The big picture\n\nA button now exists.\n\n#### The pieces");
+    expect(text).toContain("### Lesson: `src/Button.tsx`\n\nYou asked for a button.\n\n#### L1 · The start");
+    expect(text).not.toContain("Lesson: `src/App.tsx`");
+    expect(text.indexOf("The big picture")).toBeLessThan(text.indexOf("Lesson: `src/Button.tsx`"));
   });
 });

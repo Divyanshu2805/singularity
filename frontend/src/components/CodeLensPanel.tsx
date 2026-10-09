@@ -12,9 +12,13 @@
  * matte composer that takes a calm gold ring while focused. Its header is the window's lighter top band (.ws-bar)
  * with the app's icon buttons, a quoted snippet is a card with its file named in a lighter head, and the line that
  * explained where notes are kept was removed from under the composer, as the owner asked of explanatory footnotes.
+ *
+ * While a block is selected, the questions a learner most often has about it sit above the composer as one-press
+ * chips - explain it, its syntax, why it is written this way, what removing it would do - the same three a lesson in
+ * the build chat offers under each of its sections (lib/lesson.ts), so nobody has to know what to ask.
  */
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, ClipboardCopy, Eraser, FileDown, MessagesSquare, X } from "lucide-react";
+import { ArrowUp, Eraser, FileDown, MessagesSquare, X } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import {
   AlertDialog,
@@ -32,10 +36,10 @@ import { ChatMarkdown } from "@/components/ChatMarkdown";
 import { MessageActions } from "@/components/MessageActions";
 import { highlightCode } from "@/lib/highlight-code";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useCopyFeedback } from "@/hooks/use-copy-feedback";
 import { codeLens, useCodeLens, type LensTurn } from "@/lib/code-lens-store";
 import { buildLensMarkdown, downloadMarkdown, exportFilename } from "@/lib/chat-export";
 import { getFileColor, getFileIcon, splitPath } from "@/lib/file-icons";
+import { DEEPER_QUESTIONS } from "@/lib/lesson";
 import type { CodeSelection } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -148,7 +152,6 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
   const thread = useCodeLens(projectId);
   const [question, setQuestion] = useState("");
   const [isClearing, setIsClearing] = useState(false);
-  const [copiedAll, copyAll] = useCopyFeedback();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -193,7 +196,6 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
   const handleExport = () =>
     downloadMarkdown(exportFilename(projectName, "notes"), buildLensMarkdown(turns, projectName));
 
-  const handleCopyAll = () => copyAll(buildLensMarkdown(turns, projectName));
 
   return (
     <aside className="app-surface flex h-full min-w-0 flex-col animate-in fade-in-0 slide-in-from-right-2 duration-300">
@@ -214,19 +216,6 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
                 </button>
               </TooltipTrigger>
               <TooltipContent side="bottom">Clear notes</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={copiedAll ? "Copied" : "Copy as markdown"}
-                  onClick={() => void handleCopyAll()}
-                  className={cn("icon-btn h-7 w-7 rounded-lg", copiedAll && "text-syntax-string")}
-                >
-                  {copiedAll ? <Check className="h-3.5 w-3.5" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{copiedAll ? "Copied" : "Copy as markdown"}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -350,6 +339,27 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
               </TooltipTrigger>
               <TooltipContent side="top">Ask about the whole project instead</TooltipContent>
             </Tooltip>
+          </div>
+        )}
+        {selection && !isBusy && (
+          <div className="mb-1.5 flex flex-wrap gap-1" role="group" aria-label="Questions about the selected code">
+            <button
+              type="button"
+              onClick={() => void codeLens.explain(projectId)}
+              className="app-chip inline-flex h-6 items-center rounded-md px-2 text-[11px] text-foreground/85"
+            >
+              Explain it
+            </button>
+            {DEEPER_QUESTIONS.map((deeper) => (
+              <button
+                key={deeper.id}
+                type="button"
+                onClick={() => void codeLens.ask(projectId, deeper.question)}
+                className="app-chip inline-flex h-6 items-center rounded-md px-2 text-[11px] text-foreground/85"
+              >
+                {deeper.label}
+              </button>
+            ))}
           </div>
         )}
         <div className="app-field relative flex items-end gap-1.5 rounded-2xl p-1.5">

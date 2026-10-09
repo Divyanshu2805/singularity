@@ -58,7 +58,7 @@ class ChatAuthorizationTest {
     private static final long OTHER_PROJECT_ID = 43L;
     private static final long USER_ID = 7L;
 
-    private static final ChatServiceImpl CHAT_SERVICE = new ChatServiceImpl(null, null, null, null, null);
+    private static final ChatServiceImpl CHAT_SERVICE = new ChatServiceImpl(null, null, null, null, null, null);
     private static final AiGenerationServiceImpl GENERATION_SERVICE = new AiGenerationServiceImpl(
             null, null, null, null, null, null, null, null);
     private static final SuggestionServiceImpl SUGGESTION_SERVICE = new SuggestionServiceImpl(
@@ -92,6 +92,7 @@ class ChatAuthorizationTest {
         return Stream.of(
                 arguments(CHAT_SERVICE, "getProjectChatHistory"),
                 arguments(CHAT_SERVICE, "getLastTurnChanges"),
+                arguments(CHAT_SERVICE, "clearChat"),
                 arguments(GENERATION_SERVICE, "findActiveGeneration"),
                 arguments(GENERATION_SERVICE, "watchActiveGeneration"));
     }

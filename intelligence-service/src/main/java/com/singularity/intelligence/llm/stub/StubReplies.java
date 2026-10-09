@@ -9,7 +9,8 @@ import java.util.regex.Pattern;
  * What the stub model answers, chosen from what it was asked.
  *
  * <p>Handles: telling which of the service's calls a request is - a build turn, the idea interview, the compiled
- * brief, a step lesson, the suggestions under a build, or a question about code - from its system prompt, and writing
+ * brief, a step lesson, a turn's big picture, a project's tour, a glossary entry, a step's task or the check of one,
+ * the suggestions under a build, or a question about code - from its system prompt, and writing
  * the reply that call's real parser expects: a small notes app in the build protocol on a first build, one further
  * component and an edit on the next request, a closing word on a repair or a continuation, a question for a request
  * outside the stack, and plain words for a question about the project.
@@ -35,6 +36,11 @@ public final class StubReplies {
         INTERVIEW,
         BRIEF,
         LESSON,
+        OVERVIEW,
+        TOUR,
+        GLOSSARY,
+        TASK,
+        TASK_CHECK,
         SUGGEST,
         ANSWER
     }
@@ -59,7 +65,12 @@ public final class StubReplies {
         if (prompt.startsWith(INTERVIEW_PROMPT_OPENING)) return Call.INTERVIEW;
         if (prompt.startsWith(BRIEF_PROMPT_OPENING)) return Call.BRIEF;
         if (prompt.startsWith(SUGGEST_PROMPT_OPENING)) return Call.SUGGEST;
-        if (prompt.equals(CodeInsightPrompts.lessonSystemPrompt().stripLeading())) return Call.LESSON;
+        if (prompt.startsWith(CodeInsightPrompts.LESSON_PROMPT_OPENING)) return Call.LESSON;
+        if (prompt.startsWith(CodeInsightPrompts.OVERVIEW_PROMPT_OPENING)) return Call.OVERVIEW;
+        if (prompt.startsWith(CodeInsightPrompts.TOUR_PROMPT_OPENING)) return Call.TOUR;
+        if (prompt.startsWith(CodeInsightPrompts.GLOSSARY_PROMPT_OPENING)) return Call.GLOSSARY;
+        if (prompt.startsWith(CodeInsightPrompts.TASK_PROMPT_OPENING)) return Call.TASK;
+        if (prompt.startsWith(CodeInsightPrompts.TASK_CHECK_PROMPT_OPENING)) return Call.TASK_CHECK;
         return Call.ANSWER;
     }
 
@@ -69,6 +80,11 @@ public final class StubReplies {
             case INTERVIEW -> INTERVIEW;
             case BRIEF -> BRIEF;
             case LESSON -> LESSON;
+            case OVERVIEW -> OVERVIEW;
+            case TOUR -> TOUR;
+            case GLOSSARY -> GLOSSARY;
+            case TASK -> TASK;
+            case TASK_CHECK -> TASK_CHECK;
             case SUGGEST -> SUGGESTIONS;
             case ANSWER -> ANSWER;
         };
@@ -302,7 +318,82 @@ public final class StubReplies {
 
             ### What happens next
 
-            The next step uses what this one set up.""";
+            The next step uses what this one set up.
+
+            ### Check yourself
+
+            Which line has to be there before anything else in the file can work?""";
+
+    private static final String OVERVIEW = """
+            You asked for an app, and this build made its first working version: one screen you can use straight away.
+
+            ### The pieces
+
+            - `src/pages/Index.tsx` - The screen itself: it holds what you typed and shows the list.
+
+            ### How it works
+
+            1. You type and press Enter in `src/pages/Index.tsx`.
+            2. The page remembers what you typed and draws the list again.
+
+            ### Ideas in this build
+
+            - **State** - what a page remembers between clicks; here it lives in `src/pages/Index.tsx`.""";
+
+    private static final String TOUR = """
+            This is a small app with one screen: you type something, press Enter, and it is added to a list that is
+            still there when you come back.
+
+            ### The files
+
+            - `src/lib/notes.ts` - Remembers the list between visits.
+            - `src/pages/Index.tsx` - The screen itself: it holds what you typed and shows the list.
+            - `src/App.tsx` - Decides which screen to show.
+
+            ### How a click travels
+
+            1. You type in the box on `src/pages/Index.tsx` and press Enter.
+            2. The page adds your words to its **state**, which is what it remembers between clicks.
+            3. `src/lib/notes.ts` saves the list in your browser.
+            4. The page draws the list again, with your new line at the end.
+
+            ### Where to change things
+
+            - To change the words on the screen, open `src/pages/Index.tsx`.
+            - To change how the list is saved, open `src/lib/notes.ts`.""";
+
+    private static final String GLOSSARY = """
+            Something a page remembers between clicks, such as what you typed.
+
+            ### Think of it like
+
+            A sticky note on the fridge: you can read it and rewrite it, and it is still there when you come back.
+
+            ### In your project
+
+            In `src/pages/Index.tsx` the page keeps the list this way:
+
+            ```tsx
+            const [notes, setNotes] = useState([]);
+            ```
+
+            `notes` is what the page remembers, and `setNotes` is how it changes it.""";
+
+    private static final String TASK = """
+            Change the heading the page shows to your own name.
+
+            ### L1 · Where to look
+
+            This is the line that holds the words shown at the top of the page.
+
+            ### Done when
+
+            That line no longer says what it said before.""";
+
+    private static final String TASK_CHECK = """
+            Done
+
+            That is the change the task asked for: the page now shows your words where it showed the old ones.""";
 
     private static final String SUGGESTIONS = """
             Add a search box that filters the notes

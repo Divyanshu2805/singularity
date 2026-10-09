@@ -49,7 +49,7 @@ Every call uses `spring.ai.openai.chat.options.model` unless its kind says other
 | `build` | Writing a build turn's reply, or carrying one on | — |
 | `repair` | Mending what a check of the written files found | — |
 | `interview` | The idea interview and its brief | — |
-| `lesson` | A step lesson | `reasoning-effort: low` |
+| `lesson` | A step lesson and a turn's big picture | `reasoning-effort: low` |
 | `explain` | An explanation or a question about code | — |
 | `suggest` | The next steps offered under a finished build | — |
 
@@ -81,6 +81,10 @@ spring.ai.openai.chat.options.model=<a Gemini model id from ai.google.dev/gemini
 ```
 
 Gemini 3 models reject the request that follows a tool call unless it carries the hidden "thought signature" they attached to the call, and the AI library does not send it back. `GeminiToolCallCompat` (intelligence-service) adds Google's documented bypass value to every tool call, but only while `base-url` points at Google. Without it every build that reads a file fails with `400 Function call is missing a thought_signature`, while the idea interview, which uses no tools, still works. Reasoning carried between tool steps may be slightly weaker than with real signatures.
+
+### Project size limits
+
+`project-files.max-files` (500), `max-file-bytes` (1 MB) and `max-project-bytes` (25 MB) in workspace-service's `application.yaml` bound how large one project may grow. They are plain settings, not secrets; a change that would pass one is refused before anything is stored, with a sentence the chat shows.
 
 ## Frontend
 

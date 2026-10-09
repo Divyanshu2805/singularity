@@ -37,6 +37,13 @@
 		<spring-ai.version>2.0.0-M1</spring-ai.version>
 		<graalvm.version>25.4.4.1.1</graalvm.version>
 		<babel-parser.version>7.29.9</babel-parser.version>
+		<jacoco.version>0.8.15</jacoco.version>
+		<!--
+			The share of lines the tests must run, per module, checked by `./mvnw verify` (not by `test`, so one
+			test run by name is never failed for what it did not cover). Each module sets its own floor a little
+			under what it measures today; a module that sets nothing is not held to one.
+		-->
+		<coverage.minimum.lines>0.00</coverage.minimum.lines>
 		<!-- 2025.1.2 ("Oakwood") is the first Spring Cloud release train compatible with Spring Boot 4.1.0. -->
 		<spring-cloud.version>2025.1.2</spring-cloud.version>
 		<!--
@@ -170,6 +177,55 @@
 				</plugin>
 			</plugins>
 		</pluginManagement>
+		<plugins>
+			<!--
+				Coverage for every module: the agent rides along with the tests, the report is written to
+				target/site/jacoco after them, and `verify` fails a module that has fallen under its floor.
+				Passing -DargLine on the command line (the build benchmark does) replaces the agent, and that
+				run simply writes no report.
+			-->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>${jacoco.version}</version>
+				<executions>
+					<execution>
+						<id>coverage-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>coverage-report</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>coverage-check</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>LINE</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>${coverage.minimum.lines}</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
 	</build>
 
 </project>

@@ -3,11 +3,15 @@
  *
  * Handles: rendering saved and streaming turns, revealing a streamed answer at a readable pace, the scroll rail down
  * the side, the composer with its teaching-mode toggle and example prompts, the usage meter above it, retrying an
- * unfinished turn, the next steps suggested under a finished build, exporting the conversation, and the quota banner
- * that replaces the composer once the allowance is spent. The suggested next steps are the same cards the empty
- * conversation offers (.prompt-card), and like those they put their text in the composer to be edited or sent, not
- * straight into the conversation - they were first drawn as plain pills, which neither lit on hover nor looked
- * like anything else on the screen.
+ * unfinished turn, exporting the conversation, and the quota banner that replaces the composer once the allowance
+ * is spent. Three suggested next steps used to be offered as cards under every finished build; the owner had them
+ * taken out, and nothing is asked of the model for them any more.
+ *
+ * The chat follows a reply to its last line while one is being written, by keeping itself at the bottom whenever its
+ * content grows. Opening something in a finished turn grows the content too - a lesson, the thought process, the
+ * build card - and the chat used to follow that growth, so a lesson opened on the newest turn was shown from its
+ * last line. A press on anything that opens now lets go of the bottom
+ * first, so what was opened is read from where it starts; sending a message or pressing "latest" takes hold again.
  *
  * An assistant turn carries no text of its own once saved - its events are the record - so the raw text is only used
  * while one is still streaming.
@@ -21,6 +25,9 @@
  * empty, failed, stopped or cut short by the daily allowance - and that record travels with the saved turn, so the
  * offer is still there after a reload. It is not offered while the quota banner is up: a retry the server would
  * refuse is not an offer.
+ * Undo is offered on every reply whose files were saved, for as long as the server recorded which revision that was
+ * (lib/revisions, canUndoTurn): it puts the project back to how it stood just before that reply, after asking. On the
+ * newest reply it is always showing; on older ones it appears with the row's other actions.
  * While a turn is in progress the line under it says what the server is doing between pieces of the answer (reading
  * files, carrying on a reply that stopped early, saving), since those stretches used to be a bare "Working".
  *
@@ -54,10 +61,13 @@ import { Button } from "@/components/ui/button";
 import { findSafeEnd, findVisibleRanges, useStreamParser } from "@/hooks/use-stream-parser";
 import { useSmoothStream } from "@/hooks/use-smooth-stream";
 import { AssistantError, AssistantEvents, type StepToExplain } from "./ChatEventRenderer";
+import type { LessonQuestion } from "@/lib/lesson";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { PromptModeMenu } from "./PromptModeMenu";
 import { MessageActions } from "./MessageActions";
 import { assistantTurnText } from "@/lib/chat-export";
+import { canUndoTurn } from "@/lib/revisions";
+import { turnEndNote } from "@/lib/stops";
 
 import { ChatScrollRail } from "./ChatScrollRail";
 import { messageLabel } from "@/lib/chat-rail";
@@ -101,18 +111,19 @@ interface ChatPanelProps {
   isStreaming: boolean;
   isLoading?: boolean;
   readOnly?: boolean;
-  quotaBlock?: { message: string; resetsIn: string; onUpgrade: () => void } | null;
+  quotaBlock?: { message: string; detail: string; onUpgrade: () => void } | null;
   usageMeter?: ReactNode;
   onOpenFile?: (path: string, isFromCurrentChat: boolean, target?: CodeTarget) => void;
   sharedWith?: SharedProjectInfo | null;
   onBrowseCode?: () => void;
   onStop?: () => void;
   onRetry?: () => void;
+  onUndoTurn?: (message: ChatMessage) => void;
   onExplainStep?: (step: StepToExplain) => void;
+  onAskAbout?: (ask: LessonQuestion) => void;
   teachingMode?: boolean;
   projectId?: string;
   onTeachingModeChange?: (enabled: boolean) => void;
-  suggestions?: readonly string[];
 }
 
 function useIsIdle(signal: unknown, delayMs: number, enabled: boolean) {
@@ -149,11 +160,12 @@ export function ChatPanel({
   readOnly,
   onStop,
   onRetry,
+  onUndoTurn,
   onOpenFile,
   sharedWith,
   onBrowseCode,
   onExplainStep,
-  suggestions = [],
+  onAskAbout,
   teachingMode,
   projectId,
   onTeachingModeChange,
@@ -222,6 +234,12 @@ export function ChatPanel({
     if (!isJumpScrollingRef.current) {
       activeJumpRef.current = null;
       setJumpPosition(isPinnedRef.current ? userMessageIds.length : nearestUserMessageIndex() + 1);
+    }
+  };
+
+  const holdWhenSomethingIsOpened = (event: { target: EventTarget }) => {
+    if (event.target instanceof Element && event.target.closest("[aria-expanded]")) {
+      isPinnedRef.current = false;
     }
   };
 
@@ -362,7 +380,7 @@ export function ChatPanel({
   return (
     <div className="app-surface flex h-full flex-col">
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto">
+        <div ref={scrollRef} onScroll={handleScroll} onClickCapture={holdWhenSomethingIsOpened} className="h-full overflow-y-auto">
           {isLoading ? (
             <div className="flex h-full flex-col items-center justify-center gap-3">
               <OrbitSpinner className="h-6 w-6" label="Loading the conversation" />
@@ -390,6 +408,8 @@ export function ChatPanel({
                     message={message}
                     isStreaming={isStreaming && !!message.isStreaming}
                     onRetry={!readOnly && !isStreaming && !quotaBlock && message.id === currentChatMessageId ? onRetry : undefined}
+                    onUndo={!readOnly && !isStreaming && onUndoTurn && canUndoTurn(message) ? () => onUndoTurn(message) : undefined}
+                    isNewest={message.id === messages[messages.length - 1]?.id}
                     onAnswer={
                       !readOnly && !isStreaming && !quotaBlock && message.id === messages[messages.length - 1]?.id
                         ? onSendMessage
@@ -399,25 +419,11 @@ export function ChatPanel({
                       onOpenFile ? (path, target) => onOpenFile(path, message.id === currentChatMessageId, target) : undefined
                     }
                     onExplainStep={onExplainStep}
+                    onAskAbout={onAskAbout}
                     teaching={!!message.teaching}
                     projectId={projectId}
                   />
                 )
-              )}
-              {suggestions.length > 0 && !readOnly && !isStreaming && !quotaBlock && (
-                <ul aria-label="Suggested next steps" className="flex w-full max-w-[26rem] flex-col gap-2">
-                  {suggestions.map((suggestion, index) => (
-                    <li key={suggestion} className="app-rise" style={{ "--i": index } as CSSProperties}>
-                      <button type="button" onClick={() => applySuggestion(suggestion)} className="prompt-card">
-                        <span aria-hidden="true" className="prompt-card-icon">
-                          <Sparkles className="h-3.5 w-3.5" />
-                        </span>
-                        <span className="min-w-0 flex-1 py-1 leading-snug">{suggestion}</span>
-                        <ArrowUpRight aria-hidden="true" className="prompt-card-arrow h-3.5 w-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
               )}
             </div>
           )}
@@ -450,9 +456,7 @@ export function ChatPanel({
               <Zap className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-foreground">{quotaBlock.message}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Your allowance refills in {quotaBlock.resetsIn}.
-                </p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{quotaBlock.detail}</p>
               </div>
               <Button size="sm" className="h-7 shrink-0 px-2.5 text-xs" onClick={quotaBlock.onUpgrade}>
                 Upgrade
@@ -460,7 +464,7 @@ export function ChatPanel({
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="app-glass app-prompt group relative rounded-[20px] p-2.5">
+          <form onSubmit={handleSubmit} data-guide="chat" className="app-glass app-prompt group relative rounded-[20px] p-2.5">
             <div className="flex items-start gap-1">
               <span
                 aria-hidden="true"
@@ -695,8 +699,11 @@ function AssistantMessage({
   isStreaming,
   onOpenFile,
   onRetry,
+  onUndo,
+  isNewest,
   onAnswer,
   onExplainStep,
+  onAskAbout,
   teaching,
   projectId,
 }: {
@@ -704,8 +711,11 @@ function AssistantMessage({
   isStreaming: boolean;
   onOpenFile?: (path: string, target?: CodeTarget) => void;
   onRetry?: () => void;
+  onUndo?: () => void;
+  isNewest?: boolean;
   onAnswer?: (answer: string) => void;
   onExplainStep?: (step: StepToExplain) => void;
+  onAskAbout?: (ask: LessonQuestion) => void;
   teaching?: boolean;
   projectId?: string;
 }) {
@@ -736,27 +746,18 @@ function AssistantMessage({
         onOpenFile={onOpenFile}
         onAnswer={isDone ? onAnswer : undefined}
         onExplainStep={isDone ? onExplainStep : undefined}
+        onAskAbout={isDone ? onAskAbout : undefined}
         teaching={teaching}
         projectId={projectId}
+        turnId={message.turnId}
+        overview={message.overview}
       />
       {message.error && <AssistantError message={message.error} />}
       {isEmptyAnswer && <AssistantError message="The model returned no answer, so nothing was changed" />}
       {isUnrecorded && <AssistantError message="Its chat record wasn't saved, though any files it wrote were" />}
       {canRetry && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>
-            {message.wasStopped || message.outcome === "STOPPED"
-              ? "You stopped this answer."
-              : message.notSent
-                ? "Your message wasn't sent. Retry it, or use Edit on it to change it first."
-                : message.outcome === "OUT_OF_BUDGET"
-                  ? "Today's AI allowance ran out before this finished."
-                  : message.outcome === "INCOMPLETE"
-                  ? "Part of this plan wasn't written."
-                  : message.outcome === "NOT_SAVED"
-                    ? "These changes weren't saved."
-                    : "This answer didn't finish."}
-          </span>
+          <span>{turnEndNote(message)}</span>
           <button
             type="button"
             onClick={onRetry}
@@ -772,6 +773,8 @@ function AssistantMessage({
         <MessageActions
           at={message.createdAt}
           onCopy={() => assistantTurnText(events, message.content, message.error)}
+          onUndo={onUndo}
+          pinned={!!onUndo && isNewest}
           className="-mt-1.5"
         />
       )}

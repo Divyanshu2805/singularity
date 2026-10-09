@@ -1,8 +1,13 @@
 /**
  * The Share button, with collaborator avatars, plus its panel.
  *
- * Handles: listing members and their roles, inviting someone by email, changing a role and removing a member - with
- * the controls hidden for a caller who cannot manage members.
+ * Handles: listing members and their roles, inviting someone by email, the invitations nobody has answered yet with
+ * a way to withdraw each, changing a role and removing a member - with the controls hidden for a caller who cannot
+ * manage members.
+ *
+ * An invitation gives no access until the person accepts it from their own dashboard, so an invited address is listed
+ * apart from the people with access, by address only: the server sends no name for it and says the same thing
+ * whether or not the address has an account. Only the owner is sent open invitations at all.
  *
  * The Share button is the app's quiet outline button (the people icon lifts on hover), and the panel is the app's
  * matte glass: a Fraunces heading, the invite email in the app's matte well with its access picker folded into it,
@@ -25,7 +30,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, getUserInfo } from "@/lib/api";
-import { ProjectMember, ProjectRole } from "@/lib/types";
+import { PendingInvite, ProjectMember, ProjectRole } from "@/lib/types";
+import { roleOffer, type ProjectPeople } from "@/lib/members";
 import { useToast } from "@/hooks/use-toast";
 import { useGlideHighlight } from "@/hooks/use-glide-highlight";
 import { cn, generateGradient } from "@/lib/utils";
@@ -106,6 +112,8 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
     const { toast } = useToast();
     const [isOpen, setIsOpen] = useState(false);
     const [members, setMembers] = useState<ProjectMember[]>([]);
+    const [invites, setInvites] = useState<PendingInvite[]>([]);
+    const [withdrawingId, setWithdrawingId] = useState<number | null>(null);
     const [isLoadingMembers, setIsLoadingMembers] = useState(true);
     const [inviteEmail, setInviteEmail] = useState("");
     const [inviteError, setInviteError] = useState<string | null>(null);
@@ -117,17 +125,22 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
     const inviteInputRef = useRef<HTMLInputElement>(null);
     const currentUserId = getUserInfo()?.id;
 
+    const showPeople = (people: ProjectPeople) => {
+        setMembers(people.members);
+        setInvites(people.invites);
+    };
+
     const loadMembers = () =>
-        api.getProjectMembers(projectId)
-            .then(setMembers)
+        api.getProjectPeople(projectId)
+            .then(showPeople)
             .catch((error) => console.error("Failed to load members", error));
 
     useEffect(() => {
         let isCancelled = false;
         if (members.length === 0) setIsLoadingMembers(true);
-        api.getProjectMembers(projectId)
-            .then((data) => {
-                if (!isCancelled) setMembers(data);
+        api.getProjectPeople(projectId)
+            .then((people) => {
+                if (!isCancelled) showPeople(people);
             })
             .catch((error) => console.error("Failed to load members", error))
             .finally(() => {
@@ -176,7 +189,10 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
         setIsInviting(true);
         try {
             await api.inviteMember(projectId, email, inviteRole);
-            toast({ title: "Invite sent", description: `${email} can now ${inviteRole === "VIEWER" ? "view" : "edit"} this project.` });
+            toast({
+                title: "Invitation saved",
+                description: `When ${email} signs in with that address they can accept it and ${roleOffer(inviteRole)} this project.`,
+            });
             setInviteEmail("");
             loadMembers();
             inviteInputRef.current?.focus();
@@ -195,6 +211,18 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
         } catch (error) {
             setMembers(previous);
             toast({ title: "Couldn't update access", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+        }
+    };
+
+    const handleWithdraw = async (inviteId: number) => {
+        setWithdrawingId(inviteId);
+        try {
+            await api.withdrawInvite(projectId, inviteId);
+            setInvites((prev) => prev.filter((invite) => invite.inviteId !== inviteId));
+        } catch (error) {
+            toast({ title: "Couldn't withdraw the invitation", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+        } finally {
+            setWithdrawingId(null);
         }
     };
 
@@ -445,6 +473,39 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
                         )}
                     </PeopleList>
                 </div>
+
+                {invites.length > 0 && (
+                    <div className="border-t border-white/[0.06] px-2 pb-1.5 pt-2.5">
+                        <div className="flex items-center justify-between px-2 pb-1.5">
+                            <p className="sidebar-label">Invited, not accepted yet</p>
+                            <span className="rounded-full bg-white/[0.06] px-1.5 text-[10px] font-medium tabular-nums text-muted-foreground">{invites.length}</span>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto">
+                            {invites.map((invite) => (
+                                <div key={invite.inviteId} className="flex items-center gap-3 rounded-lg px-2 py-2">
+                                    <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.06]">
+                                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium">{invite.email}</p>
+                                        <p className="truncate text-xs text-muted-foreground">Can {roleOffer(invite.role)} once they accept</p>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleWithdraw(invite.inviteId)}
+                                        disabled={withdrawingId === invite.inviteId}
+                                        aria-label={`Withdraw the invitation to ${invite.email}`}
+                                        className="h-7 shrink-0 gap-1 px-2 text-xs [&_svg]:size-3.5"
+                                    >
+                                        {withdrawingId === invite.inviteId ? <OrbitSpinner className="h-3.5 w-3.5" /> : <UserX />}
+                                        Withdraw
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <div className="flex items-center gap-2.5 border-t border-white/[0.06] bg-black/15 px-4 py-2.5">
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05]">

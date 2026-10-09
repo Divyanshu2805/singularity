@@ -11,12 +11,13 @@ If you are new to the codebase, read these in order:
    - [Authentication](flows/authentication.md) — sign-in, sessions, and how every service trusts them.
    - [AI generation](flows/ai-generation.md) — a chat prompt becoming committed project files.
    - [Live preview](flows/live-preview.md) — a project running in its own Kubernetes pod.
+   - [Publishing](flows/publishing.md) — a production build of one revision, served at a public link.
 
 ## Reference
 
 | Page | Covers |
 |---|---|
-| [Security model](security-model.md) | Tenancy, sessions and CSRF, the internal API boundary, untrusted-code isolation, preview access tokens, AI prompt boundaries |
+| [Security model](security-model.md) | Tenancy, sessions and CSRF, the internal API boundary, untrusted-code isolation, preview access tokens, published apps and the shared domain, AI prompt boundaries |
 | [File revisions](file-revisions.md) | How every file write is published as an atomic, restorable revision |
 | [Cross-cutting concerns](cross-cutting-concerns.md) | Streaming, errors, rate limiting, schema ownership, configuration, observability, deployment topology |
 | [Key abstractions](key-abstractions.md) | The handful of domain concepts worth knowing by name |

@@ -1,5 +1,6 @@
 package com.singularity.intelligence.llm;
 
+import com.singularity.intelligence.enums.LearnerLevel;
 import com.singularity.intelligence.llm.CodeInsightPrompts.LessonStep;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -81,5 +82,54 @@ class CodeInsightPromptsLessonTest {
                 .contains("Explain the change, and only the change.").contains("as one story")
                 .contains("you need no tool").contains("READ-ONLY");
         assertThat(prompt).doesNotContain("<file").doesNotContain("<todo").doesNotContain("<learn").doesNotContain("read_files");
+        assertThat(prompt).contains("### Check yourself").contains("exactly one question");
+    }
+
+    @Test
+    @DisplayName("every prompt is written for the reader's level, and for someone new to code when none is given")
+    void everyPromptNamesItsReader() {
+        assertThat(CodeInsightPrompts.lessonSystemPrompt(null)).isEqualTo(CodeInsightPrompts.lessonSystemPrompt(LearnerLevel.NEW))
+                .contains("someone who has never written code");
+        assertThat(CodeInsightPrompts.lessonSystemPrompt(LearnerLevel.DEVELOPER)).contains("a working developer")
+                .doesNotContain("someone who has never written code");
+        assertThat(CodeInsightPrompts.explainSystemPrompt(LearnerLevel.SOME)).contains("written a little code");
+        assertThat(CodeInsightPrompts.askSystemPrompt(LearnerLevel.SOME)).contains("written a little code");
+        assertThat(CodeInsightPrompts.overviewSystemPrompt(LearnerLevel.NEW)).contains("someone who has never written code");
+    }
+
+    @Test
+    @DisplayName("the overview prompt reads through the tool, is given no write protocol, and asks for its four sections")
+    void theOverviewPromptIsReadOnlyAndShaped() {
+        String prompt = CodeInsightPrompts.overviewSystemPrompt(null);
+
+        assertThat(prompt).startsWith(CodeInsightPrompts.OVERVIEW_PROMPT_OPENING)
+                .contains("read_files").contains("ONE call").contains("READ-ONLY")
+                .contains("### The pieces").contains("### How it works").contains("### Ideas in this build")
+                .doesNotContain("Where to start");
+        assertThat(prompt).doesNotContain("<file").doesNotContain("<todo").doesNotContain("<learn").doesNotContain("<edit");
+        assertThat(CodeInsightPrompts.lessonSystemPrompt(null)).startsWith(CodeInsightPrompts.LESSON_PROMPT_OPENING);
+    }
+
+    @Test
+    @DisplayName("the overview's message lists what the turn wrote by path, with a bound on how many")
+    void theOverviewBlockListsPathsOnly() {
+        List<CodeInsightPrompts.OverviewFile> files = new java.util.ArrayList<>();
+        for (int i = 0; i < 45; i++) {
+            files.add(new CodeInsightPrompts.OverviewFile("src/File" + i + ".tsx", i % 2 == 0, false, 1));
+        }
+
+        String block = CodeInsightPrompts.overviewBlock("a notes app", " ", List.of(), files);
+
+        assertThat(block).startsWith("What the person asked for:\na notes app")
+                .doesNotContain("What the build said")
+                .contains("- src/File0.tsx (new, 1 line)").contains("- src/File39.tsx (changed, 1 line)")
+                .doesNotContain("src/File40.tsx").endsWith("(and 5 more not listed)");
+    }
+
+    @Test
+    @DisplayName("the ask prompt says how a syntax question, a term and the reader's own answer are each answered")
+    void theAskPromptCoversTheLessonQuestions() {
+        assertThat(CodeInsightPrompts.askSystemPrompt()).contains("SYNTAX").contains("TERM").contains("OWN ANSWER")
+                .contains("READ-ONLY");
     }
 }

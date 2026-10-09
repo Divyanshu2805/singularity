@@ -5,6 +5,8 @@ import com.singularity.workspace.dto.project.CreateProjectFromPromptRequest;
 import com.singularity.workspace.dto.project.ProjectRequest;
 import com.singularity.workspace.dto.project.ProjectResponse;
 import com.singularity.workspace.dto.project.ProjectSummaryResponse;
+import com.singularity.workspace.dto.member.InvitationResponse;
+import com.singularity.workspace.service.ProjectMemberService;
 import com.singularity.workspace.service.ProjectService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -21,8 +23,11 @@ import java.util.List;
  * renaming, deleting, forking, retrying a failed starter-template initialisation, and the per-member pin and star
  * flags.
  *
- * <p>Deleting means different things to different people: the owner deletes the project for everyone, an editor only
- * removes it from their own list.
+ * <p>Also lists the invitations addressed to the caller, across every project: that list belongs to no one project,
+ * so it lives here and not under a project's members.
+ *
+ * <p>Deleting means different things to different people: the owner deletes the project for everyone, anyone else
+ * only removes it from their own list.
  */
 @RestController
 @RequestMapping("/api/projects")
@@ -30,10 +35,16 @@ import java.util.List;
 public class ProjectController {
 
     private final ProjectService projectService;
+    private final ProjectMemberService projectMemberService;
 
     @GetMapping
     public ResponseEntity<List<ProjectSummaryResponse>> getMyProjects() {
         return ResponseEntity.ok(projectService.getUserProjects());
+    }
+
+    @GetMapping("/invitations")
+    public ResponseEntity<List<InvitationResponse>> getMyInvitations() {
+        return ResponseEntity.ok(projectMemberService.getMyInvitations());
     }
 
     @GetMapping("/{id}")

@@ -1,5 +1,6 @@
 package com.singularity.intelligence.llm.tools;
 
+import com.singularity.intelligence.llm.FileFence;
 import com.singularity.intelligence.service.ProjectFileReader;
 import feign.FeignException;
 import lombok.extern.slf4j.Slf4j;
@@ -191,7 +192,7 @@ public class CodeGenerationTools {
 
                 result.add(String.format(
                         "--- START OF FILE: %s ---\n%s\n--- END OF FILE ---",
-                        cleanPath, content
+                        cleanPath, FileFence.guard(content)
                 ));
             } catch (FeignException.NotFound e) {
                 result.add(String.format(

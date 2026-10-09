@@ -28,6 +28,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 
@@ -50,6 +51,12 @@ import java.util.Optional;
  * long after the person actually signed in. Linking is refused when the matching local account already has a
  * different Firebase uid, so two identities can never merge silently. The eviction broadcast happens after the
  * revocation is recorded, so a service that misses its cache finds the session already revoked.
+ *
+ * <p>A first sign-in can arrive twice at once - two tabs, or a client retrying - and both requests find no account
+ * and try to create one. The second insert fails on the unique Firebase uid, and used to surface as a 500 on a
+ * sign-in that had in fact worked. It is now read as what it is: the account exists, so the loser of the race signs
+ * in to it as an existing user. A unique violation that is not that race (the uid still resolves to nobody) is
+ * rethrown unchanged.
  *
  * <p>Deliberately not transactional: the Firebase round trips would hold a database connection for their whole
  * duration, and the one write in account resolution is a single save, atomic on its own.
@@ -152,11 +159,18 @@ public class SessionServiceImpl implements SessionService {
             return new AccountResolution(userRepository.save(user), Outcome.LINKED);
         }
 
-        User created = userRepository.save(User.builder()
-                .username(identity.email())
-                .name(displayName(identity))
-                .firebaseUid(identity.uid())
-                .build());
+        User created;
+        try {
+            created = userRepository.save(User.builder()
+                    .username(identity.email())
+                    .name(displayName(identity))
+                    .firebaseUid(identity.uid())
+                    .build());
+        } catch (DataIntegrityViolationException ex) {
+            User winner = userRepository.findByFirebaseUid(identity.uid()).orElseThrow(() -> ex);
+            log.info("User {} was created by a simultaneous sign-in; using it", winner.getId());
+            return new AccountResolution(winner, Outcome.EXISTING);
+        }
         log.info("Created user {} from Firebase sign-in ({})", created.getId(), identity.signInProvider());
         return new AccountResolution(created, Outcome.CREATED);
     }

@@ -190,6 +190,11 @@ class RevisionPublisherIntegrationTest {
     static class TestBeans {
 
         @Bean
+        com.singularity.workspace.config.ProjectFileLimits projectFileLimits() {
+            return new com.singularity.workspace.config.ProjectFileLimits(500, 1_048_576, 26_214_400);
+        }
+
+        @Bean
         MinioClient minioClient() {
             return MinioClient.builder()
                     .endpoint(MINIO.getS3URL())

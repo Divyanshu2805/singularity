@@ -20,6 +20,11 @@
 		so a consuming service picks up its beans without needing to widen its own @ComponentScan.
 	</description>
 
+	<properties>
+		<!-- The least of this module's lines the tests must run; `./mvnw verify` fails under it (root pom). -->
+		<coverage.minimum.lines>0.27</coverage.minimum.lines>
+	</properties>
+
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
