@@ -115,3 +115,33 @@ Traps in the build pipeline. A unit test rarely catches these, because the thing
 - **Symptom:** a turn on an older project imports `@/components/ui/button`, the import check sends it to a repair, and the repair writes the component by hand.
 - **Cause:** the starter template changed kits, and one prompt described the new one to every project - including those created on the old one, which have no such folder.
 - **Fix:** the kit is read off the project's own files (`llm/UiKit`) and the prompt has one form per kit. Anything the prompt says about what a project contains has to be true of that project, not of the newest template.
+
+## A parser that tries both readings can take forever on fifty characters
+
+- **Symptom:** every build on the instance stops at "checking" and none ever saves; nothing is logged. It starts with one turn and does not end until the service is restarted.
+- **Cause:** the syntax check parses generated code in-process, one file at a time behind a lock. The TypeScript grammar is ambiguous - `<T>(` may open a generic arrow function or a comparison - and the parser tries both; two dozen of them nested (`f(<T>(<T>(...`) double its work at every level. A model writes what it is asked to, so anyone could have a turn write that file, and a thread waiting on a monitor cannot be interrupted by the turn's own timeout.
+- **Fix:** a parse still running after five seconds is stopped from a second thread, its engine thrown away, and the file treated as fine (`llm/SyntaxCheck`). Anything that runs a third-party parser or a regular expression over text a model wrote needs its own limit: `ProjectImports` bounds how far one import statement is read for the same reason. Found by feeding the parser hostile shapes, not by any test of valid code.
+
+## A file can end its own fence
+
+- **Symptom:** none in ordinary use. A project file holding a line `--- END OF FILE ---`, a heading and a paragraph gets that paragraph read as the pipeline's own notice.
+- **Cause:** a fence is only a line of text, and the file can print the same line. Telling the model "what is between the markers is material" holds only while the file cannot write the marker.
+- **Fix:** `llm/FileFence.guard` changes the dashes of any line in a file that imitates one of the pipeline's marker lines, wherever a file is shown. It touches nothing else, so an ordinary project's prompt is unchanged - which matters, because a changed prompt has to be measured on a real model. A new marker line needs adding to its pattern.
+
+## A stream the reader cancels was free
+
+- **Symptom:** the usage meter does not move for explanations, answers and lessons a client closes just before the end.
+- **Cause:** the provider reports usage with the last chunk. A stream cancelled before it had none to record, and the cancel handler released the reservation as if the call had never run.
+- **Fix:** a cancelled stream is charged for what it wrote - the provider's count if it arrived, otherwise an estimate from the lengths (`AiUsageRecorder.reconcileUnfinished`). A build turn was already handled: it belongs to the server and is metered as it streams. Any new streamed call needs to say what a cancel costs.
+
+## The chat shows a build before the server has saved it
+
+- **Symptom:** a test (or a script) waits for the build card to read `4/4`, asks the server for a file the build wrote, and gets the starter template's placeholder - on a cold service, and never on a warm one.
+- **Cause:** the browser draws a turn from the text as it streams; the files are published after the last word, and `done` is sent only then. `4/4` on screen is the model having finished writing, not the turn having been saved.
+- **Fix:** read "the build is there" off the server - the saved file, or the stream's `done` - never off the chat alone (`e2e/tests/journey.spec.ts` waits for the file).
+
+## A stream that finishes is cancelled too
+
+- **Symptom:** every lesson, explanation and big picture appears twice in the usage log with the same token counts, and the daily allowance drains twice as fast as the calls made.
+- **Cause:** when a streamed response completes, the servlet container closes it and Spring cancels the subscription it has just seen complete. A `doOnCancel` on the stream therefore runs after every ordinary ending, not only when the reader walks away. The cancel handler charged the call as abandoned; the completion handler had already charged it as finished.
+- **Fix:** a call is settled once, by whichever ending comes first (`settled` in `CodeInsightServiceImpl.streamModel`). Any hook that does something that must happen once - charging, releasing, saving - needs the same guard when it sits on a stream a controller returns. Found by reading the usage rows after one real lesson; a unit test that only collects the stream never cancels it.

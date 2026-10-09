@@ -16,6 +16,9 @@ A task-oriented index into the code. Paths are relative to each service's `src/m
 |---|---|
 | Change how generated files are persisted | workspace `service/impl/RevisionPublisherImpl.java` and `RevisionManifestStore.java`, the `publishRevision` endpoint on `InternalWorkspaceController`; intelligence `service/impl/TurnRecorder.java` |
 | Change how files are read | workspace `service/impl/ProjectFileServiceImpl.java` |
+| Change what a restore or an Undo puts back | workspace `service/impl/RevisionServiceImpl.java` (`stateFor`), `repository/ProjectFileRevisionRepository.java` |
+| Change saving a file by hand | workspace `service/impl/FileEditServiceImpl.java`, `controller/FileController.java`; frontend `components/CodePanel.tsx` |
+| Change the History panel, Undo or their wording | frontend `components/HistoryPanel.tsx`, `components/RestoreDialog.tsx`, `lib/revisions.ts` |
 | Add a pre-publish check (lint, tests, …) | Implement workspace `service/RevisionValidator.java` as a `@Component`, like `service/impl/RevisionBuildValidator.java` |
 | Change or enable the build validation | `revision-validation.*` in workspace-service's `application.yaml` — no code change needed for a different check command |
 | Change which file paths are allowed | workspace `util/ProjectFilePath.java` |
@@ -38,6 +41,22 @@ A task-oriented index into the code. Paths are relative to each service's `src/m
 | Change how sessions or rate limits work | `common-lib` `security/` (shared by every service); account-service's `service/impl/SessionServiceImpl.java` and `security/LocalSessionAuthenticator.java` for sign-in and sign-out |
 | Change the internal-API guard | `common-lib` `security/InternalServiceAuthFilter.java`, `ServiceSecurityConfig`, and account-service's `WebSecurityConfig` |
 
+## Publishing
+
+| I want to... | Change |
+|---|---|
+| Change who may publish, or how many apps a plan keeps live | workspace `ProjectRole` / `ProjectPermission` **and** the wire copy in `common-lib` `dto/ProjectRole.java`; `SecurityExpressions.canPublishProject`; `publishing.plan-limits` in `application.yaml`; `PublishAuthorizationTest`, `PublishServiceImplTest` |
+| Change what a link name may be | workspace `util/PublishedSlug.java` **and** `proxy/published.js` (`isValidSlug`) **and** `frontend/src/lib/publish.ts` (`slugProblem`) - the three must agree; each has its own test |
+| Change how a build runs (commands, time limits, limits on size) | workspace `service/impl/PublishBuilder.java`, `publishing.*` in `application.yaml` |
+| Change the sentence or the cause given for a failed publish | workspace `util/PublishFailureExplainer.java` (`PublishFailureKind`); the advice per kind is `failureAdvice` in `frontend/src/lib/publish.ts` |
+| Change how a published app is served (paths, fallback, caching, types) | `proxy/published.js` (rules), `proxy/published-server.js` (the handler), `proxy/s3.js` (storage reads) |
+| Change the headers on a published page | `proxy/published.js` `securityHeaders` / `contentSecurityPolicy` - then the [security model](security-model.md#published-apps-and-the-shared-domain) |
+| Change what is stored for a build, or the storage layout | workspace `service/impl/PublishedStore.java` - the pointer's shape is a contract with `proxy/published.js`'s `parsePointer` |
+| Change what happens to an app when its project is deleted or it is unpublished | workspace `PublishServiceImpl.unpublish` / `takeDown`, called from `ProjectServiceImpl.softDelete`; `PublishSweeper` for the cleanup |
+| Change the Publish panel | frontend `components/PublishMenu.tsx`, `hooks/use-publish.ts`, `lib/publish.ts` |
+| Change the public page of a shared app, or fork | workspace `PublicAppServiceImpl`, `PublicAppController`; frontend `pages/SharedApp.tsx`; the anonymous path list is `app.security.public-get-paths` |
+| Change the real-cluster publish test | workspace `PublishPipelineIT`, `k8s/preview-test-cluster.sh` |
+
 ## Live previews
 
 | I want to… | Look at |
@@ -56,7 +75,8 @@ A task-oriented index into the code. Paths are relative to each service's `src/m
 
 | I want to… | Look at |
 |---|---|
-| Change chat rendering | `frontend/src/components/ChatEventRenderer.tsx` (the thought process, the build card and its lesson buttons), `frontend/src/lib/brief.ts` (how much of the person's own message is shown), `frontend/src/lib/project-chat-store.ts` (state) |
+| Change the project tour, the glossary or a lesson's "try changing this" task | Prompts: `intelligence-service/.../llm/CodeInsightPrompts.java` (`tourSystemPrompt`, `glossarySystemPrompt`, `taskSystemPrompt`, `taskCheckSystemPrompt`); service: `CodeInsightServiceImpl` (`streamTour`, `streamTerm`, `streamTask`, `streamTaskCheck`); storage: `ProjectTour`, `GlossaryEntry`, `ChatEvent.task`/`taskDone` (`V5__tour_glossary_task.sql`); the scripted replies: `llm/stub/StubReplies`; browser: `components/LearnPanel.tsx` (the panel), `lib/learn-panel-store.ts` (what it is open on), `lib/learn.ts` (reading a task and its verdict, cleaning a word), `lib/lesson-store.ts` (asking), and `TryChanging` in `components/ChatEventRenderer.tsx` |
+| Change chat rendering | `frontend/src/components/ChatEventRenderer.tsx` (the thought process, the build card with its big picture and lesson buttons; `frontend/src/lib/lesson.ts` reads what teaching mode wrote and words the questions sent to ExplainLLM), `frontend/src/lib/brief.ts` (how much of the person's own message is shown), `frontend/src/lib/project-chat-store.ts` (state) |
 | Change how a change to part of a file is found and applied, or what is checked before a turn is saved | `llm/FileEdits.java`, `llm/SyntaxCheck.java`, and `BuildTurn.repair` — and then run one real turn ([testing](../practices/testing.md#what-automated-tests-dont-cover)) |
 | Change what the model says or how much it builds | `llm/PromptUtils.java` — and then run one real turn ([testing](../practices/testing.md#what-automated-tests-dont-cover)) |
 | Change the starter template | The files under `workspace-service/src/main/resources/starter-templates/` and their `MANIFEST.txt`; `StarterTemplateSeeder` replaces changed files in storage on the next start. Keep `PromptUtils`' conventions in step with it |
@@ -65,7 +85,7 @@ A task-oriented index into the code. Paths are relative to each service's `src/m
 | Change what a turn is told about the conversation before it | intelligence `llm/ConversationMemory.java` |
 | Change the type-check of a turn's files in the preview pod | workspace `service/impl/CodeCheckServiceImpl.java` and `util/TypeCheckOutput.java`; the caller is intelligence `service/impl/PreviewCodeChecker.java`, used by `BuildTurn.inspect` |
 | Change the UI kit generated apps use | The starter template, the kit's section of `llm/PromptUtils.java` and `llm/UiKit.java` together; `KitPromptMatchesTemplateTest` fails if they disagree. The runner image is built from the template's `package.json` |
-| Change the suggested next steps | intelligence `llm/SuggestionPrompts.java`, `service/impl/SuggestionServiceImpl.java`; frontend `lib/project-chat-store.ts` and `components/ChatPanel.tsx` |
+| Change the suggested next steps | intelligence `llm/SuggestionPrompts.java`, `service/impl/SuggestionServiceImpl.java`. The frontend no longer calls or shows them |
 | Change the **Fix this** request for a preview error | frontend `lib/preview-fix.ts`, `components/RuntimeErrorAlert.tsx` |
 | Change what the scripted model answers | intelligence `llm/stub/StubReplies.java`; `StubBuildTurnTest` runs it through whole turns |
 | Change the benchmark's requests or how a turn is judged | intelligence `src/test/resources/bench/scenarios.json`, `service/impl/BuildBenchmark.java` (test code) |
