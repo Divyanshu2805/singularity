@@ -1,5 +1,6 @@
 package com.singularity.account.security;
 
+import com.singularity.common.security.EagerSecurityHeaders;
 import com.singularity.common.security.CsrfCookie;
 import com.singularity.common.security.InternalServiceAuthFilter;
 import com.singularity.common.security.RateLimitFilter;
@@ -69,7 +70,8 @@ public class WebSecurityConfig {
                         .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31_536_000))
                         .addHeaderWriter((request, response) -> response.setHeader("Permissions-Policy",
                                 "camera=(), microphone=(), geolocation=(), payment=(), usb=()"))
-                        .addHeaderWriter((request, response) -> response.setHeader("Cross-Origin-Opener-Policy", "same-origin")))
+                        .addHeaderWriter((request, response) -> response.setHeader("Cross-Origin-Opener-Policy", "same-origin"))
+                        .withObjectPostProcessor(EagerSecurityHeaders.beforeTheResponse()))
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()

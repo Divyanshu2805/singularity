@@ -66,6 +66,24 @@ class FullChainAccountAccessTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private java.util.List<org.springframework.security.web.SecurityFilterChain> securityChains;
+
+    @Test
+    @DisplayName("security headers are written before the handler runs, so a streamed response's own thread never shares them")
+    void securityHeadersAreWrittenBeforeTheHandlerRuns() {
+        java.util.List<org.springframework.security.web.header.HeaderWriterFilter> headerFilters = securityChains.stream()
+                .flatMap(chain -> chain.getFilters().stream())
+                .filter(org.springframework.security.web.header.HeaderWriterFilter.class::isInstance)
+                .map(org.springframework.security.web.header.HeaderWriterFilter.class::cast)
+                .toList();
+
+        assertThat(headerFilters).isNotEmpty();
+        assertThat(headerFilters).allSatisfy(filter -> assertThat(
+                org.springframework.test.util.ReflectionTestUtils.getField(filter, "shouldWriteHeadersEagerly"))
+                .isEqualTo(true));
+    }
+
     @MockitoBean
     private SessionService sessionService;
 
