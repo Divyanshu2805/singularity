@@ -26,6 +26,7 @@ Project-scoped endpoints require project `VIEW` (any member), except restart, wh
 | `failureKind` | On a `FAILED` preview: `INSTALL`, `DEV_SERVER`, `TIMEOUT`, `CAPACITY` or `PLATFORM`. Only `PLATFORM` is worth retrying without a change to the project. See [when a start fails](../architecture/flows/live-preview.md#when-a-start-fails). |
 | `queuePosition` | While waiting for a runner: the caller's place in the line, `1` being next. `null` otherwise. |
 | `syncState`, `syncDetail` | On a `RUNNING` preview: `UP_TO_DATE` when the runner has the project's current revision, `UPDATING` (with the step under way) while a newer one is being applied. `null` otherwise. |
+| `syncedRevisionId` | On a `RUNNING` preview: the file revision the runner's files were last brought up to, or `null` when it has only the files it started with. The panel uses it for one thing: a change of revision within a few seconds of the frame starting to load means the page may have read the old files, and it is loaded again. |
 
 ## Preview URLs
 

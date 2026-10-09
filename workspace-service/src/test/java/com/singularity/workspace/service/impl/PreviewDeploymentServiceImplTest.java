@@ -208,6 +208,7 @@ class PreviewDeploymentServiceImplTest {
 
         assertThat(response.syncState()).isEqualTo(PreviewSyncState.UP_TO_DATE);
         assertThat(response.syncDetail()).isNull();
+        assertThat(response.syncedRevisionId()).isEqualTo(31L);
     }
 
     @Test
@@ -222,6 +223,7 @@ class PreviewDeploymentServiceImplTest {
 
         assertThat(response.syncState()).isEqualTo(PreviewSyncState.UPDATING);
         assertThat(response.syncDetail()).isEqualTo("Applying your changes");
+        assertThat(response.syncedRevisionId()).isEqualTo(31L);
     }
 
     @Test

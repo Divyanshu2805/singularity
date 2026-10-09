@@ -9,11 +9,15 @@
  * or sending data anywhere this list does not name. Injected as a meta tag at build time only: the dev server relies
  * on inline scripts and a websocket that a real policy would block. A meta policy cannot set frame-ancestors, so when
  * deployed, serve this same policy as a response header and add that directive there.
+ *
+ * A build pointed at the Firebase Auth emulator (the browser journey test's, see src/lib/firebase.ts) may also
+ * connect to it - and only when the address is this machine's own, the same rule the app applies before using it.
  */
 export function buildContentSecurityPolicy(env: Record<string, string | undefined>): string {
   const apiOrigin = env.VITE_API_BASE_URL ? new URL(env.VITE_API_BASE_URL).origin : "";
   const authDomain = env.VITE_FIREBASE_AUTH_DOMAIN ? `https://${env.VITE_FIREBASE_AUTH_DOMAIN}` : "";
   const previewOrigins = env.VITE_CSP_FRAME_ORIGINS ?? "";
+  const authEmulator = localOrigin(env.VITE_FIREBASE_AUTH_EMULATOR_URL);
 
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
@@ -21,7 +25,7 @@ export function buildContentSecurityPolicy(env: Record<string, string | undefine
     "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
     "font-src": ["'self'", "https://fonts.gstatic.com"],
     "img-src": ["'self'", "data:", "https://lh3.googleusercontent.com"],
-    "connect-src": ["'self'", apiOrigin, "https://*.googleapis.com", "https://www.google.com/recaptcha/"],
+    "connect-src": ["'self'", apiOrigin, "https://*.googleapis.com", "https://www.google.com/recaptcha/", authEmulator],
     "frame-src": ["'self'", authDomain, "https://www.google.com/recaptcha/", "https://recaptcha.google.com/recaptcha/", previewOrigins],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
@@ -31,6 +35,17 @@ export function buildContentSecurityPolicy(env: Record<string, string | undefine
   return Object.entries(directives)
     .map(([name, sources]) => `${name} ${sources.filter(Boolean).join(" ")}`)
     .join("; ");
+}
+
+function localOrigin(raw: string | undefined): string {
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+    return local && url.protocol === "http:" ? url.origin : "";
+  } catch {
+    return "";
+  }
 }
 
 /**

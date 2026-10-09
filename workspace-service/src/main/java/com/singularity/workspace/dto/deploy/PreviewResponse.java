@@ -32,6 +32,7 @@ public record PreviewResponse(
         PreviewFailureKind failureKind,
         Integer queuePosition,
         PreviewSyncState syncState,
-        String syncDetail
+        String syncDetail,
+        Long syncedRevisionId
 ) {
 }

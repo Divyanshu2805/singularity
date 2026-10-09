@@ -13,10 +13,16 @@
  * Persistence is in-memory on purpose: Firebase's default keeps a refresh token in browser storage, where any script
  * on the page could read it. This app's own session is an httpOnly cookie instead, so the Firebase user is needed
  * only long enough to mint it.
+ *
+ * A build can be pointed at the Firebase Auth emulator with VITE_FIREBASE_AUTH_EMULATOR_URL, which is how the
+ * browser journey test signs in without a real Firebase project (e2e/). The address is used only when it is this
+ * machine's own - localhost or a loopback address - so no build can send sign-ins to another host by this route,
+ * whatever the variable says. Nothing that deploys sets it.
  */
 import { initializeApp, type FirebaseApp } from "firebase/app";
 import {
   browserPopupRedirectResolver,
+  connectAuthEmulator,
   GoogleAuthProvider,
   inMemoryPersistence,
   initializeAuth,
@@ -31,6 +37,17 @@ const config = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID as string | undefined,
 };
 
+export function authEmulatorUrl(raw: string | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+    return local && url.protocol === "http:" ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 
@@ -44,7 +61,12 @@ export function getFirebaseAuth(): Auth {
       persistence: inMemoryPersistence,
       popupRedirectResolver: browserPopupRedirectResolver,
     });
-    initializeRecaptchaConfig(auth).catch(() => undefined);
+    const emulator = authEmulatorUrl(import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_URL as string | undefined);
+    if (emulator) {
+      connectAuthEmulator(auth, emulator, { disableWarnings: true });
+    } else {
+      initializeRecaptchaConfig(auth).catch(() => undefined);
+    }
   }
   return auth;
 }

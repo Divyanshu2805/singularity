@@ -114,6 +114,7 @@ import {
   autoStartKey,
   describePreviewStartFailure,
   holdsPreviewErrors,
+  frameMissedAnUpdate,
   formatStopsIn,
   isWaitingForRunner,
   nextPreviewDevice,
@@ -225,11 +226,27 @@ export function PreviewPanel({
     setConsoleLines([]);
   }, [projectId]);
 
+  const syncedRevisionRef = useRef(preview?.syncedRevisionId ?? null);
+  syncedRevisionRef.current = preview?.syncedRevisionId ?? null;
+  const frameLoadRef = useRef({ since: Date.now(), revision: syncedRevisionRef.current });
+
   useEffect(() => {
     dispatchFrame({ type: "mounted" });
     setPlace(ROOT_PLACE);
     heldErrorRef.current = null;
+    frameLoadRef.current = { since: Date.now(), revision: syncedRevisionRef.current };
   }, [preview?.id, preview?.readyAt, reloadKey]);
+
+  useEffect(() => {
+    if (preview?.status !== "RUNNING") return;
+    const missed = frameMissedAnUpdate({
+      loadingSince: frameLoadRef.current.since,
+      revisionAtLoad: frameLoadRef.current.revision,
+      revisionNow: preview.syncedRevisionId,
+      now: Date.now(),
+    });
+    if (missed) setReloadKey((key) => key + 1);
+  }, [preview?.status, preview?.syncedRevisionId]);
 
   useEffect(() => {
     setConsoleLines([]);
