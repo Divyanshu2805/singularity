@@ -11,6 +11,7 @@ Credentials and private hostnames — the tailnet hostname, the tunnel's credent
 | `DB_PASSWORD` | The Postgres password |
 | `MINIO_ROOT_PASSWORD` | The MinIO admin password |
 | `MINIO_RUNNER_SECRET` | The password of the read-only MinIO user the preview pods use |
+| `MINIO_PUBLISHED_SECRET` | The password of the read-only MinIO user the preview proxy serves published apps with - a different value from the runner's, because that one is in every runner pod next to project code |
 | `INTERNAL_SERVICE_SHARED_SECRET` | The internal-API secret — a new random value, never the local one |
 | `PREVIEW_ACCESS_TOKEN_SECRET` | Signs preview access tokens — a different random value |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | The Firebase Admin service-account key file's contents |
@@ -21,6 +22,7 @@ Credentials and private hostnames — the tailnet hostname, the tunnel's credent
 | `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` | A Tailscale OAuth client (scope **Auth Keys: Write**, tag `tag:ci`) that lets CI join the tailnet |
 | `KUBE_API_SERVER` | The k3s API's URL over Tailscale |
 | `KUBE_DEPLOYER_TOKEN` | The namespace-scoped `deployer` service-account token |
+| `KUBE_CA_CERT` | Optional. The cluster's CA certificate, base64 of the PEM (`base64 -w0 /var/lib/rancher/k3s/server/tls/server-ca.crt` on the server). With it the deploy checks the API server's certificate; without it the check is skipped and the run says so. The certificate must name the address in `KUBE_API_SERVER` - start k3s with `--tls-san <tailscale hostname>` first, or every deploy fails at the first `kubectl` call |
 
 ## Variables
 
@@ -45,6 +47,7 @@ Non-secret settings are set as environment variables or `app-config` entries in 
 | `MINIO_URL` | `http://minio-service:9000` |
 | `EUREKA_SERVER_URL` | `http://discovery-service:8761/eureka/` |
 | `CLIENT_URL` | `https://<app domain>` |
+| `PUBLISHING_PUBLIC_SCHEME`, `PUBLISHING_PUBLIC_DOMAIN`, `PUBLISHING_PUBLIC_PORT` | Optional. Where published apps' links point; they follow the `PREVIEW_PUBLIC_*` values when unset. Set `PUBLISHING_PUBLIC_DOMAIN` (and the proxy's `PUBLISHED_DOMAIN`) to move published apps to a domain of their own |
 | `PREVIEW_PORT_FORWARD_ENABLED` | `false` — the local-dev default opens port-forwards into a kind cluster; deployed, Redis and the proxy are reached directly |
 | `PREVIEW_KUBE_CONTEXT` | blank — use the pod's own service account. The local-dev default names the kind cluster's kubeconfig context |
 | `PREVIEW_PUBLIC_SCHEME`, `PREVIEW_PUBLIC_DOMAIN`, `PREVIEW_PUBLIC_PORT` | `https`, the preview root domain, `443` |

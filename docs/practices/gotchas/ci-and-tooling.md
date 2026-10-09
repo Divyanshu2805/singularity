@@ -53,3 +53,39 @@
 - **Symptom:** after a change to the script the preview proxy injects, a preview on a hostname the browser has seen before goes on behaving the old way - the address shows, back and forward stay grey, a typed address does nothing - while a fresh project works.
 - **Cause:** the dev server sends its HTML with an ETag. The browser revalidates, the dev server answers "not modified", and the browser shows its cached copy, which carries whatever was injected into it when it was cached. A project keeps its preview hostname across restarts, so the cached copy outlives the proxy that made it.
 - **Fix:** the proxy strips `If-None-Match` and `If-Modified-Since` from a page load and sends the rewritten page with no validator and `Cache-Control: no-store` (`proxy/index.js`). `PreviewPipelineIT` asks for the page with both headers and expects it whole. Anything that rewrites a response on the way out owns its caching too.
+
+## `rollout undo` goes back one release whether or not this deploy touched the service
+
+- **Symptom:** a deploy fails early - a missing secret, say - and production is found running the release before the last one, on every service.
+- **Cause:** the rollback step ran on any failure in the job and called `kubectl rollout undo` on every Deployment. Undo means "the revision before the current one"; for a Deployment the failed run never changed, that is a real, older release.
+- **Fix:** the revision of each Deployment is written down immediately before the apply, and on failure only those now at a different revision are rolled back, to the recorded number (`deploy/scripts/deploy-revisions.sh`). With no record there is nothing to undo. Test such a script against a stand-in `kubectl`, as that one was.
+
+## A workflow-level permission is every job's permission
+
+- **Symptom:** none, until a dependency's install script goes looking.
+- **Cause:** `packages: write` was granted at the top of the workflow, so the test jobs - which run `npm ci` and Maven with their install scripts - held a token that could push images, and `actions/checkout` leaves that token in the workspace's git config.
+- **Fix:** the workflow is read-only by default and each image build asks for `packages: write` itself. A value typed into a manual run (the commit to deploy) is checked for its shape and read from the environment, never interpolated into a script: it went into a `sed` expression, and `sed` has a command that runs a shell.
+
+## With path conversion off, Git Bash's own curl cannot write to `/dev/null`
+
+- **Symptom:** a script that sets `MSYS_NO_PATHCONV=1` waits for a service with `curl -o /dev/null ...` and never sees it come up on Windows, though the service is answering. On Linux the same script is fine.
+- **Cause:** Git Bash's `curl` is a Windows program. Normally the shell rewrites `/dev/null` to `nul` for it; with conversion off it is handed `/dev/null` as a file name, cannot open it, and exits non-zero whatever the server said.
+- **Fix:** let the shell do the discarding: `curl -fsS "$url" > /dev/null 2>&1` (`e2e/stack.sh`). The same goes for any path given to a Windows program as an argument once conversion is off.
+
+## A bare `/login` argument becomes a Windows path
+
+- **Symptom:** a Node script given `/login` as an argument from Git Bash receives `C:/Program Files/Git/login`.
+- **Cause:** the same rewriting as above, applied to anything that looks like a path.
+- **Fix:** take whole addresses instead of paths (`e2e/lighthouse.mjs`), or run that one command with `MSYS_NO_PATHCONV=1`.
+
+## A fresh database beside a used preview namespace
+
+- **Symptom:** a test stack started again with a new database shows a brand-new project files it never wrote, or its preview never comes up, on some runs and not others.
+- **Cause:** project ids come from the database, and the namespace is full of things named after them: stored files under `projects/<id>/`, runner pods labelled with the id, routes. A new database counts from 1 again, and project 1 inherits whatever an earlier project 1 left.
+- **Fix:** the database and the namespace are one unit. `e2e/stack.sh` gives each pairing a random name, kept in a ConfigMap in the namespace and as a label on the Postgres container; it reuses the two only when they agree and otherwise makes both again. Anything else that stands a database up beside an existing namespace needs the same rule.
+
+## Naming a library as its own bundle file can put React inside it
+
+- **Symptom:** after adding `manualChunks` to split the code editor and the charts out of the project view, every page - the landing page included - downloads the charts. `index.html` preloads them.
+- **Cause:** a module no rule names goes into whichever named file needs it first. React, left unnamed, was placed inside the Markdown and charts files, so the entry point had to load those to get React.
+- **Fix:** name React as a file of its own (`VENDOR_CHUNKS` in `frontend/vite.config.ts`). After changing that list, build and check that `dist/index.html` preloads only `react`.

@@ -23,6 +23,16 @@ The browser only ever talks to one origin: the Gateway in production, and the Vi
 
 In production the app is `singularity.divyanshuagrahari.dev` and previews are `*.divyanshuagrahari.dev`, so a browser treats them as the same *site*: `SameSite=Strict` does not separate them, and a preview page can set cookies on the shared parent domain. The `__Host-` prefix on the session and CSRF cookies stops those cookies being overwritten, but the clean fix is to serve previews from a different registered domain (the preview cookie, the CSP frame origins, the cloudflared wildcard and `preview-public-domain` all follow from it).
 
+## Published apps share that domain too
+
+Published apps are served from `<name>.divyanshuagrahari.dev`, one label under the same registered domain as the app and the previews, for the same reason (the free wildcard certificate covers a single level). The [security model](../architecture/security-model.md#published-apps-and-the-shared-domain) goes through what that allows - a page can set cookies for the whole site, which can make the app unusable in that browser, and can imitate the product - and decides: acceptable while the audience is the owner's own, a domain of their own before it is not, and a configuration change when the time comes.
+
+## A build saved while its preview is starting
+
+A build request starts the project's preview, and the build's files are copied into the runner when the build is saved. If that copy lands in the first second or two after the dev server comes up, the page in the Preview tab can come up blank or on the starter template's placeholder, and stays that way until Reload is pressed. A real build takes long enough that this is rare; the browser journey test, whose scripted model builds in two seconds, sees it about one run in ten and presses Reload when it does.
+
+The panel reloads the frame by itself in one of the two forms this takes. The whole fix is on the server: do not copy a revision into a runner whose dev server has not finished starting, or start the dev server only after the newest revision is in place. It touches `PreviewBootstrapper` and `PreviewSynchronizer`, so it needs `PreviewPipelineIT` and the preview checklist, and was left out of the work that found it. See [pitfalls](../practices/gotchas/kubernetes.md#a-build-that-lands-while-the-dev-server-is-starting).
+
 ## Previews are single-stack
 
 Live previews support React + Vite projects. The pod pool, bootstrapper and routing are almost entirely stack-agnostic; only the runner image, the start-up script, the readiness probe (`/@vite/client`) and the port are specific to Vite. Supporting another stack is a change to those four pieces, not to the pipeline.

@@ -78,6 +78,12 @@
 - **Cause:** `PreviewReaper`'s orphan sweep lists every claimed pod in `preview.namespace` and releases any that no active preview **in its own database** owns. A second database looking at the same namespace is, to the first, a source of orphans - and the reverse.
 - **Fix:** one namespace per database. `PreviewPipelineIT` runs in `singularity-it`, which `k8s/preview-test-cluster.sh` creates; never point it, or a second workspace-service, at a namespace another one is using.
 
+## A websocket exec cannot end standard input
+
+- **Symptom:** a command that reads its input to the end - `tar -xf - -C /app` - never finishes; the exec runs to its time limit and reports "timed out", with no output. A publish failed at "Copying your files" for two minutes every time.
+- **Cause:** the Kubernetes websocket exec has no way to say "this is the end of input". Closing the stream the client holds does nothing the process can see, so `tar` waits for the rest of an archive that has already been sent.
+- **Fix:** don't pipe a file through a command's standard input. Upload it as a file (`PreviewRunnerPool.uploadFile`, the same mechanism `kubectl cp` uses) and run the command on the path: `PublishBuilder` uploads `/tmp/project.tar` and then runs `tar -xf /tmp/project.tar -C /app`. Only a mock could have hidden this; it was found by `PublishPipelineIT`.
+
 ## A second writer beside the file watcher
 
 - **Symptom:** a copy of the project's files into a runner (`mc mirror`) hangs until the exec times out two minutes later, with no output, on some change and not on others. Seen once in seven copies on kind; not reproducible by hand.
@@ -89,3 +95,9 @@
 - **Symptom:** a script that sets `MSYS_NO_PATHCONV=1` (so `kubectl exec … /bin/sh` works) then fails at `docker build … /c/Users/…` with "path not found".
 - **Cause:** with conversion off, `docker` and `kind` - Windows programs - receive the Git Bash path as it is and cannot read it.
 - **Fix:** take the directory with `pwd -W` when it exists (`k8s/preview-test-cluster.sh`), which gives `C:/…` under Git Bash and fails harmlessly everywhere else.
+
+## A build that lands while the dev server is starting
+
+- **Symptom:** right after a quick first build the Preview tab shows the starter template's placeholder ("Your app starts here") under a panel that says "Up to date", or the "The page is blank" notice. The runner pod has the built files, and pressing Reload shows the app. About one run in ten of the browser journey, where the scripted model finishes a build in two seconds; a real build takes long enough that the dev server has settled first, but someone opening the preview just as a build is saved can hit the same moment.
+- **Cause:** a build request starts the preview, so the dev server comes up on the template's files and the build's files are copied in a second or two later. The dev server is still starting: its first scan for dependencies reads a file half-written (`/tmp/dev.log` in the pod: `Failed to scan for dependencies ... Unexpected end of file`), so it optimizes them late, on the first page load, and reloads the page while it does - and that reload's requests fail. Or the page loads the old files and the change is never announced to it.
+- **Fix, in part:** the preview's response says which revision the runner holds (`syncedRevisionId`), and the panel loads the frame again, once, if that changes within a few seconds of the frame starting to load (`frameMissedAnUpdate` in `frontend/src/lib/preview.ts`). That covers the page that read the old files. It does not cover the dev server reloading the page into its own restart; that needs the start-up and the first copy put in order on the server (see [known gaps](../../known-gaps/constraints-and-trade-offs.md#a-build-saved-while-its-preview-is-starting)). When a preview looks wrong, read the pod's `/tmp/dev.log` before anything else.

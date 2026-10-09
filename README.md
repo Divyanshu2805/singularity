@@ -17,6 +17,13 @@
 </p>
 
 <p align="center">
+  <img src="https://github.com/Divyanshu2805/singularity/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
+  <img src="https://img.shields.io/badge/backend%20coverage-67%25%20lines-1f2328?labelColor=555" alt="Backend line coverage, enforced per module in CI">
+  <img src="https://img.shields.io/badge/frontend%20logic%20coverage-77%25%20lines-1f2328?labelColor=555" alt="Frontend src/lib line coverage, enforced in CI">
+  <img src="https://img.shields.io/badge/Lighthouse%20accessibility-100-1f2328?labelColor=555" alt="Lighthouse accessibility 100 on the public pages, enforced in CI">
+</p>
+
+<p align="center">
   <a href="https://singularity.divyanshuagrahari.dev"><b>singularity.divyanshuagrahari.dev</b></a>
 </p>
 
@@ -31,8 +38,9 @@ Singularity is an AI-assisted project builder. You type a one-line idea; a short
 - **Idea clarifier** — 2–4 questions written by the model for your specific idea, compiled into a project brief before any code is generated.
 - **Streaming code generation** — files are written live, with a build checklist and automatic recovery when a turn stops short.
 - **Live previews** — every project runs in an isolated Kubernetes pod behind a signed, expiring preview link, shared correctly between collaborators and reclaimed when idle.
+- **Publishing** — the owner publishes a production build of one saved revision at a link anyone can open, with no account; updates replace it atomically, and unpublishing or deleting the project takes it down. The code can be shared on a read-only page that anyone signed in can fork.
 - **Atomic file revisions** — every AI turn lands as one all-or-nothing revision, and any earlier revision can be restored.
-- **Teaching mode** — send a message in Teach mode and every step of that build can be opened for a lesson on what it changed: it starts from what you asked for, walks through only the changed lines (which the editor can jump to and mark), and hands over to the next step. Written only when you open it, so the build is no slower, and kept with the conversation.
+- **Teaching mode** — send a message in Teach mode and every step of that build can be opened for a lesson on what it changed: it starts from what you asked for, walks through only the changed lines (which the editor can jump to and mark), and hands over to the next step. The build opens with the big picture first - each file and its job, one action followed through them, the ideas it uses - then each step's lesson ends with a question to answer and leads to the next, and any line can be taken further in ExplainLLM: its syntax, why it is written that way, what removing it would do. Explanations are written for the level you choose (new to code, coded a little, developer). Lessons are written only when you open them, so the build is no slower, and kept with the conversation. Beyond one build, a **Learn your project** panel holds a tour of the whole project (each file and its job, and how a click travels through them) and a glossary: the words marked in a lesson open a plain definition with an example from your own code, and are kept. A lesson can also set a small **Try changing this** task: you make the change yourself in the editor, and the read-only model reads your saved file and tells you whether it is done.
 - **Code insight** — ask about any selection or the whole project; answers are read-only by construction and saved as private notes.
 - **Collaboration** — per-project roles, invitations, forking, pinning and starring, code search, and ZIP export.
 - **Plans and usage** — Stripe subscriptions with enforced daily-token, project and preview limits, plus a usage dashboard broken down by day, feature and project.
@@ -93,12 +101,13 @@ Open <http://localhost:5173>. The full guide, including live previews and troubl
 ## Testing
 
 ```bash
-./mvnw test                  # backend: 960 tests across all modules
-cd frontend && npm test      # frontend: 739 tests
+./mvnw verify                # backend: 1,308 tests across all modules, and each module's coverage floor
+cd frontend && npm test      # frontend: 845 tests
 cd proxy && node --test      # preview proxy
+(cd e2e && npm test)         # one person's whole path in a real browser, against the stack e2e/stack.sh starts
 ```
 
-The backend suite is plain JUnit and needs no database or cluster, except one Testcontainers integration test (which needs Docker). The live-preview pipeline and Stripe billing are verified by hand. See [testing](docs/practices/testing.md).
+The backend suite is plain JUnit and needs no database or cluster, except one Testcontainers integration test (which needs Docker). A real preview on a kind cluster and the browser journey each run in CI on every push. What has been measured - waits, cost per build, load, Lighthouse, coverage - is in [the product's numbers](docs/practices/product-numbers.md). See [testing](docs/practices/testing.md).
 
 ## Project structure
 
