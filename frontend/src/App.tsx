@@ -16,6 +16,9 @@
  * reviewed section by section until the owner approves it to replace the page at the root (pages/Home.tsx, shown
  * by Index).
  *
+ * /p/:slug is the one public page: the read-only view of a shared app's code, open to anyone with the link and
+ * without signing in (pages/SharedApp).
+ *
  * Route order matters: the catch-all must stay last, or it would swallow everything after it.
  */
 import { lazy, Suspense } from "react";
@@ -41,7 +44,10 @@ const AllProjects = lazy(() => import("./pages/AllProjects").then((m) => ({ defa
 const Pricing = lazy(() => import("./pages/Pricing").then((m) => ({ default: m.Pricing })));
 const BillingSettings = lazy(() => import("./pages/BillingSettings").then((m) => ({ default: m.BillingSettings })));
 const UsageInsights = lazy(() => import("./pages/UsageInsights").then((m) => ({ default: m.UsageInsights })));
+const SharedApp = lazy(() => import("./pages/SharedApp").then((m) => ({ default: m.SharedApp })));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const Privacy = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Privacy })));
+const Terms = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Terms })));
 const Genesis = import.meta.env.DEV ? lazy(() => import("./pages/Genesis")) : null;
 
 const queryClient = new QueryClient();
@@ -69,6 +75,9 @@ const App = () => (
               <Route path="/settings/billing" element={<BillingSettings />} />
               <Route path="/usage" element={<UsageInsights />} />
               <Route path="/settings/security" element={<SecuritySettings />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/p/:slug" element={<SharedApp />} />
               {Genesis && <Route path="/genesis" element={<Genesis />} />}
               <Route path="*" element={<NotFound />} />
             </Routes>

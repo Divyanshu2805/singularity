@@ -7,16 +7,17 @@
  * anchors, and the account's, which leave for the sign-in pages by the page slide - each underlining itself from the
  * left (.wipe-link); and the closing wordmark (FooterWordmark).
  *
- * Links to the source, a privacy page and a terms page are in the content plan and are not here: none of them
- * exists to link to yet. It was part of pages/Home.tsx until the page being rebuilt (pages/Genesis.tsx) needed the
+ * A third group links to the Privacy and Terms pages, the source and the maker (lib/legal holds the addresses); the
+ * two that leave the site open in a new tab. It was part of pages/Home.tsx until the page being rebuilt (pages/Genesis.tsx) needed the
  * same footer; both pages show this one.
  */
 import { BrandName, HorizonMark } from "@/components/HorizonMark";
 import { SlideLink } from "@/components/SlideLink";
+import { MAKER_URL, SOURCE_URL } from "@/lib/legal";
 import { FooterWordmark } from "./FooterWordmark";
 import { Reveal } from "./Reveal";
 
-const FOOTER_GROUPS: { name: string; links: { label: string; href?: string; to?: string }[] }[] = [
+const FOOTER_GROUPS: { name: string; links: { label: string; href?: string; to?: string; external?: boolean }[] }[] = [
   {
     name: "Product",
     links: [
@@ -33,6 +34,15 @@ const FOOTER_GROUPS: { name: string; links: { label: string; href?: string; to?:
     links: [
       { label: "Create an account", to: "/signup" },
       { label: "Sign in", to: "/login" },
+    ],
+  },
+  {
+    name: "About",
+    links: [
+      { label: "Privacy", to: "/privacy" },
+      { label: "Terms", to: "/terms" },
+      { label: "Source code", href: SOURCE_URL, external: true },
+      { label: "Made by Divyanshu", href: MAKER_URL, external: true },
     ],
   },
 ];
@@ -52,7 +62,7 @@ export function Footer() {
           </p>
         </Reveal>
         <Reveal delay={90}>
-          <nav aria-label="Footer" className="grid grid-cols-2 gap-x-16 gap-y-8">
+          <nav aria-label="Footer" className="grid grid-cols-2 gap-x-14 gap-y-8 sm:grid-cols-3">
             {FOOTER_GROUPS.map((group) => (
               <div key={group.name}>
                 <p className="text-[13px] font-medium text-foreground/85">{group.name}</p>
@@ -64,7 +74,7 @@ export function Footer() {
                           {link.label}
                         </SlideLink>
                       ) : (
-                        <a href={link.href} className="wipe-link">
+                        <a href={link.href} className="wipe-link" {...(link.external ? { target: "_blank", rel: "noreferrer" } : {})}>
                           {link.label}
                         </a>
                       )}

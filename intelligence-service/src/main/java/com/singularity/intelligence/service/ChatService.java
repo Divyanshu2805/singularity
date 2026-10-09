@@ -16,4 +16,9 @@ public interface ChatService {
     List<ChatResponse> getProjectChatHistory(Long projectId);
 
     LastTurnChangesResponse getLastTurnChanges(Long projectId);
+
+    /**
+     * Deletes the caller's own conversation in a project. The project's files and history are not touched.
+     */
+    void clearChat(Long projectId);
 }
