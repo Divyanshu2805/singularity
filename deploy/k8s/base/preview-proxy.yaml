@@ -61,6 +61,30 @@ spec:
             # below remap its own external port 80 to this one.
             - name: PORT
               value: "8080"
+            # Published apps (docs/architecture/decisions/0008-published-apps.md): the proxy serves them from the
+            # published-apps bucket with a read-only user, to anyone, with no token. These are literals rather than
+            # ConfigMap references because the ConfigMap lives in the `singularity` namespace and this pod does not;
+            # the oracle overlay patches the domain, scheme and app URL. PUBLISHED_DOMAIN must be the same value as
+            # workspace-service's publishing.public-domain, which follows PREVIEW_PUBLIC_DOMAIN.
+            - name: PUBLISHED_DOMAIN
+              value: "localhost"
+            - name: PUBLISHED_SCHEME
+              value: "http"
+            - name: PUBLISHED_APP_URL
+              value: "http://localhost:8080/"
+            - name: PUBLISHED_FRAME_ANCESTORS
+              value: "http://localhost:8080"
+            - name: PUBLISHED_BUCKET
+              value: "published-apps"
+            - name: MINIO_ENDPOINT
+              value: "http://minio-service.singularity.svc.cluster.local:9000"
+            - name: MINIO_ACCESS_KEY
+              value: "publishedreader"
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-published-credentials
+                  key: password
           ports:
             - containerPort: 8080
           readinessProbe:
