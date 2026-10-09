@@ -7,6 +7,12 @@
  * plan's own numbers) and which plan is recommended (the first paid one), deciding whether a plan is an upgrade, a downgrade,
  * the current one or a cancellation, and the copy for confirming any of those.
  *
+ * A count of tokens means nothing to someone who has never used an AI API, so the allowance is also said as builds:
+ * about how many requests a day's allowance, or what is left of it, pays for. One build is taken as 15,000 tokens -
+ * the build benchmark's first builds cost about 14,000 (docs/practices/build-benchmark-results.md), and a change to a
+ * built app costs less - rounded down, and to the nearest five once it is twenty or more, so the figure is never a
+ * promise the meter cannot keep. Change TOKENS_PER_BUILD when the benchmark moves.
+ *
  * Kept pure and out of the components so it can be tested without rendering: the parts that are easy to get subtly
  * wrong - a percentage that divides by zero, a countdown that rounds 59 minutes to zero hours, a comparison that
  * calls an equal plan an upgrade - are exactly the parts a component test would not catch.
@@ -64,6 +70,19 @@ export function formatResetIn(resetsAt: Date | null, now: Date = new Date()): st
 
 export const formatTokens = (value: number) => value.toLocaleString();
 
+export const TOKENS_PER_BUILD = 15_000;
+
+export function buildsFor(tokens: number): number {
+  const builds = Math.floor(Math.max(0, tokens) / TOKENS_PER_BUILD);
+  return builds >= 20 ? Math.floor(builds / 5) * 5 : builds;
+}
+
+export function buildsLeftLabel(remainingTokens: number): string {
+  const builds = buildsFor(remainingTokens);
+  if (builds === 0) return "Not enough left for a full build";
+  return `About ${builds} more ${builds === 1 ? "build" : "builds"} today`;
+}
+
 export function cardPrice(plan: Plan): string {
   if (!plan.isFree) return plan.price;
   try {
@@ -84,7 +103,9 @@ export function planFeatures(plan: Plan): string[] {
 
   return [
     `${projects} ${projects === 1 ? "project" : "projects"}`,
-    `${formatTokens(tokens)} AI tokens per day`,
+    buildsFor(tokens) > 0
+      ? `${formatTokens(tokens)} AI tokens per day - about ${buildsFor(tokens)} builds`
+      : `${formatTokens(tokens)} AI tokens per day`,
     `${previews} live ${previews === 1 ? "preview" : "previews"} running at once`,
     plan.isFree ? "Full editor, chat and ExplainLLM" : "Everything in the free plan",
     plan.isFree ? "Teaching mode walkthroughs" : "Priority access when the AI is busy",

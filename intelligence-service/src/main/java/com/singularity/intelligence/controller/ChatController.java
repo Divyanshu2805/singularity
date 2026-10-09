@@ -25,7 +25,7 @@ import java.util.List;
 /**
  * The project build chat, for the browser.
  *
- * <p>Handles: starting a generation and streaming it, reading the saved history, the last turn's changed files for
+ * <p>Handles: starting a generation and streaming it, reading the saved history, clearing it, the last turn's changed files for
  * the editor's diffs, asking whether a generation is already running, reattaching to one, and stopping one.
  *
  * <p>Closing the response does not stop a generation - it only stops watching it; stopping is its own endpoint. A
@@ -67,6 +67,12 @@ public class ChatController {
             @PathVariable Long projectId) {
 
         return ResponseEntity.ok(chatService.getProjectChatHistory(projectId));
+    }
+
+    @DeleteMapping("/projects/{projectId}")
+    public ResponseEntity<Void> clearChat(@PathVariable Long projectId) {
+        chatService.clearChat(projectId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/projects/{projectId}/last-turn-changes")
