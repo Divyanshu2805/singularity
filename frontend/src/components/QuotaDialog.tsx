@@ -29,7 +29,7 @@ export function QuotaDialog({ quota, onClose }: { quota: QuotaDetails | null; on
   if (!quota) return null;
 
   const isTokens = quota.reason === "DAILY_TOKENS";
-  const noun = quota.reason === "PREVIEW_LIMIT" ? "live preview" : "project";
+  const noun = quota.reason === "PREVIEW_LIMIT" ? "live preview" : quota.reason === "PUBLISH_LIMIT" ? "published app" : "project";
   const resetsAt = quota.resetsAt ? new Date(quota.resetsAt) : null;
 
   return (
@@ -53,8 +53,12 @@ export function QuotaDialog({ quota, onClose }: { quota: QuotaDetails | null; on
             ) : (
               <>
                 You're using all {quota.used} of them. Upgrade for more, or{" "}
-                {quota.reason === "PREVIEW_LIMIT" ? "stop a preview you're not using" : "delete a project you've finished with"} to
-                make room.
+                {quota.reason === "PREVIEW_LIMIT"
+                  ? "stop a preview you're not using"
+                  : quota.reason === "PUBLISH_LIMIT"
+                    ? "unpublish an app you've finished with"
+                    : "delete a project you've finished with"}{" "}
+                to make room.
               </>
             )}
           </AlertDialogDescription>
