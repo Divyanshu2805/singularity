@@ -2,7 +2,9 @@
  * One project, as a card on the dashboard or as a row in a list.
  *
  * Handles: the name with inline renaming, the generated gradient thumbnail, the last-edited time, the caller's role,
- * and the actions menu - pin, star, fork, delete.
+ * the actions menu - pin, star, fork, delete - and, for a project with a live published app, a "Published" mark that
+ * links to the app and is shown to every member alike. Delete is offered to every member, a viewer included: for
+ * anyone but the owner it removes the project from their own list only.
  *
  * The card and the row share one hover: the app's gold wash, never a lit border. On the card it fades in across the
  * foot (index.css, .card-foot) with a soft glare under the pointer and a slight tilt towards it
@@ -24,7 +26,7 @@ import { useEffect, useRef, useState } from "react";
 import { releaseTilt, tiltToPointer } from "@/components/landing/motion";
 import { deleteCopy } from "@/lib/project-delete";
 import { formatDistanceToNow } from "date-fns";
-import { ArrowUpRight, Download, GitFork, MoreHorizontal, Pencil, Pin, PinOff, Star, StarOff, Trash2 } from "lucide-react";
+import { ArrowUpRight, Download, Globe, GitFork, MoreHorizontal, Pencil, Pin, PinOff, Star, StarOff, Trash2 } from "lucide-react";
 import { canForkProject } from "@/lib/project-fork";
 import {
     DropdownMenu,
@@ -169,7 +171,7 @@ function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin
                         Fork project
                     </DropdownMenuItem>
                 )}
-                {canManage && (
+                {project.role && (
                     <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -193,6 +195,29 @@ function PreferenceMarks({ project }: { project: ProjectSummaryResponse }) {
             {project.pinnedAt && <Pin aria-label="Pinned" className="pin-active h-3 w-3" />}
             {project.starredAt && <Star aria-label="Starred" className="h-3 w-3 fill-current" />}
         </span>
+    );
+}
+
+function PublishedMark({ project, onThumb }: { project: ProjectSummaryResponse; onThumb?: boolean }) {
+    if (!project.publishedUrl) return null;
+    return (
+        <a
+            href={project.publishedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            title="Open the published app"
+            className={cn(
+                "role-chip inline-flex items-center gap-1",
+                onThumb && "absolute right-2.5 top-2.5"
+            )}
+            data-on={onThumb ? "thumb" : undefined}
+            data-role="owner"
+        >
+            <Globe aria-hidden="true" className="h-3 w-3" />
+            Published
+        </a>
     );
 }
 
@@ -230,6 +255,7 @@ export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, isLeaving,
                         {ROLE_LABELS[project.role]}
                     </span>
                 )}
+                <PublishedMark project={project} onThumb />
                 {!isRenaming && (
                     <span aria-hidden="true" className="card-open">
                         <ArrowUpRight className="no-icon-anim h-3.5 w-3.5" />
@@ -292,6 +318,7 @@ export function ProjectRow({ onOpen, isRenaming, isLeaving, onRenameDone, ...pro
                     <>
                         <p className="proj-name truncate text-sm font-medium">{project.name}</p>
                         <PreferenceMarks project={project} />
+                        <PublishedMark project={project} />
                         <ArrowUpRight aria-hidden="true" className="proj-arrow no-icon-anim h-3.5 w-3.5 shrink-0" />
                     </>
                 )}
