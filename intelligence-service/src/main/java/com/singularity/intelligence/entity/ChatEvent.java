@@ -18,7 +18,9 @@ import lombok.experimental.FieldDefaults;
  * lesson explains what the step changed, which is the difference between the two versions.
  *
  * <p>The lesson is written once, the first time the step is opened in a turn that was asked for in teaching mode,
- * and kept here so it stays in the conversation and is never paid for twice.
+ * and kept here so it stays in the conversation and is never paid for twice. So is the "try changing this" task set
+ * from the same change, when the person asks for one, and whether the person has since made that change: the task is
+ * marked done once the read-only model has looked at the file and found it made.
  *
  * <p>The type column is declared with an explicit column definition so Hibernate does not generate a check constraint
  * listing today's enum values. Such a constraint is created once and never widened, so adding an event type left
@@ -63,5 +65,10 @@ public class ChatEvent {
 
     @Column(columnDefinition = "text")
     String lesson;
+
+    @Column(columnDefinition = "text")
+    String task;
+
+    boolean taskDone;
 
 }
