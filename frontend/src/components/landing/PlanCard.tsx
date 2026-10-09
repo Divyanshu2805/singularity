@@ -5,6 +5,10 @@
  * Handles: the card's layout, its two looks, the price counting up, the feature list ticking in, and how the card
  * answers the pointer.
  *
+ * The plan's name is a heading whose level the page chooses (nameAs): on the landing page the cards sit under a
+ * section heading, so it is an h3; the pricing page has only its title above them, so it asks for an h2. Left as an
+ * h3 there, the page skipped a level, which a screen reader's outline reads as a missing section.
+ *
  * Every card has one layout so its rows line up with its neighbours': a small tile with the tier's icon beside the
  * plan's name (TIER_ICONS, by position, so it holds for whatever plans the server sends), the tagline, the price with
  * its currency sign set small, a hairline, an "Includes" label and the list, and the caller's button at the foot. The
@@ -86,8 +90,9 @@ function Price({ plan, start }: { plan: Plan; start: boolean }) {
   );
 }
 
-export function PlanCard({ plan, featured, order, landed, columns = "lg", cellRef, popRef, children }: {
+export function PlanCard({ plan, featured, order, landed, columns = "lg", nameAs: Name = "h3", cellRef, popRef, children }: {
   plan: Plan;
+  nameAs?: "h2" | "h3";
   featured: boolean;
   order: number;
   landed: boolean;
@@ -120,7 +125,7 @@ export function PlanCard({ plan, featured, order, landed, columns = "lg", cellRe
               <span className={cn("plan-tier grid h-9 w-9 shrink-0 place-items-center rounded-[11px]", featured && "plan-tier-featured")}>
                 <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
               </span>
-              <h3 className="font-display text-[21px] font-semibold tracking-tight">{plan.name}</h3>
+              <Name className="font-display text-[21px] font-semibold tracking-tight">{plan.name}</Name>
             </div>
             {plan.tagline && <p className="mt-3.5 min-h-[2.8rem] text-[14px] leading-[1.6] text-foreground/65">{plan.tagline}</p>}
 
