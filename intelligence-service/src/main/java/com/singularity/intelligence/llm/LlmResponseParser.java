@@ -46,8 +46,10 @@ import java.util.regex.Pattern;
  * browser's parser, which follows the same rules in another language, trims exactly the same ones.
  *
  * <p>Text between blocks is not an event. A model narrates before it reads files ("let me look at the hook"), and
- * that belongs in neither the transcript nor a file. How much was skipped is logged once per answer with a short
- * preview, since an unexpected amount of it is the first sign a model has stopped following the protocol. It is
+ * that belongs in neither the transcript nor a file. How much was skipped is logged once per answer, as a count
+ * and never as text, since an unexpected amount of it is the first sign a model has stopped following the protocol.
+ * The log used to carry the first hundred characters, which are the model's words about someone's project and often
+ * their own request repeated back; nothing a model writes belongs in a service log. It is
  * handed back beside the events all the same, piece by piece with where each sat, and without the half-written block
  * the text may end in. The pipeline uses it in the two cases where dropping it would lose the answer: a model that
  * said everything in plain words, with no tags at all, and one that tagged its files and steps but wrote its plan and
@@ -187,10 +189,8 @@ public class LlmResponseParser {
 
         List<Loose> looseParts = looseParts(text, scan.blocks(), scan.dangling());
         if (!looseParts.isEmpty()) {
-            String first = looseParts.getFirst().text();
-            log.info("Skipped {} character(s) of text outside the protocol's blocks, starting: {}",
-                    looseParts.stream().mapToInt(part -> part.text().length()).sum(),
-                    first.length() > 100 ? first.substring(0, 100) + "..." : first);
+            log.info("Skipped {} character(s) of text outside the protocol's blocks, in {} place(s)",
+                    looseParts.stream().mapToInt(part -> part.text().length()).sum(), looseParts.size());
         }
         if (checklistSteps > MAX_CHECKLIST_STEPS) {
             log.warn("Dropped {} checklist step(s) over the {} step cap", checklistSteps - MAX_CHECKLIST_STEPS, MAX_CHECKLIST_STEPS);

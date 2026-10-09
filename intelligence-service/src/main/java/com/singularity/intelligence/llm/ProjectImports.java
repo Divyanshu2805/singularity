@@ -32,6 +32,11 @@ import java.util.regex.Pattern;
  * recognise, a path that climbs out of the project, package names when package.json is missing or unreadable - since
  * a wrong report costs a whole extra model call and may talk the model into "fixing" working code. An import
  * statement is only read where it starts a line, so a code sample shown inside a page is not mistaken for one.
+ *
+ * <p>The words between {@code import} and {@code from} are read up to a fixed length. Unbounded, a file of nothing
+ * but short {@code export name} lines made every one of them scan to the end of the file looking for a {@code from}
+ * that never came - the square of the file's length, tens of seconds for a file a turn can write. A real import
+ * statement longer than the bound is simply not checked, which is the side this check already errs on.
  */
 public final class ProjectImports {
 
@@ -65,7 +70,7 @@ public final class ProjectImports {
             "dependencies", "devDependencies", "peerDependencies", "optionalDependencies");
 
     private static final Pattern IMPORT_FROM = Pattern.compile(
-            "(?m)^[ \\t]*(?:import|export)\\b[\\w\\s{},*$]*?\\bfrom\\s*['\"]([^'\"\\n]+)['\"]");
+            "(?m)^[ \\t]*(?:import|export)\\b[\\w\\s{},*$]{0,4000}?\\bfrom\\s*['\"]([^'\"\\n]+)['\"]");
     private static final Pattern SIDE_EFFECT_IMPORT = Pattern.compile("(?m)^[ \\t]*import\\s*['\"]([^'\"\\n]+)['\"]");
     private static final Pattern DYNAMIC_IMPORT = Pattern.compile("\\bimport\\s*\\(\\s*['\"]([^'\"\\n]+)['\"]\\s*\\)");
     private static final Pattern PACKAGE_NAME = Pattern.compile(

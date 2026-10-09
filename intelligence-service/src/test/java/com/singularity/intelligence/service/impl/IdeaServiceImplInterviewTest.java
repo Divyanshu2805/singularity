@@ -113,6 +113,14 @@ class IdeaServiceImplInterviewTest {
     }
 
     @Test
+    @DisplayName("a reply that is not the JSON asked for reads as no interview, and a well-formed one is read")
+    void aReplyThatIsNotJsonReadsAsNoInterview() {
+        assertThat(IdeaServiceImpl.readInterview("Sure! Here are some questions about your bakery app...")).isNull();
+        assertThat(service.tailoredInterview(IdeaServiceImpl.readInterview("{ not json")).tailored()).isFalse();
+        assertThat(IdeaServiceImpl.readInterview("{\"questions\": []}").questions()).isEmpty();
+    }
+
+    @Test
     @DisplayName("a question the model sent without a usable id still gets a unique one")
     void idsAreMadeUnique() {
         ClarifyIdeaResponse response = service.tailoredInterview(new GeneratedInterview(List.of(
