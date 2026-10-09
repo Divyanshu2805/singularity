@@ -423,7 +423,8 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
                 !open && failed ? runner.getFailureKind() : null,
                 waiting ? previewRepository.countWaitingAhead(runner.getId(), Instant.now().minus(WAITER_FRESHNESS)) + 1 : null,
                 running ? (updating ? PreviewSyncState.UPDATING : PreviewSyncState.UP_TO_DATE) : null,
-                updating ? Optional.ofNullable(runner.getSyncDetail()).orElse(PreviewSynchronizer.APPLYING) : null);
+                updating ? Optional.ofNullable(runner.getSyncDetail()).orElse(PreviewSynchronizer.APPLYING) : null,
+                running ? runner.getSyncedRevisionId() : null);
     }
 
     /**

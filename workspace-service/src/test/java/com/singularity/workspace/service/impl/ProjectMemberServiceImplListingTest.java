@@ -9,7 +9,13 @@ import com.singularity.workspace.entity.ProjectMemberId;
 import com.singularity.workspace.enums.ProjectRole;
 import com.singularity.workspace.feign.IntelligenceServiceClient;
 import com.singularity.workspace.mapper.ProjectMemberMapper;
+import com.singularity.common.security.UserPrincipal;
+import com.singularity.workspace.repository.ProjectInviteRepository;
 import com.singularity.workspace.repository.ProjectMemberRepository;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import com.singularity.workspace.repository.ProjectRepository;
 import com.singularity.workspace.service.PreviewDeploymentService;
 import feign.FeignException;
@@ -41,14 +47,26 @@ class ProjectMemberServiceImplListingTest {
     private static final long ANOTHER_HEALTHY_MEMBER_ID = 30L;
 
     private final ProjectMemberRepository projectMemberRepository = mock(ProjectMemberRepository.class);
+    private final ProjectInviteRepository projectInviteRepository = mock(ProjectInviteRepository.class);
     private final ProjectRepository projectRepository = mock(ProjectRepository.class);
     private final ProjectMemberMapper projectMemberMapper = mock(ProjectMemberMapper.class);
     private final AccountServiceClient accountServiceClient = mock(AccountServiceClient.class);
     private final IntelligenceServiceClient intelligenceServiceClient = mock(IntelligenceServiceClient.class);
     private final PreviewDeploymentService previewDeploymentService = mock(PreviewDeploymentService.class);
     private final ProjectMemberServiceImpl service = new ProjectMemberServiceImpl(
-            projectMemberRepository, projectRepository, projectMemberMapper, new AuthUtil(), accountServiceClient,
-            intelligenceServiceClient, previewDeploymentService);
+            projectMemberRepository, projectInviteRepository, projectRepository, projectMemberMapper, new AuthUtil(),
+            accountServiceClient, intelligenceServiceClient, previewDeploymentService);
+
+    @BeforeEach
+    void signIn() {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new UserPrincipal(ANOTHER_HEALTHY_MEMBER_ID, "viewer@example.com", "firebase-uid", List.of()), null, List.of()));
+    }
+
+    @AfterEach
+    void clean() {
+        SecurityContextHolder.clearContext();
+    }
 
     private ProjectMember memberOf(long userId, ProjectRole role) {
         return ProjectMember.builder().id(new ProjectMemberId(PROJECT_ID, userId)).projectRole(role).build();
@@ -74,8 +92,8 @@ class ProjectMemberServiceImplListingTest {
         when(accountServiceClient.getUser(DANGLING_MEMBER_ID)).thenThrow(notFound());
         when(accountServiceClient.getUser(ANOTHER_HEALTHY_MEMBER_ID)).thenReturn(alsoHealthyUser);
 
-        MemberResponse healthyResponse = new MemberResponse(HEALTHY_MEMBER_ID, "owner@example.com", "Owner", ProjectRole.OWNER, null, null);
-        MemberResponse alsoHealthyResponse = new MemberResponse(ANOTHER_HEALTHY_MEMBER_ID, "viewer@example.com", "Viewer", ProjectRole.VIEWER, null, null);
+        MemberResponse healthyResponse = new MemberResponse(HEALTHY_MEMBER_ID, null, "owner@example.com", "Owner", ProjectRole.OWNER, null, null);
+        MemberResponse alsoHealthyResponse = new MemberResponse(ANOTHER_HEALTHY_MEMBER_ID, null, "viewer@example.com", "Viewer", ProjectRole.VIEWER, null, null);
         when(projectMemberMapper.toMemberResponse(healthy, healthyUser)).thenReturn(healthyResponse);
         when(projectMemberMapper.toMemberResponse(alsoHealthy, alsoHealthyUser)).thenReturn(alsoHealthyResponse);
 
@@ -103,7 +121,7 @@ class ProjectMemberServiceImplListingTest {
         when(projectMemberRepository.findByIdProjectId(PROJECT_ID)).thenReturn(List.of(healthy));
         UserDto healthyUser = new UserDto(HEALTHY_MEMBER_ID, "owner@example.com", "Owner", "uid-1");
         when(accountServiceClient.getUser(HEALTHY_MEMBER_ID)).thenReturn(healthyUser);
-        MemberResponse healthyResponse = new MemberResponse(HEALTHY_MEMBER_ID, "owner@example.com", "Owner", ProjectRole.OWNER, null, null);
+        MemberResponse healthyResponse = new MemberResponse(HEALTHY_MEMBER_ID, null, "owner@example.com", "Owner", ProjectRole.OWNER, null, null);
         when(projectMemberMapper.toMemberResponse(healthy, healthyUser)).thenReturn(healthyResponse);
 
         List<MemberResponse> result = service.getProjectMembers(PROJECT_ID);

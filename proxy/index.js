@@ -34,6 +34,10 @@
  * request the same way an unreachable one does, not hang until the client gives up - proxyTimeout covers the plain
  * HTTP passes, and the manual proxyReqWs timer covers the websocket pass, which http-proxy never times out itself.
  *
+ * A hostname that is not a preview's and sits one label under PUBLISHED_DOMAIN is a published app, and is handed to
+ * published-server.js before any of the above: it needs no token, reads its files from storage and never reaches Redis or
+ * a runner. A websocket upgrade on such a host is refused.
+ *
  * The HTML rewrite asks for an uncompressed response, since it has to read the body - the dev server does not
  * compress, but a user's own server might. What the injected reporter does inside the page, and what the status
  * pages tell the Preview tab about themselves, is reporter.js's.
@@ -52,6 +56,9 @@ const Redis = require('ioredis');
 const { verifyToken, readCookie, accessCookieHeader, ACCESS_COOKIE_NAME, TOKEN_QUERY_PARAM } = require('./auth');
 const { ROUTER_UNAVAILABLE, classifyMissingRoute } = require('./routing');
 const { injectReporter, statusPageHtml } = require('./reporter');
+const { publishedSlug } = require('./published');
+const { createPublishedHandler } = require('./published-server');
+const { createS3Client } = require('./s3');
 
 const redisUrl = process.env.REDIS_URL || 'redis://redis-service:6379';
 const port = Number(process.env.PORT || 80);
@@ -73,6 +80,27 @@ const ACCESS_TOKEN_SECRET = process.env.PREVIEW_ACCESS_TOKEN_SECRET;
 // that's OPS-01's job, not this proxy's.
 if (!ACCESS_TOKEN_SECRET) {
     console.error('PREVIEW_ACCESS_TOKEN_SECRET is not set - every preview request will be refused rather than served unauthenticated');
+}
+
+// Published apps (docs/architecture/decisions/0008-published-apps.md): a hostname that is one label under
+// PUBLISHED_DOMAIN and is not a preview's is a published app, served from storage with no token. Without the domain or
+// the storage settings the feature is off and every hostname is treated as a preview, as before.
+const PUBLISHED_DOMAIN = process.env.PUBLISHED_DOMAIN;
+const publishedHandler = PUBLISHED_DOMAIN && process.env.MINIO_ENDPOINT && process.env.MINIO_ACCESS_KEY && process.env.MINIO_SECRET_KEY
+    ? createPublishedHandler({
+        store: createS3Client({
+            endpoint: process.env.MINIO_ENDPOINT,
+            accessKey: process.env.MINIO_ACCESS_KEY,
+            secretKey: process.env.MINIO_SECRET_KEY,
+        }),
+        bucket: process.env.PUBLISHED_BUCKET || 'published-apps',
+        appUrl: process.env.PUBLISHED_APP_URL,
+        frameAncestors: process.env.PUBLISHED_FRAME_ANCESTORS,
+        https: process.env.PUBLISHED_SCHEME === 'https',
+    })
+    : null;
+if (!publishedHandler) {
+    console.log('Published apps are off: PUBLISHED_DOMAIN and MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY are not all set');
 }
 
 function isAuthorized(req, hostname) {
@@ -179,6 +207,14 @@ function statusPage(res, status, title, message, options) {
 }
 
 const server = http.createServer(async (req, res) => {
+    const published = publishedHandler ? publishedSlug(req.headers.host, PUBLISHED_DOMAIN) : null;
+    if (published) {
+        return publishedHandler(req, res, published).catch((err) => {
+            console.error('Published handler failed for %s: %s', published, err.message);
+            if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Something went wrong.');
+        });
+    }
     const hostname = (req.headers.host || '').split(':')[0];
     const target = await getTarget(hostname);
 
@@ -221,6 +257,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.on('upgrade', async (req, socket, head) => {
+    if (publishedHandler && publishedSlug(req.headers.host, PUBLISHED_DOMAIN)) return socket.destroy();
     const hostname = (req.headers.host || '').split(':')[0];
     const target = await getTarget(hostname);
     if (target === ROUTER_UNAVAILABLE) console.error(`Refusing a websocket upgrade for ${hostname}: the router (Redis) didn't answer`);

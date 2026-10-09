@@ -43,6 +43,13 @@ import java.util.stream.Collectors;
  * refusal is a real HTTP status with its details on it - a 409, or a 402 carrying the quota numbers - not an error
  * event the client could not tell from a provider failure.
  *
+ * <p>Anyone who may edit the project can stop the turn running on it, whoever started it. A project runs one turn
+ * at a time for all its members, and stopping used to reach only the caller's own: an editor refused with "someone
+ * is already generating - wait, or stop it first" had no way to do the second, and a turn left running by someone
+ * who had closed their laptop held the project until its own time limit. Stopping hands over nothing of the other
+ * person's conversation - the caller gets a 204 and the turn is recorded, as stopped, in its owner's chat. Watching
+ * and reattaching stay scoped to the caller's own turn.
+ *
  * <p>Stopping waits a moment for the turn to be recorded before returning, so the client that asked can reload the
  * conversation straight away and find the stopped turn in it. A turn that has already begun saving is past stopping;
  * the wait then simply covers the rest of the save.
@@ -120,14 +127,16 @@ public class AiGenerationServiceImpl implements AiGenerationService {
     @Override
     @PreAuthorize("@security.canEditProject(#projectId)")
     public boolean stopActiveGeneration(Long projectId) {
-        Optional<ActiveGeneration> generation = generationRegistry.find(projectId, authUtil.getCurrentUserId());
-        generation.ifPresent(active -> {
+        Long callerId = authUtil.getCurrentUserId();
+        List<ActiveGeneration> running = generationRegistry.findAllForProject(projectId);
+        for (ActiveGeneration active : running) {
             if (active.requestStop()) {
-                log.info("Generation stopped by the user for projectId: {}", projectId);
+                log.info("Generation for projectId: {} started by userId: {} stopped by userId: {}",
+                        projectId, active.userId(), callerId);
             }
-            active.awaitFinished(STOP_WAIT);
-        });
-        return generation.isPresent();
+        }
+        running.forEach(active -> active.awaitFinished(STOP_WAIT));
+        return !running.isEmpty();
     }
 
     @Override

@@ -1,6 +1,6 @@
 # workspace-service data model
 
-Projects, members, files, file revisions and live previews. Database: `singularity-workspace-db`.
+Projects, members, files, file revisions, live previews and published apps. Database: `singularity-workspace-db`.
 
 `Project` has no `owner` field of its own — ownership is expressed entirely by a `PROJECT_MEMBER` row with `projectRole = OWNER`; see [Ownership lives on the join row](conventions.md#ownership-lives-on-the-join-row-not-a-foreign-key).
 
@@ -14,7 +14,7 @@ A workspace being built.
 | `isPublic` | Whether the project is visible to non-members. Defaults `false`. Not currently enforced by any read endpoint — every project read still goes through `@security.canViewProject`. |
 | `templateInitIssue` | Nullable. `null` = the starter template copied cleanly (or wasn't needed); otherwise a short description of what's still missing. Cleared by `POST /api/projects/{id}/retry-template-init`. |
 | `forkedFromProjectId` | Nullable, a plain `Long` (not a relation) — set by `POST /api/projects/{id}/fork`. Plain so a fork keeps working after its source is deleted. |
-| `deletedAt` | Soft-delete marker. An owner's delete sets this; an editor's delete instead removes only their own `PROJECT_MEMBER` row and leaves the project untouched — see [Projects API](../api/projects.md). |
+| `deletedAt` | Soft-delete marker. An owner's delete sets this; anyone else's delete instead removes only their own `PROJECT_MEMBER` row and leaves the project untouched — see [Projects API](../api/projects.md). |
 | `currentFileRevisionId` | Nullable, a plain `Long` (not a relation on purpose — see [File revisions](../architecture/file-revisions.md)) — the project's currently-published revision. `null` until the project's first revision. Only ever advanced by `ProjectRepository.casAdvanceCurrentRevision`'s single-statement compare-and-swap, never a plain entity save. |
 
 ## PROJECT_MEMBER
@@ -24,9 +24,24 @@ The only record of who can access a project and how — owners and collaborators
 | Field | Meaning |
 |---|---|
 | `projectId` + `userId` | Composite primary key (`ProjectMemberId`, `@Embeddable`, `Serializable`, with `equals()`/`hashCode()` over both fields — required by the JPA spec for a composite key to behave correctly in the persistence context). `projectId` is a real foreign key; `userId` is a plain id into account-service's database. |
-| `projectRole` | `OWNER`, `EDITOR`, or `VIEWER` — see [roles and permissions](enums.md#roles-and-permissions). Nothing enforces "exactly one `OWNER`" or restricts who may be assigned it (see [known gaps](../known-gaps/not-yet-built.md)). |
-| `invitedAt` / `acceptedAt` | `acceptedAt` is `null` until `POST /api/projects/{projectId}/members/accept`; access is **not** gated on it — an invited member has full access from the moment the row is created, whether or not they've accepted. This is a deliberate product choice, not an oversight. |
+| `projectRole` | `OWNER`, `EDITOR`, or `VIEWER` — see [roles and permissions](enums.md#roles-and-permissions). A project has exactly one `OWNER`, written when it is created or forked; `ProjectMemberServiceImpl` refuses to grant, change or remove it. |
+| `invitedAt` / `acceptedAt` | A row exists only for someone who has accepted, so `acceptedAt` is always set: an invitation is a `PROJECT_INVITE` row until then. Rows written before invitations had to be accepted were marked accepted as of their invitation by `V7__project_invites`. |
 | `pinnedAt` / `starredAt` | Independent, nullable, per-member sidebar preferences. Re-setting either keeps the original timestamp so a list ordered by it doesn't reshuffle. |
+
+## PROJECT_INVITE
+
+An invitation nobody has answered yet. It grants nothing: no permission query reads this table.
+
+| Field | Meaning |
+|---|---|
+| `id` | Generated. What the owner names to withdraw an invitation. |
+| `projectId` | The project, a real foreign key. Unique together with `email`. |
+| `email` | The invited address, lower-cased. Keyed by address and not by user on purpose: the row is written the same way whether or not an account exists, so inviting never reveals which addresses are registered. |
+| `projectRole` | The role on offer, `EDITOR` or `VIEWER`. |
+| `invitedBy` | The owner who sent it — a plain id into account-service's database. |
+| `invitedAt` | When it was sent, or last re-sent. |
+
+Written by a native upsert (`ProjectInviteRepository.upsert`), so inviting an address twice changes the offer instead of failing. Deleted when it is accepted (which writes the `PROJECT_MEMBER` row), declined or withdrawn. Lookups by address exclude deleted projects.
 
 ## PROJECT_FILE
 
@@ -94,3 +109,25 @@ One person's use of a shared `PREVIEW` runner. A preview is one pod per project 
 | `projectId` | Denormalised from `preview.project`, so "this user's session on this project" is a single-table lookup. |
 | `lastSeenAt` | This person's own idle clock — separate from `Preview.lastAccessedAt`. |
 | `endedAt` / `endReason` / `failed` | Null while open. `failed = true` means the runner never came up — shown to the user as an error rather than a normal stop. |
+
+## PUBLISHED_APP
+
+A project's published app (see the [publishing flow](../architecture/flows/publishing.md) and [ADR 0008](../architecture/decisions/0008-published-apps.md)). **One row per project that has ever been published**, so the link stays the project's across unpublish and publish again. Created by migration V6. Live and build are separate groups of columns on purpose: an update that fails leaves the live app exactly as it was. Every change to the build columns goes through `PublishedAppRepository`'s conditional updates, which name the build number and apply only while that build is still the one under way - so a build ended by Unpublish, a project's deletion or the sweeper cannot write its result over what replaced it.
+
+| Field | Meaning |
+|---|---|
+| `project` / `projectId` | The FK relation (unique: one row per project), plus a read-only mirror column for code outside a request. |
+| `slug` | The link's name - one DNS label, unique across the table, chosen once and kept. Reserved and preview-shaped names are refused (`PublishedSlug`). |
+| `status` | `PublishStatus`: `LIVE` or `UNPUBLISHED` (the link kept, nothing served). |
+| `livePrefix` / `liveRevisionId` / `liveFileCount` / `liveBytes` | The served build's storage prefix (`b<N>/`), the project revision it was made from (compared with `PROJECT.currentFileRevisionId` to say "you have changes that are not published"; null for a project with no revision yet), and its size. |
+| `publishedByUserId` / `publishedAt` | Who started the live build, and when it went live. |
+| `buildNumber` | Builds ever started for the row; names each build's storage prefix. Incremented by the claim. |
+| `buildStatus` | `PublishBuildStatus`: `BUILDING`, `FAILED`, or null when no build is under way. |
+| `buildRevisionId` / `buildDetail` | The revision being built and the step under way. |
+| `buildPodName` | The runner pod the build holds. `PreviewReaper`'s orphan sweep counts it as owned. |
+| `buildStartedByUserId` / `buildStartedAt` | Whose build, and when it started - the next claim must be at least `publishing.min-build-interval` later. |
+| `buildHeartbeatAt` / `buildOwner` | Refreshed every few seconds while the build runs. `PublishSweeper` fails a `BUILDING` row whose heartbeat is older than `publishing.heartbeat-stale-after`. `buildOwner` is a diagnostic label. |
+| `failureKind` / `failureDetail` / `failureLog` | `PublishFailureKind`, one plain sentence, and the tail of the output of a failed build. |
+| `retiredPrefix` / `retiredAt` | A build that no longer serves and is waiting to be deleted. The sweeper deletes every build the app has in storage except the live one and the one under way, since the row can remember only one. |
+
+The storage layout is not in the database: `published-apps/<slug>/current.json` is the pointer, `<slug>/b<N>/site/` the build and `<slug>/b<N>/src/` the sources it was made from.

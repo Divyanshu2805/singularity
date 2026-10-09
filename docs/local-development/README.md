@@ -10,6 +10,7 @@ Local development runs **six processes**: Eureka, the three domain services, the
 | 2. Configure environment variables | [Configuration](configuration.md) |
 | 3. Start the stack | [First-time setup](setup.md) |
 | 4. (Optional) Run live previews on a local cluster | [Live previews](live-previews.md) |
+| 5. (Optional) Publish an app on it | [Publishing locally](publishing.md) |
 
 ## Reference
 
@@ -17,6 +18,7 @@ Local development runs **six processes**: Eureka, the three domain services, the
 |---|---|
 | [Troubleshooting](troubleshooting.md) | Symptoms you're likely to hit, and their fixes |
 | [The preview checklist](preview-checklist.md) | Every preview case, how to provoke it, and what was verified where |
+| [The publishing checklist](publish-checklist.md) | What to check by hand after a change to publishing, locally and on production |
 | [Useful commands](commands.md) | Build, run, test and cluster commands in one place |
 | [Health checks](health-checks.md) | The actuator endpoint on each service's management port |
 | [Resetting local data](resetting-data.md) | Starting over from empty databases and storage |

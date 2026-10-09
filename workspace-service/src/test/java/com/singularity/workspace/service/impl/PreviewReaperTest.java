@@ -7,6 +7,7 @@ import com.singularity.workspace.enums.PreviewFailureKind;
 import com.singularity.workspace.enums.PreviewStatus;
 import com.singularity.workspace.repository.PreviewRepository;
 import com.singularity.workspace.repository.PreviewSessionRepository;
+import com.singularity.workspace.repository.PublishedAppRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -55,8 +56,10 @@ class PreviewReaperTest {
             "singularity-ai", "http", "localhost", null, 5173, "local", "projects",
             Duration.ofMinutes(30), Duration.ofMinutes(2), Duration.ofMinutes(5), "secret", Duration.ofHours(6), Duration.ofMinutes(5));
 
+    private final PublishedAppRepository publishedAppRepository = mock(PublishedAppRepository.class);
+
     private final PreviewReaper reaper = new PreviewReaper(previewRepository, sessionRepository, runnerPool, router,
-            bootstrapper, lifecycle, properties, deploymentService, synchronizer, instanceId);
+            bootstrapper, lifecycle, properties, deploymentService, synchronizer, instanceId, publishedAppRepository);
 
     private static final PreviewBootstrapper.HealthCheck HEALTHY = new PreviewBootstrapper.HealthCheck(true, true, true);
 
@@ -117,6 +120,24 @@ class PreviewReaperTest {
 
         verify(deploymentService, never()).republishRoute(any());
         verify(deploymentService, never()).shutDownIfUnused(any(), eq("Nobody has it open"));
+    }
+
+    @Test
+    void onePreviewThatCannotBeLookedAfterDoesNotCostTheOthersTheirTurn() {
+        Preview broken = Preview.builder().id(2L).projectId(6L).status(PreviewStatus.RUNNING)
+                .podName("pod-b").hostname("host-b").build();
+        Preview current = preview(PreviewStatus.RUNNING, "pod-a", "host-a");
+        when(previewRepository.findByStatusIn(ACTIVE)).thenReturn(List.of(broken, current));
+        when(deploymentService.lockFor(6L)).thenReturn(new Object());
+        when(previewRepository.findById(2L)).thenThrow(new IllegalStateException("row could not be read"));
+        when(previewRepository.findById(PREVIEW_ID)).thenReturn(Optional.of(current));
+        when(runnerPool.isAlive("pod-a")).thenReturn(true);
+        when(bootstrapper.checkHealth("pod-a")).thenReturn(new PreviewBootstrapper.HealthCheck(false, false, true));
+
+        reaper.reap();
+
+        verify(lifecycle).terminate(current, "The dev server stopped unexpectedly");
+        verify(runnerPool).claimedPods();
     }
 
     @Test
@@ -299,6 +320,23 @@ class PreviewReaperTest {
         reaper.reap();
 
         verify(lifecycle).fail(eq(waiting), eq(PreviewFailureKind.CAPACITY), any(), eq(null));
+    }
+
+    @Test
+    void aPodHeldByAPublishBuildIsNotReleasedAsAnOrphanButAnUnownedOldOneIs() {
+        Instant old = Instant.now().minus(Duration.ofMinutes(10));
+        when(previewRepository.findByStatusIn(ACTIVE)).thenReturn(List.of());
+        when(publishedAppRepository.findBuildPodNames()).thenReturn(List.of("build-pod"));
+        when(runnerPool.claimedPods()).thenReturn(List.of(
+                new PreviewRunnerPool.ClaimedPod("build-pod", old),
+                new PreviewRunnerPool.ClaimedPod("stray-pod", old),
+                new PreviewRunnerPool.ClaimedPod("fresh-pod", Instant.now())));
+
+        reaper.reap();
+
+        verify(runnerPool, never()).release("build-pod");
+        verify(runnerPool, never()).release("fresh-pod");
+        verify(runnerPool).release("stray-pod");
     }
 
     @Test

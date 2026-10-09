@@ -185,3 +185,85 @@ spec:
             limits:
               cpu: "200m"
               memory: "512Mi"
+
+---
+
+# The read-only user the preview proxy serves published apps with. Narrower than previewreader on purpose: it can read a
+# build's `site/` files and each app's `current.json` pointer and nothing else - not the `src/` snapshot stored beside
+# them for the share page, not any other bucket - and it can never write. It is a separate user from previewreader
+# because that one's credentials sit in every runner pod, next to project code.
+#
+# Needs minio-published-credentials in BOTH namespaces with the same password (the Job reads it here, the proxy in
+# `singularity-ai` uses it):
+#   kubectl create secret generic minio-published-credentials -n singularity --from-literal=password='<MINIO_PUBLISHED_SECRET>'
+#   kubectl create secret generic minio-published-credentials -n singularity-ai --from-literal=password='<the same value>'
+# deploy/scripts/apply-secrets.sh does both from the GitHub `production` environment. Like the previewreader Job it is
+# safe to run again, but a Job's template is immutable: delete the finished Job before applying a changed one.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-bootstrap-published-reader
+  namespace: singularity
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mc
+          image: ghcr.io/divyanshu2805/mc:RELEASE.2025-08-13T08-35-41Z
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["IPC_LOCK"]
+          env:
+            - name: HOME
+              value: /tmp
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: username
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root-credentials
+                  key: password
+            - name: PUBLISHED_READER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-published-credentials
+                  key: password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              mc alias set myminio http://minio-service:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+              mc mb --ignore-existing myminio/published-apps
+              cat > /tmp/published-readonly-policy.json <<'POLICY'
+              {
+                "Version": "2012-10-17",
+                "Statement": [
+                  { "Effect": "Allow", "Action": ["s3:GetObject"],
+                    "Resource": ["arn:aws:s3:::published-apps/*/current.json", "arn:aws:s3:::published-apps/*/site/*"] }
+                ]
+              }
+              POLICY
+              mc admin policy create myminio published-readonly /tmp/published-readonly-policy.json
+              mc admin user add myminio publishedreader "$PUBLISHED_READER_PASSWORD"
+              mc admin policy attach myminio published-readonly --user publishedreader
+              echo "publishedreader is ready, read-only on published apps' pointers and site files"
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "512Mi"

@@ -478,6 +478,18 @@ public class PromptUtils {
             - Do not converge on the usual choices: no purple gradient on white, no Inter, Roboto or Space Grotesk.
             When the request or the brief describes a style, that style wins over everything in this section.
 
+            One thing no style overrides: every screen fits the window it is in, from a 360px phone to a wide
+            desktop, and the page never scrolls sideways.
+            - Write the phone layout first and widen it with `sm:`, `md:` and `lg:`. Things that sit side by side
+              on a desktop - columns of a board, cards, a sidebar beside its content, the items of a toolbar -
+              stack or wrap on a narrow screen: `grid grid-cols-1 md:grid-cols-3`, `flex flex-col md:flex-row`,
+              `flex-wrap`.
+            - Never give a container a fixed width wider than a phone (`w-[900px]`, `min-w-[320px]` on each of
+              several columns). Use `w-full` with a `max-w-*`, and `min-w-0` on a flex or grid child that holds
+              long text so it can shrink; long text truncates or wraps.
+            - When something truly needs more room than a phone has - a wide table, a board that must stay in
+              one row - put that one element in its own `overflow-x-auto` box, so it scrolls and the page does not.
+
             ## 7. The UI kit
             {{KIT}}
 

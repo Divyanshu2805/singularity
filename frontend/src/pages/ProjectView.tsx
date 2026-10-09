@@ -5,8 +5,28 @@
  * the line a chat message points at, handing a build step to the code lens for a detailed explanation, refreshing
  * usage when a response ends, replacing the composer with the quota banner once the allowance is spent or too little
  * of it is left for the server to admit another build, saying so when a request could not be
- * sent because a response is already in progress, bringing the preview up to date when a response has changed files,
- * and the share, fork and delete actions.
+ * sent because a response is already in progress - with a button to stop that response for someone who may edit,
+ * since the one in progress may be another member's and would otherwise hold the project until it ended - bringing
+ * the preview up to date when a response has changed files,
+ * the publish, share, fork and delete actions, the History panel and the question asked before going back to a version,
+ * Undo on a chat reply, clearing the chat, the first-run guide, and the page shown instead of all of it when the
+ * project cannot be opened.
+ *
+ * A project that is not this person's to open - deleted, never shared with them, a wrong address - used to leave an
+ * empty workspace under an error toast. It is now a page of its own that says what the possibilities are and leads
+ * back to their projects; a load that failed for another reason offers to try again (lib/project-access). The chat
+ * is asked for only once the project has loaded, so a stranger's visit does not also raise a chat error.
+ *
+ * When the files change from outside the chat - a version restored, a turn undone, a file saved by hand - the chat
+ * store's copy of the files a build wrote is the stale one, so it is dropped, the code panel is told to read again,
+ * and a running preview is asked about so its "Updating" shows. After a restore the preview is also reloaded once it
+ * has had a moment to catch up, since a restore can swap out a page the browser is still showing.
+ *
+ * The guide (components/WorkspaceGuide) opens by itself once, the first time a person opens a project they can build
+ * in, and afterwards only from the header's help button.
+ *
+ * Publish is the header's chip with its own panel (components/PublishMenu), shown to every member - the owner
+ * changes it, the others see where it stands.
  *
  * After a response whose files were saved, a running preview is asked about at once, so its "Updating" shows and
  * gives way to "Up to date" as the server brings it level (the server also installs a new package by itself; this
@@ -39,7 +59,7 @@
 import { useState, useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ClipboardCopy, CodeXml, Download, Eye, FileDown, GitFork, Pin, Star, Trash2, type LucideIcon } from "lucide-react";
+import { CircleHelp, CodeXml, Download, Eraser, Eye, FileDown, GitFork, GraduationCap, History, Pin, Star, Trash2, type LucideIcon } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { ForkProjectDialog } from "@/components/ForkProjectDialog";
 import { canForkProject } from "@/lib/project-fork";
@@ -67,21 +87,32 @@ import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useProjectPreferences } from "@/hooks/use-project-preferences";
 import { useTeachingMode } from "@/hooks/use-teaching-mode";
-import { api, isAuthenticated, loginRedirectPath } from "@/lib/api";
-import { projectChat, useProjectChat } from "@/lib/project-chat-store";
+import { api, getUserInfo, isAuthenticated, loginRedirectPath } from "@/lib/api";
+import { projectChat, useProjectChat, type ChatMessage } from "@/lib/project-chat-store";
+import { projectLoadFailure, type ProjectLoadFailure } from "@/lib/project-access";
+import { hasSeenGuide, markGuideSeen } from "@/lib/guide";
+import { HistoryPanel } from "@/components/HistoryPanel";
+import { LearnPanel } from "@/components/LearnPanel";
+import { learnPanel } from "@/lib/learn-panel-store";
+import { RestoreDialog, type RestoreTarget } from "@/components/RestoreDialog";
+import { WorkspaceGuide } from "@/components/WorkspaceGuide";
+import { Button } from "@/components/ui/button";
 import { codeLens, useCodeLens, type BuildStepQuestion } from "@/lib/code-lens-store";
+import type { LessonQuestion } from "@/lib/lesson";
 import { useToast } from "@/hooks/use-toast";
 import type { RuntimeError } from "@/components/RuntimeErrorAlert";
 import { generateGradient, cn } from "@/lib/utils";
 import { ProjectResponse, type ProjectSummaryResponse } from "@/lib/types";
 import type { CodeTarget } from "@/lib/lesson";
 import { ShareDialog } from "@/components/ShareDialog";
+import { PublishMenu } from "@/components/PublishMenu";
 import { buildChatMarkdown, downloadMarkdown, exportFilename } from "@/lib/chat-export";
 import { deleteCopy } from "@/lib/project-delete";
-import { useCopyFeedback } from "@/hooks/use-copy-feedback";
+import { ToastAction } from "@/components/ui/toast";
 import { useBilling } from "@/hooks/use-billing";
 import { ChatUsageMeter } from "@/components/ChatUsageMeter";
-import { formatResetIn, formatTokens } from "@/lib/billing";
+import { formatResetIn } from "@/lib/billing";
+import { quotaStop } from "@/lib/stops";
 
 type ViewMode = "code" | "preview";
 
@@ -94,10 +125,11 @@ const CHAT_PANEL_PERCENT = { sidebarCollapsed: 45, sidebarPinned: 44 };
 const PREVIEW_SYNC_GRACE_MS = 2500;
 const CHAT_PANEL_PERCENT_WITH_NOTES = 28;
 
-function HeaderIconButton({ label, onClick, disabled, destructive, star, motion = "scale(1.14)", children }: {
+function HeaderIconButton({ label, onClick, disabled, destructive, star, guide, motion = "scale(1.14)", children }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  guide?: string;
   destructive?: boolean;
   star?: boolean;
   motion?: string;
@@ -109,6 +141,7 @@ function HeaderIconButton({ label, onClick, disabled, destructive, star, motion 
         <button
           type="button"
           aria-label={label}
+          data-guide={guide}
           onClick={onClick}
           disabled={disabled}
           style={{ "--icon-hover": motion } as CSSProperties}
@@ -238,6 +271,13 @@ function ProjectWorkspace() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [loadFailure, setLoadFailure] = useState<ProjectLoadFailure | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null);
+  const [filesVersion, setFilesVersion] = useState(0);
+  const [isClearChatOpen, setIsClearChatOpen] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   const initialPromptRef = useRef<string | null>(
     (location.state as { initialPrompt?: string } | null)?.initialPrompt ?? null
@@ -277,34 +317,58 @@ function ProjectWorkspace() {
     if (!projectId) return;
     let isCancelled = false;
 
-    projectChat.loadHistory(projectId);
+    setLoadFailure(null);
     api.getProject(projectId)
       .then((projectData) => {
-        if (!isCancelled) setProject(projectData);
+        if (isCancelled) return;
+        setProject(projectData);
+        projectChat.loadHistory(projectId);
       })
       .catch((error) => {
         console.error("Failed to load project:", error);
-        toast({
-          title: "Couldn't load this project",
-          description: error instanceof Error ? error.message : "Check your connection and try again.",
-          variant: "destructive",
-        });
+        if (!isCancelled) setLoadFailure(projectLoadFailure(error));
       });
 
     return () => {
       isCancelled = true;
     };
-  }, [projectId, toast]);
+  }, [projectId, loadAttempt]);
 
   useEffect(() => {
     if (!chat.historyError) return;
     toast({ title: "Couldn't load the chat", description: chat.historyError, variant: "destructive" });
   }, [chat.historyError, toast]);
 
+  const canBuildHere = role === "OWNER" || role === "EDITOR";
+  useEffect(() => {
+    if (!canBuildHere || !chat.isHistoryLoaded) return;
+    const userId = getUserInfo()?.id;
+    if (hasSeenGuide(userId)) return;
+    markGuideSeen(userId);
+    setIsGuideOpen(true);
+  }, [canBuildHere, chat.isHistoryLoaded]);
+  const closeGuide = useCallback(() => setIsGuideOpen(false), []);
+
   useEffect(() => {
     if (!chat.notice || !projectId) return;
-    toast({ title: "A response is already in progress", description: chat.notice });
+    const stopIt = async () => {
+      try {
+        await api.stopGeneration(projectId);
+        await projectChat.loadHistory(projectId);
+        toast({ title: "Stopped", description: "What it had finished is saved. You can send your request now." });
+      } catch (error) {
+        toast({ title: "Couldn't stop it", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+      }
+    };
+    toast({
+      title: "A response is already in progress",
+      description: chat.notice,
+      action: canEdit && !chat.isStreaming
+        ? <ToastAction altText="Stop the response in progress" onClick={() => void stopIt()}>Stop it</ToastAction>
+        : undefined,
+    });
     projectChat.dismissNotice(projectId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.notice, projectId, toast]);
 
   const handleOpenFile = useCallback((path: string, isFromCurrentChat: boolean, target?: CodeTarget) => {
@@ -317,6 +381,27 @@ function ProjectWorkspace() {
     setViewMode("code");
     setOpenFileRequest({ path: step.path, id: Date.now(), showDiff: false });
     codeLens.explainStep(projectId, step);
+  }, [projectId]);
+
+  const handleAskAbout = useCallback((ask: LessonQuestion) => {
+    if (!projectId) return;
+    setViewMode("code");
+    const hasLines = !!ask.path && !!ask.code && ask.startLine !== undefined;
+    if (ask.path) {
+      setOpenFileRequest({
+        path: ask.path,
+        id: Date.now(),
+        showDiff: false,
+        target: hasLines ? { line: ask.startLine, endLine: ask.endLine } : undefined,
+      });
+    }
+    codeLens.askAbout(
+      projectId,
+      hasLines
+        ? { path: ask.path!, code: ask.code!, startLine: ask.startLine!, endLine: ask.endLine ?? ask.startLine! }
+        : null,
+      ask.question
+    );
   }, [projectId]);
 
   const previewForBuildRef = useRef({ canEdit, livePreview });
@@ -398,6 +483,59 @@ function ProjectWorkspace() {
     }, PREVIEW_SYNC_GRACE_MS);
   }, [chat.isStreaming, chat.lastTurnFiles, lastTurnOutcome, currentPreview?.status, refreshPreview]);
 
+  const handleFilesChanged = useCallback((paths?: readonly string[]) => {
+    if (!projectId) return;
+    projectChat.filesChangedOutside(projectId, paths);
+    queryClient.invalidateQueries({ queryKey: ["revisions", projectId] });
+    if (currentPreview?.status === "RUNNING") {
+      refreshPreview().catch(() => {
+      });
+    }
+  }, [projectId, queryClient, currentPreview?.status, refreshPreview]);
+
+  const handleRestored = useCallback(() => {
+    handleFilesChanged();
+    setFilesVersion((version) => version + 1);
+    setRuntimeError(null);
+    if (currentPreview?.status === "RUNNING") {
+      window.clearTimeout(previewReloadTimerRef.current);
+      previewReloadTimerRef.current = window.setTimeout(() => setPreviewReloadSignal((signal) => signal + 1), PREVIEW_SYNC_GRACE_MS);
+    }
+  }, [handleFilesChanged, currentPreview?.status]);
+
+  const handleFileSaved = useCallback((path: string) => handleFilesChanged([path]), [handleFilesChanged]);
+
+  const handleUndoTurn = useCallback((message: ChatMessage) => {
+    if (message.revisionId == null) return;
+    const index = chat.messages.findIndex((candidate) => candidate.id === message.id);
+    const request = index > 0 && chat.messages[index - 1].role === "user" ? chat.messages[index - 1].content : "";
+    const firstLine = request.replace(/[*_`#>]/g, "").split("\n").map((line) => line.trim()).find(Boolean) ?? "this change";
+    setRestoreTarget({
+      revisionId: message.revisionId,
+      before: true,
+      title: firstLine.length > 90 ? `${firstLine.slice(0, 89).trimEnd()}…` : firstLine,
+    });
+  }, [chat.messages]);
+
+  const handlePickRestore = useCallback((target: RestoreTarget) => {
+    setIsHistoryOpen(false);
+    setRestoreTarget(target);
+  }, []);
+
+  const handleClearChat = async () => {
+    if (!projectId) return;
+    try {
+      await projectChat.clearChat(projectId);
+      toast({ title: "Chat cleared", description: "Your files and their history are untouched." });
+    } catch (error) {
+      toast({
+        title: "Couldn't clear the chat",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleRename = async (name: string) => {
     if (!projectId) return false;
     try {
@@ -439,22 +577,10 @@ function ProjectWorkspace() {
 
   const projectName = projectSummary?.name ?? project?.name ?? "project";
 
-  const [copiedChat, copyChat] = useCopyFeedback();
 
   const { quota, refresh: refreshBilling } = useBilling();
-  const quotaBlock = quota?.isExhausted
-    ? {
-        message: `You've used today's ${formatTokens(quota.limit)} AI tokens.`,
-        resetsIn: formatResetIn(quota.resetsAt),
-        onUpgrade: () => navigate("/pricing"),
-      }
-    : quota && !quota.canBuild
-      ? {
-          message: `Only ${formatTokens(quota.remaining)} of today's ${formatTokens(quota.limit)} AI tokens are left - not enough for another build.`,
-          resetsIn: formatResetIn(quota.resetsAt),
-          onUpgrade: () => navigate("/pricing"),
-        }
-      : null;
+  const stop = quota ? quotaStop(quota, formatResetIn(quota.resetsAt)) : null;
+  const quotaBlock = stop ? { message: stop.title, detail: stop.detail, onUpgrade: () => navigate("/pricing") } : null;
 
   const wasStreamingRef = useRef(chat.isStreaming);
   useEffect(() => {
@@ -469,7 +595,6 @@ function ProjectWorkspace() {
     downloadMarkdown(exportFilename(projectName, "chat"), chatMarkdown());
   };
 
-  const handleCopyChat = () => copyChat(chatMarkdown());
 
   const wasNotesOpenRef = useRef(isNotesOpen);
   useEffect(() => {
@@ -520,6 +645,30 @@ function ProjectWorkspace() {
     );
   }
 
+  if (loadFailure) {
+    return (
+      <div className="dash-night ws-shell relative flex h-screen overflow-hidden">
+        <SidebarSpacer sidebar={sidebar} />
+        <div className="ws-stage relative flex min-w-0 flex-1 items-center justify-center p-6">
+          <div className="chat-enter flex max-w-md flex-col items-center gap-3 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.03] text-muted-foreground">
+              <Eye className="h-5 w-5" />
+            </span>
+            <h1 className="text-lg font-semibold text-foreground">{loadFailure.title}</h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">{loadFailure.detail}</p>
+            <div className="mt-2 flex items-center gap-2">
+              {loadFailure.kind === "error" && (
+                <Button variant="outline" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</Button>
+              )}
+              <Button onClick={() => navigate("/projects")}>Back to your projects</Button>
+            </div>
+          </div>
+        </div>
+        <AppSidebar sidebar={sidebar} inset />
+      </div>
+    );
+  }
+
   const workArea = (
     <div className="relative h-full">
       <div className={cn("absolute inset-0", viewMode !== "code" && "hidden")}>
@@ -534,6 +683,9 @@ function ProjectWorkspace() {
           lastTurnFiles={chat.lastTurnFiles}
           openFileRequest={openFileRequest}
           onDiffViewed={handleDiffViewed}
+          canEdit={canEdit}
+          filesVersion={filesVersion}
+          onFileSaved={handleFileSaved}
         />
       </div>
       <div className={cn("ws-window absolute inset-0", viewMode !== "preview" && "hidden")}>
@@ -589,6 +741,11 @@ function ProjectWorkspace() {
                   >
                     <Star className={cn(projectSummary?.starredAt && "fill-current")} />
                   </HeaderIconButton>
+                  {canEdit && (
+                    <HeaderIconButton label="Show me around" motion="scale(1.12)" onClick={() => setIsGuideOpen(true)} disabled={!project}>
+                      <CircleHelp />
+                    </HeaderIconButton>
+                  )}
                 </div>
               </div>
             ) : (
@@ -609,6 +766,7 @@ function ProjectWorkspace() {
                 key={mode}
                 type="button"
                 role="tab"
+                data-guide={mode}
                 aria-selected={viewMode === mode}
                 onClick={() => setViewMode(mode)}
                 className={cn(
@@ -633,26 +791,49 @@ function ProjectWorkspace() {
               </span>
             )}
 
-            {!isViewer && (
-              <>
-                <HeaderIconButton
-                  label={copiedChat ? "Copied" : "Copy as markdown"}
-                  motion="scale(1.08)"
-                  onClick={() => void handleCopyChat()}
-                  disabled={!hasChatToExport}
-                >
-                  {copiedChat ? <Check className="text-syntax-string" /> : <ClipboardCopy />}
-                </HeaderIconButton>
+            <HeaderIconButton
+              label="Learn your project"
+              motion="translateY(-2px) scale(1.1)"
+              onClick={() => projectId && learnPanel.open(projectId)}
+              disabled={!project}
+            >
+              <GraduationCap />
+            </HeaderIconButton>
 
-                <HeaderIconButton
-                  label="Export as markdown"
-                  motion="translateY(1.5px) scale(1.08)"
-                  onClick={handleExportChat}
-                  disabled={!hasChatToExport}
-                >
-                  <FileDown />
-                </HeaderIconButton>
-              </>
+            <HeaderIconButton
+              label="History"
+              guide="history"
+              motion="rotate(-40deg) scale(1.08)"
+              onClick={() => setIsHistoryOpen(true)}
+              disabled={!project}
+            >
+              <History />
+            </HeaderIconButton>
+
+            {!isViewer && (
+              <HeaderIconButton
+                label="Clear chat"
+                motion="rotate(-12deg) scale(1.08)"
+                onClick={() => setIsClearChatOpen(true)}
+                disabled={!hasChatToExport || chat.isStreaming}
+              >
+                <Eraser />
+              </HeaderIconButton>
+            )}
+
+            <HeaderIconButton label="Download ZIP" motion="translateY(2px)" onClick={handleDownloadProject} disabled={!project || isDownloading}>
+              {isDownloading ? <OrbitSpinner /> : <Download />}
+            </HeaderIconButton>
+
+            {!isViewer && (
+              <HeaderIconButton
+                label="Export as markdown"
+                motion="translateY(1.5px) scale(1.08)"
+                onClick={handleExportChat}
+                disabled={!hasChatToExport}
+              >
+                <FileDown />
+              </HeaderIconButton>
             )}
 
             {canForkProject(role) && (
@@ -661,17 +842,15 @@ function ProjectWorkspace() {
               </HeaderIconButton>
             )}
 
-            <HeaderIconButton label="Download ZIP" motion="translateY(2px)" onClick={handleDownloadProject} disabled={!project || isDownloading}>
-              {isDownloading ? <OrbitSpinner /> : <Download />}
-            </HeaderIconButton>
-
-            {canEdit && (
+            {role && (
               <HeaderIconButton label={deleteText.menuLabel} destructive motion="rotate(-10deg) scale(1.1)" onClick={() => setIsDeleteDialogOpen(true)}>
                 <Trash2 />
               </HeaderIconButton>
             )}
 
             <span aria-hidden="true" className="mx-1 h-5 w-px bg-white/[0.1]" />
+
+            <PublishMenu projectId={projectId} role={role} projectName={projectName} />
 
             <ShareDialog projectId={projectId} canManageMembers={role === "OWNER"} />
           </div>
@@ -700,11 +879,12 @@ function ProjectWorkspace() {
                   onBrowseCode={() => setViewMode("code")}
                   onStop={handleStop}
                   onRetry={handleRetry}
+                  onUndoTurn={canEdit ? handleUndoTurn : undefined}
                   onExplainStep={handleExplainStep}
+                  onAskAbout={handleAskAbout}
                   teachingMode={teachingMode}
                   projectId={projectId}
                   onTeachingModeChange={setTeachingMode}
-                  suggestions={chat.suggestions}
                 />
               </ResizablePanel>
 
@@ -721,6 +901,50 @@ function ProjectWorkspace() {
           project={isForkDialogOpen && project ? { id: project.id, name: projectSummary?.name ?? project.name } : null}
           onOpenChange={setIsForkDialogOpen}
         />
+
+        <HistoryPanel
+          projectId={projectId}
+          open={isHistoryOpen}
+          onOpenChange={setIsHistoryOpen}
+          turns={chat.messages}
+          canRestore={canEdit}
+          restoreBlockedReason={chat.isStreaming ? "A response is being written. You can go back to a version once it has finished." : null}
+          onRestore={handlePickRestore}
+        />
+
+        <LearnPanel
+          projectId={projectId}
+          onOpenFile={(path) => handleOpenFile(path, false)}
+          onAsk={handleAskAbout}
+        />
+
+        <RestoreDialog
+          projectId={projectId}
+          target={restoreTarget}
+          onClose={() => setRestoreTarget(null)}
+          onRestored={handleRestored}
+        />
+
+        <WorkspaceGuide open={isGuideOpen} onClose={closeGuide} />
+
+        <AlertDialog open={isClearChatOpen} onOpenChange={setIsClearChatOpen}>
+          <AlertDialogContent className="sm:max-w-md">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear this chat?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Your conversation in this project is deleted and the AI starts fresh, without what was said before.
+                Your files, their History and other people&rsquo;s chats are not touched. A cleared chat can&rsquo;t be
+                brought back - export it first if you want to keep it.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => void handleClearChat()} className={buttonVariants({ variant: "destructive" })}>
+                Clear chat
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
           <AlertDialogContent className="sm:max-w-md">

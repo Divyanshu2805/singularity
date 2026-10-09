@@ -14,7 +14,7 @@
 # base/preview-proxy.yaml's own comments explain why - Kubernetes Secrets don't cross namespaces).
 set -euo pipefail
 
-for var in DB_PASSWORD MINIO_ROOT_PASSWORD MINIO_RUNNER_SECRET INTERNAL_SERVICE_SHARED_SECRET \
+for var in DB_PASSWORD MINIO_ROOT_PASSWORD MINIO_RUNNER_SECRET MINIO_PUBLISHED_SECRET INTERNAL_SERVICE_SHARED_SECRET \
            PREVIEW_ACCESS_TOKEN_SECRET FIREBASE_SERVICE_ACCOUNT_JSON OPENROUTER_API_KEY STRIPE_SECRET \
            STRIPE_WEBHOOK_SECRET STRIPE_PRICE_PRO STRIPE_PRICE_BUSINESS CLOUDFLARE_TUNNEL_CREDENTIALS \
            R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_ENDPOINT; do
@@ -41,6 +41,12 @@ apply minio-runner-credentials -n singularity \
 apply minio-runner-credentials -n singularity-ai \
   --from-literal=password="$MINIO_RUNNER_SECRET" \
   --from-literal=host-uri="$MINIO_RUNNER_HOST_URI"
+
+# The read-only user the preview proxy serves published apps with (base/minio.yaml's published-reader Job creates it).
+# Its own secret, not the runner's: runner pods run project code and must never hold a credential that can read a
+# published app's stored sources.
+apply minio-published-credentials -n singularity --from-literal=password="$MINIO_PUBLISHED_SECRET"
+apply minio-published-credentials -n singularity-ai --from-literal=password="$MINIO_PUBLISHED_SECRET"
 
 apply internal-service-secret -n singularity --from-literal=shared-secret="$INTERNAL_SERVICE_SHARED_SECRET"
 

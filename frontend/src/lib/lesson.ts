@@ -20,7 +20,19 @@
  * with no lines (`### What happens next`). The sections come in the order the idea needs, which is not always the
  * order of the lines, so nothing here assumes ascending ranges. It is plain headed text rather than tags, so a
  * half-arrived answer reads sensibly at every point: only a heading line still being written is held back, and the
- * last section is reported as not complete until the next heading or the end of the stream shows it is.
+ * last section is reported as not complete until the next heading or the end of the stream shows it is. A lesson
+ * may close with a second unnumbered section, `### Check yourself`: one question the reader answers from the lines
+ * in front of them, kept apart from the closing so it can be shown as something to answer.
+ *
+ * The big picture is the third kind: what teaching mode says about a whole turn before any step is opened - an
+ * opening, then headed sections of bullets and numbered steps (the pieces, how it works, the ideas). Big pictures written while there was a fourth section, on which step to
+ * open first, still carry it; it is dropped here, since the owner had it taken out.
+ * It is read here into an intro and sections, and a section's text into paragraphs and lists, with the same rule
+ * about a heading that is still arriving.
+ *
+ * The questions a lesson hands to ExplainLLM are worded here too, so the chat and the code lens ask them in the same
+ * words: the three on a piece of code (its syntax, why it is written that way, what removing it would do), what a
+ * term means, and a check of the reader's own answer. Each is an ordinary question to the read-only model.
  */
 export interface CodeTarget {
   line?: number;
@@ -149,7 +161,10 @@ export interface Walkthrough {
   overview: string;
   notes: WalkthroughNote[];
   closing?: { title: string; text: string };
+  check?: string;
 }
+
+const CHECK_TITLE = /^check yourself\b/i;
 
 const NOTE_HEADING = /^###[ \t]+L(\d+)(?:[ \t]*[-–—][ \t]*L?(\d+))?[ \t]*[·•|:–—-][ \t]*(\S.*?)[ \t]*$/;
 const ANY_HEADING = /^###[ \t]+(\S.*?)[ \t]*$/;
@@ -161,7 +176,7 @@ export function parseWalkthrough(raw: string, isComplete: boolean): Walkthrough 
   const overview: string[] = [];
   const headings: Omit<WalkthroughNote, "text" | "isComplete">[] = [];
   const bodies: string[][] = [];
-  let closing: { title: string; body: string[] } | undefined;
+  let extras: { title: string; body: string[] }[] = [];
   let body = overview;
 
   for (const line of lines) {
@@ -176,13 +191,13 @@ export function parseWalkthrough(raw: string, isComplete: boolean): Walkthrough 
         endLine: Math.max(first, last),
         title: cleanText(note[3].replace(/\*\*/g, "")),
       });
-      closing = undefined;
+      extras = [];
       continue;
     }
     const other = ANY_HEADING.exec(line);
     if (other) {
       body = [];
-      closing = { title: cleanText(other[1].replace(/\*\*/g, "")), body };
+      extras.push({ title: cleanText(other[1].replace(/\*\*/g, "")), body });
       continue;
     }
     body.push(line);
@@ -192,14 +207,137 @@ export function parseWalkthrough(raw: string, isComplete: boolean): Walkthrough 
   const notes = headings.map((heading, index) => ({
     ...heading,
     text: joined(bodies[index]),
-    isComplete: isComplete || closing !== undefined || index < headings.length - 1,
+    isComplete: isComplete || extras.length > 0 || index < headings.length - 1,
   }));
+  const closing = extras.find((extra) => !CHECK_TITLE.test(extra.title));
+  const checkAt = extras.findIndex((extra) => CHECK_TITLE.test(extra.title));
+  const check = checkAt >= 0 && (isComplete || checkAt < extras.length - 1) ? joined(extras[checkAt].body) : "";
 
   return {
     overview: joined(overview),
     notes,
     ...(closing ? { closing: { title: closing.title, text: joined(closing.body) } } : {}),
+    ...(check ? { check } : {}),
   };
+}
+
+export interface BigPictureSection {
+  title: string;
+  text: string;
+}
+
+export interface BigPicture {
+  intro: string;
+  sections: BigPictureSection[];
+}
+
+export function parseBigPicture(raw: string, isComplete: boolean): BigPicture {
+  const lines = raw.replace(/\r\n/g, "\n").split("\n");
+  if (!isComplete && lines.length > 0 && /^#/.test(lines[lines.length - 1])) lines.pop();
+
+  const intro: string[] = [];
+  const sections: { title: string; body: string[] }[] = [];
+  let body = intro;
+  for (const line of lines) {
+    const heading = /^#{2,4}[ \t]+(\S.*?)[ \t]*$/.exec(line);
+    if (heading) {
+      body = [];
+      sections.push({ title: cleanText(heading[1].replace(/\*\*/g, "")), body });
+      continue;
+    }
+    body.push(line);
+  }
+
+  const joined = (parts: string[]) => cleanText(parts.join("\n").replace(/\n{3,}/g, "\n\n"));
+  return {
+    intro: joined(intro),
+    sections: sections
+      .filter((section) => !/^where to start\b/i.test(section.title))
+      .map((section) => ({ title: section.title, text: joined(section.body) })),
+  };
+}
+
+export type ProseBlock =
+  | { kind: "paragraph"; text: string }
+  | { kind: "bullets" | "steps"; items: string[] };
+
+const BULLET = /^[ \t]*[-*•][ \t]+(\S.*)$/;
+const NUMBERED = /^[ \t]*\d+[.)][ \t]+(\S.*)$/;
+
+export function proseBlocks(text: string): ProseBlock[] {
+  const blocks: ProseBlock[] = [];
+  let paragraph: string[] = [];
+  const endParagraph = () => {
+    if (paragraph.length > 0) blocks.push({ kind: "paragraph", text: paragraph.join(" ") });
+    paragraph = [];
+  };
+
+  for (const line of text.split("\n")) {
+    const bullet = BULLET.exec(line);
+    const numbered = bullet ? null : NUMBERED.exec(line);
+    const kind = bullet ? "bullets" : numbered ? "steps" : null;
+    if (kind) {
+      endParagraph();
+      const item = (bullet ?? numbered)![1].trim();
+      const last = blocks[blocks.length - 1];
+      if (last && last.kind === kind) last.items.push(item);
+      else blocks.push({ kind, items: [item] });
+      continue;
+    }
+    if (!line.trim()) {
+      endParagraph();
+      continue;
+    }
+    const last = blocks[blocks.length - 1];
+    if (paragraph.length === 0 && last && last.kind !== "paragraph" && /^[ \t]+\S/.test(line)) {
+      last.items[last.items.length - 1] += ` ${line.trim()}`;
+      continue;
+    }
+    paragraph.push(line.trim());
+  }
+  endParagraph();
+  return blocks;
+}
+
+export interface LessonQuestion {
+  question: string;
+  path?: string;
+  startLine?: number;
+  endLine?: number;
+  code?: string;
+}
+
+export const DEEPER_QUESTIONS: { id: string; label: string; question: string }[] = [
+  {
+    id: "syntax",
+    label: "Explain the syntax",
+    question: "Explain the syntax of this code piece by piece: each keyword and symbol, what it means, and how to read the whole thing in plain English.",
+  },
+  {
+    id: "why",
+    label: "Why this way?",
+    question: "Why is this code written this way? What problem does it solve here, and what would a simpler or different way look like?",
+  },
+  {
+    id: "remove",
+    label: "What if I remove it?",
+    question: "What would break or change in the app if I removed this code?",
+  },
+];
+
+const MAX_TERM_CHARS = 80;
+const MAX_CHECK_QUESTION_CHARS = 500;
+const MAX_CHECK_ANSWER_CHARS = 1000;
+
+const oneLine = (text: string, max: number) => text.replace(/\s+/g, " ").trim().slice(0, max);
+
+export const termQuestion = (term: string) =>
+  `What does "${oneLine(term, MAX_TERM_CHARS)}" mean? Explain it in plain words, then show me where it appears in this project.`;
+
+export function checkAnswerQuestion(path: string, asked: string, answer: string) {
+  return `The lesson on \`${path}\` asked me: "${oneLine(asked, MAX_CHECK_QUESTION_CHARS)}"\n\n`
+    + `My answer: ${answer.trim().slice(0, MAX_CHECK_ANSWER_CHARS)}\n\n`
+    + "Is my answer right? Tell me what I got right, correct what I got wrong, and point me at the lines that show it.";
 }
 
 export function linesOf(fileContent: string | undefined, startLine: number, endLine: number): string[] {

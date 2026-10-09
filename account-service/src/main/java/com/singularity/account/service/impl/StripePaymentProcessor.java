@@ -70,6 +70,13 @@ import java.util.UUID;
  * says is missing and asks once more by email, under a fresh idempotency key, since the first key is spent on the
  * refused request. Only that one answer is treated this way; any other refusal is still a 503.
  *
+ * <p>A webhook about a subscription, user or plan this database does not hold is acknowledged, not answered 404.
+ * Stripe reads anything but a 2xx as "deliver again", for days, and a Stripe account sends every event to every
+ * endpoint registered on it - so an event for a subscription made by another environment on the same account, or one
+ * that arrived before the checkout that creates its row, was retried and logged as an error until Stripe gave up. It
+ * is safe to drop: completing a checkout re-reads the subscription's current state from Stripe, so an update that
+ * came too early is caught up there. The event is still marked processed, and the reason is logged.
+ *
  * <p>Every webhook delivery is claimed through WebhookEventRepository before its handler runs, by Stripe's own event
  * id: an already-PROCESSED event is skipped outright, one still stuck at RECEIVED (in flight, or its own handler
  * previously threw) is reclaimed. Each handler also carries the event's own creation time down into
@@ -323,13 +330,18 @@ public class StripePaymentProcessor implements PaymentProcessor {
             return;
         }
 
-        switch (type) {
-            case "checkout.session.completed" -> handleCheckoutSessionCompleted((Session) stripeObject, metadata, eventCreatedAt);
-            case "customer.subscription.updated" -> handleCustomerSubscriptionUpdated((Subscription) stripeObject, eventCreatedAt);
-            case "customer.subscription.deleted" -> handleCustomerSubscriptionDeleted((Subscription) stripeObject, eventCreatedAt);
-            case "invoice.paid" -> handleInvoicePaid((Invoice) stripeObject, eventCreatedAt);
-            case "invoice.payment_failed" -> handleInvoicePaymentFailed((Invoice) stripeObject, eventCreatedAt);
-            default -> log.debug("Ignoring the event: {}", type);
+        try {
+            switch (type) {
+                case "checkout.session.completed" -> handleCheckoutSessionCompleted((Session) stripeObject, metadata, eventCreatedAt);
+                case "customer.subscription.updated" -> handleCustomerSubscriptionUpdated((Subscription) stripeObject, eventCreatedAt);
+                case "customer.subscription.deleted" -> handleCustomerSubscriptionDeleted((Subscription) stripeObject, eventCreatedAt);
+                case "invoice.paid" -> handleInvoicePaid((Invoice) stripeObject, eventCreatedAt);
+                case "invoice.payment_failed" -> handleInvoicePaymentFailed((Invoice) stripeObject, eventCreatedAt);
+                default -> log.debug("Ignoring the event: {}", type);
+            }
+        } catch (ResourceNotFoundException e) {
+            log.warn("Webhook event {} ({}) is about something this database does not hold - acknowledged, nothing changed: {}",
+                    eventId, type, e.getMessage());
         }
 
         if (eventId != null) {

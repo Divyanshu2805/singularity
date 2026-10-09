@@ -52,7 +52,7 @@ class FileReadAuthorizationTest {
     private static final long OTHER_PROJECT_ID = 43L;
     private static final long USER_ID = 7L;
 
-    private static final FileController CONTROLLER = new FileController(null);
+    private static final FileController CONTROLLER = new FileController(null, null, null);
     private static final ProjectFileServiceImpl SERVICE = new ProjectFileServiceImpl(null, null, null, null, "projects");
 
     private final ProjectMemberRepository members = mock(ProjectMemberRepository.class);

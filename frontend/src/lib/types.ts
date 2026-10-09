@@ -1,7 +1,7 @@
 /**
  * The shapes the backend actually returns, as the app sees them.
  *
- * Handles: projects and their members, files and search results, previews, chat messages and events, code notes and
+ * Handles: projects and their members, files and search results, revisions, previews, chat messages and events, code notes and
  * selections, plans, subscriptions and quota details, usage totals and insights, the session response and the auth
  * security trail.
  *
@@ -34,11 +34,53 @@ export interface Preview {
   queuePosition?: number | null;
   syncState?: PreviewSyncState | null;
   syncDetail?: string | null;
+  syncedRevisionId?: number | null;
 }
 
 export interface PreviewLogs {
   log: string | null;
   live: boolean;
+}
+
+export type PublishBuildStatus = "BUILDING" | "FAILED";
+export type PublishFailureKind = "INSTALL" | "BUILD" | "NO_OUTPUT" | "TOO_LARGE" | "TIMEOUT" | "CAPACITY" | "PLATFORM";
+
+export interface PublishBuild {
+  status: PublishBuildStatus;
+  step: string | null;
+  startedAt: string | null;
+  failureKind: PublishFailureKind | null;
+  failureMessage: string | null;
+}
+
+export interface PublishState {
+  live: boolean;
+  url: string | null;
+  slug: string | null;
+  suggestedSlug: string | null;
+  publishedAt: string | null;
+  hasChanges: boolean;
+  shared: boolean;
+  build: PublishBuild | null;
+}
+
+export interface PublicApp {
+  name: string;
+  slug: string;
+  url: string;
+  publishedAt: string | null;
+  fileCount: number;
+}
+
+export interface PublicFile {
+  path: string;
+  size: number;
+}
+
+export interface PublicFileContent {
+  path: string;
+  content: string;
+  binary: boolean;
 }
 
 export enum ChatEventType {
@@ -66,6 +108,10 @@ export interface ChatEvent {
   isComplete?: boolean;
   /** The lesson teaching mode has already written about this file edit, when it has been opened before. */
   lesson?: string | null;
+  /** The "try changing this" task already set from this file edit, when one was asked for. */
+  task?: string | null;
+  /** True once the check of that task found the change made. */
+  taskDone?: boolean;
 }
 
 export interface ChatMessage {
@@ -76,6 +122,53 @@ export interface ChatMessage {
   createdAt?: string;
   /** True on an assistant turn that was asked for in teaching mode: only its steps can be opened for a lesson. */
   teaching?: boolean;
+  /** The big picture teaching mode has already written about this turn, when it has been shown before. */
+  overview?: string | null;
+  /** The revision an assistant turn's files were published as; absent when it wrote none. Undo restores to before it. */
+  revisionId?: number | null;
+}
+
+export type RevisionStatus = "STAGING" | "APPLIED" | "FAILED" | "CONFLICT";
+export type RevisionSource = "AI_GENERATION" | "MANUAL_EDIT" | "RESTORE";
+
+export interface RevisionSummary {
+  id: number;
+  parentRevisionId: number | null;
+  status: RevisionStatus;
+  source: RevisionSource;
+  createdByUserId: number | null;
+  createdAt: string | null;
+  appliedAt: string | null;
+  changedPaths: string[];
+  /** On a revision made by going back: the revision that was chosen, and whether the project went to just before it. */
+  restoredRevisionId?: number | null;
+  restoredBefore?: boolean | null;
+}
+
+export interface RevisionChange {
+  path: string;
+  kind: "ADDED" | "MODIFIED" | "DELETED";
+}
+
+export interface RestoreResult {
+  revisionId: number | null;
+  status: "APPLIED" | "FAILED" | "CONFLICT";
+  currentRevisionId: number | null;
+  failedPaths: string[];
+}
+
+export interface FileContent {
+  path: string;
+  content: string;
+  /** SHA-256 of the stored bytes; a save by hand sends it back as the version the edit was made against. */
+  hash: string | null;
+}
+
+export interface SavedFile {
+  path: string;
+  hash: string;
+  /** Null when the content was already what the file held and nothing was written. */
+  revisionId: number | null;
 }
 
 export interface ProjectSummaryResponse {
@@ -88,6 +181,7 @@ export interface ProjectSummaryResponse {
   updatedAt?: string;
   pinnedAt?: string | null;
   starredAt?: string | null;
+  publishedUrl?: string | null;
 }
 
 export interface ProjectResponse {
@@ -130,6 +224,31 @@ export interface ProjectMember {
   invitedAt?: string;
 }
 
+export interface ProjectMemberEntry {
+  userId?: number | null;
+  inviteId?: number | null;
+  username: string;
+  name?: string | null;
+  role: ProjectRole;
+  invitedAt?: string | null;
+  acceptedAt?: string | null;
+}
+
+export interface PendingInvite {
+  inviteId: number;
+  email: string;
+  role: ProjectRole;
+  invitedAt?: string;
+}
+
+export interface ProjectInvitation {
+  projectId: number;
+  projectName: string;
+  role: ProjectRole;
+  invitedByName: string | null;
+  invitedAt: string;
+}
+
 export interface CodeSearchMatch {
   line: number;
   text: string;
@@ -164,6 +283,18 @@ export interface CodeNote {
   question: string;
   answer: string;
   selection?: CodeSelection | null;
+  createdAt?: string;
+}
+
+export interface ProjectTour {
+  content: string;
+  writtenAt?: string;
+}
+
+export interface GlossaryEntry {
+  id: number;
+  term: string;
+  definition: string;
   createdAt?: string;
 }
 
@@ -271,7 +402,7 @@ export interface UsageEventPage {
 }
 
 export interface QuotaDetails {
-  reason: "DAILY_TOKENS" | "PROJECT_LIMIT" | "PREVIEW_LIMIT";
+  reason: "DAILY_TOKENS" | "PROJECT_LIMIT" | "PREVIEW_LIMIT" | "PUBLISH_LIMIT";
   limit: number;
   used: number;
   resetsAt?: string | null;

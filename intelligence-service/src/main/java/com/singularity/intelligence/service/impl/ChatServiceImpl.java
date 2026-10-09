@@ -1,5 +1,8 @@
 package com.singularity.intelligence.service.impl;
 
+import com.singularity.common.error.ConflictException;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.singularity.intelligence.dto.chat.ChatResponse;
 import com.singularity.intelligence.dto.chat.LastTurnChangesResponse;
 import com.singularity.intelligence.entity.ChatSessionId;
@@ -21,7 +24,13 @@ import java.util.List;
  *
  * <p>Handles: reading the caller's own chat on a project - a session that does not exist yet is an empty list, not an
  * error - and the latest turn's changed files with their previous versions, skipping any edit saved before those
- * versions were recorded, since there is nothing to diff it against.
+ * versions were recorded, since there is nothing to diff it against - and clearing the caller's own chat.
+ *
+ * <p>Clearing deletes the caller's turns and their events in this project, and nothing else: the files, the
+ * revisions those turns published and every other member's conversation stay as they are, so a cleared chat can
+ * still be undone from the History panel. The session row is kept - its key is the project and the user, and the
+ * next message needs it. It is refused while the caller has a response in progress, which would otherwise be saved
+ * into the emptied conversation a moment later. Any member may clear their own chat; a viewer has none to clear.
  */
 @Service
 @RequiredArgsConstructor
@@ -33,6 +42,7 @@ public class ChatServiceImpl implements ChatService {
     private final ChatSessionRepository chatSessionRepository;
     private final AuthUtil authUtil;
     private final ChatMapper chatMapper;
+    private final GenerationRegistry generationRegistry;
 
     @Override
     @PreAuthorize("@security.canViewProject(#projectId)")
@@ -57,5 +67,19 @@ public class ChatServiceImpl implements ChatService {
                 .map(event -> new LastTurnChangesResponse.FileChange(event.getFilePath(), event.getPreviousContent()))
                 .toList();
         return new LastTurnChangesResponse(files);
+    }
+
+    @Override
+    @Transactional
+    @PreAuthorize("@security.canViewProject(#projectId)")
+    public void clearChat(Long projectId) {
+        Long userId = authUtil.getCurrentUserId();
+        if (generationRegistry.find(projectId, userId).isPresent()) {
+            throw new ConflictException("A response is still being written. Wait for it to finish, or stop it, "
+                    + "then clear the chat.");
+        }
+        int events = chatEventRepository.deleteOfSession(projectId, userId);
+        int messages = chatMessageRepository.deleteOfSession(projectId, userId);
+        log.info("User {} cleared their chat in projectId: {} ({} turn(s), {} event(s))", userId, projectId, messages, events);
     }
 }

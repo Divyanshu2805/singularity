@@ -1,6 +1,7 @@
 package com.singularity.common.security;
 
 import jakarta.servlet.DispatcherType;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -9,9 +10,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
+import java.util.List;
+
 /**
  * The browser-facing security chain for a service that serves no public route - workspace-service and
- * intelligence-service, whose every /api/** endpoint requires a session.
+ * intelligence-service, whose every /api/** endpoint requires a session - except the GET paths a service lists as
+ * public (workspace-service's page of a shared app), which need none.
  *
  * <p>Handles: CSRF for a cookie session, the security response headers, the filter order (session authentication,
  * then machine authentication, then rate limiting), the authority required on /internal/v1/**, and routing 401 and
@@ -41,6 +45,22 @@ public final class ServiceSecurityConfig {
                                             SessionCookies sessionCookies,
                                             HandlerExceptionResolver handlerExceptionResolver,
                                             InternalServiceAuthFilter internalServiceAuthFilter) {
+        return build(httpSecurity, sessionAuthenticator, sessionCookies, handlerExceptionResolver,
+                internalServiceAuthFilter, List.of());
+    }
+
+    /**
+     * As above, with a list of path patterns on which a GET needs no session at all (the public page of a shared
+     * app). Only GET: every other method on those paths, and every method on every other path, still needs a signed-in
+     * caller, and a state-changing request still needs the CSRF header. An empty list is the chain every service had
+     * before.
+     */
+    public static SecurityFilterChain build(HttpSecurity httpSecurity,
+                                            SessionAuthenticator sessionAuthenticator,
+                                            SessionCookies sessionCookies,
+                                            HandlerExceptionResolver handlerExceptionResolver,
+                                            InternalServiceAuthFilter internalServiceAuthFilter,
+                                            List<String> publicGetPaths) {
         SessionAuthFilter sessionAuthFilter = new SessionAuthFilter(
                 sessionAuthenticator, sessionCookies, handlerExceptionResolver);
         RateLimitFilter rateLimitFilter = new RateLimitFilter(new RateLimiter(), handlerExceptionResolver);
@@ -58,16 +78,23 @@ public final class ServiceSecurityConfig {
                         .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31_536_000))
                         .addHeaderWriter((request, response) -> response.setHeader("Permissions-Policy",
                                 "camera=(), microphone=(), geolocation=(), payment=(), usb=()"))
-                        .addHeaderWriter((request, response) -> response.setHeader("Cross-Origin-Opener-Policy", "same-origin")))
-                .authorizeHttpRequests(auth -> auth
-                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
-                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                        // DEP-036: actuator's own management.server.port already runs outside this chain
-                        // entirely (a separate child context) - this rule is defense in depth for the day someone
-                        // removes that port separation, not the thing actually keeping health checks reachable.
-                        .requestMatchers("/actuator/health/**").permitAll()
-                        .requestMatchers("/internal/**").hasAuthority(InternalServiceAuthFilter.ROLE)
-                        .anyRequest().authenticated())
+                        .addHeaderWriter((request, response) -> response.setHeader("Cross-Origin-Opener-Policy", "same-origin"))
+                        .withObjectPostProcessor(EagerSecurityHeaders.beforeTheResponse()))
+                .authorizeHttpRequests(auth -> {
+                    auth
+                            .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
+                            .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                            // DEP-036: actuator's own management.server.port already runs outside this chain
+                            // entirely (a separate child context) - this rule is defense in depth for the day someone
+                            // removes that port separation, not the thing actually keeping health checks reachable.
+                            .requestMatchers("/actuator/health/**").permitAll();
+                    if (publicGetPaths != null && !publicGetPaths.isEmpty()) {
+                        auth.requestMatchers(HttpMethod.GET, publicGetPaths.toArray(String[]::new)).permitAll();
+                    }
+                    auth
+                            .requestMatchers("/internal/**").hasAuthority(InternalServiceAuthFilter.ROLE)
+                            .anyRequest().authenticated();
+                })
                 .addFilterBefore(sessionAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(internalServiceAuthFilter, SessionAuthFilter.class)
                 .addFilterAfter(rateLimitFilter, InternalServiceAuthFilter.class)

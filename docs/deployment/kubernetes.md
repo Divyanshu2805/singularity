@@ -22,7 +22,7 @@ kubectl apply -k deploy/k8s/overlays/kind       # local rehearsal
 
 - **`app-config` ConfigMap** — non-secret settings that differ between environments (domains, the AI model). See [configuration](configuration.md).
 - **Postgres** — a StatefulSet with a 10 GB volume. One server, three databases, created by the same `infra/postgres-init` SQL used locally.
-- **MinIO** — a StatefulSet with a 20 GB volume, non-root, plus a bootstrap Job that creates the read-only `previewreader` user the runner pods use.
+- **MinIO** — a StatefulSet with a 20 GB volume, non-root, plus two bootstrap Jobs: one creates the read-only `previewreader` user the runner pods use, the other the `publishedreader` user the preview proxy serves published apps with, which can read only `current.json` and `site/` files in the `published-apps` bucket (a Job's template is immutable, so delete a finished one before applying a changed one).
 - **Redis** — preview routing state only, no volume.
 - **The five Java services** — each a Deployment with `enableServiceLinks: false` (see [the pitfall](../practices/gotchas/kubernetes.md#kubernetes-service-links-collide-with-port-properties)), probes on management port `9404`, and a non-root security context.
 - **Frontend, preview proxy, runner pool** — the runner pool's init container seeds each warm pod's `node_modules` from the pre-built runner image.
@@ -48,6 +48,18 @@ kubectl apply -k deploy/k8s/overlays/kind       # local rehearsal
 | Each preview pod | about 1.1 Gi | 1 Gi dev server + 64 Mi file sync |
 
 Java services run with `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75 -XX:+UseSerialGC -Xss512k` to stay inside their limits. Namespace quotas cap the preview namespace so previews can never starve the services. See [capacity](capacity.md).
+
+## Network policies
+
+- **Runner pods** are fenced in `base/runner-pods.yaml`: in from the preview proxy only, out to DNS, MinIO and the public internet, never to a private address.
+- **The trusted workloads** have their own set in `deploy/k8s/network-policies/`, which is **not part of base and not applied by CI**. In `singularity` every incoming connection is refused unless a rule allows it; in `singularity-ai` Redis and the proxy are covered. Only incoming connections are restricted. Apply it by hand after a deploy, with the app open, and undo it the same way:
+
+  ```bash
+  kubectl --context <cluster> apply -k deploy/k8s/network-policies
+  kubectl --context <cluster> delete -k deploy/k8s/network-policies
+  ```
+
+  Then sign in, open a project, send one build and start one preview. A new workload that must reach Postgres, MinIO, Redis or a service needs a line there.
 
 ## Deploy order
 

@@ -5,10 +5,10 @@ name: CI
 # of a one-time manual check - it runs the same commands CLAUDE.md documents as this project's own build/test
 # workflow, nothing CI-specific invented on top.
 #
-# Deliberately not attempted here (see CODE_TODO.md GATE-05 for the fuller list): Flyway migration checks against a
-# real Postgres, and a browser-journey smoke test - both need live infrastructure this job doesn't stand up. The
-# backend suite needs neither database nor cluster (CLAUDE.md: "A bare `./mvnw test` passes"), which is exactly why
-# it's safe to run here as-is.
+# The backend suite needs neither database nor cluster (CLAUDE.md: "A bare `./mvnw test` passes"), which is exactly
+# why it's safe to run here as-is. What does need them has jobs of its own: `preview-pipeline` starts a real preview on
+# a kind cluster, and `journey` starts the whole application - every service's Flyway migrations against a real
+# Postgres included - and walks one person's path through it in a browser.
 #
 # docs/deployment/ci-cd.md: on a push to main, once every test job passes, this also builds all 8 arm64
 # images, pushes them to GHCR tagged with the commit SHA, waits for the owner's approval (the `approve` job), and
@@ -33,9 +33,13 @@ concurrency:
   # worse than letting a superseded run finish. A pull request's tests are safe to cancel-and-replace as usual.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Read-only by default. Every job that runs third-party code - npm and Maven installs, with their install scripts -
+# runs with a token that can read this repository and nothing else. Only the four image builds may write packages,
+# and each asks for that itself. It used to be granted here, to every job: checkout leaves the job's token in the
+# workspace's git config, so a dependency's install script in a test job could have pushed an image under this
+# repository's name.
 permissions:
   contents: read
-  packages: write
 
 env:
   REGISTRY: ghcr.io
@@ -61,7 +65,14 @@ jobs:
         # A single reactor build, not per-module: common-lib must be resolved from the in-progress reactor, not a
         # pre-installed ~/.m2 copy - see CLAUDE.md's shared-~/.m2-jar gotcha for why building modules independently
         # is the wrong shape even locally.
-        run: ./mvnw --batch-mode --no-transfer-progress clean package
+        #
+        # `verify`, not `package`: verify is where each module's line coverage is held to its floor (pom.xml,
+        # coverage.minimum.lines). The jars are the same ones `package` builds.
+        run: ./mvnw --batch-mode --no-transfer-progress clean verify
+
+      - name: Report coverage per module
+        if: always()
+        run: bash scripts/coverage-summary.sh >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the reactor's jars for the image-build job
         # docker/java-service.Dockerfile packages a jar it did not build itself (docs/deployment/container-images.md) -
@@ -108,8 +119,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Unit tests
-        run: npm test
+      - name: Unit tests, with coverage held to its floors
+        # The floors are in vitest.config.ts: one for src/lib, where the logic and the tests are, and a low one for
+        # the whole app.
+        run: npm run coverage
 
   proxy:
     name: Preview proxy (test)
@@ -139,14 +152,15 @@ jobs:
     # The preview pipeline - Kubernetes, MinIO, Redis, the proxy - is mocked everywhere in the ordinary suite, so
     # until this job it was verified only by hand. It starts a real preview of the starter template on a throwaway
     # kind cluster, fetches the page through the real proxy, changes a file and a package, kills the runner, waits in
-    # line for one, and stops (PreviewPipelineIT). Both kind and kubectl are preinstalled on the runner image.
+    # line for one, and stops (PreviewPipelineIT) - and then, on the same cluster, publishes an app, fetches it through
+    # the proxy, updates it, takes it down (PublishPipelineIT). Both kind and kubectl are preinstalled on the runner image.
     #
     # It gates the deploy (see `approve`): a change that breaks starting a preview should not reach production on
     # the strength of tests that never start one. The only thing it needs from outside the runner is the public npm
     # registry, which a real preview needs too.
     runs-on: ubuntu-latest
     if: github.event_name != 'workflow_dispatch'
-    timeout-minutes: 30
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -170,6 +184,20 @@ jobs:
           ./mvnw --batch-mode --no-transfer-progress -pl common-lib,workspace-service test
           -Dtest=PreviewPipelineIT -Dsurefire.failIfNoSpecifiedTests=false
 
+      - name: Publish an app on the same cluster, fetch it through the proxy, change it, take it down
+        # The publish pipeline (PublishPipelineIT): a real build in a runner pod, stored, pointed at and served by the
+        # real proxy at its own hostname. Runs on the cluster the preview test just used.
+        run: >
+          ./mvnw --batch-mode --no-transfer-progress -pl common-lib,workspace-service test
+          -Dtest=PublishPipelineIT -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: Report how long each publish took
+        if: always()
+        run: |
+          if [ -f workspace-service/target/publish-timings.txt ]; then
+            { echo '### Publish timings (kind, no pre-installed node_modules)'; echo '```'; cat workspace-service/target/publish-timings.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Report how long each start took
         if: always()
         run: |
@@ -185,10 +213,147 @@ jobs:
           kubectl --context kind-singularity -n singularity-it logs deployment/singularity-proxy --tail=80 || true
           kubectl --context kind-singularity -n singularity-it logs -l app=runner -c syncer --tail=40 || true
 
+  journey:
+    name: Browser journey (sign in, build, preview, lesson, sign out)
+    # One person's whole path through the product in a real browser, against every real service: the Gateway, the
+    # session cookie and CSRF token, the migrations, object storage, a runner pod with a real npm install and dev
+    # server, the preview proxy, and the frontend as it is built for production (e2e/tests/journey.spec.ts). Three
+    # things are stand-ins - the AI provider (the scripted `stub-ai` model), Firebase (its Auth emulator) and Stripe
+    # (never called) - so the job needs no secret and spends nothing, and a pull request can run it.
+    #
+    # It does not gate the deploy yet. `preview-pipeline` does, and this job is new: let it show a few green runs on
+    # GitHub before adding it to `approve`'s needs.
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            e2e/package-lock.json
+            frontend/package-lock.json
+
+      - name: Package the services
+        # The jars the journey runs are the ones a deploy would ship. Tests are the `backend` job's business.
+        run: ./mvnw --batch-mode --no-transfer-progress -DskipTests -Djacoco.skip=true package
+
+      - name: Create the kind cluster
+        run: kind create cluster --name singularity --config k8s/kind-config.yaml --wait 120s
+
+      - name: Install the test's packages and its browser
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Start the whole application on the runner
+        run: bash e2e/stack.sh up --context kind-singularity
+
+      - name: Walk the journey
+        working-directory: e2e
+        run: npm test
+
+      - name: Report how long the real steps took
+        if: always()
+        run: |
+          if [ -f e2e/test-results/journey-timings.json ]; then
+            { echo '### Browser journey timings (milliseconds; the two builds and the lesson are the scripted model)'; echo '```json'; cat e2e/test-results/journey-timings.json; echo; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the report, the trace and the services' logs when it failed
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: journey-failure
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+            e2e/.run/logs
+          retention-days: 7
+
+      - name: Show the cluster's state when it failed
+        if: failure()
+        run: |
+          kubectl --context kind-singularity -n singularity-e2e get pods -o wide -L status,project-id || true
+          kubectl --context kind-singularity -n singularity-e2e get events --sort-by=.lastTimestamp | tail -40 || true
+          kubectl --context kind-singularity -n singularity-e2e logs deployment/singularity-proxy --tail=80 || true
+
+  lighthouse:
+    name: Lighthouse (public pages, served by the real nginx image)
+    # The pages anyone can open without signing in, built for production and served by the same nginx image and
+    # configuration a deploy uses - compressed, with its security headers - then audited as a phone and as a desktop
+    # (e2e/lighthouse.mjs). Accessibility, best practices and SEO are held to floors; performance is reported in the
+    # run's summary and not enforced, because a shared runner's speed is not the page's.
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            e2e/package-lock.json
+            frontend/package-lock.json
+
+      - name: Build the frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Serve it from the nginx image a deploy uses
+        run: |
+          docker run -d --name lighthouse-nginx -p 127.0.0.1:14180:8080 \
+            -v "$PWD/frontend/dist:/usr/share/nginx/html:ro" \
+            -v "$PWD/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+            -v "$PWD/frontend/security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro" \
+            -v "$PWD/frontend/csp-header.conf:/etc/nginx/snippets/csp-header.conf:ro" \
+            nginxinc/nginx-unprivileged:1.27-alpine
+          for attempt in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:14180/ > /dev/null && exit 0
+            sleep 1
+          done
+          docker logs lighthouse-nginx
+          exit 1
+
+      - name: Install Lighthouse and its browser
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Audit the landing and sign-in pages
+        working-directory: e2e
+        run: node lighthouse.mjs http://127.0.0.1:14180/ http://127.0.0.1:14180/login
+
+      - name: Report the scores
+        if: always()
+        run: |
+          if [ -f e2e/test-results/lighthouse-report.md ]; then cat e2e/test-results/lighthouse-report.md >> "$GITHUB_STEP_SUMMARY"; fi
+
   build-java-images:
     name: Build image (${{ matrix.module }})
     needs: [backend]
     if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-24.04-arm
     strategy:
       matrix:
@@ -242,6 +407,9 @@ jobs:
     name: Build image (frontend)
     needs: [frontend]
     if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-24.04-arm
     # Every VITE_FIREBASE_*/APP_DOMAIN value this job's build-args need is a *production environment* variable
     # (GitHub Settings -> Environments -> production -> Variables), not a repository-wide one - without this key,
@@ -281,6 +449,9 @@ jobs:
     name: Build image (preview-proxy)
     needs: [proxy]
     if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -303,6 +474,9 @@ jobs:
     # (docker/preview-runner.Dockerfile), nothing from this repo's source is compiled into it. Consumed by the warm
     # runner pool's seed-node-modules init container (deploy/k8s/base/runner-pods.yaml), so `deploy` waits for it.
     if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -365,9 +539,31 @@ jobs:
       group: production-deploy
       cancel-in-progress: false
     steps:
+      - name: Check the commit asked for is a commit
+        # A manual redeploy takes the commit as typed text. It goes into a checkout and, further down, into a sed
+        # expression - where sed's own `e` command runs a shell - so it is held to forty hex characters before
+        # anything reads it. It is read from the environment here, never pasted into the script.
+        run: |
+          if ! printf '%s' "$DEPLOY_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::The commit to deploy must be a full 40-character SHA."
+            exit 1
+          fi
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.DEPLOY_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the commit is on main
+        # Production runs what was merged. Without this a redeploy could name any commit the repository holds - an
+        # unmerged branch, a pull request's head - and its manifests would be applied with production's secrets.
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$DEPLOY_SHA" origin/main; then
+            echo "::error::$DEPLOY_SHA is not on main, so it is not deployed."
+            exit 1
+          fi
 
       - name: Join the tailnet
         uses: tailscale/github-action@6cae46e2d796f265265cfcf628b72a32b4d7cade # v3
@@ -414,9 +610,26 @@ jobs:
         # tunnel (both this runner and the API server must be authorized tailnet members first), which is the real
         # security boundary here, not the k8s API's own TLS cert - a deliberate simplification for a project this
         # size, not an oversight.
+        #
+        # When the production environment holds KUBE_CA_CERT (the cluster CA, base64 of the PEM), the certificate is
+        # checked instead: another machine on the tailnet answering at that address would otherwise be handed the
+        # deployer's token. It is optional because the API server's certificate must name the address used here
+        # (k3s: --tls-san), which is set on the server, not in this repository. The secrets are read from the
+        # environment, never pasted into the script.
+        env:
+          KUBE_API_SERVER: ${{ secrets.KUBE_API_SERVER }}
+          KUBE_DEPLOYER_TOKEN: ${{ secrets.KUBE_DEPLOYER_TOKEN }}
+          KUBE_CA_CERT: ${{ secrets.KUBE_CA_CERT }}
         run: |
-          kubectl config set-cluster oracle --server="${{ secrets.KUBE_API_SERVER }}" --insecure-skip-tls-verify=true
-          kubectl config set-credentials deployer --token="${{ secrets.KUBE_DEPLOYER_TOKEN }}"
+          if [ -n "$KUBE_CA_CERT" ]; then
+            printf '%s' "$KUBE_CA_CERT" | base64 -d > "$RUNNER_TEMP/cluster-ca.crt"
+            kubectl config set-cluster oracle --server="$KUBE_API_SERVER" \
+              --certificate-authority="$RUNNER_TEMP/cluster-ca.crt" --embed-certs=true
+          else
+            echo "::warning::KUBE_CA_CERT is not set - the API server's certificate is not being checked."
+            kubectl config set-cluster oracle --server="$KUBE_API_SERVER" --insecure-skip-tls-verify=true
+          fi
+          kubectl config set-credentials deployer --token="$KUBE_DEPLOYER_TOKEN"
           kubectl config set-context oracle --cluster=oracle --user=deployer --namespace=singularity
           kubectl config use-context oracle
 
@@ -446,6 +659,7 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
           MINIO_RUNNER_SECRET: ${{ secrets.MINIO_RUNNER_SECRET }}
+          MINIO_PUBLISHED_SECRET: ${{ secrets.MINIO_PUBLISHED_SECRET }}
           INTERNAL_SERVICE_SHARED_SECRET: ${{ secrets.INTERNAL_SERVICE_SHARED_SECRET }}
           PREVIEW_ACCESS_TOKEN_SECRET: ${{ secrets.PREVIEW_ACCESS_TOKEN_SECRET }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
@@ -460,9 +674,14 @@ jobs:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
         run: bash deploy/scripts/apply-secrets.sh
 
+      - name: Note which revision of each service is running
+        # What the rollback below goes back to. Written just before the apply, so a step that fails earlier - the
+        # tailnet, the secrets - leaves no file and rolls nothing back.
+        run: bash deploy/scripts/deploy-revisions.sh record "$RUNNER_TEMP/revisions-before"
+
       - name: Set the real image tags and apply the oracle overlay
         run: |
-          sed -i "s/REPLACED_BY_CI/${{ env.DEPLOY_SHA }}/g" deploy/k8s/overlays/oracle/kustomization.yaml
+          sed -i "s/REPLACED_BY_CI/${DEPLOY_SHA}/g" deploy/k8s/overlays/oracle/kustomization.yaml
           kubectl apply -k deploy/k8s/overlays/oracle
 
       - name: Wait for each service to become ready
@@ -494,13 +713,10 @@ jobs:
       - name: Roll back on failure
         # Plain `failure()` - not just a failed smoke test, a rollout that never became Ready (the previous step)
         # is just as much "a failed rollout" as docs/deployment/'s own Phase 5 spec calls for rolling back.
+        #
+        # Only what this run changed is rolled back, to the revision it was at. This step used to undo every
+        # service whenever anything in the job failed - so a deploy that failed before applying anything (a missing
+        # secret, say) still stepped all eight services back one release, and a service the apply had not touched
+        # went back a release along with the ones it had.
         if: failure()
-        run: |
-          kubectl -n singularity rollout undo deployment/discovery-service
-          kubectl -n singularity rollout undo deployment/account-service
-          kubectl -n singularity rollout undo deployment/workspace-service
-          kubectl -n singularity rollout undo deployment/intelligence-service
-          kubectl -n singularity rollout undo deployment/gateway-service
-          kubectl -n singularity rollout undo deployment/frontend
-          kubectl -n singularity-ai rollout undo deployment/singularity-proxy
-          kubectl -n singularity-ai rollout undo deployment/runner-pool
+        run: bash deploy/scripts/deploy-revisions.sh rollback "$RUNNER_TEMP/revisions-before"

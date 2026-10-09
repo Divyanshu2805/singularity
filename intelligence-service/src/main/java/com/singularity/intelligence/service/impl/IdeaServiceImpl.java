@@ -42,7 +42,9 @@ import java.util.stream.Collectors;
  * interview falls back to a fixed set of general questions and the brief to the user's own words. The fallback is
  * reported, never disguised - the response says the questions are not tailored, and the failure is logged as an error
  * naming the cause. It was once swallowed at warn level, and a revoked provider key then looked like an interview
- * that always asked the same four things.
+ * that always asked the same four things. A reply that is not the JSON asked for is logged by its length and the
+ * kind of failure only: the parser's own message quotes the text it choked on, which is the model's reply about
+ * someone's idea, and logging the exception put that in the service log.
  *
  * <p>Both prompts say what the product can build: an app that runs in the browser, with no accounts, payments,
  * shared data or notifications. Run on real ideas, the interview offered "client login", "deposit required" and
@@ -203,12 +205,22 @@ public class IdeaServiceImpl implements IdeaService {
                     .call()
                     .chatResponse();
             aiUsageRecorder.reconcile(reservation, response, UsageFeature.IDEA_INTERVIEW, null);
-            return tailoredInterview(QUESTIONS_CONVERTER.convert(responseText(response)));
+            return tailoredInterview(readInterview(responseText(response)));
         } catch (Exception e) {
             aiUsageRecorder.release(reservation);
             log.error("The AI provider could not write interview questions, so the general set is being shown and "
                     + "flagged as untailored. Cause: {}", describeFailure(e), e);
             return generalInterview();
+        }
+    }
+
+    static GeneratedInterview readInterview(String reply) {
+        try {
+            return QUESTIONS_CONVERTER.convert(reply);
+        } catch (RuntimeException e) {
+            log.error("The model's interview reply ({} characters) was not the JSON it was asked for ({})",
+                    reply == null ? 0 : reply.length(), e.getClass().getSimpleName());
+            return null;
         }
     }
 

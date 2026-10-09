@@ -7,7 +7,7 @@
  * into its overview and line-ranged sections, and cutting a section's lines out of a file.
  */
 import { describe, it, expect } from "vitest";
-import { findCodeLine, linesOf, parseLesson, parseWalkthrough, withLines, withoutLeadingConcept } from "./lesson";
+import { checkAnswerQuestion, DEEPER_QUESTIONS, findCodeLine, linesOf, parseBigPicture, parseLesson, parseWalkthrough, proseBlocks, termQuestion, withLines, withoutLeadingConcept } from "./lesson";
 
 const FULL = `<summary>The heart button under each post.</summary>
 <part concept="Props"><code>export function LikeButton({ initialLikes }: LikeButtonProps) {</code>Creates the button.</part>
@@ -214,5 +214,94 @@ describe("linesOf", () => {
     expect(linesOf(FILE_TEXT, 9, 12)).toEqual([]);
     expect(linesOf(FILE_TEXT, 0, 2)).toEqual([]);
     expect(linesOf(undefined, 1, 2)).toEqual([]);
+  });
+});
+
+describe("a lesson's closing question", () => {
+  const LESSON = "Opening.\n\n### L2 · The count\nIt is kept here.\n\n### What happens next\nThe page shows it.\n\n### Check yourself\nWhich line keeps the count?\n";
+
+  it("is kept apart from the closing, so it can be shown as something to answer", () => {
+    const walkthrough = parseWalkthrough(LESSON, true);
+
+    expect(walkthrough.closing).toEqual({ title: "What happens next", text: "The page shows it." });
+    expect(walkthrough.check).toBe("Which line keeps the count?");
+    expect(walkthrough.notes).toHaveLength(1);
+  });
+
+  it("is not shown while it is still being written, and is absent from a lesson written before there was one", () => {
+    expect(parseWalkthrough(LESSON.slice(0, -12), false).check).toBeUndefined();
+    expect(parseWalkthrough(LESSON.slice(0, -12), false).closing?.text).toBe("The page shows it.");
+    expect(parseWalkthrough("Opening.\n\n### L2 · The count\nKept.\n\n### What happens next\nShown.\n", true).check).toBeUndefined();
+  });
+});
+
+describe("parseBigPicture", () => {
+  const PICTURE = [
+    "You asked for notes, and now there is a page for them.",
+    "",
+    "### The pieces",
+    "- `src/lib/notes.ts` - Remembers the notes.",
+    "- `src/pages/Index.tsx` - The screen.",
+    "",
+    "### How it works",
+    "1. You type a note in `src/pages/Index.tsx`.",
+    "2. It is saved by `src/lib/notes.ts`.",
+    "",
+    "### Ideas in this build",
+    "- **State** - what the page remembers.",
+  ].join("\n");
+
+  it("reads the opening and each headed section", () => {
+    const picture = parseBigPicture(PICTURE, true);
+
+    expect(picture.intro).toBe("You asked for notes, and now there is a page for them.");
+    expect(picture.sections.map((section) => section.title)).toEqual(["The pieces", "How it works", "Ideas in this build"]);
+    expect(picture.sections[2].text).toBe("- **State** - what the page remembers.");
+  });
+
+  it("holds back a heading that is still arriving, and is only an opening before any section", () => {
+    expect(parseBigPicture("Opening.\n\n### The pie", false)).toEqual({ intro: "Opening.", sections: [] });
+    expect(parseBigPicture("Half an open", false)).toEqual({ intro: "Half an open", sections: [] });
+    expect(parseBigPicture("", true)).toEqual({ intro: "", sections: [] });
+  });
+});
+
+describe("proseBlocks", () => {
+  it("reads paragraphs, bullets and numbered steps, joining a wrapped line to what it continues", () => {
+    expect(proseBlocks("One line\nwrapped.\n\n- first\n- second\n  carried on\n\n1. do this\n2) then this\n\nLast.")).toEqual([
+      { kind: "paragraph", text: "One line wrapped." },
+      { kind: "bullets", items: ["first", "second carried on"] },
+      { kind: "steps", items: ["do this", "then this"] },
+      { kind: "paragraph", text: "Last." },
+    ]);
+    expect(proseBlocks("")).toEqual([]);
+  });
+});
+
+describe("the questions a lesson sends to ExplainLLM", () => {
+  it("offers the same three about a piece of code, each within what the server accepts", () => {
+    expect(DEEPER_QUESTIONS.map((deeper) => deeper.label)).toEqual(["Explain the syntax", "Why this way?", "What if I remove it?"]);
+    DEEPER_QUESTIONS.forEach((deeper) => expect(deeper.question.length).toBeLessThan(2000));
+  });
+
+  it("asks what a term means on one line, however the term was written", () => {
+    expect(termQuestion("  State\n")).toBe('What does "State" mean? Explain it in plain words, then show me where it appears in this project.');
+    expect(termQuestion("x".repeat(500)).length).toBeLessThan(250);
+  });
+
+  it("sends the reader's own answer with the question it answers, bounded however long either is", () => {
+    const question = checkAnswerQuestion("src/App.tsx", "Which line keeps\nthe count?", "  Line 2, the useState one.  ");
+
+    expect(question).toContain('The lesson on `src/App.tsx` asked me: "Which line keeps the count?"');
+    expect(question).toContain("My answer: Line 2, the useState one.\n\nIs my answer right?");
+    expect(checkAnswerQuestion("src/App.tsx", "q".repeat(3000), "a".repeat(3000)).length).toBeLessThan(2000);
+  });
+});
+
+describe("a big picture written when it still said where to start", () => {
+  it("is shown without that section", () => {
+    const picture = parseBigPicture("Opening.\n\n### The pieces\n- one\n\n### Where to start\nOpen step 1.\n", true);
+
+    expect(picture.sections.map((section) => section.title)).toEqual(["The pieces"]);
   });
 });

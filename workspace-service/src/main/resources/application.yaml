@@ -57,6 +57,10 @@ app:
       max-age: 5d
       secure: true
     revocation-check-interval: 60s
+  security:
+    # GET paths that need no session: the public, read-only page of a shared app. Nothing else in this service is
+    # anonymous; a POST here (the fork) still needs a signed-in caller and the CSRF header.
+    public-get-paths: /api/public/**
 
 minio:
   url: http://localhost:9000
@@ -81,6 +85,13 @@ revision-validation:
   install-timeout: 2m
   build-timeout: 2m
   output-max-chars: 8000
+
+# How large one project may grow (ProjectFileLimits). Checked where every write to a project lands, before anything
+# is stored. A first build is about 40 files and 150 KB; the largest project measured was 74 files and 137 KB.
+project-files:
+  max-files: 500
+  max-file-bytes: 1048576
+  max-project-bytes: 26214400
 
 # The kind namespace, Redis and MinIO bucket the live-preview pipeline runs against (PreviewRouter's Redis keys
 # are per-hostname).
@@ -131,6 +142,38 @@ preview:
           app: singularity-proxy
         pod-port: 8080
         local-port: 8090
+
+# Published apps: a production build of one revision, built in a runner pod and served by the preview proxy from the
+# bucket below (docs/architecture/decisions/0008-published-apps.md). The public domain is its own setting so published
+# apps can move to a domain of their own without a code change; until then it follows the preview domain. The proxy
+# reads the same domain as PUBLISHED_DOMAIN.
+publishing:
+  public-scheme: ${PUBLISHING_PUBLIC_SCHEME:${preview.public-scheme}}
+  public-domain: ${PUBLISHING_PUBLIC_DOMAIN:${preview.public-domain}}
+  public-port: ${PUBLISHING_PUBLIC_PORT:${preview.public-port}}
+  bucket: published-apps
+  # Live apps one owner may have, by plan name. account-service's plan table has no column for this, and a second
+  # schema change for a number nobody has yet needed to vary was not worth it; a plan not listed gets default-limit.
+  plan-limits:
+    Free: 1
+    Pro: 3
+    Business: 10
+  default-limit: 1
+  max-builds-per-hour: 10
+  min-build-interval: 30s
+  # How long a build waits for a runner when every one is busy, then fails as "try again in a moment".
+  runner-wait: 90s
+  install-timeout: 4m
+  build-timeout: 4m
+  collect-timeout: 1m
+  max-source-files: 500
+  max-source-bytes: 20971520
+  max-output-files: 1000
+  max-output-bytes: 52428800
+  # A retired build is deleted this long after it stopped serving, so a request already in flight is never cut off.
+  retire-after: 2m
+  heartbeat-stale-after: 45s
+  log-max-chars: 8000
 
 client.url: http://localhost:5173
 

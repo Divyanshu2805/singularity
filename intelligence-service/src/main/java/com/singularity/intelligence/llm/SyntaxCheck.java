@@ -4,6 +4,7 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -15,6 +16,11 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -52,6 +58,18 @@ import java.util.Properties;
  * syntax error, the file is treated as fine and the reason is logged - a turn is never lost to its own safety check.
  * Only one check runs at a time, since a context is not safe for two threads at once and a turn's files are few.
  *
+ * <p>A parse has a time limit, because one check at a time means one stuck parse stops them all. The TypeScript
+ * grammar is ambiguous in places and the parser tries both readings: two dozen nested generic arrow functions
+ * ({@code f(<T>(<T>(...} ) take it longer than anyone will wait, doubling with each level, on fifty characters of
+ * input. A model writes what it is asked to, so anyone could have a turn write that file - and its parse then held
+ * the lock every other turn's check waits on, with nothing to end it, and no turn on the instance got past its check
+ * again. A parse still running after {@code maxParseTime} is now stopped from a second thread; the file is treated
+ * as fine like any other the check could not read, the engine it ran in is thrown away, and the next check starts a
+ * new one. What is stopped is the parser's own code inside its engine: nothing of the file was ever executing.
+ *
+ * <p>Failures are logged by their kind and the file's path, never with the exception itself: the parser's message
+ * can quote the source it was reading, which is someone's project.
+ *
  * <p>Only package.json is read as JSON. The other JSON files of a project (tsconfig and its kin) allow comments,
  * which a strict reader would report as errors.
  */
@@ -84,12 +102,51 @@ public class SyntaxCheck {
               }
             })""";
 
+    private static final Duration DEFAULT_MAX_PARSE_TIME = Duration.ofSeconds(5);
+
     private final Object lock = new Object();
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
+    private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor(
+            task -> Thread.ofPlatform().name("syntax-check-limit").daemon(true).unstarted(task));
+    private final Duration maxParseTime;
     private Engine engine;
     private Context context;
     private Value check;
     private boolean unavailable;
+
+    public SyntaxCheck() {
+        this(DEFAULT_MAX_PARSE_TIME);
+    }
+
+    SyntaxCheck(Duration maxParseTime) {
+        this.maxParseTime = maxParseTime;
+    }
+
+    private static void stop(Context running) {
+        try {
+            running.close(true);
+        } catch (RuntimeException e) {
+            log.debug("Stopping a parse that ran too long failed", e);
+        }
+    }
+
+    private void discardEngine() {
+        check = null;
+        Context stale = context;
+        Engine staleEngine = engine;
+        context = null;
+        engine = null;
+        try {
+            if (stale != null) {
+                stale.close(true);
+            }
+            if (staleEngine != null) {
+                staleEngine.close(true);
+            }
+        } catch (RuntimeException e) {
+            log.debug("Closing a stopped parser's engine failed", e);
+        }
+    }
 
     @EventListener(ApplicationReadyEvent.class)
     public void warmUp() {
@@ -128,6 +185,8 @@ public class SyntaxCheck {
             if (!ready()) {
                 return null;
             }
+            Context running = context;
+            ScheduledFuture<?> limit = watchdog.schedule(() -> stop(running), maxParseTime.toMillis(), TimeUnit.MILLISECONDS);
             try {
                 String outcome = check.execute(content, plugins).asString();
                 if (outcome.isEmpty()) {
@@ -137,9 +196,21 @@ public class SyntaxCheck {
                 int line = Integer.parseInt(parts[0]);
                 int column = Integer.parseInt(parts[1]) + 1;
                 return new Problem(path, line, column, withoutPosition(parts[2]), excerpt(content, line));
-            } catch (RuntimeException e) {
-                log.warn("Couldn't check the syntax of {} - treating it as fine", path, e);
+            } catch (PolyglotException e) {
+                if (e.isCancelled() || e.isInterrupted()) {
+                    log.warn("The parser was still working on {} ({} characters) after {} ms and was stopped - "
+                            + "treating the file as fine", path, content.length(), maxParseTime.toMillis());
+                    discardEngine();
+                } else {
+                    log.warn("Couldn't check the syntax of {} - treating it as fine ({})", path, e.getClass().getSimpleName());
+                }
                 return null;
+            } catch (RuntimeException e) {
+                log.warn("Couldn't check the syntax of {} - treating it as fine ({})", path, e.getClass().getSimpleName());
+                discardEngine();
+                return null;
+            } finally {
+                limit.cancel(false);
             }
         }
     }
@@ -209,6 +280,7 @@ public class SyntaxCheck {
 
     @PreDestroy
     public void close() {
+        watchdog.shutdownNow();
         synchronized (lock) {
             check = null;
             try {

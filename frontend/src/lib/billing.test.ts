@@ -15,6 +15,8 @@ import {
   planAction,
   planActionLabel,
   planFeatures,
+  buildsFor,
+  buildsLeftLabel,
   planPriceLabel,
   subscriptionStatusLabel,
   toQuota,
@@ -57,6 +59,27 @@ const subscription = (over: Partial<Subscription> = {}): Subscription => ({
   cancelAtPeriodEnd: false,
   isFree: false,
   ...over,
+});
+
+describe("buildsFor", () => {
+  it("rounds down, and to the nearest five from twenty up", () => {
+    expect(buildsFor(5_000)).toBe(0);
+    expect(buildsFor(100_000)).toBe(6);
+    expect(buildsFor(300_000)).toBe(20);
+    expect(buildsFor(1_000_000)).toBe(65);
+    expect(buildsFor(-1)).toBe(0);
+  });
+
+  it("says what is left as builds", () => {
+    expect(buildsLeftLabel(100_000)).toBe("About 6 more builds today");
+    expect(buildsLeftLabel(16_000)).toBe("About 1 more build today");
+    expect(buildsLeftLabel(9_000)).toBe("Not enough left for a full build");
+  });
+
+  it("is added to a plan's allowance line when the allowance pays for at least one", () => {
+    expect(planFeatures({ ...free, maxTokensPerDay: 100_000, maxPreviews: 1 })[1])
+      .toBe(`${(100_000).toLocaleString()} AI tokens per day - about 6 builds`);
+  });
 });
 
 describe("planFeatures", () => {

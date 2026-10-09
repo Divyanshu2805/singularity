@@ -30,19 +30,19 @@ import static org.mockito.Mockito.when;
 class StorageBucketInitializerTest {
 
     private final MinioClient minio = mock(MinioClient.class);
-    private final StorageBucketInitializer initializer = new StorageBucketInitializer(minio, "projects", "project-blobs");
+    private final StorageBucketInitializer initializer = new StorageBucketInitializer(minio, "projects", "project-blobs", "published-apps");
 
     @Test
-    @DisplayName("both missing buckets are created, under their configured names")
-    void createsBothBucketsWhenMissing() throws Exception {
+    @DisplayName("every missing bucket is created, under its configured name")
+    void createsEveryBucketWhenMissing() throws Exception {
         when(minio.bucketExists(any(BucketExistsArgs.class))).thenReturn(false);
 
         initializer.run(null);
 
         ArgumentCaptor<MakeBucketArgs> made = ArgumentCaptor.forClass(MakeBucketArgs.class);
-        verify(minio, times(2)).makeBucket(made.capture());
+        verify(minio, times(3)).makeBucket(made.capture());
         assertThat(made.getAllValues().stream().map(MakeBucketArgs::bucket))
-                .containsExactlyInAnyOrderElementsOf(List.of("projects", "project-blobs"));
+                .containsExactlyInAnyOrderElementsOf(List.of("projects", "project-blobs", "published-apps"));
     }
 
     @Test

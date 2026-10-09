@@ -4,8 +4,15 @@ import com.singularity.intelligence.dto.code.AskCodeRequest;
 import com.singularity.intelligence.dto.code.CodeInsightResponse;
 import com.singularity.intelligence.dto.code.CodeNoteResponse;
 import com.singularity.intelligence.dto.code.ExplainCodeRequest;
+import com.singularity.intelligence.dto.code.GlossaryEntryResponse;
+import com.singularity.intelligence.dto.code.GlossaryRequest;
 import com.singularity.intelligence.dto.code.LessonRequest;
+import com.singularity.intelligence.dto.code.OverviewRequest;
 import com.singularity.intelligence.dto.code.SaveCodeNoteRequest;
+import com.singularity.intelligence.dto.code.TaskCheckRequest;
+import com.singularity.intelligence.dto.code.TaskRequest;
+import com.singularity.intelligence.dto.code.TourRequest;
+import com.singularity.intelligence.dto.code.TourResponse;
 import com.singularity.intelligence.service.CodeInsightService;
 import com.singularity.intelligence.util.SseHeartbeat;
 import jakarta.validation.Valid;
@@ -28,7 +35,10 @@ import java.util.List;
 /**
  * The code lens: explain a selection, then ask follow-up questions about it, and keep the thread.
  *
- * <p>Handles: the explain and ask answers both whole and streamed, the streamed lesson on what a build step changed, and the caller's saved notes - listing them,
+ * <p>Handles: the explain and ask answers both whole and streamed, teaching mode's two streams - the big picture of a
+ * saved turn and the lesson on what one of its steps changed - the learning that belongs to the person and the
+ * project (the tour of the whole project, the glossary of terms, and a step's "try changing this" task with the check
+ * of it, each streamed and kept, and the tour and glossary read back), and the caller's saved notes: listing them,
  * saving one finished exchange, deleting one and clearing them all.
  *
  * <p>The answering endpoints are read-only and can produce text and nothing else. The notes are the thread itself:
@@ -70,6 +80,58 @@ public class CodeInsightController {
             @PathVariable Long projectId,
             @RequestBody @Valid LessonRequest request) {
         return asEvents(codeInsightService.streamLesson(projectId, request), projectId);
+    }
+
+    @PostMapping(value = "/overview/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> streamOverview(
+            @PathVariable Long projectId,
+            @RequestBody @Valid OverviewRequest request) {
+        return asEvents(codeInsightService.streamOverview(projectId, request), projectId);
+    }
+
+    @GetMapping("/tour")
+    public ResponseEntity<TourResponse> getTour(@PathVariable Long projectId) {
+        TourResponse tour = codeInsightService.getTour(projectId);
+        return tour == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(tour);
+    }
+
+    @PostMapping(value = "/tour/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> streamTour(
+            @PathVariable Long projectId,
+            @RequestBody @Valid TourRequest request) {
+        return asEvents(codeInsightService.streamTour(projectId, request), projectId);
+    }
+
+    @GetMapping("/glossary")
+    public ResponseEntity<List<GlossaryEntryResponse>> getGlossary(@PathVariable Long projectId) {
+        return ResponseEntity.ok(codeInsightService.getGlossary(projectId));
+    }
+
+    @PostMapping(value = "/glossary/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> streamTerm(
+            @PathVariable Long projectId,
+            @RequestBody @Valid GlossaryRequest request) {
+        return asEvents(codeInsightService.streamTerm(projectId, request), projectId);
+    }
+
+    @DeleteMapping("/glossary/{entryId}")
+    public ResponseEntity<Void> deleteTerm(@PathVariable Long projectId, @PathVariable Long entryId) {
+        codeInsightService.deleteTerm(projectId, entryId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping(value = "/task/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> streamTask(
+            @PathVariable Long projectId,
+            @RequestBody @Valid TaskRequest request) {
+        return asEvents(codeInsightService.streamTask(projectId, request), projectId);
+    }
+
+    @PostMapping(value = "/task-check/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> streamTaskCheck(
+            @PathVariable Long projectId,
+            @RequestBody @Valid TaskCheckRequest request) {
+        return asEvents(codeInsightService.streamTaskCheck(projectId, request), projectId);
     }
 
     private Flux<ServerSentEvent<String>> asEvents(Flux<String> answer, Long projectId) {

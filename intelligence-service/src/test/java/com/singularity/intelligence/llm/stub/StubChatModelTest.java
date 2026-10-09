@@ -1,5 +1,6 @@
 package com.singularity.intelligence.llm.stub;
 
+import com.singularity.intelligence.enums.LearnerLevel;
 import com.singularity.intelligence.llm.CodeInsightPrompts;
 import com.singularity.intelligence.llm.PromptUtils;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,36 @@ class StubChatModelTest {
         assertThat(StubReplies.callOf(CodeInsightPrompts.lessonSystemPrompt())).isEqualTo(StubReplies.Call.LESSON);
         assertThat(answer(CodeInsightPrompts.lessonSystemPrompt(), "the change"))
                 .contains("### L1").contains("### What happens next");
+    }
+
+    @Test
+    void theLessonAndOverviewPromptsAreRecognisedAtEveryLevel() {
+        for (LearnerLevel level : LearnerLevel.values()) {
+            assertThat(StubReplies.callOf(CodeInsightPrompts.lessonSystemPrompt(level))).isEqualTo(StubReplies.Call.LESSON);
+            assertThat(StubReplies.callOf(CodeInsightPrompts.overviewSystemPrompt(level))).isEqualTo(StubReplies.Call.OVERVIEW);
+            assertThat(StubReplies.callOf(CodeInsightPrompts.askSystemPrompt(level))).isEqualTo(StubReplies.Call.ANSWER);
+        }
+        assertThat(answer(CodeInsightPrompts.lessonSystemPrompt(), "the change")).contains("### Check yourself");
+        assertThat(answer(CodeInsightPrompts.overviewSystemPrompt(null), "the turn"))
+                .contains("### The pieces").contains("### How it works").contains("### Ideas in this build")
+                .doesNotContain("Where to start");
+    }
+
+    @Test
+    void theTourGlossaryTaskAndCheckPromptsAreRecognisedAndAnswered() {
+        for (LearnerLevel level : LearnerLevel.values()) {
+            assertThat(StubReplies.callOf(CodeInsightPrompts.tourSystemPrompt(level))).isEqualTo(StubReplies.Call.TOUR);
+            assertThat(StubReplies.callOf(CodeInsightPrompts.glossarySystemPrompt(level))).isEqualTo(StubReplies.Call.GLOSSARY);
+            assertThat(StubReplies.callOf(CodeInsightPrompts.taskSystemPrompt(level))).isEqualTo(StubReplies.Call.TASK);
+            assertThat(StubReplies.callOf(CodeInsightPrompts.taskCheckSystemPrompt(level))).isEqualTo(StubReplies.Call.TASK_CHECK);
+        }
+        assertThat(answer(CodeInsightPrompts.tourSystemPrompt(null), "files"))
+                .contains("### The files").contains("### How a click travels").contains("### Where to change things");
+        assertThat(answer(CodeInsightPrompts.glossarySystemPrompt(null), "word"))
+                .contains("### Think of it like").contains("### In your project");
+        assertThat(answer(CodeInsightPrompts.taskSystemPrompt(null), "change"))
+                .contains("### L1 · Where to look").contains("### Done when");
+        assertThat(CodeInsightPrompts.isDoneVerdict(answer(CodeInsightPrompts.taskCheckSystemPrompt(null), "task"))).isTrue();
     }
 
     @Test

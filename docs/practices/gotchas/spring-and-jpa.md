@@ -86,3 +86,21 @@
 - **Symptom:** a delete or an update "succeeds" - the request answers 204, nothing is logged - and the row is unchanged. It happens only on some paths: removing a member who had the preview open, leaving or deleting a project whose preview was running.
 - **Cause:** `repository.delete(entity)` and `save(entity)` queue their SQL until the transaction flushes. A `@Modifying(clearAutomatically = true)` query later in the same transaction clears the persistence context when it finishes, queued work included, and Hibernate does not flush first unless the query touches the same table. Every preview status update is such a query.
 - **Fix:** `flush()` the change before calling anything that may run one (`ProjectMemberServiceImpl.removeProjectMember`, `ProjectServiceImpl.softDelete`). A unit test with mocked repositories cannot see this; the tests pin the order - written, then flushed, then the preview call - and the proof is the SQL log showing the `delete`.
+
+## A revision snapshot is not the whole project
+
+- **Symptom:** restoring an earlier version (or undoing a turn) would delete `package.json`, `index.html` and the component kit. Unit tests of the restore passed. It was caught by reading the code when the History panel was built, before any restore had been run; nothing had called the endpoint until then.
+- **Cause:** the starter template's files and a fork's copied files are written with no revision, so `RevisionSnapshotReader.snapshot` holds only the paths some revision has changed. Diffing the current files against that alone reads every untouched file as "added since" and a template file first changed later as "did not exist yet".
+- **Fix:** a restore target is the snapshot laid over each path's original content (`ProjectFileRevisionRepository.findOriginalContent`), and a current file with no content hash is left alone (`RevisionServiceImpl.stateFor`). Anything else that needs "the project as of revision N" must do the same; the snapshot reader by itself is only right for a project every file of which has been through a revision.
+
+## Find-then-save is two requests' worth of "not found"
+
+- **Symptom:** a first sign-in from two tabs at once answers one of them with a `500`; the account exists and the next attempt works.
+- **Cause:** both requests looked the user up, found nobody, and inserted. The second insert broke the unique Firebase uid, and nothing read that as "someone else just made it".
+- **Fix:** catch the `DataIntegrityViolationException`, read the row again, and carry on as the existing user; rethrow when the row still is not there, since then it was a different violation (`SessionServiceImpl.resolveAccount`). Where there is no row to fall back on, use a native upsert instead (`ProjectInviteRepository.upsert`).
+
+## Security headers written while a streamed response has already begun
+
+- **Symptom:** now and then a chat or lesson stream is a `500` before it starts; the service's log has `ArrayIndexOutOfBoundsException` inside Tomcat's `MimeHeaders`, under `HeaderWriterFilter`, and the Gateway reports `Connection prematurely closed BEFORE response`. It needs several streams starting at the same moment - eight first builds at once did it - so one person clicking never sees it.
+- **Cause:** Spring Security writes its response headers when the filter chain returns or when the response is committed, whichever is first. For a streamed response those are two threads: the request thread leaving the chain and the stream's own thread writing its first event. Both touch the response's header table, which is not built for that.
+- **Fix:** every browser-facing chain writes the headers before the request is handled (`EagerSecurityHeaders`, applied in `ServiceSecurityConfig` and account-service's `WebSecurityConfig`), so only the request thread ever writes them. A new `SecurityFilterChain` must do the same; the `FullChain*AccessTest`s check it. Found by the load test (`e2e/load.mjs`), not by any unit test - a race like this needs a real container and real concurrency.

@@ -65,6 +65,7 @@ import {
     type SignInOutcome,
 } from "@/lib/firebase-auth";
 import { cn } from "@/lib/utils";
+import { safeNextPath } from "@/lib/next-path";
 
 const COPY: Record<AuthMode, { submit: string; loading: string; google: string; lead: string; accent: string }> = {
     login: { submit: "Sign in", loading: "Signing you in…", google: "Continue with Google", lead: "Welcome", accent: "back" },
@@ -85,6 +86,7 @@ export default function AuthPage() {
     const location = useLocation();
     const { toast } = useToast();
     const [searchParams] = useSearchParams();
+    const afterSignIn = safeNextPath(searchParams.get("next")) ?? "/projects";
 
     const mode: AuthMode = location.pathname === "/signup" ? "signup" : "login";
     const isSignup = mode === "signup";
@@ -130,8 +132,8 @@ export default function AuthPage() {
     }, [step]);
 
     useEffect(() => {
-        if (isAuthenticated()) navigate("/projects", { replace: true });
-    }, [navigate]);
+        if (isAuthenticated()) navigate(afterSignIn, { replace: true });
+    }, [navigate, afterSignIn]);
 
     const previousModeRef = useRef(mode);
     useEffect(() => {
@@ -145,7 +147,7 @@ export default function AuthPage() {
     const switchMode = () => {
         setFieldErrors({});
         setFormError(null);
-        navigate(isSignup ? "/login" : "/signup", { replace: true });
+        navigate({ pathname: isSignup ? "/login" : "/signup", search: searchParams.get("next") ? `?next=${encodeURIComponent(searchParams.get("next") ?? "")}` : "" }, { replace: true });
     };
 
     const clearErrorFor = (field: keyof AuthFieldErrors) => {
@@ -182,7 +184,7 @@ export default function AuthPage() {
     const handleOutcome = (outcome: SignInOutcome) => {
         if (outcome.kind === "signed-in") {
             greet(outcome.session.user, outcome.session.newAccount, outcome.session.secondFactorUsed);
-            navigate("/projects", { replace: true });
+            navigate(afterSignIn, { replace: true });
             return;
         }
         if (outcome.kind === "second-factor") {

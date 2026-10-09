@@ -12,6 +12,7 @@ import com.singularity.common.security.AuthUtil;
 import com.singularity.workspace.feign.IntelligenceServiceClient;
 import com.singularity.workspace.service.PreviewDeploymentService;
 import com.singularity.workspace.service.ProjectFileService;
+import com.singularity.workspace.service.PublishService;
 import com.singularity.workspace.service.ProjectTemplateService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,9 +42,10 @@ class ProjectServiceImplQuotaTest {
     private final AccountServiceClient accountServiceClient = mock(AccountServiceClient.class);
 
     private final ProjectServiceImpl service = new ProjectServiceImpl(
-            projectRepository, mock(ProjectMapper.class), projectMemberRepository, authUtil, accountServiceClient,
+            projectRepository, mock(ProjectMapper.class), projectMemberRepository, authUtil,
+            new ProjectQuota(authUtil, accountServiceClient, projectMemberRepository),
             mock(ProjectTemplateService.class), mock(ProjectFileService.class), mock(PreviewDeploymentService.class),
-            mock(IntelligenceServiceClient.class));
+            mock(IntelligenceServiceClient.class), mock(PublishService.class));
 
     private void plan(String name, int maxProjects, int owned) {
         when(authUtil.getCurrentUserId()).thenReturn(USER_ID);

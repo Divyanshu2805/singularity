@@ -81,10 +81,17 @@ class RoutingTableTest {
                         "/api/projects/7/preview",
                         "/api/projects/7/preview/restart",
                         "/api/projects/7/preview/logs",
+                        "/api/projects/7/publish",
+                        "/api/projects/7/publish/sharing",
+                        "/api/projects/7/publish/log",
                         "/api/projects/7/revisions",
                         "/api/projects/7/revisions/12/preview",
                         "/api/projects/7/revisions/12/restore",
-                        "/api/previews"),
+                        "/api/previews",
+                        "/api/public/apps/demo-ab12",
+                        "/api/public/apps/demo-ab12/files",
+                        "/api/public/apps/demo-ab12/files/content",
+                        "/api/public/apps/demo-ab12/fork"),
                 INTELLIGENCE, List.of(
                         "/api/chat/stream",
                         "/api/chat/projects/7",
@@ -106,6 +113,14 @@ class RoutingTableTest {
                         "/api/projects/7/code/ask",
                         "/api/projects/7/code/ask/stream",
                         "/api/projects/7/code/lesson/stream",
+                        "/api/projects/7/code/overview/stream",
+                        "/api/projects/7/code/tour",
+                        "/api/projects/7/code/tour/stream",
+                        "/api/projects/7/code/glossary",
+                        "/api/projects/7/code/glossary/stream",
+                        "/api/projects/7/code/glossary/3",
+                        "/api/projects/7/code/task/stream",
+                        "/api/projects/7/code/task-check/stream",
                         "/api/projects/7/code/notes",
                         "/api/projects/7/code/notes/3"),
                 NO_ROUTE, List.of(
@@ -114,6 +129,7 @@ class RoutingTableTest {
                         "/internal/v1/sessions/evict",
                         "/api/projects-archive",
                         "/api/chatter",
+                        "/api/publicity/apps/demo",
                         "/nope"));
 
         return pathsByRoute.entrySet().stream()

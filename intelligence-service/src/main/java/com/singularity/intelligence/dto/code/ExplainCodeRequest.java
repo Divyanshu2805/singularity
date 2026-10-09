@@ -1,12 +1,14 @@
 package com.singularity.intelligence.dto.code;
 
+import com.singularity.intelligence.enums.LearnerLevel;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
  * A selected block of code to explain in plain language.
  *
- * <p>Handles: the file, the code and its line range, each length-bounded. Read-only: nothing here can change a file.
+ * <p>Handles: the file, the code and its line range, each length-bounded, and how much code the reader knows.
+ * Read-only: nothing here can change a file.
  */
 public record ExplainCodeRequest(
 
@@ -20,6 +22,12 @@ public record ExplainCodeRequest(
 
         Integer startLine,
 
-        Integer endLine
+        Integer endLine,
+
+        LearnerLevel level
 ) {
+
+    public ExplainCodeRequest(String path, String code, Integer startLine, Integer endLine) {
+        this(path, code, startLine, endLine, null);
+    }
 }

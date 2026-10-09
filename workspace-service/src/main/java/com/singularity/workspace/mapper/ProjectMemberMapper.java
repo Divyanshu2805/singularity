@@ -18,6 +18,7 @@ import org.mapstruct.Mapping;
 public interface ProjectMemberMapper {
 
     @Mapping(target = "userId", source = "member.id.userId")
+    @Mapping(target = "inviteId", ignore = true)
     @Mapping(target = "username", source = "user.username")
     @Mapping(target = "name", source = "user.name")
     @Mapping(target = "role", source = "member.projectRole")

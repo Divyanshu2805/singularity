@@ -10,8 +10,10 @@ import com.singularity.common.security.SessionCookies;
 import com.singularity.common.security.UserPrincipal;
 import com.singularity.workspace.controller.FileController;
 import com.singularity.workspace.dto.project.FileContentResponse;
+import com.singularity.workspace.dto.project.SaveFileResponse;
 import com.singularity.workspace.enums.ProjectRole;
 import com.singularity.workspace.repository.ProjectMemberRepository;
+import com.singularity.workspace.service.FileEditService;
 import com.singularity.workspace.service.ProjectFileService;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.DisplayName;
@@ -39,9 +41,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -80,6 +87,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * anything ultimately backed by a live database. "Pending invite" is likewise not distinguishable here: the query
  * has no {@code acceptedAt} filter at all (SEC-07, still open, decision needed), so a pending and an accepted
  * member are identical at this layer by construction, not by an oversight in this test.
+ *
+ * <p>The save by hand ({@code PUT .../files/content}) is the controller's one write, so it is driven through the
+ * same chain for each kind of caller: an editor is let through to the service, a viewer and a non-member are refused
+ * before it, and a request with no CSRF token never arrives.
  */
 @WebMvcTest(FileController.class)
 @Import({FullChainFileAccessTest.TestSecurityBeans.class, GlobalExceptionHandler.class})
@@ -98,6 +109,69 @@ class FullChainFileAccessTest {
 
     @MockitoBean
     private ProjectFileService projectFileService;
+
+    @MockitoBean
+    private FileEditService fileEditService;
+
+    private static final String SAVE_BODY = "{\"path\":\"src/App.tsx\",\"content\":\"x\",\"baseHash\":\"abc\"}";
+
+    private Cookie primedCsrfCookie() throws Exception {
+        when(projectFileService.getFileContent(anyLong(), anyString()))
+                .thenReturn(new FileContentResponse("src/App.tsx", "content"));
+        return mockMvc.perform(get("/api/projects/{projectId}/files/content", PROJECT_ID)
+                        .param("path", "src/App.tsx")
+                        .cookie(sessionCookie()))
+                .andReturn().getResponse().getCookie("__Host-XSRF-TOKEN");
+    }
+
+    private org.springframework.test.web.servlet.ResultActions save(ProjectRole role) throws Exception {
+        when(projectMemberRepository.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID))
+                .thenReturn(Optional.ofNullable(role));
+        Cookie xsrfCookie = primedCsrfCookie();
+        return mockMvc.perform(put("/api/projects/{projectId}/files/content", PROJECT_ID)
+                .cookie(sessionCookie(), xsrfCookie)
+                .header("X-XSRF-TOKEN", xsrfCookie.getValue())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(SAVE_BODY));
+    }
+
+    @Test
+    @DisplayName("an editor can save a file by hand")
+    void anEditorCanSave() throws Exception {
+        when(fileEditService.saveFile(anyLong(), any(), anyLong()))
+                .thenReturn(new SaveFileResponse("src/App.tsx", "def", 3L));
+
+        save(ProjectRole.EDITOR).andExpect(status().isOk());
+        verify(fileEditService).saveFile(eq(PROJECT_ID), any(), eq(USER_ID));
+    }
+
+    @Test
+    @DisplayName("a viewer cannot save a file")
+    void aViewerCannotSave() throws Exception {
+        save(ProjectRole.VIEWER).andExpect(status().isForbidden());
+        verify(fileEditService, never()).saveFile(anyLong(), any(), anyLong());
+    }
+
+    @Test
+    @DisplayName("a signed-in user who is not a member cannot save a file")
+    void aNonMemberCannotSave() throws Exception {
+        save(null).andExpect(status().isForbidden());
+        verify(fileEditService, never()).saveFile(anyLong(), any(), anyLong());
+    }
+
+    @Test
+    @DisplayName("a save with no CSRF token is rejected")
+    void aSaveWithNoCsrfTokenIsRejected() throws Exception {
+        when(projectMemberRepository.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID))
+                .thenReturn(Optional.of(ProjectRole.OWNER));
+
+        mockMvc.perform(put("/api/projects/{projectId}/files/content", PROJECT_ID)
+                        .cookie(sessionCookie())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(SAVE_BODY))
+                .andExpect(status().isForbidden());
+        verify(fileEditService, never()).saveFile(anyLong(), any(), anyLong());
+    }
 
     @Test
     @DisplayName("a viewer can read a project's file content")

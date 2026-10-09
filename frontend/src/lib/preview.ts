@@ -164,6 +164,34 @@ export function holdsPreviewErrors(args: {
   return args.isBuilding || args.isSettling || args.preview?.syncState === "UPDATING";
 }
 
+/**
+ * How long after a frame starts loading a change of revision is taken to have been missed by it, rather than
+ * delivered to it by hot reload.
+ */
+export const FRAME_SETTLE_MS = 8_000;
+
+/**
+ * Whether the page in the frame should be loaded again because the runner's files changed underneath it while it
+ * was still loading. A page that has been up for a while gets a change by hot reload, with its state kept; that is
+ * the normal case and nothing here touches it. But a page that began loading just as the dev server started, a
+ * moment before the first build's files arrived, can read the old files and never hear that they changed - the dev
+ * server was still taking stock of the folder, and the change went unannounced. The frame then showed the starter
+ * template's placeholder under a panel saying "Up to date", for as long as nobody pressed reload.
+ *
+ * The tell is the revision the runner says it holds changing within a few seconds of the frame starting to load.
+ * Only then is the frame reloaded, once: the reload resets when the frame started, and the revision does not change
+ * again by itself.
+ */
+export function frameMissedAnUpdate(args: {
+  loadingSince: number;
+  revisionAtLoad: number | null;
+  revisionNow: number | null | undefined;
+  now: number;
+}): boolean {
+  if (args.revisionNow == null || args.revisionNow === args.revisionAtLoad) return false;
+  return args.now - args.loadingSince <= FRAME_SETTLE_MS;
+}
+
 export type PreviewDevice = "desktop" | "tablet" | "mobile";
 
 export const PREVIEW_DEVICES: readonly { device: PreviewDevice; label: string; width: number | null }[] = [

@@ -21,6 +21,10 @@ import static org.mockito.Mockito.mock;
  * <p>Asking is all it does. The thread running a turn notices, records the turn as stopped and removes it from the
  * registry itself, so a turn has exactly one writer; {@link BuildTurnTest} covers that half. A turn already saving is
  * past stopping, and the access recheck before its files commit is what keeps a revoked caller's changes out.
+ *
+ * <p>Also covers the browser's own stop: it reaches the turn running on the project whoever started it, and no turn
+ * on any other project. That only someone who may edit can ask is the method's guard, pinned by
+ * ChatAuthorizationTest.
  */
 class AiGenerationServiceImplStopGenerationsTest {
 
@@ -30,8 +34,10 @@ class AiGenerationServiceImplStopGenerationsTest {
 
     private final GenerationRegistry registry = new GenerationRegistry(Clock.systemUTC());
 
+    private final AuthUtil authUtil = mock(AuthUtil.class);
+
     private final AiGenerationServiceImpl service = new AiGenerationServiceImpl(
-            mock(AuthUtil.class), mock(ChatSessionRepository.class), mock(ChatMessageRepository.class),
+            authUtil, mock(ChatSessionRepository.class), mock(ChatMessageRepository.class),
             mock(UsageService.class), mock(AiUsageRecorder.class), registry,
             mock(BuildTurn.class), Runnable::run);
 
@@ -76,6 +82,32 @@ class AiGenerationServiceImplStopGenerationsTest {
 
         assertThat(saving.stopRequested()).isFalse();
         assertThat(saving.status()).isEqualTo(ActiveGeneration.Status.SAVING);
+    }
+
+    @Test
+    void anEditorCanStopTheTurnAnotherMemberStartedOnTheSameProject() throws Exception {
+        ActiveGeneration someoneElses = registry.start(PROJECT_ID, USER_A, "build a form");
+        ActiveGeneration onAnotherProject = registry.start(2L, USER_A, "build a nav");
+        org.mockito.Mockito.when(authUtil.getCurrentUserId()).thenReturn(USER_B);
+
+        java.util.concurrent.CompletableFuture<Boolean> stopped =
+                java.util.concurrent.CompletableFuture.supplyAsync(() -> service.stopActiveGeneration(PROJECT_ID));
+        long giveUpAt = System.nanoTime() + java.time.Duration.ofSeconds(5).toNanos();
+        while (!someoneElses.stopRequested() && System.nanoTime() < giveUpAt) {
+            Thread.sleep(10);
+        }
+        someoneElses.fail(new IllegalStateException("stopped"));
+
+        assertThat(stopped.get(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        assertThat(someoneElses.stopRequested()).isTrue();
+        assertThat(onAnotherProject.stopRequested()).isFalse();
+    }
+
+    @Test
+    void stoppingFromTheBrowserWhenNothingIsRunningSaysSo() {
+        org.mockito.Mockito.when(authUtil.getCurrentUserId()).thenReturn(USER_B);
+
+        assertThat(service.stopActiveGeneration(PROJECT_ID)).isFalse();
     }
 
     @Test
