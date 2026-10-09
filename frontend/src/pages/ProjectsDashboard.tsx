@@ -22,8 +22,21 @@
  * little way behind the panel and fades out there, since stopping at the hero's edge drew a hard line across the
  * page), a soft gold bloom behind the prompt, the horizon mark building itself above a Fraunces headline in
  * near-white whose italic pale-gold accent is the visitor's name, the prompt on a matte glass card that takes a calm
- * gold ring while it has focus, and the recent projects on a glass panel below. The page arrives in a short
- * staggered rise - mark, headline (its words dropping in, as the landing hero's do, and again whenever the headline
+ * gold ring while it has focus, and the recent projects on a glass panel below.
+ *
+ * Nothing on the page is moved by what is going on in the prompt's place. The interview's questions are each a
+ * different height, and the page used to be centred on whatever was showing, so every question shoved the projects
+ * panel up or down, the mark vanishing lifted the headline, and the headline was rewritten twice while a project was
+ * set up. Now the head of the page is a stage (.dash-stage) that is as tall as the prompt and its suggestions need,
+ * and is held at exactly that height - measured while they were showing, since it differs with the width of the
+ * screen - for as long as something else is in their place: what is in it hangs from its top and is free to run
+ * past its foot. While an idea is being shaped or a project set up, the projects
+ * panel draws back a little and fades where it stands (.dash-dock) - it keeps its place in the layout, so it returns to
+ * exactly where it was - which leaves the questions the whole height of the page. The mark gives way to the eyebrow
+ * in a slot that eases between their two heights (.dash-crown), the questions and the set-up steps share one glass
+ * card that eases to each new height (use-smooth-height), and the headline changes once, when building starts; the
+ * project's name appears in the last step instead of in the headline. The page arrives in a short
+ * staggered rise - mark, headline (its words dropping in, as the landing hero's do, and again when the headline
  * changes between asking, shaping and setting up), prompt, suggestions, then the projects dealt in one after another - kept well under a second, since this is a
  * page people come back to all day, not one they see once.
  *
@@ -34,11 +47,12 @@
  * rather than blink.
  */
 import { Nebula } from "@/components/app/Nebula";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ArrowUpRight, ArrowUp, Camera, Check, FolderOpen, Layers, ListChecks, Sparkles } from "lucide-react";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
+import { InvitationsList } from "@/components/InvitationsList";
 import { ProjectCard } from "@/components/ProjectCard";
 import { ProjectFilterTabs } from "@/components/ProjectFilterTabs";
 import { Button } from "@/components/ui/button";
@@ -51,6 +65,7 @@ import { WORD_DROP } from "@/components/landing/intro";
 import { play } from "@/components/landing/motion";
 import { useProjectActions } from "@/hooks/use-project-actions";
 import { useSidebar } from "@/hooks/use-sidebar";
+import { useSmoothHeight } from "@/hooks/use-smooth-height";
 import { useTeachingMode } from "@/hooks/use-teaching-mode";
 import { useTypewriterPlaceholder } from "@/hooks/use-typewriter-placeholder";
 import { useToast } from "@/hooks/use-toast";
@@ -146,7 +161,7 @@ function CreationProgress({ creation, now }: { creation: Creation; now: number }
     const progress = creation.projectName ? 100 : Math.min(92, 8 + (elapsedMs / 9000) * 84);
 
     return (
-        <div role="status" aria-live="polite" className="app-glass app-rise relative mt-8 w-full rounded-[22px] text-left">
+        <div role="status" aria-live="polite" className="chat-enter">
             <div className="px-5 pb-5 pt-4">
                 <p className="line-clamp-2 text-sm text-muted-foreground">&ldquo;{creation.description}&rdquo;</p>
                 <div className="app-progress mt-4">
@@ -192,6 +207,17 @@ function CreationProgress({ creation, now }: { creation: Creation; now: number }
     );
 }
 
+function FocusCard({ children }: { children: ReactNode }) {
+    const { outerRef, innerRef } = useSmoothHeight();
+    return (
+        <div className="w-full pb-10">
+            <div ref={outerRef} className="app-glass app-rise smooth-height relative mt-8 w-full rounded-[22px] text-left">
+                <div ref={innerRef}>{children}</div>
+            </div>
+        </div>
+    );
+}
+
 function CardPlaceholder({ className, shimmer = true }: { className?: string; shimmer?: boolean }) {
     const block = shimmer ? "app-skeleton" : "bg-muted/40";
     return (
@@ -223,8 +249,11 @@ export function ProjectsDashboard() {
     const [filter, setFilter] = useState<ProjectFilter>(null);
     const clarifyingIdea = useInterview()?.idea ?? null;
     const promptRef = useRef<HTMLTextAreaElement>(null);
+    const stageRef = useRef<HTMLDivElement>(null);
+    const [restingStageHeight, setRestingStageHeight] = useState<number | null>(null);
 
     const isCreating = creation !== null;
+    const isFocused = isCreating || clarifyingIdea !== null;
     const isSignedIn = isAuthenticated();
     const firstName = getUserInfo()?.name?.split(" ")[0];
     const ideaPlaceholder = useTypewriterPlaceholder(IDEA_SUGGESTIONS, !isCreating && prompt.length === 0);
@@ -350,19 +379,27 @@ export function ProjectsDashboard() {
         () => projects.filter((project) => matchesProjectFilter(project, filter)).sort(byLastEdited).slice(0, RECENT_PROJECT_LIMIT),
         [projects, filter]
     );
+    useLayoutEffect(() => {
+        const stage = stageRef.current;
+        if (isFocused || !stage) return;
+        setRestingStageHeight(stage.offsetHeight);
+        if (typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver(() => setRestingStageHeight(stage.offsetHeight));
+        observer.observe(stage);
+        return () => observer.disconnect();
+    }, [isFocused]);
+
     const emptyMessage = EMPTY_MESSAGES[filter ?? "all"];
     const slotCount = Math.min(RECENT_PROJECT_LIMIT, Math.max(counts.all, 1));
 
     const headline = creation
-        ? creation.projectName
-            ? { lead: "Setting up", accent: creation.projectName }
-            : { lead: "Setting up your", accent: "project" }
+        ? { lead: "Setting up your", accent: "project" }
         : clarifyingIdea
             ? { lead: "Let's shape your", accent: "idea" }
             : firstName
                 ? { lead: "Got an idea,", accent: `${firstName}?` }
                 : { lead: "Got an", accent: "idea?" };
-    const eyebrow = creation ? "Building" : clarifyingIdea ? "A few quick questions" : null;
+    const eyebrow = creation ? "Building" : "A few quick questions";
 
     return (
         <div className="dash-night dash-sky relative flex h-screen overflow-hidden bg-background">
@@ -379,35 +416,44 @@ export function ProjectsDashboard() {
                                 className="app-bloom absolute left-1/2 top-1/2 h-[560px] w-[min(1000px,110%)] -translate-x-1/2 -translate-y-1/2"
                             />
 
-                            <div className="relative flex w-full max-w-2xl flex-col items-center text-center">
-                                {!clarifyingIdea && (
-                                    <span className="relative mb-7 inline-flex h-16 w-16">
+                            <div
+                                ref={stageRef}
+                                data-focus={isFocused || undefined}
+                                style={isFocused && restingStageHeight ? { height: restingStageHeight } : undefined}
+                                className="dash-stage relative z-20 flex w-full max-w-2xl flex-col items-center text-center"
+                            >
+                                <div className="dash-crown" data-focus={isFocused || undefined}>
+                                    <span aria-hidden={isFocused || undefined} className="dash-crown-mark">
                                         <span aria-hidden="true" className="nav-brand-glow pointer-events-none absolute -inset-[60%] rounded-full" />
                                         <HorizonMark drawn className="relative h-full w-full" />
                                     </span>
-                                )}
-                                {eyebrow && (
-                                    <p key={eyebrow} className="app-eyebrow app-fade mb-4" style={stagger(1)}>
-                                        {eyebrow}
+                                    <p aria-hidden={!isFocused || undefined} className="dash-crown-eyebrow">
+                                        <span key={eyebrow} className="app-eyebrow app-fade">
+                                            {eyebrow}
+                                        </span>
                                     </p>
-                                )}
+                                </div>
                                 <Headline lead={headline.lead} accent={headline.accent} />
 
-                                {creation ? (
-                                    <CreationProgress creation={creation} now={now} />
-                                ) : clarifyingIdea ? (
-                                    <IdeaClarifier
-                                        onEditIdea={() => {
-                                            clearInterview();
-                                            requestAnimationFrame(() => promptRef.current?.focus());
-                                        }}
-                                        onComplete={(firstMessage) => createProject(clarifyingIdea, firstMessage)}
-                                        onQuotaExceeded={(details) => {
-                                            clearInterview();
-                                            setBlockedBy(details);
-                                            void refreshBilling();
-                                        }}
-                                    />
+                                {isFocused ? (
+                                    <FocusCard>
+                                        {creation ? (
+                                            <CreationProgress creation={creation} now={now} />
+                                        ) : (
+                                            <IdeaClarifier
+                                                onEditIdea={() => {
+                                                    clearInterview();
+                                                    requestAnimationFrame(() => promptRef.current?.focus());
+                                                }}
+                                                onComplete={(firstMessage) => createProject(clarifyingIdea ?? "", firstMessage)}
+                                                onQuotaExceeded={(details) => {
+                                                    clearInterview();
+                                                    setBlockedBy(details);
+                                                    void refreshBilling();
+                                                }}
+                                            />
+                                        )}
+                                    </FocusCard>
                                 ) : (
                                     <>
                                         <form
@@ -475,7 +521,13 @@ export function ProjectsDashboard() {
                             </div>
                         </section>
 
-                        <section className="relative z-10 mx-auto -mt-12 w-full max-w-6xl shrink-0 px-4 pb-6 sm:px-6">
+                        <InvitationsList />
+
+                        <section
+                            aria-hidden={isFocused || undefined}
+                            data-away={isFocused || undefined}
+                            className="dash-dock relative z-10 mx-auto -mt-12 w-full max-w-6xl shrink-0 px-4 pb-6 sm:px-6"
+                        >
                             <div className="app-glass app-rise rounded-[22px] p-4 sm:p-5" style={stagger(0, 420)}>
                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                                     <ProjectFilterTabs value={filter} onChange={setFilter} counts={counts} isLoading={isLoading} />

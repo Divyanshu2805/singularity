@@ -15,8 +15,9 @@ import java.util.List;
 /**
  * A project's collaborators, for the browser.
  *
- * <p>Handles: listing members, inviting one by email, accepting an invitation, changing a member's role and removing
- * them.
+ * <p>Handles: listing members, inviting an email address, accepting or declining an invitation addressed to the
+ * caller, the owner withdrawing an invitation, changing a member's role and removing them. The caller's own
+ * invitations across every project are listed by ProjectController, since that list belongs to no one project.
  */
 @RestController
 @RequestMapping("/api/projects/{projectId}/members")
@@ -43,6 +44,21 @@ public class ProjectMemberController {
     @PostMapping("/accept")
     public ResponseEntity<MemberResponse> acceptInvite(@PathVariable Long projectId) {
         return ResponseEntity.ok(projectMemberService.acceptInvite(projectId));
+    }
+
+    @PostMapping("/decline")
+    public ResponseEntity<Void> declineInvite(@PathVariable Long projectId) {
+        projectMemberService.declineInvite(projectId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/invites/{inviteId}")
+    public ResponseEntity<Void> withdrawInvite(
+            @PathVariable Long projectId,
+            @PathVariable Long inviteId
+    ) {
+        projectMemberService.withdrawInvite(projectId, inviteId);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{memberId}")

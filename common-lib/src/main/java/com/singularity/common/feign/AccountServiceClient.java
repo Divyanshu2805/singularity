@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 /**
  * Every other service's only way to reach User and Plan data, which live in account-service's own database.
  *
- * <p>Handles: the user lookups behind session authentication and the invite-by-email flow, the plan limits behind
+ * <p>Handles: the user lookups behind session authentication and member lists, the plan limits behind
  * every quota check, and the revocation check - REVOKED_SESSION exists only in account-service. Resolved through
  * Eureka by spring.application.name.
  *
@@ -19,15 +19,16 @@ import org.springframework.web.bind.annotation.RequestParam;
  * request before the prefix is applied, so the check would miss it and every call would 401. There is no shared
  * ErrorDecoder - each call site catches FeignException.NotFound and translates it to the exception that fits its own
  * context.
+ *
+ * <p>There is no lookup by email address, on purpose. Invitations are held by address and matched to the session of
+ * whoever accepts, so no service needs to ask whether an address has an account - and an endpoint that answers that
+ * is the thing an invitation must never reveal.
  */
 @FeignClient(name = "account-service")
 public interface AccountServiceClient {
 
     @GetMapping("/internal/v1/users/{userId}")
     UserDto getUser(@PathVariable Long userId);
-
-    @GetMapping("/internal/v1/users/by-username")
-    UserDto getUserByUsername(@RequestParam String username);
 
     @GetMapping("/internal/v1/users/by-firebase-uid")
     UserDto getUserByFirebaseUid(@RequestParam String uid);

@@ -13,6 +13,7 @@ import com.singularity.workspace.entity.ProjectMemberId;
 import com.singularity.workspace.enums.ProjectRole;
 import com.singularity.workspace.feign.IntelligenceServiceClient;
 import com.singularity.workspace.mapper.ProjectMemberMapper;
+import com.singularity.workspace.repository.ProjectInviteRepository;
 import com.singularity.workspace.repository.ProjectMemberRepository;
 import com.singularity.workspace.repository.ProjectRepository;
 import com.singularity.workspace.service.PreviewDeploymentService;
@@ -53,14 +54,15 @@ class ProjectMemberServiceImplOwnershipTest {
     private static final long CALLER_ID = 10L;
 
     private final ProjectMemberRepository projectMemberRepository = mock(ProjectMemberRepository.class);
+    private final ProjectInviteRepository projectInviteRepository = mock(ProjectInviteRepository.class);
     private final ProjectRepository projectRepository = mock(ProjectRepository.class);
     private final ProjectMemberMapper projectMemberMapper = mock(ProjectMemberMapper.class);
     private final AccountServiceClient accountServiceClient = mock(AccountServiceClient.class);
     private final IntelligenceServiceClient intelligenceServiceClient = mock(IntelligenceServiceClient.class);
     private final PreviewDeploymentService previewDeploymentService = mock(PreviewDeploymentService.class);
     private final ProjectMemberServiceImpl service = new ProjectMemberServiceImpl(
-            projectMemberRepository, projectRepository, projectMemberMapper, new AuthUtil(), accountServiceClient,
-            intelligenceServiceClient, previewDeploymentService);
+            projectMemberRepository, projectInviteRepository, projectRepository, projectMemberMapper, new AuthUtil(),
+            accountServiceClient, intelligenceServiceClient, previewDeploymentService);
 
     @BeforeEach
     void signIn() {
@@ -77,14 +79,13 @@ class ProjectMemberServiceImplOwnershipTest {
     void invitingSomeoneAsOwnerIsRejected() {
         Project project = Project.builder().id(PROJECT_ID).name("demo").build();
         when(projectRepository.findAccessibleProjectById(PROJECT_ID, CALLER_ID)).thenReturn(Optional.of(project));
-        when(accountServiceClient.getUserByUsername("invitee@example.com"))
-                .thenReturn(new UserDto(OTHER_MEMBER_ID, "invitee@example.com", "Invitee", "uid-2"));
 
         assertThatThrownBy(() -> service.inviteMember(PROJECT_ID,
                 new InviteMemberRequest("invitee@example.com", ProjectRole.OWNER)))
                 .isInstanceOf(BadRequestException.class);
 
         verify(projectMemberRepository, never()).save(any());
+        verify(projectInviteRepository, never()).upsert(any(), any(), any(), any(), any());
     }
 
     @Test

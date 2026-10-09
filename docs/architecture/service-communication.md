@@ -26,7 +26,7 @@ Each service exposes `/internal/v1/**` for the other services, never for the bro
 
 | Endpoint (`/internal/v1/…`) | Owner | Called by | Purpose |
 |---|---|---|---|
-| `GET users/{id}`, `users/by-username`, `users/by-firebase-uid` | account | workspace, intelligence | Resolving a session's Firebase uid to a user; invite by email |
+| `GET users/{id}`, `users/by-firebase-uid` | account | workspace, intelligence | Resolving a session's Firebase uid to a user (never a deleted one); naming the members of a project |
 | `GET sessions/revoked?cookieHash=` | account | workspace, intelligence | The revocation check when a session isn't in the local cache |
 | `GET users/{id}/plan-limits` | account | workspace, intelligence | The effective plan's limits (free-tier fallback included) for quota checks |
 | `POST sessions/evict` | workspace, intelligence | account | Push-evicting a signed-out session from their local caches |
