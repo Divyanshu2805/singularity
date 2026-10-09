@@ -38,6 +38,12 @@
 - **Cause:** `InternalWorkspaceController` calls `ProjectFileService` as the internal machine principal, which has no user id, so a `@PreAuthorize` on that service method breaks the internal API. But a browser-facing controller that reaches an *unguarded* service method is open to every signed-in user.
 - **Fix:** put the guard on the browser-facing controller (`FileController`) for methods the internal API also uses. `FileReadAuthorizationTest` pins both halves.
 
+## A tar entry is not a file
+
+- **Symptom:** a build whose output contains a symbolic link comes back with that link stored as a file.
+- **Cause:** commons-compress's `TarArchiveEntry.isFile()` answers true for a link entry - it only says "not a directory" - so a reader that keeps what `isFile()` accepts keeps links, hard links and devices. The archive is made by a pod running a project's own code.
+- **Fix:** `util/TarArchive` also refuses `isLink()`, `isSymbolicLink()`, devices and FIFOs, and `TarArchiveTest` has a case for each. Found by that test, not in use.
+
 ## `.env` not found under `spring-boot:run`
 
 - **Symptom:** a service started with `./mvnw -pl <service> spring-boot:run` boots with blank secrets.

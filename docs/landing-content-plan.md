@@ -287,13 +287,16 @@ Privacy and Terms pages do not exist yet. A site that takes sign-ins and card de
 - The app's own names: Build, Teach me, ExplainLLM, Owner, Editor, Viewer
 - Plan numbers from the server
 
+**May claim, since it works today (publishing, `docs/architecture/flows/publishing.md`):** the owner publishes an app at a link anyone can open with no account; the link stays the same when they update it; they can take it down; and they can share the code so others can read and fork it. Say "publish" and "a link anyone can open"; say nothing about hosting, uptime or scale, which have not been measured. Plans limit how many apps can be live (the numbers come from the server's plan settings, not from copy).
+
 **Never claim, because the app does not do it today:**
 
 | Claim | Why not |
 |---|---|
 | Version history, undo, restore | The API exists; no screen uses it |
 | Backends, databases, sign-in inside generated apps | Generated apps are browser-only |
-| Publish, deploy, a permanent link | Previews stop when idle; static publish is not built |
+| Custom domains, a password on a published app, visitor analytics, older versions to go back to | Publishing is one link per project and one live version; these are not built |
+| A published app with a server, a database or sign-in | Published apps are static and browser-only, like the previews they come from |
 | Other stacks (Next.js, Vue, and so on) | One template: React with Vite |
 | Live reload as you type | The preview updates when a turn finishes |
 | User counts, testimonials, logos, speed figures | None exist or have been measured |

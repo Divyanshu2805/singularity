@@ -46,6 +46,12 @@ The seed is what makes a start a matter of seconds: it removes about 26 of the 3
 
 **Production has not been measured since these changes.** The 2-core arm64 node is slower than the laptop these came from; time one first start and one restart there with a stopwatch, from pressing Start to the app appearing (the starting screen shows no clock) and add a column. The seed is confirmed working if a fresh project's first start there is well under 15 seconds.
 
+## Publishing
+
+A publish claims one runner pod for the length of its build and releases it afterwards, so it competes with previews for the pool; a build that finds none waits up to `publishing.runner-wait` (90 seconds) and then fails as "try again in a moment". Measured by `PublishPipelineIT` ([how](../practices/testing.md#the-publish-pipeline-test)) on the starter template, on a local kind cluster with the pre-installed `node_modules`, 2026-10-08: **16.3 s** for a first publish and **16.1 s** for an update, from the request to the app being served through the proxy. That is claim, copy, `npm install` (nothing to install), `vite build`, collect, store and the pointer. Without the seed the install adds about the 26 seconds the preview start does.
+
+**Production has not been measured.** Publish once there and time it with a stopwatch (the panel shows the steps but no clock); put the number here.
+
 ## A demo day
 
 Several people starting at the same moment each need a warm pod; the pool keeps `replicas` of them and takes about 10–20 seconds to warm a replacement. With the default of 1, the second and third simultaneous starts wait in line for that long. For a demo, raise it for the day:

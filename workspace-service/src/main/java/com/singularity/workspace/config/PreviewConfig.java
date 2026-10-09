@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @Configuration
 @EnableScheduling
-@EnableConfigurationProperties({PreviewProperties.class, PreviewPortForwardProperties.class, CodeCheckProperties.class})
+@EnableConfigurationProperties({PreviewProperties.class, PreviewPortForwardProperties.class, CodeCheckProperties.class,
+        PublishingProperties.class})
 public class PreviewConfig {
 }

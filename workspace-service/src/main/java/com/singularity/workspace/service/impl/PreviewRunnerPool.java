@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -34,7 +35,10 @@ import java.util.concurrent.TimeoutException;
  *
  * <p>Handles: claiming a ready idle pod for a project, releasing one, checking a pod is still alive, reading its
  * address, listing claimed pods for the orphan sweep, and running a shell script in one of a pod's containers with a
- * timeout.
+ * timeout - or returning its output as bounded raw bytes (a build's tar coming out) - which a publish uses to build in a
+ * pod of its own. A project goes in the other way as one uploaded tar file, not through a command's standard input: the
+ * exec's websocket cannot say "end of input", so a tar read from stdin waits for the rest of its archive until the exec
+ * times out (found by PublishPipelineIT on a real cluster).
  *
  * <p>How the pool works: a Deployment selects pods labelled idle. Claiming relabels a pod busy, which takes it out of
  * the ReplicaSet, so Kubernetes immediately starts a fresh idle pod to replace it and the claimed one belongs to its
@@ -203,6 +207,77 @@ public class PreviewRunnerPool {
             throw e;
         } catch (Exception e) {
             throw new ExternalServiceException("Couldn't upload " + pathInContainer + " to " + podName, e);
+        }
+    }
+
+    public record BytesResult(int exitCode, byte[] output, String error, boolean overflowed) {
+        public boolean succeeded() {
+            return exitCode == 0 && !overflowed;
+        }
+    }
+
+    /**
+     * Runs a script and returns what it wrote to standard output as raw bytes, up to {@code maxBytes}; anything past
+     * that is dropped and reported as {@code overflowed}, so a pod cannot make the service hold an unbounded buffer.
+     * Standard error comes back separately, as text, so a tar on standard output is never mixed with a warning.
+     */
+    public BytesResult execForBytes(String podName, String container, Duration timeout, String script, int maxBytes) {
+        BoundedOutput output = new BoundedOutput(maxBytes);
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+        try (ExecWatch watch = pods().withName(podName).inContainer(container)
+                .writingOutput(output)
+                .writingError(error)
+                .exec("sh", "-c", script)) {
+            Integer exitCode = watch.exitCode().get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            return new BytesResult(exitCode == null ? -1 : exitCode, output.toByteArray(),
+                    error.toString(StandardCharsets.UTF_8), output.overflowed());
+        } catch (TimeoutException e) {
+            return new BytesResult(-1, output.toByteArray(), error.toString(StandardCharsets.UTF_8)
+                    + "\n(timed out after " + timeout.toSeconds() + "s)", output.overflowed());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while running a command in " + podName, e);
+        } catch (KubernetesClientException e) {
+            throw clusterUnreachable(e);
+        } catch (Exception e) {
+            throw new ExternalServiceException("Couldn't run a command in the preview runner", e);
+        }
+    }
+
+    static final class BoundedOutput extends OutputStream {
+        private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        private final int max;
+        private boolean overflowed;
+
+        BoundedOutput(int max) {
+            this.max = max;
+        }
+
+        @Override
+        public synchronized void write(int b) {
+            if (bytes.size() >= max) {
+                overflowed = true;
+                return;
+            }
+            bytes.write(b);
+        }
+
+        @Override
+        public synchronized void write(byte[] buffer, int offset, int length) {
+            int room = max - bytes.size();
+            if (length > room) {
+                overflowed = true;
+                length = Math.max(room, 0);
+            }
+            bytes.write(buffer, offset, length);
+        }
+
+        synchronized byte[] toByteArray() {
+            return bytes.toByteArray();
+        }
+
+        synchronized boolean overflowed() {
+            return overflowed;
         }
     }
 

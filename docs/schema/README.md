@@ -13,7 +13,7 @@ Data is split across **three PostgreSQL databases, one per service**, and each s
 |---|---|
 | [Databases](databases.md) | Which service owns which tables, ids and timestamps |
 | [account-service](account-service.md) | Users, plans, subscriptions, checkout intents, webhook events, the auth audit trail, revoked sessions |
-| [workspace-service](workspace-service.md) | Projects, members, files, file revisions, previews and preview sessions |
+| [workspace-service](workspace-service.md) | Projects, members, files, file revisions, previews, preview sessions and published apps |
 | [intelligence-service](intelligence-service.md) | Chat sessions, messages and events, code notes, usage counters and ledger |
 | [Cross-service references](cross-service-references.md) | Every column that points into another service's database |
 | [Enums](enums.md) | Roles, permissions, and every status and type value |

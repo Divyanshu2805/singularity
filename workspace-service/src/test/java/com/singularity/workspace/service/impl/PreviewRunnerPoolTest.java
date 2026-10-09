@@ -186,6 +186,19 @@ class PreviewRunnerPoolTest {
         return (Map<String, Object>) value;
     }
 
+    @Test
+    void aBoundedOutputKeepsWhatFitsAndReportsTheRest() {
+        PreviewRunnerPool.BoundedOutput out = new PreviewRunnerPool.BoundedOutput(5);
+
+        out.write(new byte[]{1, 2, 3}, 0, 3);
+        assertThat(out.overflowed()).isFalse();
+        out.write(new byte[]{4, 5, 6, 7}, 0, 4);
+        out.write(9);
+
+        assertThat(out.toByteArray()).containsExactly(1, 2, 3, 4, 5);
+        assertThat(out.overflowed()).isTrue();
+    }
+
     private static Pod idleRunnerPod() throws IOException {
         try (InputStream in = PreviewRunnerPoolTest.class.getResourceAsStream("/preview/idle-runner-pod.json")) {
             assertThat(in).as("fixture /preview/idle-runner-pod.json").isNotNull();

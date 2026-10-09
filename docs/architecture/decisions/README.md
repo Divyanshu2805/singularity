@@ -11,6 +11,7 @@ Short records of the decisions that shape Singularity, each with the context tha
 | [0005](0005-content-addressed-file-revisions.md) | Publish every file change as a content-addressed, atomic revision | Accepted |
 | [0006](0006-flyway-owned-schemas.md) | Let Flyway own every schema, with no enum `CHECK` constraints | Accepted |
 | [0007](0007-single-node-k3s-deployment.md) | Deploy to a single k3s node behind a tunnel, with portable manifests | Accepted |
+| [0008](0008-published-apps.md) | Publish an app as a production build of one revision, served from storage | Accepted |
 
 ## Writing a new record
 

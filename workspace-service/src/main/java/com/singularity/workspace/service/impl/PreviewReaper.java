@@ -9,6 +9,7 @@ import com.singularity.workspace.enums.PreviewStatus;
 import com.singularity.common.error.ExternalServiceException;
 import com.singularity.workspace.repository.PreviewRepository;
 import com.singularity.workspace.repository.PreviewSessionRepository;
+import com.singularity.workspace.repository.PublishedAppRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -32,12 +33,22 @@ import static com.singularity.workspace.service.impl.PreviewDeploymentServiceImp
  * that overran its timeout, ending a preview whose pod has vanished or whose dev server has crashed or gone
  * unresponsive, relaunching a file-sync watcher that died, keeping alive a preview being visited directly through
  * the proxy (and re-publishing its route if Redis lost it), shutting down a runner once no session is left on it,
- * releasing claimed pods that no active preview owns, and asking the synchronizer to bring level any running preview
- * that a published revision's own notice did not reach.
+ * releasing claimed pods that no active preview and no publish build owns, and asking the synchronizer to bring level
+ * any running preview that a published revision's own notice did not reach.
+ *
+ * <p>A publish build claims a runner pod too, and its pod is named on the build's row; the orphan sweep counts those as
+ * owned. Without that a build that outlasts the two-minute grace would have its pod deleted from under it.
  *
  * <p>A restart kills any bootstrap that was in flight, so a still-creating row from before can never finish; failing
  * those immediately is better than leaving the tab spinning until the timeout. The cluster or Redis being unreachable
  * - a sleeping laptop, a stopped cluster - is logged once rather than every minute.
+ *
+ * <p>One preview that cannot be looked after does not cost the others their turn. A sweep used to be one loop with
+ * nothing caught inside it but the cluster being unreachable, so a single row that made any step throw - a database
+ * hiccup on its update, a value nobody expected - ended the run there, every minute, for good: the previews after it
+ * were never checked, idle runners were never shut down and orphaned pods never released, until every runner was
+ * held and nobody could start a preview. Each preview is now handled on its own and a failure is logged with its
+ * id. The cluster or Redis being unreachable still ends the run, since that is true for every preview alike.
  *
  * <p>Every per-preview action - reviving a lost route, shutting down an idle runner, failing a stuck one - re-reads
  * the row under its project's lock immediately before acting, rather than trusting the snapshot this class's own
@@ -87,6 +98,7 @@ public class PreviewReaper {
     private final PreviewDeploymentServiceImpl deploymentService;
     private final PreviewSynchronizer synchronizer;
     private final InstanceId instanceId;
+    private final PublishedAppRepository publishedAppRepository;
 
     private final ConcurrentHashMap<Long, Integer> unresponsiveStreak = new ConcurrentHashMap<>();
 
@@ -125,10 +137,17 @@ public class PreviewReaper {
 
             List<Preview> active = previewRepository.findByStatusIn(ACTIVE);
             for (Preview preview : active) {
-                if (preview.getStatus() == PreviewStatus.CREATING) {
-                    reapIfStuck(preview, now);
-                } else if (reapIfUnusedOrGone(preview, now)) {
-                    synchronizer.bringUpToDate(preview.getProjectId());
+                try {
+                    if (preview.getStatus() == PreviewStatus.CREATING) {
+                        reapIfStuck(preview, now);
+                    } else if (reapIfUnusedOrGone(preview, now)) {
+                        synchronizer.bringUpToDate(preview.getProjectId());
+                    }
+                } catch (ExternalServiceException e) {
+                    throw e;
+                } catch (RuntimeException e) {
+                    log.error("Preview reaper couldn't look after preview {} this run - carrying on with the rest",
+                            preview.getId(), e);
                 }
             }
             sweepOrphanPods(active, now);
@@ -246,6 +265,7 @@ public class PreviewReaper {
 
     private void sweepOrphanPods(List<Preview> active, Instant now) {
         Set<String> owned = active.stream().map(Preview::getPodName).collect(Collectors.toSet());
+        owned.addAll(publishedAppRepository.findBuildPodNames());
         for (PreviewRunnerPool.ClaimedPod pod : runnerPool.claimedPods()) {
             if (owned.contains(pod.name())) continue;
             if (pod.claimedAt() != null && pod.claimedAt().plus(ORPHAN_GRACE).isAfter(now)) continue;
