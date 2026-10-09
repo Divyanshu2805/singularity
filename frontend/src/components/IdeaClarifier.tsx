@@ -18,7 +18,9 @@
  * outcome (build with this message, or a spent allowance) to the page when there is one, including one that arrived
  * while the page was away.
  *
- * It sits on the dashboard's glass (index.css, .app-glass): each question rises in, a chosen answer takes the app's
+ * It draws no card of its own: the dashboard puts it on the glass card that the project's set-up progress then takes
+ * over (pages/ProjectsDashboard.tsx), so the two are one card changing its contents and easing to each new height,
+ * not one card leaving and another arriving. Each question rises in, a chosen answer takes the app's
  * selected look - a faint gold glass fill inside a gold hairline (.row-active) and a filled number badge - and the step bar fills
  * in gold as the questions are answered.
  */
@@ -163,7 +165,7 @@ export function IdeaClarifier({ onEditIdea, onComplete, onQuotaExceeded }: IdeaC
   const currentStep = phase === "review" || phase === "compiling" ? questions.length : index;
 
   return (
-    <div className="app-glass app-rise relative mt-8 w-full rounded-[22px] text-left">
+    <>
       <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3">
         <Sparkles className="h-4 w-4 shrink-0 text-primary" />
         <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={idea}>
@@ -369,6 +371,6 @@ export function IdeaClarifier({ onEditIdea, onComplete, onQuotaExceeded }: IdeaC
           </>
         )}
       </div>
-    </div>
+    </>
   );
 }

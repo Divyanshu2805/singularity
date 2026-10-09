@@ -4874,6 +4874,101 @@ html.page-slide-back::view-transition-new(root) {
     box-shadow: 0 0 0 100vmax hsl(var(--surround));
   }
 
+  .dash-stage[data-focus] {
+    height: 26rem;
+  }
+
+  .dash-crown {
+    position: relative;
+    width: 100%;
+    height: 5.75rem;
+    flex-shrink: 0;
+    transition: height 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .dash-crown[data-focus] {
+    height: 2.125rem;
+  }
+
+  .dash-crown-mark {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 4rem;
+    height: 4rem;
+    translate: -50% 0;
+    transform-origin: 50% 0;
+    transition:
+      opacity 0.45s ease,
+      scale 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .dash-crown[data-focus] .dash-crown-mark {
+    opacity: 0;
+    scale: 0.6;
+    pointer-events: none;
+  }
+
+  .dash-crown-eyebrow {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 1rem;
+    display: flex;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 0.3s ease,
+      visibility 0s 0.3s;
+  }
+
+  .dash-crown[data-focus] .dash-crown-eyebrow {
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity 0.5s ease 0.2s,
+      visibility 0s;
+  }
+
+  .dash-dock {
+    transform-origin: 50% 0;
+    transition:
+      opacity 0.5s ease 0.1s,
+      scale 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.1s,
+      visibility 0s;
+  }
+
+  .dash-dock[data-away] {
+    opacity: 0;
+    scale: 0.975;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 0.35s ease,
+      scale 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+      visibility 0s 0.5s;
+  }
+
+  .smooth-height {
+    overflow: hidden;
+    transition: height 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dash-crown,
+    .dash-crown-mark,
+    .dash-crown-eyebrow,
+    .dash-dock,
+    .dash-dock[data-away],
+    .smooth-height {
+      transition: none;
+    }
+
+    .dash-dock[data-away] {
+      scale: none;
+    }
+  }
+
   .dash-night .dash-headline [data-word]:not(.heat-text) {
     background-image: linear-gradient(180deg, hsl(0 0% 100%) 30%, hsl(40 28% 95%));
   }
@@ -5383,8 +5478,6 @@ html.page-slide-back::view-transition-new(root) {
       & .lucide-eye-off { animation: ic-unblink 1.1s ease-out; }
       & .lucide-star { fill: currentColor; scale: 1.2; animation: ic-pop 0.8s ease; }
       & .lucide-gauge path:first-child { transform-origin: 0 100%; animation: ic-needle 1.1s ease-in-out; }
-      & .lucide-pin { animation: ic-stab 0.96s ease-out; }
-      & .lucide-pin-off { animation: ic-stab 0.96s ease-out; }
       & .lucide-copy rect { translate: 1.5px 1.5px; }
       & .lucide-copy path { translate: -1.5px -1.5px; }
       & :is(.lucide-chart-column, .lucide-bar-chart-3) :is(path:nth-child(2), path:nth-child(3), path:nth-child(4)) { transform-origin: 50% 100%; animation: ic-bar 1.1s ease-in-out; }
@@ -5392,12 +5485,11 @@ html.page-slide-back::view-transition-new(root) {
       & :is(.lucide-chart-column, .lucide-bar-chart-3) path:nth-child(4) { animation-delay: 0.24s; }
       & .lucide-download { scale: 1.08; }
       & .lucide-download :is(polyline, line) { animation: ic-drop 1.3s ease-in-out infinite; }
-      & .lucide-upload { animation: ic-bob-up 1.3s ease-in-out infinite; scale: 1; }
+      & .lucide-upload { scale: 1.18; }
       & :is(.lucide-rotate-cw, .lucide-refresh-cw) { animation: ic-spin 1.1s cubic-bezier(0.45, 0, 0.2, 1); }
       & :is(.lucide-rotate-ccw, .lucide-history) { animation: ic-spin-back 1.1s cubic-bezier(0.45, 0, 0.2, 1); }
-      & .lucide-lock path { translate: 0 -2px; }
       & .lucide-key-round { animation: ic-wiggle 0.96s ease-in-out; }
-      & :is(.lucide-mail, .lucide-folder, .lucide-folder-open, .lucide-file, .lucide-file-text, .lucide-file-code, .lucide-file-code-2, .lucide-file-json, .lucide-package-open, .lucide-cloud, .lucide-graduation-cap, .lucide-info) { animation: ic-hop 0.8s ease; }
+      & :is(.lucide-mail, .lucide-folder, .lucide-folder-open, .lucide-file, .lucide-file-text, .lucide-file-code, .lucide-file-code-2, .lucide-file-json, .lucide-package-open, .lucide-cloud, .lucide-graduation-cap, .lucide-info) { scale: 1.18; }
       & .lucide-mail-check path:last-child { animation: icon-construct 0.96s ease both; }
       & .lucide-shield-check path:last-child { animation: icon-construct 0.96s ease both; }
       & .lucide-check:not(.no-icon-anim) { animation: icon-construct 0.8s ease both; }
@@ -5411,10 +5503,8 @@ html.page-slide-back::view-transition-new(root) {
       & :is(.lucide-x, .lucide-circle-x) { scale: 0.8; }
       & :is(.lucide-log-out, .lucide-arrow-right, .lucide-chevron-right) { translate: 3px 0; }
       & :is(.lucide-arrow-left, .lucide-chevron-left) { translate: -3px 0; }
-      & :is(.lucide-arrow-up, .lucide-chevron-up) { translate: 0 -3px; }
+      & :is(.lucide-arrow-up, .lucide-chevron-up, .lucide-arrow-up-right, .lucide-rocket) { scale: 1.18; }
       & :is(.lucide-arrow-down, .lucide-chevron-down) { translate: 0 3px; }
-      & .lucide-arrow-up-right { translate: 2px -2px; }
-      & .lucide-rocket { translate: 2px -2px; }
       & :is(.lucide-circle-alert, .lucide-triangle-alert, .lucide-wrench, .lucide-moon) { animation: ic-wiggle 0.96s ease-in-out; }
       & .lucide-hammer { animation: ic-hammer 0.96s ease-in-out; transform-origin: 20% 80%; }
       & :is(.lucide-camera, .lucide-messages-square, .lucide-message-square-text) { animation: ic-pop 0.8s ease; }
@@ -5425,14 +5515,11 @@ html.page-slide-back::view-transition-new(root) {
     @keyframes ic-lid { 0%, 100% { rotate: 0deg; translate: 0 0; } 35%, 70% { rotate: -22deg; translate: -1px -2px; } }
     @keyframes ic-look { 0%, 100% { translate: 0 0; } 25% { translate: -2px 0; } 60% { translate: 2px 0; } 85% { translate: 0 -0.5px; } }
     @keyframes ic-unblink { 0% { scale: 1.12 0.08; } 100% { scale: 1.12; } }
-    @keyframes ic-stab { 0% { translate: 0 -5px; } 55% { translate: 0 1.5px; } 100% { translate: 0 0; } }
     @keyframes ic-spin { to { rotate: 360deg; } }
     @keyframes ic-spin-back { to { rotate: -360deg; } }
-    @keyframes ic-hop { 40% { translate: 0 -3px; } 70% { translate: 0 1px; } }
     @keyframes ic-bar { 0%, 100% { scale: 1 1; } 30% { scale: 1 0.25; } 65% { scale: 1 1.15; } }
     @keyframes ic-drop { 0%, 100% { translate: 0 -1.5px; opacity: 1; } 45% { translate: 0 3px; opacity: 1; } 60% { translate: 0 3px; opacity: 0; } 61% { translate: 0 -3px; opacity: 0; } 85% { translate: 0 -1.5px; opacity: 1; } }
     
-    @keyframes ic-bob-up { 50% { translate: 0 -2.5px; } }
     @keyframes ic-wiggle { 25% { rotate: -14deg; } 50% { rotate: 12deg; } 75% { rotate: -6deg; } }
     @keyframes ic-needle { 25% { rotate: 40deg; } 60% { rotate: -25deg; } }
     @keyframes ic-twinkle { 30% { scale: 1.3; } 60% { scale: 0.9; } }
