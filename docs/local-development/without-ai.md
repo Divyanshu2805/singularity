@@ -16,7 +16,8 @@ The service logs a warning at start-up saying the profile is on. Nothing that de
 | A request naming another stack (Vue, Python...) | A question: build it in React? |
 | A short question | One message |
 | The idea interview and its brief | Two questions; a fixed brief |
-| A step lesson, an explanation, suggestions | Fixed text in the shape each parser reads |
+| A step lesson, a turn's big picture, an explanation, suggestions | Fixed text in the shape each parser reads |
+| A project tour, a glossary entry, a lesson's task, the check of a task | Fixed text in the shape each reader expects; the check always says `Done`, since the stub reads no file |
 
 The reply is streamed in small pieces (`ai.stub.chunk-delay`, 12 ms each by default), so the chat fills in the way a real one does. Token usage is reported as characters over four, so the meter and the daily allowance move.
 

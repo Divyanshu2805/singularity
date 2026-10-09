@@ -184,6 +184,7 @@ describe("codeLens thread", () => {
         { role: "user", content: "What does this do?" },
         { role: "assistant", content: "It stores the count." },
       ],
+      level: "NEW",
     });
     expect(result.current?.selection).toBeNull();
   });
@@ -308,7 +309,7 @@ describe("codeLens thread", () => {
 
     const stream = lastStream();
     expect(stream.kind).toBe("ask");
-    expect(stream.body).toEqual({ question: "Where is routing set up?", history: [] });
+    expect(stream.body).toEqual({ question: "Where is routing set up?", history: [], level: "NEW" });
     expect(result.current?.turns.at(-2)).toMatchObject({ role: "user", content: "Where is routing set up?" });
     expect(result.current?.turns.at(-2)?.selection).toBeUndefined();
   });
@@ -540,6 +541,32 @@ describe("codeLens thread", () => {
     expect(stream.body.question).toContain('the step "Remembering the tasks" did in `src/hooks/useTasks.ts`');
     expect(stream.body.question).toContain("The build described this step as: Adds the list's memory.");
     expect(result.current?.turns[0]).toMatchObject({ role: "user", content: stream.body.question });
+  });
+
+  it("takes a lesson's question about some lines as a question with those lines selected", async () => {
+    const { result } = renderHook(() => useCodeLens(projectId));
+
+    act(() => codeLens.askAbout(projectId, selection, "Explain the syntax of this code piece by piece."));
+    await flush();
+
+    const stream = lastStream();
+    expect(result.current?.isOpen).toBe(true);
+    expect(stream.kind).toBe("ask");
+    expect(stream.body).toMatchObject({ path: "src/Counter.tsx", code: selection.code, startLine: 4, endLine: 4, level: "NEW" });
+    expect(result.current?.turns[0]).toMatchObject({ role: "user", selection });
+  });
+
+  it("says so, and sends nothing, when a lesson asks while another answer is still being written", async () => {
+    const { result } = renderHook(() => useCodeLens(projectId));
+    act(() => codeLens.askAbout(projectId, null, "What does \"state\" mean?"));
+    await flush();
+    const sent = vi.mocked(api.streamCodeInsight).mock.calls.length;
+
+    act(() => codeLens.askAbout(projectId, selection, "Why this way?"));
+
+    expect(vi.mocked(api.streamCodeInsight).mock.calls).toHaveLength(sent);
+    expect(result.current?.error).toMatch(/still answering/i);
+    expect(result.current?.turns.filter((turn) => turn.role === "user")).toHaveLength(1);
   });
 
   it("keeps a step's question within what the server accepts, however long the step's description", () => {

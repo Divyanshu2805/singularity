@@ -222,4 +222,15 @@ class PromptUtilsTest {
         assertThat(prompt).contains("Always check your imports before the final `<message>`")
                 .contains("with no leading").contains("Tag names are lower case");
     }
+
+    @Test
+    @DisplayName("every screen is to fit its window, whatever style was asked for")
+    void itAsksForScreensThatFitTheirWindow() {
+        String prompt = PromptUtils.getSystemPrompt();
+
+        assertThat(prompt).contains("the page never scrolls sideways").contains("grid grid-cols-1 md:grid-cols-3")
+                .contains("overflow-x-auto");
+        assertThat(prompt.indexOf("the page never scrolls sideways"))
+                .isGreaterThan(prompt.indexOf("that style wins over everything in this section"));
+    }
 }

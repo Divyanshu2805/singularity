@@ -10,20 +10,21 @@
  * answered with a click; several are picked and then sent together), and the separate rendering for a turn that ended
  * in an error.
  *
- * A turn is shown in the order things happen, the way a terminal agent shows its work. While it is being written,
- * each file is one line as it arrives - what the step is for, the file, and where it stands in the plan ("3/12") -
- * between the sentences the model says as it goes; the plan itself is not drawn. Once the turn is saved, those
- * lines fold to one each ("4 files written"), still between the sentences they were written between and opening
- * when pressed to the files alone - their names, not each one's step again, which the build card below already
- * says (the step beside each file was taken out of the opened fold at the owner's request), and the build
- * card is placed last, under the closing words: the whole build as steps, which is where
- * a step's lesson is opened in teaching mode. The card used to appear as "Plan" before a line was written and
- * count up in place, which put a long checklist between the person and what was actually happening.
+ * A turn is shown in the order things happen, the way a terminal agent shows its work. Each run of files between two
+ * of the model's sentences is one line, while it is being written and afterwards alike: "Writing Index.tsx" with the
+ * comet while a file arrives, "4 files written" once they have, opening when pressed to the files alone. It is one
+ * element that changes its words, so nothing moves when the turn is saved. It used to be a line per file while the
+ * turn ran - the step it belonged to, the file, its place in the plan ("3/12") - which then collapsed into a fold
+ * and a card at the moment of saving; the owner asked for the file alone, no what or why, and no jump. The build
+ * card is placed last, under the closing words, folded to its head ("Build steps 6/6") until it is pressed: the whole
+ * build as steps, which is where a step's lesson is opened in teaching mode. The card used to appear as "Plan"
+ * before a line was written and count up in place, which put a long checklist between the person and what was
+ * actually happening, and then stood open under every finished turn.
  *
  * There is one card for a build where there used to be two. A turn showed a "Build steps" checklist and, under it, an
  * "Edited 8 files" list naming the same eight files again, and the model's plan sat above both as a numbered Markdown
  * list - three tellings of one thing. The checklist is now the plan: it appears as "Plan" before anything is written,
- * counts up as "Building" while files land beside their steps, and settles as "Built". A file nobody listed - one a
+ * counts up as "Building" while files land beside their steps, and settles as "Build steps" (it read "Built" until the owner asked for the plainer name). A file nobody listed - one a
  * step wrote alongside its main file, or one added by a later pass that repaired an import - is shown too, under the
  * step that was being written or as a row of its own, so the card is still the whole record of what changed.
  *
@@ -37,6 +38,36 @@
  * is pressed. The button is offered once the saved turn has arrived, since a lesson is asked for by the id of the
  * saved file edit. Lessons saved by earlier versions sit folded under their step as "What this step does", with the
  * detail button and, for the oldest shape, the quoted lines behind a "Line by line" toggle.
+ *
+ * Teaching runs from the whole to the part to the detail, which is the order the owner asked for. A teaching turn's
+ * card opens with "The big picture" above its steps: what was asked for, each file the turn wrote and its job, one
+ * action followed through them, and the ideas the build uses. It is a card of its own in
+ * the chat, above the build card and folded like it, fetched when it is first opened and kept with the turn; it sat
+ * inside the build card as a row under the steps until the owner asked for the two to be separate. A file named in
+ * it opens that file. It ended with a button that opened the first step's lesson; the owner had that taken out too.
+ * In the build card the steps are ruled apart, the step whose lesson is open is lit, and opening one step's lesson
+ * closes whichever was open, so one is read at a time, and brings that step's row to the top of the chat so the
+ * lesson is read from where it starts. Each step's lesson then ends with a question to answer, and the card's head
+ * counts the lessons opened. A lesson also ended with a button to the next step's lesson for a day; the owner had it
+ * taken out. The detail is ExplainLLM's: under each section of a lesson are three
+ * questions about those lines (the syntax, why it is written that way, what removing it would do), and the reader's
+ * answer to the lesson's question is sent to be checked - each an ordinary question to the read-only code lens, with
+ * the section's lines as its selection. A marked term is not one of those: pressing it opens the word in the glossary
+ * (components/LearnPanel), written once and kept, which can still hand the word to ExplainLLM. After the question a
+ * lesson offers "Try changing this" (TryChanging): a task - one small, safe change on a line the step added - the
+ * person makes by hand in the editor, then "Check my change" has the read-only model read the saved file and say Done
+ * or Not yet. Nothing in it is asked for until a button is pressed, and it is not offered where no editor can be
+ * opened.
+ *
+ * What teaching mode draws is drawn as the rest of the app is: a file is the chat's file chip, and a term and every
+ * action are the app's chip (.app-chip) in its own pill shape, lighting under the pointer as every button does, with
+ * nothing in a colour of its own. The
+ * lines a section is about sit on a faint gold ground with a gold edge, and the boxes of a lesson - a section of the
+ * big picture, what happens next - share that warmth: a gold hairline, a faintly gold head. The question is the one
+ * box in another colour, the editor's orange for a keyword (it was blue for an hour; the owner asked for orange), because it is the one place the reader is asked to do
+ * something; its field is the app's composer in small - a rounded well with the round send button. The code
+ * was briefly a plain grey card and the boxes the workspace's grey card; the owner asked for the yellow back and for
+ * the boxes to match it. Before that it was gold capitals, underlined code and squared-off chips.
  *
  * The lesson used to be a row of its own under every step, reading "How File.tsx works", shown on every turn in the
  * conversation whenever the mode was on, and it explained the whole file. The owner asked for the icon beside the
@@ -62,8 +93,8 @@
  * and toggles take the app's row highlight (.hl-row) under the pointer, anything under way shows the app's comet
  * (OrbitSpinner) rather than a spinning icon, and the turn is signed with the horizon mark (HorizonMark).
  */
-import { Fragment, type CSSProperties, type ReactNode, useEffect, useId, useMemo, useState } from 'react';
-import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleAlert, CircleHelp, Clock, FilePen, FileSearch, GraduationCap, Lightbulb, ListChecks, MessagesSquare, Trash2 } from 'lucide-react';
+import { Fragment, type CSSProperties, type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ArrowRight, ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleHelp, Clock, Compass, FilePen, FileSearch, GraduationCap, Lightbulb, ListChecks, MessagesSquare, Pencil, Trash2 } from 'lucide-react';
 import { HorizonMark } from '@/components/HorizonMark';
 import { OrbitSpinner } from '@/components/app/OrbitSpinner';
 import { ChatMarkdown } from '@/components/ChatMarkdown';
@@ -71,8 +102,10 @@ import { useStepReveal } from '@/hooks/use-step-reveal';
 import { ChatEvent, ChatEventType } from '@/lib/types';
 import { type AskedQuestion, formatAnswers, isFullyAnswered, parseAnswerOptions } from '@/lib/ask';
 import { getFileColor, getFileIcon, splitPath } from '@/lib/file-icons';
-import { type CodeTarget, type Lesson, type LessonPart, linesOf, parseLesson, parseWalkthrough, withLines } from '@/lib/lesson';
-import { type LessonState, lessonKey, requestLesson, useLesson } from '@/lib/lesson-store';
+import { checkAnswerQuestion, type CodeTarget, DEEPER_QUESTIONS, type Lesson, type LessonPart, type LessonQuestion, linesOf, parseBigPicture, parseLesson, parseWalkthrough, proseBlocks, withLines } from '@/lib/lesson';
+import { parseTask, parseVerdict } from '@/lib/learn';
+import { learnPanel } from '@/lib/learn-panel-store';
+import { type LessonState, lessonKey, overviewKey, requestLesson, requestOverview, requestTask, requestTaskCheck, taskCheckKey, taskKey, useLesson, useLessonsWritten } from '@/lib/lesson-store';
 import { thoughtSteps } from '@/lib/thought';
 import { cn, formatWorkedFor } from '@/lib/utils';
 
@@ -85,12 +118,16 @@ export interface StepToExplain {
 }
 
 type ExplainStep = (step: StepToExplain) => void;
+type AskAbout = (ask: LessonQuestion) => void;
+
+const MAX_ASKED_CODE_CHARS = 12000;
+const FILE_PATH = /^[\w@.-]+(?:\/[\w@.[\]-]+)*\.[a-z]{1,5}$/i;
 
 const MAX_CHECKLIST_STEPS = 12;
 
 type LessonView = Lesson & { isComplete: boolean };
 type LessonItem = { path?: string; lesson: LessonView };
-type StepFile = { path: string; active: boolean; deleted?: boolean; edited?: boolean; lines?: number; content?: string; eventId?: number; lesson?: string };
+type StepFile = { path: string; active: boolean; deleted?: boolean; edited?: boolean; lines?: number; content?: string; eventId?: number; lesson?: string; task?: string; taskDone?: boolean };
 type StepStatus = 'done' | 'active' | 'pending';
 type BuildStep = { label: string; path?: string; isExtra?: boolean; status: StepStatus; files: StepFile[]; lessons: LessonItem[] };
 type AskItem = AskedQuestion & { isComplete: boolean };
@@ -238,7 +275,7 @@ export function buildBlocks(events: ChatEvent[], isStreaming: boolean): Block[] 
         active,
         ...(deleted
           ? { deleted: true }
-          : { lines: lineCount(event.content), content: event.content, eventId: event.id, lesson: event.lesson || undefined }),
+          : { lines: lineCount(event.content), content: event.content, eventId: event.id, lesson: event.lesson || undefined, task: event.task || undefined, taskDone: event.taskDone }),
       });
     } else if (event.type === ChatEventType.LEARN && event.content) {
       if (event.filePath && lessonPaths.has(event.filePath)) return;
@@ -349,9 +386,12 @@ export function activitySummary(items: ActivityItem[]): string {
   return parts.join(", ");
 }
 
+const activityVerb = (file: StepFile) => (file.deleted ? "Deleting" : file.edited ? "Editing" : "Writing");
+
 function ActivityFold({ block, onOpen }: { block: ActivityBlock; onOpen?: OpenFile }) {
   const [isOpen, setIsOpen] = useState(false);
   const detailsId = useId();
+  const current = block.items.find((item) => item.file.active);
 
   return (
     <div className="min-w-0">
@@ -362,47 +402,42 @@ function ActivityFold({ block, onOpen }: { block: ActivityBlock; onOpen?: OpenFi
         onClick={() => setIsOpen((open) => !open)}
         className="group -ml-1.5 flex h-6 max-w-full items-center gap-1.5 rounded-md px-1.5 text-xs text-muted-foreground transition-colors hover:text-primary focus-visible:text-primary active:text-primary focus-visible:outline-none"
       >
-        <FilePen className="h-3.5 w-3.5 shrink-0" />
-        <span className="shrink-0">{activitySummary(block.items)}</span>
-        <ChevronRight className={cn("h-3 w-3 shrink-0 transition-transform", isOpen && "rotate-180")} />
+        {current ? <OrbitSpinner className="h-3.5 w-3.5 shrink-0" /> : <FilePen className="h-3.5 w-3.5 shrink-0" />}
+        {current ? (
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            <span className="text-shimmer shrink-0 font-medium">{activityVerb(current.file)}</span>
+            <span className="truncate font-mono text-[11px] text-foreground/85">{splitPath(current.file.path).base}</span>
+          </span>
+        ) : (
+          <span className="shrink-0">{activitySummary(block.items)}</span>
+        )}
+        {current && block.items.length > 1 && (
+          <span className="shrink-0 tabular-nums text-muted-foreground/70">{block.items.length} files</span>
+        )}
+        <ChevronRight className={cn("h-3 w-3 shrink-0 transition-transform", isOpen && "rotate-90")} />
       </button>
       {isOpen && (
-        <div id={detailsId} className="mt-1.5 border-l-2 border-white/[0.12] pl-3">
-          <ActivityLines block={{ ...block, isSummary: false }} onOpen={onOpen} filesOnly />
-        </div>
+        <ul id={detailsId} className="mt-1.5 flex min-w-0 flex-col gap-0.5 border-l-2 border-white/[0.12] pl-3">
+          {block.items.map(({ key, file }) => (
+            <li key={key} className="flex min-h-6 min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              {file.active
+                ? <OrbitSpinner className="h-3.5 w-3.5 shrink-0" />
+                : <Check className="h-3.5 w-3.5 shrink-0 text-primary/80" />}
+              <StepFileChip file={{ ...file, active: false }} onOpen={file.active ? undefined : onOpen} />
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
 }
 
-function ActivityLines({ block, onOpen, filesOnly = false }: { block: ActivityBlock; onOpen?: OpenFile; filesOnly?: boolean }) {
-  if (block.isSummary) return <ActivityFold block={block} onOpen={onOpen} />;
-  return (
-    <ul className="flex min-w-0 flex-col gap-0.5">
-      {block.items.map(({ key, label, position, total, file }) => (
-        <li key={key} className="flex min-h-6 min-w-0 items-center gap-2 text-xs text-muted-foreground chat-enter">
-          {file.active
-            ? <OrbitSpinner className="h-3.5 w-3.5 shrink-0" />
-            : <Check className="h-3.5 w-3.5 shrink-0 text-primary/80" />}
-          {!filesOnly && (
-            <span className={cn("min-w-0 truncate", file.active ? "text-shimmer font-medium" : "text-foreground/80")}>
-              {label ?? (file.deleted ? "Removing a file" : file.edited ? "Changing a file" : "Writing a file")}
-            </span>
-          )}
-          <StepFileChip file={{ ...file, active: false }} onOpen={file.active ? undefined : onOpen} />
-          {!filesOnly && position && total && (
-            <span className="ml-auto shrink-0 pl-2 tabular-nums text-muted-foreground/60">{position}/{total}</span>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function FileChip({ path, onOpen }: { path: string; onOpen?: (path: string) => void }) {
+function FileChip({ path, onOpen, inline }: { path: string; onOpen?: (path: string) => void; inline?: boolean }) {
   const Icon = getFileIcon(path);
-  const className =
-    "inline-flex h-6 max-w-[220px] items-center gap-1.5 rounded-full border border-white/[0.12] bg-[hsl(var(--ws-card))] px-2 text-[11.5px] text-foreground/90 transition-colors";
+  const className = cn(
+    "inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-white/[0.12] bg-[hsl(var(--ws-card))] px-2 text-[11.5px] text-foreground/90 transition-colors",
+    inline ? "h-5 align-middle" : "h-6"
+  );
   const content = (
     <>
       <Icon className={cn("h-3 w-3 shrink-0", getFileColor(path))} />
@@ -577,18 +612,34 @@ function AskBlock({ questions, onAnswer }: { questions: AskItem[]; onAnswer?: (a
   );
 }
 
-function LessonText({ text }: { text: string }) {
+export function LessonText({ text, onTerm, onPath }: { text: string; onTerm?: (term: string) => void; onPath?: (path: string) => void }) {
   return (
     <>
       {text.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g).map((part, index) =>
         part.length > 2 && part.startsWith("`") && part.endsWith("`") ? (
-          <code key={index} className="rounded bg-muted px-1 py-px font-mono text-[11px] text-foreground">
-            {part.slice(1, -1)}
-          </code>
+          onPath && FILE_PATH.test(part.slice(1, -1)) ? (
+            <FileChip key={index} path={part.slice(1, -1)} onOpen={onPath} inline />
+          ) : (
+            <code key={index} className="rounded bg-muted px-1 py-px font-mono text-[11px] text-foreground">
+              {part.slice(1, -1)}
+            </code>
+          )
         ) : part.length > 4 && part.startsWith("**") && part.endsWith("**") ? (
-          <mark key={index} className="rounded-sm bg-primary/[0.14] px-0.5 font-semibold text-foreground">
-            {part.slice(2, -2)}
-          </mark>
+          onTerm ? (
+            <button
+              key={index}
+              type="button"
+              onClick={() => onTerm(part.slice(2, -2))}
+              title={`Open "${part.slice(2, -2)}" in your glossary`}
+              className="app-chip inline-flex h-5 items-center px-2 align-middle text-[11.5px] font-medium text-foreground"
+            >
+              {part.slice(2, -2)}
+            </button>
+          ) : (
+            <mark key={index} className="rounded-sm bg-primary/[0.14] px-0.5 font-semibold text-foreground">
+              {part.slice(2, -2)}
+            </mark>
+          )
         ) : (
           <Fragment key={index}>{part.replace(/\*\*/g, "")}</Fragment>
         )
@@ -618,7 +669,7 @@ function CodeExcerpt({ lines, startLine, onClick }: { lines: string[]; startLine
     </>
   );
   const className =
-    "mt-1.5 block w-full min-w-0 rounded-md border border-primary/25 border-l-2 border-l-primary/70 bg-primary/[0.06] px-2.5 py-1.5 text-left font-mono text-[11px] leading-[1.6]";
+    "mt-1.5 block w-full min-w-0 rounded-lg border border-primary/25 border-l-2 border-l-primary/70 bg-primary/[0.07] px-2.5 py-1.5 text-left font-mono text-[11px] leading-[1.6]";
   const style = { "--gutter": `${gutter}ch` } as CSSProperties;
 
   if (!onClick) return <code className={className} style={style}>{body}</code>;
@@ -628,18 +679,350 @@ function CodeExcerpt({ lines, startLine, onClick }: { lines: string[]; startLine
       onClick={onClick}
       title="Show these lines in the editor"
       style={style}
-      className={cn(className, "transition-colors duration-200 hover:border-primary/50 hover:bg-primary/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
+      className={cn(className, "transition-colors duration-200 hover:border-primary/50 hover:bg-primary/[0.11] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
     >
       {body}
     </button>
   );
 }
 
-function WalkthroughNoteView({ note, path, content, onOpen }: {
+export function Prose({ text, onTerm, onPath }: { text: string; onTerm?: (term: string) => void; onPath?: (path: string) => void }) {
+  return (
+    <>
+      {proseBlocks(text).map((block, index) =>
+        block.kind === "paragraph" ? (
+          <p key={index} className="break-words text-[12.5px] leading-[1.7] text-foreground/85">
+            <LessonText text={block.text} onTerm={onTerm} onPath={onPath} />
+          </p>
+        ) : (
+          <ol key={index} className="space-y-1.5">
+            {block.items.map((item, itemIndex) => (
+              <li key={itemIndex} className="flex min-w-0 gap-2 text-[12.5px] leading-[1.7] text-foreground/85">
+                {block.kind === "steps" ? (
+                  <span aria-hidden="true" className="mt-[3px] flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[10px] font-medium tabular-nums text-foreground/80">
+                    {itemIndex + 1}
+                  </span>
+                ) : (
+                  <span aria-hidden="true" className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-muted-foreground/60" />
+                )}
+                <span className="min-w-0 break-words">
+                  <LessonText text={item} onTerm={onTerm} onPath={onPath} />
+                </span>
+              </li>
+            ))}
+          </ol>
+        )
+      )}
+    </>
+  );
+}
+
+const CARD_TONES = {
+  gold: {
+    box: "border-primary/20 bg-primary/[0.035]",
+    head: "border-primary/15 bg-primary/[0.08]",
+    icon: "text-primary/85",
+  },
+  orange: {
+    box: "border-[hsl(var(--syntax-keyword)/0.3)] bg-[hsl(var(--syntax-keyword)/0.05)]",
+    head: "border-[hsl(var(--syntax-keyword)/0.22)] bg-[hsl(var(--syntax-keyword)/0.12)]",
+    icon: "text-[hsl(var(--syntax-keyword))]",
+  },
+};
+
+export function TaughtCard({ title, Icon, tone = "gold", children }: {
+  title: string;
+  Icon: typeof Lightbulb;
+  tone?: keyof typeof CARD_TONES;
+  children: ReactNode;
+}) {
+  const colours = CARD_TONES[tone];
+  return (
+    <section className={cn("min-w-0 overflow-hidden rounded-xl border animate-in fade-in duration-500 motion-reduce:animate-none", colours.box)}>
+      <h4 className={cn("flex items-center gap-1.5 border-b px-3 py-1.5 text-[11.5px] font-medium text-foreground/90", colours.head)}>
+        <Icon className={cn("h-3.5 w-3.5 shrink-0", colours.icon)} />
+        <span className="truncate">{title}</span>
+      </h4>
+      <div className="min-w-0 space-y-2 px-3 py-2.5">{children}</div>
+    </section>
+  );
+}
+
+const sectionIcon = (title: string) =>
+  /piece/i.test(title) ? FilePen : /how/i.test(title) ? ListChecks : /idea/i.test(title) ? Lightbulb : Compass;
+
+function BigPictureCard({ projectId, turnId, saved, onOpen, onAsk }: {
+  projectId: string;
+  turnId: number;
+  saved?: string;
+  onOpen?: OpenFile;
+  onAsk?: AskAbout;
+}) {
+  const live = useLesson(overviewKey(projectId, turnId));
+  const state = useMemo<LessonState | undefined>(
+    () => live ?? (saved ? { status: "done", text: saved } : undefined),
+    [live, saved]
+  );
+  const [isOpen, setIsOpen] = useState(false);
+  const panelId = useId();
+
+  const picture = useMemo(() => (state ? parseBigPicture(state.text, state.status === "done") : null), [state]);
+  const hasText = !!picture && (picture.intro !== "" || picture.sections.length > 0);
+  const ask = () => { requestOverview(projectId, turnId); };
+  const toggle = () => {
+    if (!isOpen && !state) ask();
+    setIsOpen((open) => !open);
+  };
+  const onTerm = (term: string) => learnPanel.openTerm(projectId, term);
+  const onPath = onOpen ? (path: string) => onOpen(path) : undefined;
+
+  return (
+    <div className="chat-tile overflow-hidden rounded-xl">
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-controls={panelId}
+        onClick={toggle}
+        className={cn("chat-tile-head hl-row flex h-8 w-full min-w-0 items-center gap-2 px-3 text-left text-xs focus-visible:outline-none", !isOpen && "border-b-0")}
+      >
+        <Compass className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="shrink-0 font-medium text-foreground/90">The big picture</span>
+        <span className="min-w-0 truncate text-[11px] text-muted-foreground">Start here: what this build made and how it fits together</span>
+        <ChevronDown className={cn("ml-auto h-3 w-3 shrink-0 text-muted-foreground transition-transform", !isOpen && "-rotate-90")} />
+      </button>
+      {isOpen && (
+        <div id={panelId} className="min-w-0 space-y-3 px-3 py-3">
+          {state?.status === "error" && (
+            <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
+              <CircleAlert className="h-3.5 w-3.5 shrink-0 text-destructive" />
+              <span className="min-w-0 break-words">{state.error ?? "Couldn't write the big picture."}</span>
+              <button type="button" onClick={ask} className="app-chip inline-flex h-7 items-center px-3 text-xs text-foreground/90">
+                Try again
+              </button>
+            </div>
+          )}
+
+          {!hasText && state?.status !== "error" && (
+            <div className="space-y-2" aria-label="Writing the big picture">
+              <p className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+                <OrbitSpinner className="h-3 w-3" />
+                Reading what this build wrote&hellip;
+              </p>
+              {[84, 96, 58].map((width) => (
+                <div key={width} className="h-2.5 animate-pulse rounded bg-white/[0.06]" style={{ width: `${width}%` }} />
+              ))}
+            </div>
+          )}
+
+          {picture?.intro && <Prose text={picture.intro} onTerm={onTerm} onPath={onPath} />}
+
+          {picture?.sections.map((section, index) => (
+            <TaughtCard key={`${section.title}-${index}`} title={section.title} Icon={sectionIcon(section.title)}>
+              <Prose text={section.text} onTerm={onTerm} onPath={onPath} />
+            </TaughtCard>
+          ))}
+
+          {state?.status === "loading" && hasText && (
+            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <OrbitSpinner className="h-3 w-3" />
+              Still writing&hellip;
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const MAX_ANSWER_HEIGHT = 120;
+
+function CheckYourself({ question, path, onAsk }: { question: string; path: string; onAsk?: AskAbout }) {
+  const [answer, setAnswer] = useState("");
+  const fieldId = useId();
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const send = () => {
+    if (!onAsk || !answer.trim()) return;
+    onAsk({ question: checkAnswerQuestion(path, question, answer) });
+    setAnswer("");
+    if (fieldRef.current) fieldRef.current.style.height = "auto";
+  };
+
+  return (
+    <TaughtCard title="Check yourself" Icon={CircleHelp} tone="orange">
+      <label htmlFor={fieldId} className="block break-words text-[12.5px] leading-[1.7] text-foreground/90">
+        <LessonText text={question} />
+      </label>
+      {onAsk && (
+        <>
+          <div className="app-field relative flex items-end gap-1.5 rounded-2xl p-1.5">
+            <textarea
+              id={fieldId}
+              ref={fieldRef}
+              value={answer}
+              rows={1}
+              maxLength={1000}
+              placeholder="Type your answer…"
+              onChange={(event) => {
+                setAnswer(event.target.value);
+                event.target.style.height = "auto";
+                event.target.style.height = `${Math.min(event.target.scrollHeight, MAX_ANSWER_HEIGHT)}px`;
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  send();
+                }
+              }}
+              className="max-h-[120px] min-w-0 flex-1 resize-none bg-transparent px-2 py-1 text-[13px] text-foreground caret-primary outline-none placeholder:text-muted-foreground"
+            />
+            <button
+              type="button"
+              onClick={send}
+              disabled={!answer.trim()}
+              aria-label="Check my answer"
+              title="Check my answer"
+              className="app-send h-7 w-7"
+            >
+              <ArrowUp className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">ExplainLLM reads your answer and tells you what it got right.</p>
+        </>
+      )}
+    </TaughtCard>
+  );
+}
+
+const TASK_CHIP = "app-chip inline-flex h-7 items-center gap-1.5 px-3 text-xs text-foreground/90 disabled:pointer-events-none disabled:opacity-60";
+
+function TryChanging({ projectId, file, onOpen }: { projectId: string; file: StepFile; onOpen: OpenFile }) {
+  const eventId = file.eventId as number;
+  const liveTask = useLesson(taskKey(projectId, eventId));
+  const liveCheck = useLesson(taskCheckKey(projectId, eventId));
+  const taskState = useMemo<LessonState | undefined>(
+    () => liveTask ?? (file.task ? { status: "done", text: file.task } : undefined),
+    [liveTask, file.task]
+  );
+  const task = useMemo(() => (taskState ? parseTask(taskState.text, taskState.status === "done") : null), [taskState]);
+  const verdict = useMemo(
+    () => (liveCheck ? parseVerdict(liveCheck.text, liveCheck.status === "done") : null),
+    [liveCheck]
+  );
+  const name = splitPath(file.path).base;
+  const hasTask = !!task && task.task !== "";
+  const isDone = !!file.taskDone || verdict?.state === "done";
+  const isChecking = liveCheck?.status === "loading";
+  const target = task?.startLine !== undefined ? { line: task.startLine, endLine: task.endLine } : undefined;
+  const range = task?.startLine === undefined ? "" : task.endLine === task.startLine ? `L${task.startLine}` : `L${task.startLine}–${task.endLine}`;
+  const ask = () => { requestTask(projectId, eventId); };
+  const check = () => { requestTaskCheck(projectId, eventId); };
+  const isSetting = taskState?.status === "loading";
+  const problem = taskState?.status === "error"
+    ? taskState.error ?? "Couldn't set a task."
+    : liveCheck?.status === "error" ? liveCheck.error ?? "Couldn't check your change." : null;
+
+  return (
+    <TaughtCard title="Try changing this" Icon={Pencil} tone="orange">
+      {hasTask && task ? (
+        <Prose text={task.task} />
+      ) : (
+        <p className="break-words text-[12.5px] leading-[1.7] text-foreground/85">
+          Change one small thing in {name} yourself and see what happens. ExplainLLM sets the task and checks it afterwards.
+        </p>
+      )}
+
+      {hasTask && range && (
+        <div className="flex min-w-0 items-start gap-2">
+          <button
+            type="button"
+            onClick={() => onOpen(file.path, target)}
+            title={`Show ${range} in the editor`}
+            className="app-chip inline-flex h-[22px] shrink-0 items-center gap-1 border border-primary/40 bg-primary/[0.1] px-2 font-mono text-[10.5px] tabular-nums text-primary"
+          >
+            {range}
+            <ArrowUpRight className="h-3 w-3" />
+          </button>
+          {task?.where && <span className="min-w-0 break-words text-[12px] leading-[22px] text-foreground/80">{task.where}</span>}
+        </div>
+      )}
+
+      {hasTask && task?.doneWhen && (
+        <p className="break-words text-[11.5px] leading-[1.6] text-muted-foreground">
+          <span className="font-medium text-foreground/80">Done when: </span>
+          {task.doneWhen}
+        </p>
+      )}
+
+      {(taskState || liveCheck) && (
+        <p role="status" className="flex min-h-[20px] items-start gap-1.5 break-words text-[12px] leading-[20px] text-muted-foreground">
+          {problem ? (
+            <>
+              <CircleAlert className="mt-[3px] h-3.5 w-3.5 shrink-0 text-destructive" />
+              <span className="min-w-0">{problem}</span>
+            </>
+          ) : isSetting && !hasTask ? (
+            <>
+              <OrbitSpinner className="mt-1 h-3 w-3" />
+              <span>Thinking of a small task&hellip;</span>
+            </>
+          ) : isChecking && (!verdict || verdict.state === "pending") ? (
+            <>
+              <OrbitSpinner className="mt-1 h-3 w-3" />
+              <span>Reading {name}&hellip;</span>
+            </>
+          ) : isDone ? (
+            <>
+              <CircleCheck className="mt-[3px] h-3.5 w-3.5 shrink-0 text-syntax-string" />
+              <span className="min-w-0 text-foreground/90">
+                <span className="font-medium">Done.</span>
+                {verdict?.state === "done" && verdict.detail ? ` ${verdict.detail}` : " You made this change."}
+              </span>
+            </>
+          ) : verdict?.state === "notYet" ? (
+            <span className="min-w-0 text-foreground/90">
+              <span className="font-medium">Not yet.</span>
+              {verdict.detail ? ` ${verdict.detail}` : ""}
+            </span>
+          ) : isSetting ? null : (
+            <span className="min-w-0 text-[11.5px]">
+              Open the file, press the pencil above the editor, make the change, press Save, then check it here. The check reads the saved file.
+            </span>
+          )}
+        </p>
+      )}
+
+      <div className="flex min-h-7 flex-wrap items-center gap-1.5">
+        {hasTask && !isSetting ? (
+          <>
+            <button type="button" onClick={() => onOpen(file.path, target)} className={TASK_CHIP}>
+              <Pencil className="h-3 w-3 shrink-0 text-primary/80" />
+              Open {name}
+            </button>
+            {!isDone && (
+              <button type="button" onClick={check} disabled={isChecking} className={TASK_CHIP}>
+                <Check className="h-3 w-3 shrink-0 text-primary/80" />
+                Check my change
+              </button>
+            )}
+          </>
+        ) : (
+          <button type="button" onClick={ask} disabled={isSetting} className={TASK_CHIP}>
+            <Pencil className="h-3 w-3 shrink-0 text-primary/80" />
+            {taskState?.status === "error" ? "Try again" : "Give me a task"}
+          </button>
+        )}
+      </div>
+    </TaughtCard>
+  );
+}
+
+function WalkthroughNoteView({ projectId, note, path, content, onOpen, onAsk }: {
+  projectId: string;
   note: ReturnType<typeof parseWalkthrough>["notes"][number];
   path: string;
   content: string;
   onOpen?: OpenFile;
+  onAsk?: AskAbout;
 }) {
   const range = note.startLine === note.endLine ? `L${note.startLine}` : `L${note.startLine}–${note.endLine}`;
   const show = onOpen ? () => onOpen(path, { line: note.startLine, endLine: note.endLine }) : undefined;
@@ -653,7 +1036,7 @@ function WalkthroughNoteView({ note, path, content, onOpen }: {
             type="button"
             onClick={show}
             title={`Show ${range} in the editor`}
-            className="app-chip inline-flex h-[22px] shrink-0 items-center gap-1 rounded-md border border-primary/40 bg-primary/[0.1] px-1.5 font-mono text-[10.5px] tabular-nums text-primary"
+            className="app-chip inline-flex h-[22px] shrink-0 items-center gap-1 border border-primary/40 bg-primary/[0.1] px-2 font-mono text-[10.5px] tabular-nums text-primary"
           >
             {range}
             <ArrowUpRight className="h-3 w-3" />
@@ -668,8 +1051,29 @@ function WalkthroughNoteView({ note, path, content, onOpen }: {
       <CodeExcerpt lines={excerpt} startLine={note.startLine} onClick={show} />
       {note.text && (
         <p className="mt-1.5 break-words text-[12.5px] leading-[1.7] text-foreground/80">
-          <LessonText text={note.text} />
+          <LessonText text={note.text} onTerm={(term) => learnPanel.openTerm(projectId, term)} />
         </p>
+      )}
+      {onAsk && note.isComplete && excerpt.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label={`Ask ExplainLLM about ${range}`}>
+          {DEEPER_QUESTIONS.map((deeper) => (
+            <button
+              key={deeper.id}
+              type="button"
+              onClick={() => onAsk({
+                question: deeper.question,
+                path,
+                startLine: note.startLine,
+                endLine: note.startLine + excerpt.length - 1,
+                code: excerpt.join("\n").slice(0, MAX_ASKED_CODE_CHARS),
+              })}
+              className="app-chip inline-flex h-7 items-center gap-1.5 px-3 text-xs text-foreground/90"
+            >
+              <MessagesSquare className="h-3 w-3 shrink-0 text-primary/80" />
+              {deeper.label}
+            </button>
+          ))}
+        </div>
       )}
       {!note.isComplete && !note.text && (
         <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -708,13 +1112,19 @@ function LessonToggle({ file, isOpen, panelId, onToggle }: {
   );
 }
 
-function StepLesson({ projectId, file, panelId, showFile, onOpen }: {
+function StepLesson({ projectId, file, panelId, showFile, onOpen, onAsk, scrollToken }: {
   projectId: string;
   file: StepFile;
   panelId: string;
   showFile?: boolean;
   onOpen?: OpenFile;
+  onAsk?: AskAbout;
+  scrollToken?: number;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (scrollToken) (panelRef.current?.closest("li") ?? panelRef.current)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [scrollToken]);
   const code = file.content ?? "";
   const eventId = file.eventId as number;
   const live = useLesson(lessonKey(projectId, eventId));
@@ -736,7 +1146,7 @@ function StepLesson({ projectId, file, panelId, showFile, onOpen }: {
   const hasText = !!walkthrough && (walkthrough.overview !== "" || walkthrough.notes.length > 0);
 
   return (
-    <div id={panelId} className="relative mb-2 ml-[34px] mr-3 mt-1 min-w-0 space-y-3 pb-1 pl-3 before:absolute before:bottom-1 before:left-0 before:top-1 before:w-[2px] before:rounded-full before:bg-primary/60">
+    <div id={panelId} ref={panelRef} className="relative mb-3 ml-[34px] mr-3 mt-1 min-w-0 scroll-mt-16 space-y-3 pb-1 pl-3 before:absolute before:bottom-1 before:left-0 before:top-1 before:w-[2px] before:rounded-full before:bg-white/[0.12]">
       {showFile && (
         <p className="flex min-w-0 items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary">
           <GraduationCap className="h-3 w-3 shrink-0" />
@@ -748,7 +1158,7 @@ function StepLesson({ projectId, file, panelId, showFile, onOpen }: {
         <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
           <CircleAlert className="h-3.5 w-3.5 shrink-0 text-destructive" />
           <span className="min-w-0 break-words">{state.error ?? "Couldn't write the lesson."}</span>
-          <button type="button" onClick={ask} className="app-chip inline-flex h-6 items-center rounded-md px-2 text-[11.5px] text-foreground/85">
+          <button type="button" onClick={ask} className="app-chip inline-flex h-7 items-center px-3 text-xs text-foreground/90">
             Try again
           </button>
         </div>
@@ -768,29 +1178,29 @@ function StepLesson({ projectId, file, panelId, showFile, onOpen }: {
 
       {walkthrough?.overview && (
         <p className="break-words text-[12.5px] leading-[1.7] text-foreground/90">
-          <LessonText text={walkthrough.overview} />
+          <LessonText text={walkthrough.overview} onTerm={(term) => learnPanel.openTerm(projectId, term)} />
         </p>
       )}
 
       {walkthrough && walkthrough.notes.length > 0 && (
         <ol className="space-y-4">
           {walkthrough.notes.map((note, index) => (
-            <WalkthroughNoteView key={index} note={note} path={file.path} content={code} onOpen={onOpen} />
+            <WalkthroughNoteView key={index} projectId={projectId} note={note} path={file.path} content={code} onOpen={onOpen} onAsk={onAsk} />
           ))}
         </ol>
       )}
 
       {walkthrough?.closing && walkthrough.closing.text && (
-        <div className="rounded-md bg-white/[0.04] px-2.5 py-2">
-          <p className="mb-0.5 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary">
-            <Lightbulb className="h-3 w-3" />
-            {walkthrough.closing.title}
-          </p>
-          <p className="break-words text-[12.5px] leading-[1.7] text-foreground/80">
+        <TaughtCard title={walkthrough.closing.title} Icon={Lightbulb}>
+          <p className="break-words text-[12.5px] leading-[1.7] text-foreground/85">
             <LessonText text={walkthrough.closing.text} />
           </p>
-        </div>
+        </TaughtCard>
       )}
+
+      {walkthrough?.check && <CheckYourself question={walkthrough.check} path={file.path} onAsk={onAsk} />}
+
+      {state?.status === "done" && onOpen && <TryChanging projectId={projectId} file={file} onOpen={onOpen} />}
 
       {isWriting && hasText && (
         <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -1002,10 +1412,10 @@ function buildTitle(block: BuildBlock, isStreaming: boolean) {
   }
   if (isStreaming && !block.hasStarted) return "Plan";
   if (block.isRunning) return "Building";
-  return steps.every((step) => step.status === 'done') ? "Built" : "Build steps";
+  return "Build steps";
 }
 
-function StepRow({ step, index, isStreaming, teaching, projectId, onOpen, onExplain }: {
+function StepRow({ step, index, isStreaming, teaching, projectId, onOpen, onExplain, onAsk, openLesson, scrollToken, onToggleLesson }: {
   step: BuildStep;
   index: number;
   isStreaming: boolean;
@@ -1013,8 +1423,11 @@ function StepRow({ step, index, isStreaming, teaching, projectId, onOpen, onExpl
   projectId?: string;
   onOpen?: OpenFile;
   onExplain?: ExplainStep;
+  onAsk?: AskAbout;
+  openLesson: number | null;
+  scrollToken?: number;
+  onToggleLesson: (fileIndex: number) => void;
 }) {
-  const [openLesson, setOpenLesson] = useState<number | null>(null);
   const panelId = useId();
   const hasOwnRowFile = step.files.length <= 1;
   const rowFile = hasOwnRowFile ? step.files[0] : undefined;
@@ -1028,13 +1441,13 @@ function StepRow({ step, index, isStreaming, teaching, projectId, onOpen, onExpl
         file={file}
         isOpen={openLesson === fileIndex}
         panelId={panelId}
-        onToggle={() => setOpenLesson((open) => (open === fileIndex ? null : fileIndex))}
+        onToggle={() => onToggleLesson(fileIndex)}
       />
     ) : null;
 
   return (
-    <li data-status={step.status}>
-      <div className="flex min-h-7 min-w-0 items-center gap-2 py-0.5 pl-3 pr-2">
+    <li data-status={step.status} data-open={openLesson !== null || undefined} className={cn("scroll-mt-3 transition-colors", openLesson !== null && "bg-primary/[0.045]")}>
+      <div className="flex min-h-8 min-w-0 items-center gap-2 py-0.5 pl-3 pr-2">
         {step.status === 'done' ? (
           <Check className="h-3.5 w-3.5 shrink-0 text-syntax-string" />
         ) : step.status === 'active' ? (
@@ -1103,27 +1516,52 @@ function StepRow({ step, index, isStreaming, teaching, projectId, onOpen, onExpl
           panelId={panelId}
           showFile={!hasOwnRowFile}
           onOpen={onOpen}
+          onAsk={onAsk}
+          scrollToken={scrollToken}
         />
       )}
     </li>
   );
 }
 
-function BuildCard({ block, isStreaming, teaching, projectId, onOpen, onExplain }: {
+function teachableLessons(steps: BuildStep[]) {
+  return steps.flatMap((step, stepIndex) =>
+    step.status === 'done' && step.lessons.length === 0
+      ? step.files
+          .map((file, fileIndex) => ({ stepIndex, fileIndex, file, label: step.isExtra ? splitPath(file.path).base : step.label }))
+          .filter(({ file }) => canTeach(file))
+      : []
+  );
+}
+
+function BuildCard({ block, isStreaming, teaching, projectId, onOpen, onExplain, onAsk }: {
   block: BuildBlock;
   isStreaming: boolean;
   teaching?: boolean;
   projectId?: string;
   onOpen?: OpenFile;
   onExplain?: ExplainStep;
+  onAsk?: AskAbout;
 }) {
   const { steps } = block;
+  const [isOpen, setIsOpen] = useState(false);
+  const stepsId = useId();
   const doneCount = steps.filter((step) => step.status === 'done').length;
   const title = buildTitle(block, isStreaming);
-
+  const [open, setOpen] = useState<{ step: number; file: number; scroll: number } | null>(null);
+  const isTaught = !!teaching && !!projectId && !isStreaming;
+  const lessons = isTaught ? teachableLessons(steps) : [];
+  const unsavedIds = lessons.filter(({ file }) => !file.lesson).map(({ file }) => file.eventId).join(",");
+  const lessonsRead = lessons.filter(({ file }) => !!file.lesson).length + useLessonsWritten(projectId ?? "", unsavedIds);
   return (
     <div className="chat-tile overflow-hidden rounded-xl">
-      <div className="chat-tile-head flex h-8 items-center gap-2 px-3 text-xs">
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-controls={stepsId}
+        onClick={() => setIsOpen((shown) => !shown)}
+        className={cn("chat-tile-head hl-row flex h-8 w-full items-center gap-2 px-3 text-left text-xs focus-visible:outline-none", !isOpen && "border-b-0")}
+      >
         {block.isRunning
           ? <OrbitSpinner className="h-3.5 w-3.5" />
           : block.isPlanned
@@ -1136,22 +1574,41 @@ function BuildCard({ block, isStreaming, teaching, projectId, onOpen, onExplain 
               {doneCount}/{steps.length}
             </span>
           )}
+          {lessons.length > 0 && (
+            <span
+              className="flex items-center gap-1 tabular-nums text-primary/85"
+              title="Lessons opened"
+              aria-label={`${lessonsRead} of ${lessons.length} lessons opened`}
+            >
+              <GraduationCap className="h-3.5 w-3.5" />
+              {lessonsRead}/{lessons.length}
+            </span>
+          )}
+          <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform", !isOpen && "-rotate-90")} />
         </div>
-      </div>
-      <ol className="py-1">
-        {steps.map((step, index) => (
-          <StepRow
-            key={`${step.label}-${index}`}
-            step={step}
-            index={index}
-            isStreaming={isStreaming}
-            teaching={teaching}
-            projectId={projectId}
-            onOpen={onOpen}
-            onExplain={onExplain}
-          />
-        ))}
-      </ol>
+      </button>
+      {isOpen && (
+        <ol id={stepsId} className="divide-y divide-white/[0.07]">
+          {steps.map((step, index) => (
+            <StepRow
+              key={`${step.label}-${index}`}
+              step={step}
+              index={index}
+              isStreaming={isStreaming}
+              teaching={teaching}
+              projectId={projectId}
+              onOpen={onOpen}
+              onExplain={onExplain}
+              onAsk={onAsk}
+              openLesson={open?.step === index ? open.file : null}
+              scrollToken={open?.step === index ? open.scroll : 0}
+              onToggleLesson={(fileIndex) =>
+                setOpen((current) => (current?.step === index && current.file === fileIndex ? null : { step: index, file: fileIndex, scroll: (current?.scroll ?? 0) + 1 }))
+              }
+            />
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
@@ -1182,8 +1639,11 @@ interface AssistantEventsProps {
   onOpenFile?: OpenFile;
   onAnswer?: (answer: string) => void;
   onExplainStep?: ExplainStep;
+  onAskAbout?: AskAbout;
   teaching?: boolean;
   projectId?: string;
+  turnId?: number;
+  overview?: string;
 }
 
 function WorkingFor({ since }: { since: string }) {
@@ -1196,7 +1656,7 @@ function WorkingFor({ since }: { since: string }) {
   return <>Working for {formatWorkedFor(Number.isFinite(seconds) ? seconds : 1)}</>;
 }
 
-export function AssistantEvents({ events, isStreaming, isIdle, status, startedAt, fallbackThought, onOpenFile, onAnswer, onExplainStep, teaching, projectId }: AssistantEventsProps) {
+export function AssistantEvents({ events, isStreaming, isIdle, status, startedAt, fallbackThought, onOpenFile, onAnswer, onExplainStep, onAskAbout, teaching, projectId, turnId, overview }: AssistantEventsProps) {
   const thought = events.find((event) => event.type === ChatEventType.THOUGHT)?.content ?? fallbackThought;
   const blocks = displayBlocks(events, isStreaming);
 
@@ -1241,9 +1701,24 @@ export function AssistantEvents({ events, isStreaming, isIdle, status, startedAt
           case 'reads':
             return <ReadsBlock key={block.key} files={block.files} active={block.active} onOpen={onOpenFile} />;
           case 'activity':
-            return <ActivityLines key={block.key} block={block} onOpen={onOpenFile} />;
-          case 'build':
-            return <BuildCard key={block.key} block={block} isStreaming={isStreaming} teaching={teaching} projectId={projectId} onOpen={onOpenFile} onExplain={onExplainStep} />;
+            return <ActivityFold key={block.key} block={block} onOpen={onOpenFile} />;
+          case 'build': {
+            const isTaught = !!teaching && !isStreaming && teachableLessons(block.steps).length > 0;
+            return (
+              <Fragment key={block.key}>
+                {isTaught && projectId && turnId !== undefined && (
+                  <BigPictureCard
+                    projectId={projectId}
+                    turnId={turnId}
+                    saved={overview}
+                    onOpen={onOpenFile}
+                    onAsk={onAskAbout}
+                  />
+                )}
+                <BuildCard block={block} isStreaming={isStreaming} teaching={teaching} projectId={projectId} onOpen={onOpenFile} onExplain={onExplainStep} onAsk={isStreaming ? undefined : onAskAbout} />
+              </Fragment>
+            );
+          }
           case 'lessons':
             return <LessonsBlock key={block.key} items={block.items} onOpen={onOpenFile} />;
           case 'ask':

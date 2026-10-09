@@ -13,12 +13,18 @@
  * sentence the build gave it become an ordinary question here, with no selection, so the answer is the line-by-line
  * walkthrough the build chat deliberately leaves out and stays in the thread like any other note.
  *
+ * A lesson in the build chat sends its questions here the same way (askAbout): the syntax of a piece of code, why
+ * it is written as it is, what a term means, or a check of the reader's own answer - with the lines the lesson was
+ * about as the selection when there are any. Every answer is asked for at the reader's level (lib/learner-level.ts).
+ * A question that arrives while another is being answered is not dropped silently: the thread says so.
+ *
  * It registers its own reset with the session module: this is module state, which outlives a client-side route
  * change, and not clearing it once leaked one account's transcript to the next person who signed in on the same
  * browser.
  */
 import { useCallback, useSyncExternalStore } from "react";
 import { api, getUserInfo } from "./api";
+import { getLearnerLevel } from "./learner-level";
 import { onSignOut } from "./session";
 import type { CodeNote, CodeSelection } from "./types";
 
@@ -241,7 +247,8 @@ function streamAnswer(
     }],
   }), { persist: false });
 
-  const body = askBody === undefined ? { ...selection } : { ...(selection ?? {}), ...askBody };
+  const level = getLearnerLevel();
+  const body = askBody === undefined ? { ...selection, level } : { ...(selection ?? {}), ...askBody, level };
 
   const settle = (current: LensThread) => current.turns
     .map((turn) => (turn.id === answerId ? { ...turn, isStreaming: false } : turn))
@@ -373,6 +380,16 @@ export const codeLens = {
   explainStep(projectId: string, step: BuildStepQuestion) {
     openThread(projectId, null);
     this.ask(projectId, stepQuestion(step));
+  },
+
+  askAbout(projectId: string, selection: CodeSelection | null, question: string) {
+    if (getThread(projectId)?.isBusy) {
+      openThread(projectId, getThread(projectId)?.selection ?? null);
+      update(projectId, () => ({ error: "ExplainLLM is still answering. Ask again when it has finished." }), { persist: false });
+      return;
+    }
+    openThread(projectId, selection);
+    this.ask(projectId, question);
   },
 
   dismissError(projectId: string) {
