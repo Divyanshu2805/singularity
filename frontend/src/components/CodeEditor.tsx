@@ -1,9 +1,13 @@
 /**
- * The code editor: a read-only CodeMirror view of one project file.
+ * The code editor: a CodeMirror view of one project file, read-only until its owner switches editing on.
  *
  * Handles: the language for the file, the app's own syntax theme, the unified diff against a turn's previous version
- * when the diff toggle is on, and briefly highlighting and scrolling to the line a chat message, a walkthrough or a
- * note points at.
+ * when the diff toggle is on, briefly highlighting and scrolling to the line a chat message, a walkthrough or a
+ * note points at, and - when the panel around it has put the file into editing - taking what is typed, handing each
+ * change up, and treating Ctrl+S / Cmd+S as Save instead of letting the browser offer to save the page.
+ *
+ * It never decides by itself that a file may be edited, and it never saves: both belong to CodePanel, which knows
+ * who is looking and what version the edit started from.
  *
  * The highlight is applied through an editor state field defined outside this component, so that logic can be tested
  * against a real editor state - the dispatch here is scheduled inside an animation frame, which never runs in a
@@ -12,7 +16,7 @@
  * The selection's menu is the app's matte menu - Explain as a small primary button, Ask beside it - and the empty
  * and loading states use the app's quiet tile and comet.
  */
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { json } from '@codemirror/lang-json';
@@ -65,6 +69,9 @@ interface CodeEditorProps {
   diffOriginal?: string | null;
   reveal?: (CodeTarget & { id: number }) | null;
   onSelectionAction?: (selection: CodeSelection, action: "explain" | "ask") => void;
+  editable?: boolean;
+  onChange?: (value: string) => void;
+  onSave?: () => void;
 }
 
 interface ToolbarAnchor {
@@ -77,7 +84,7 @@ const MIN_SELECTION_CHARS = 2;
 const TOOLBAR_OFFSET_PX = 8;
 const TOOLBAR_HEIGHT_PX = 34;
 
-export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoading, diffOriginal, reveal, onSelectionAction }: CodeEditorProps) {
+export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoading, diffOriginal, reveal, onSelectionAction, editable, onChange, onSave }: CodeEditorProps) {
   const [view, setView] = useState<EditorView | null>(null);
   const [selection, setSelection] = useState<CodeSelection | null>(null);
   const [anchor, setAnchor] = useState<ToolbarAnchor | null>(null);
@@ -103,6 +110,14 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
 
   const selectionHandlerRef = useRef(onSelectionAction);
   selectionHandlerRef.current = onSelectionAction;
+
+  const saveRef = useRef(onSave);
+  saveRef.current = onSave;
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!editable || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") return;
+    event.preventDefault();
+    saveRef.current?.();
+  };
 
   useEffect(() => {
     setSelection(null);
@@ -206,12 +221,13 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
     : `Lines ${selection.startLine}–${selection.endLine}`);
 
   return (
-    <div ref={wrapperRef} className="relative h-full w-full overflow-hidden">
+    <div ref={wrapperRef} onKeyDown={handleKeyDown} className="relative h-full w-full overflow-hidden">
       <CodeMirror
         value={content}
         height="100%"
         theme={singularityTheme}
-        editable={false}
+        editable={!!editable}
+        onChange={editable ? onChange : undefined}
         extensions={extensions}
         basicSetup={BASIC_SETUP}
         onCreateEditor={setView}

@@ -22,7 +22,7 @@ public interface RevisionService {
 
     List<RevisionSummaryResponse> listRevisions(Long projectId);
 
-    RevisionPreviewResponse preview(Long projectId, Long revisionId);
+    RevisionPreviewResponse preview(Long projectId, Long revisionId, boolean before);
 
     /**
      * path -> content hash, for every path that exists (not deleted) as of the given revision. Works for a
@@ -32,5 +32,9 @@ public interface RevisionService {
      */
     Map<String, String> snapshot(Long revisionId);
 
-    PublishRevisionResponse restore(Long projectId, Long revisionId, Long userId);
+    /**
+     * Restores the project to the given revision, or - with {@code before} - to what it held just before that
+     * revision was made, which is what undoing one change means.
+     */
+    PublishRevisionResponse restore(Long projectId, Long revisionId, boolean before, Long userId);
 }

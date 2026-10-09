@@ -2,8 +2,16 @@
  * The code side of a project: the file tree, the open tabs and the editor.
  *
  * Handles: opening files and remembering the open tabs, showing which files the last turn changed, the diff toggle
- * and scrolling to the first change, find-in-files, copying and downloading, and docking the code lens beside the
- * editor.
+ * and scrolling to the first change, find-in-files, copying and downloading, docking the code lens beside the
+ * editor, and editing a file by hand.
+ *
+ * A file is read-only until someone who may edit the project presses Edit on it. Editing starts from a fresh read of
+ * the file, never from the copy a build left in the browser, because a save is checked against the hash of exactly
+ * what the server holds; a save the server refuses because the file changed underneath keeps what was typed and says
+ * what to do. One file is edited at a time, saving is held while a response is being written (it is about to change
+ * files), and leaving the page with unsaved changes asks first. A save lands as a revision, so it is in the History
+ * and a running preview picks it up by itself. When the files change from outside this panel - a restore - the
+ * parent bumps filesVersion and the panel drops what it had read and any tab whose file is gone.
  *
  * Whether the files column is open is a preference about the editor layout rather than anything to do with one
  * project, so it is remembered per browser.
@@ -19,7 +27,7 @@
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { memo, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
 import { ResizablePanelGroup, ResizablePanel, ResizableGutter } from "@/components/ui/resizable";
-import { Check, ChevronsDownUp, ChevronsUpDown, Copy, Download, GitCompare, MessagesSquare, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Check, ChevronsDownUp, ChevronsUpDown, Copy, Download, GitCompare, MessagesSquare, PanelLeftClose, PanelLeftOpen, Pencil } from "lucide-react";
 import { FileTree, type TreeExpansionCommand } from "./FileTree";
 import { CodeEditor } from "./CodeEditor";
 import { FileTabs } from "./FileTabs";
@@ -27,7 +35,7 @@ import { CodeLensPanel } from "./CodeLensPanel";
 import { CodeSearchPanel } from "./CodeSearchPanel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { api, buildFileTree, OPEN_TABS_KEY, ACTIVE_TAB_KEY } from "@/lib/api";
+import { api, ApiRequestError, buildFileTree, OPEN_TABS_KEY, ACTIVE_TAB_KEY } from "@/lib/api";
 import { splitPath } from "@/lib/file-icons";
 import { cn } from "@/lib/utils";
 import { codeLens, useCodeLens } from "@/lib/code-lens-store";
@@ -56,6 +64,16 @@ interface CodePanelProps {
   lastTurnFiles: readonly string[];
   openFileRequest: OpenFileRequest | null;
   onDiffViewed: (path: string) => void;
+  canEdit?: boolean;
+  filesVersion?: number;
+  onFileSaved?: (path: string) => void;
+}
+
+interface FileEdit {
+  path: string;
+  baseHash: string;
+  saved: string;
+  draft: string;
 }
 
 const DEFAULT_FILES = ["src/pages/Index.tsx", "pages/Index.tsx"];
@@ -89,6 +107,9 @@ export const CodePanel = memo(function CodePanel({
   lastTurnFiles,
   openFileRequest,
   onDiffViewed,
+  canEdit = false,
+  filesVersion = 0,
+  onFileSaved,
 }: CodePanelProps) {
   const { toast } = useToast();
   const [savedTabs] = useState(() => readSavedTabs(projectId));
@@ -183,6 +204,32 @@ export const CodePanel = memo(function CodePanel({
 
   const [reveal, setReveal] = useState<(CodeTarget & { path: string; id: number }) | null>(null);
 
+  const [edit, setEdit] = useState<FileEdit | null>(null);
+  const [isOpeningEdit, setIsOpeningEdit] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const isDirty = !!edit && edit.draft !== edit.saved;
+
+  const seenFilesVersionRef = useRef(filesVersion);
+  useEffect(() => {
+    if (seenFilesVersionRef.current === filesVersion) return;
+    seenFilesVersionRef.current = filesVersion;
+    setEdit(null);
+    setFetchedContents(EMPTY_CONTENTS);
+    setOpenDiffPaths(new Set());
+    loadTree().then((paths) => {
+      if (!paths) return;
+      setOpenTabs((prev) => (prev.every((path) => paths.includes(path)) ? prev : prev.filter((path) => paths.includes(path))));
+      setActiveTab((active) => (active && !paths.includes(active) ? null : active));
+    });
+  }, [filesVersion, loadTree]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isDirty]);
+
   const handledRequestIdRef = useRef(openFileRequest?.id ?? null);
   useEffect(() => {
     if (!openFileRequest || openFileRequest.id === handledRequestIdRef.current) return;
@@ -215,15 +262,16 @@ export const CodePanel = memo(function CodePanel({
     return () => {
       isCancelled = true;
     };
-  }, [projectId, activeTab, skipFetch]);
+  }, [projectId, activeTab, skipFetch, filesVersion]);
 
   const fetchedContent = activeTab ? fetchedContents.get(activeTab) : undefined;
-  const knownContent = completedContent ?? fetchedContent;
+  const isEditingActive = !!edit && edit.path === activeTab;
+  const knownContent = isEditingActive ? edit.draft : completedContent ?? fetchedContent;
   const content = knownContent ?? "";
   const isAwaitingNewFile = isBeingWritten && knownContent === undefined;
   const isLoadingFile = !!activeTab && !isBeingWritten && knownContent === undefined;
 
-  const hasDiffAvailable = activeTab ? diffBaselines.has(activeTab) : false;
+  const hasDiffAvailable = !isEditingActive && activeTab ? diffBaselines.has(activeTab) : false;
   const isDiffToggledOn = activeTab ? openDiffPaths.has(activeTab) : false;
   const diffOriginal = hasDiffAvailable && isDiffToggledOn && activeTab ? diffBaselines.get(activeTab) ?? null : null;
 
@@ -283,6 +331,63 @@ export const CodePanel = memo(function CodePanel({
   const handleSelectionAction = useCallback((selection: CodeSelection, action: "explain" | "ask") => {
     codeLens.open(projectId, selection, { explain: action === "explain" });
   }, [projectId]);
+
+  const startEditing = async () => {
+    if (!activeTab || isOpeningEdit || isStreaming) return;
+    const path = activeTab;
+    setIsOpeningEdit(true);
+    try {
+      const file = await api.getFile(projectId, path);
+      if (!file.hash) throw new Error("This file can't be edited right now.");
+      setFetchedContents((prev) => new Map(prev).set(path, file.content));
+      setOpenDiffPaths((prev) => {
+        if (!prev.has(path)) return prev;
+        const next = new Set(prev);
+        next.delete(path);
+        return next;
+      });
+      setEdit({ path, baseHash: file.hash, saved: file.content, draft: file.content });
+    } catch (error) {
+      toast({
+        title: "Couldn't open this file for editing",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setIsOpeningEdit(false);
+    }
+  };
+
+  const handleDraftChange = useCallback((value: string) => {
+    setEdit((current) => (current && current.draft !== value ? { ...current, draft: value } : current));
+  }, []);
+
+  const saveEdit = async () => {
+    if (!edit || isSaving || isStreaming || edit.draft === edit.saved) return;
+    const { path, draft, baseHash } = edit;
+    setIsSaving(true);
+    try {
+      const saved = await api.saveFile(projectId, path, draft, baseHash);
+      setFetchedContents((prev) => new Map(prev).set(path, draft));
+      setEdit((current) => (current && current.path === path ? { ...current, baseHash: saved.hash, saved: draft } : current));
+      onFileSaved?.(path);
+      toast({ title: `Saved ${splitPath(path).base}`, description: "It's in History, so you can undo it. A running preview updates by itself." });
+    } catch (error) {
+      const changedUnderneath = error instanceof ApiRequestError && error.status === 409;
+      toast({
+        title: changedUnderneath ? "This file changed while you were editing" : "Couldn't save this file",
+        description: changedUnderneath
+          ? "Someone else, or the AI, saved a newer version. Copy what you typed, press Discard, then Edit again to work on the newer version."
+          : error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  const saveEditRef = useRef(saveEdit);
+  saveEditRef.current = saveEdit;
+  const handleSaveShortcut = useCallback(() => void saveEditRef.current(), []);
 
   const handleCopyFile = async () => {
     if (!activeTab) return;
@@ -411,23 +516,30 @@ export const CodePanel = memo(function CodePanel({
               actions={
                 activeTab ? (
                   <div className="flex shrink-0 items-center gap-0.5 border-l border-white/[0.1] pl-1.5">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label={isLensOpen ? "Close ExplainLLM" : "Open ExplainLLM"}
-                          onClick={() => (isLensOpen ? codeLens.close(projectId) : codeLens.reopen(projectId))}
-                          aria-pressed={isLensOpen}
-                          style={{ "--icon-hover": "rotate(-8deg)" } as CSSProperties}
-                          className="icon-btn h-7 w-7"
-                        >
-                          <MessagesSquare className="h-3.5 w-3.5" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        {isLensOpen ? "Close ExplainLLM" : "Open ExplainLLM"}
-                      </TooltipContent>
-                    </Tooltip>
+                    {canEdit && !isEditingActive && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            data-guide="edit-file"
+                            aria-label="Edit this file"
+                            onClick={() => void startEditing()}
+                            disabled={isOpeningEdit || isStreaming || isBeingWritten || (!!edit && isDirty)}
+                            style={{ "--icon-hover": "rotate(-14deg)" } as CSSProperties}
+                            className="icon-btn h-7 w-7"
+                          >
+                            {isOpeningEdit ? <OrbitSpinner className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          {isStreaming
+                            ? "Wait for the response to finish, then edit"
+                            : edit && isDirty
+                              ? `Save or discard your changes to ${splitPath(edit.path).base} first`
+                              : "Edit this file by hand"}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
@@ -455,6 +567,23 @@ export const CodePanel = memo(function CodePanel({
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom">Download file</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={isLensOpen ? "Close ExplainLLM" : "Open ExplainLLM"}
+                          onClick={() => (isLensOpen ? codeLens.close(projectId) : codeLens.reopen(projectId))}
+                          aria-pressed={isLensOpen}
+                          style={{ "--icon-hover": "rotate(-8deg)" } as CSSProperties}
+                          className="icon-btn h-7 w-7"
+                        >
+                          <MessagesSquare className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        {isLensOpen ? "Close ExplainLLM" : "Open ExplainLLM"}
+                      </TooltipContent>
                     </Tooltip>
                   </div>
                 ) : undefined
@@ -497,7 +626,34 @@ export const CodePanel = memo(function CodePanel({
                   diffOriginal={diffOriginal}
                   reveal={reveal?.path === activeTab ? reveal : null}
                   onSelectionAction={handleSelectionAction}
+                  editable={isEditingActive}
+                  onChange={handleDraftChange}
+                  onSave={handleSaveShortcut}
                 />
+              )}
+              {isEditingActive && (
+                <div className="app-menu chat-enter absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border p-1 pl-3.5">
+                  <span className="mr-1 text-[11.5px] text-muted-foreground">
+                    {isStreaming ? "Saving waits for the response" : isDirty ? "Unsaved changes" : "Editing - nothing to save yet"}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => setEdit(null)}
+                    className="btn btn-glass flex h-8 items-center rounded-full px-3.5 text-xs font-semibold text-foreground/90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35"
+                  >
+                    {isDirty ? "Discard" : "Done"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!isDirty || isSaving || isStreaming}
+                    onClick={() => void saveEdit()}
+                    className="btn btn-primary flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35 disabled:opacity-50"
+                  >
+                    {isSaving && <OrbitSpinner className="h-3 w-3" />}
+                    {isSaving ? "Saving…" : "Save"}
+                  </button>
+                </div>
               )}
               {isBeingWritten && !isAwaitingNewFile && (
                 <div className="app-menu chat-enter pointer-events-none absolute bottom-3 right-3 z-10 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11px] text-muted-foreground">
