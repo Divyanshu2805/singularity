@@ -15,7 +15,8 @@ import java.util.Optional;
  * Reads and writes projects.
  *
  * <p>Handles: the caller's accessible projects most-recently-updated first, one accessible project by id, the
- * revision a project's files currently stand at (empty for a project that has never had one), and advancing it.
+ * revision a project's files currently stand at (empty for a project that has never had one), advancing it, and
+ * switching whether its code is shared.
  *
  * <p>The two access queries fold the membership check and the soft-delete check into the lookup itself, so a project the caller
  * cannot see is indistinguishable from one that does not exist.
@@ -51,6 +52,15 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
     @Query("SELECT p.currentFileRevisionId FROM Project p WHERE p.id = :projectId")
     Optional<Long> findCurrentFileRevisionId(@Param("projectId") Long projectId);
+
+    /**
+     * Switches whether a project's code is shared on its public page. A plain update that leaves the persistence
+     * context alone and the project's updated-at untouched: sharing is not an edit of the project.
+     */
+    @Modifying
+    @Transactional
+    @Query("UPDATE Project p SET p.isPublic = :shared WHERE p.id = :projectId")
+    int setPublic(@Param("projectId") Long projectId, @Param("shared") boolean shared);
 
     /**
      * The atomic "publish" claim (CODE_REVIEW.md AI-05): a single-statement compare-and-swap that only advances a

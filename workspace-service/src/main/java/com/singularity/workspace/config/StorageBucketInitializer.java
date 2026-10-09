@@ -14,9 +14,9 @@ import java.util.List;
 /**
  * Makes sure every bucket this service writes to exists before anything writes to it.
  *
- * <p>Handles: creating the configured project-files and revision-blob (CODE_REVIEW.md AI-05) buckets at startup if
- * either is missing, so a brand-new MinIO with an empty data volume works without a manual step. Idempotent - an
- * existing bucket is left alone.
+ * <p>Handles: creating the configured project-files, revision-blob (CODE_REVIEW.md AI-05) and published-apps buckets at
+ * startup if any is missing, so a brand-new MinIO with an empty data volume works without a manual step. Idempotent -
+ * an existing bucket is left alone.
  *
  * <p>Best effort on purpose: if MinIO cannot be reached at startup the service still boots, and the first file
  * operation reports the problem rather than the boot failing.
@@ -30,9 +30,10 @@ public class StorageBucketInitializer implements ApplicationRunner {
 
     public StorageBucketInitializer(MinioClient minioClient,
                                      @Value("${minio.project-bucket}") String projectBucket,
-                                     @Value("${minio.blob-bucket}") String blobBucket) {
+                                     @Value("${minio.blob-bucket}") String blobBucket,
+                                     @Value("${publishing.bucket}") String publishedBucket) {
         this.minioClient = minioClient;
-        this.buckets = List.of(projectBucket, blobBucket);
+        this.buckets = List.of(projectBucket, blobBucket, publishedBucket);
     }
 
     @Override

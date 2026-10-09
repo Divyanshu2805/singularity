@@ -9,7 +9,7 @@ All browser traffic goes to the Gateway — `http://localhost:8000` locally, the
 | Path prefix | Owning service |
 |---|---|
 | `/api/auth/**`, `/api/plans`, `/api/me/**`, `/api/payments/**`, `/webhooks/payment` | account-service |
-| `/api/projects/**` (except `.../code/**`), `/api/previews` | workspace-service |
+| `/api/projects/**` (except `.../code/**`), `/api/previews`, `/api/public/**` | workspace-service |
 | `/api/chat/**`, `/api/ideas/**`, `/api/usage/**`, `/api/projects/{id}/code/**` | intelligence-service |
 | `/internal/**` | Never routed — service-to-service only |
 
@@ -43,6 +43,7 @@ A path no route owns is a 404 from the Gateway. `RoutingTableTest` pins every do
 | File tree, content, search, ZIP download | workspace | [Files](files.md) |
 | Revision history and restore | workspace | [Revisions](revisions.md) |
 | Live previews | workspace | [Previews](previews.md) |
+| Publishing, and the public page of a shared app | workspace | [Publishing](publishing.md) |
 | AI chat and code generation | intelligence | [Chat](chat.md) |
 | Idea clarifier | intelligence | [Ideas](ideas.md) |
 | Code explanations, questions and notes | intelligence | [Code insight](code-insight.md) |

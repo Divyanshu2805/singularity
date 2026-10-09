@@ -7,8 +7,8 @@ import java.time.Instant;
 /**
  * An action would take the user past what their plan allows.
  *
- * <p>Handles: a 402 Payment Required carrying the quota numbers, for the three limits this platform enforces - the
- * daily token allowance, the project count and concurrent previews. Deliberately not a BadRequestException, so a
+ * <p>Handles: a 402 Payment Required carrying the quota numbers, for the four limits this platform enforces - the
+ * daily token allowance, the project count, concurrent previews and published apps. Deliberately not a BadRequestException, so a
  * client can show an upgrade prompt rather than a generic error.
  *
  * <p>The limit is always account-service's; the thing being counted belongs to whichever service throws this.
@@ -19,7 +19,8 @@ public class QuotaExceededException extends RuntimeException {
     public enum Reason {
         DAILY_TOKENS,
         PROJECT_LIMIT,
-        PREVIEW_LIMIT
+        PREVIEW_LIMIT,
+        PUBLISH_LIMIT
     }
 
     private final Reason reason;

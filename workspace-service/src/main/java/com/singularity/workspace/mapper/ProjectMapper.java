@@ -13,7 +13,8 @@ import java.time.Instant;
  * Turns project rows into the shapes the app reads.
  *
  * <p>Handles: the full project response and the dashboard summary, each taking the caller's role - and the summary
- * their pin and star markers - alongside the row, since those are per-member rather than per-project.
+ * their pin and star markers - alongside the row, since those are per-member rather than per-project; the summary also
+ * takes the link of the project's live published app, which is null for a project with none.
  */
 @Mapper(componentModel = "spring")
 public interface ProjectMapper {
@@ -24,5 +25,7 @@ public interface ProjectMapper {
     @Mapping(target = "role", source = "role")
     @Mapping(target = "pinnedAt", source = "pinnedAt")
     @Mapping(target = "starredAt", source = "starredAt")
-    ProjectSummaryResponse toProjectSummaryResponse(Project project, ProjectRole role, Instant pinnedAt, Instant starredAt);
+    @Mapping(target = "publishedUrl", source = "publishedUrl")
+    ProjectSummaryResponse toProjectSummaryResponse(Project project, ProjectRole role, Instant pinnedAt, Instant starredAt,
+                                                    String publishedUrl);
 }

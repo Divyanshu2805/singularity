@@ -11,5 +11,6 @@ public enum ProjectPermission {
     EDIT,
     DELETE,
     MANAGE_MEMBERS,
-    VIEW_MEMBERS
+    VIEW_MEMBERS,
+    PUBLISH
 }

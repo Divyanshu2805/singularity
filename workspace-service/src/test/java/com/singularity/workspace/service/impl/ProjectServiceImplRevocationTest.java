@@ -11,6 +11,7 @@ import com.singularity.workspace.repository.ProjectMemberRepository;
 import com.singularity.workspace.repository.ProjectRepository;
 import com.singularity.workspace.service.PreviewDeploymentService;
 import com.singularity.workspace.service.ProjectFileService;
+import com.singularity.workspace.service.PublishService;
 import com.singularity.workspace.service.ProjectTemplateService;
 import org.junit.jupiter.api.Test;
 
@@ -43,10 +44,12 @@ class ProjectServiceImplRevocationTest {
     private final PreviewDeploymentService previewDeploymentService = mock(PreviewDeploymentService.class);
     private final IntelligenceServiceClient intelligenceServiceClient = mock(IntelligenceServiceClient.class);
 
+    private final PublishService publishService = mock(PublishService.class);
+
     private final ProjectServiceImpl service = new ProjectServiceImpl(
             projectRepository, mock(ProjectMapper.class), projectMemberRepository, authUtil,
-            mock(AccountServiceClient.class), mock(ProjectTemplateService.class), mock(ProjectFileService.class),
-            previewDeploymentService, intelligenceServiceClient);
+            mock(ProjectQuota.class), mock(ProjectTemplateService.class), mock(ProjectFileService.class),
+            previewDeploymentService, intelligenceServiceClient, publishService);
 
     @Test
     void ownerDeletingTheProjectStopsEveryGenerationAndPreviewForIt() {
@@ -59,9 +62,10 @@ class ProjectServiceImplRevocationTest {
         service.softDelete(PROJECT_ID);
 
         verify(intelligenceServiceClient).stopGeneration(eq(PROJECT_ID), isNull());
-        org.mockito.InOrder order = org.mockito.Mockito.inOrder(projectRepository, previewDeploymentService);
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(projectRepository, previewDeploymentService, publishService);
         order.verify(projectRepository).flush();
         order.verify(previewDeploymentService).stopAllForProject(eq(PROJECT_ID), anyString());
+        order.verify(publishService).takeDown(PROJECT_ID);
         verify(previewDeploymentService, never()).endSessionForUser(any(), any(), anyString());
     }
 
@@ -82,7 +86,24 @@ class ProjectServiceImplRevocationTest {
         verify(intelligenceServiceClient).stopGeneration(PROJECT_ID, EDITOR_ID);
         verify(previewDeploymentService).endSessionForUser(eq(PROJECT_ID), eq(EDITOR_ID), anyString());
         verify(previewDeploymentService, never()).stopAllForProject(any(), anyString());
+        verify(publishService, never()).takeDown(any());
         verify(projectRepository, never()).save(any());
+    }
+
+    @Test
+    void aViewerLeavingRemovesOnlyTheirOwnMembershipAndNeverDeletesTheProject() {
+        Project project = Project.builder().id(PROJECT_ID).name("demo").build();
+        when(authUtil.getCurrentUserId()).thenReturn(EDITOR_ID);
+        when(projectRepository.findAccessibleProjectById(PROJECT_ID, EDITOR_ID)).thenReturn(Optional.of(project));
+        when(projectMemberRepository.findRoleByProjectIdAndUserId(PROJECT_ID, EDITOR_ID))
+                .thenReturn(Optional.of(ProjectRole.VIEWER));
+
+        service.softDelete(PROJECT_ID);
+
+        verify(projectMemberRepository).deleteById(new ProjectMemberId(PROJECT_ID, EDITOR_ID));
+        org.assertj.core.api.Assertions.assertThat(project.getDeletedAt()).isNull();
+        verify(projectRepository, never()).save(any());
+        verify(previewDeploymentService, never()).stopAllForProject(any(), anyString());
     }
 
     @Test
@@ -99,5 +120,6 @@ class ProjectServiceImplRevocationTest {
 
         verify(projectRepository).save(project);
         verify(previewDeploymentService).stopAllForProject(eq(PROJECT_ID), anyString());
+        verify(publishService).takeDown(PROJECT_ID);
     }
 }

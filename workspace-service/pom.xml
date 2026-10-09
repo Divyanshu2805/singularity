@@ -19,6 +19,11 @@
 		writes).
 	</description>
 
+	<properties>
+		<!-- The least of this module's lines the tests must run; `./mvnw verify` fails under it (root pom). -->
+		<coverage.minimum.lines>0.60</coverage.minimum.lines>
+	</properties>
+
 	<dependencies>
 		<!-- CODE_REVIEW.md DEP-036: liveness/readiness for the Kubernetes deploy pipeline, exposed only on
 		     management.server.port (below in application.yaml) - never reachable through the public gateway path
@@ -108,6 +113,14 @@
 			<groupId>io.minio</groupId>
 			<artifactId>minio</artifactId>
 			<version>8.6.0</version>
+		</dependency>
+		<!-- Writes the tar a project goes into a build pod as, and reads the tar a build comes back in (util/TarArchive).
+		     It was already on the classpath through io.minio:minio at this version; named here because a publish now
+		     depends on it directly. -->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-compress</artifactId>
+			<version>1.28.0</version>
 		</dependency>
 		<!-- Pinned explicitly - io.minio:minio otherwise resolves a Gradle-metadata-only okhttp:5.1.0 transitively
 		     (documented gotcha, docs/local-development/). -->

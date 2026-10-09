@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
  * Backs every permission guard in workspace-service.
  *
  * <p>Handles: resolving the caller's role on a project and mapping it to the permission a given operation needs -
- * view, edit, delete, and the two member-management permissions. A caller with no membership, or a membership on a
+ * view, edit, delete, publish, and the two member-management permissions. A caller with no membership, or a membership on a
  * soft-deleted project, has no permissions at all.
  *
  * <p>Registered under the bean name the authorization expressions refer to. The expression's argument name must match
@@ -48,5 +48,9 @@ public class SecurityExpressions {
 
     public boolean canManageMembers(Long projectId) {
         return hasPermission(projectId, ProjectPermission.MANAGE_MEMBERS);
+    }
+
+    public boolean canPublishProject(Long projectId) {
+        return hasPermission(projectId, ProjectPermission.PUBLISH);
     }
 }
