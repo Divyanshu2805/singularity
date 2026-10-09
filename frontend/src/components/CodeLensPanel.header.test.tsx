@@ -1,8 +1,9 @@
 /**
- * Covers the two ways of getting a code-lens thread out - copying it and downloading it - producing the same
- * markdown.
+ * Covers what the ExplainLLM panel's header offers for taking a thread away.
  *
- * The difference between them is only where the text lands, so a change to one that skips the other is a bug.
+ * Handles: nothing being offered until something has been said, and the thread then being offered as a markdown file
+ * and in no other way - copying it to the clipboard was removed at the owner's request on 2026-10-09, here and in the
+ * project header. What the file contains is covered by lib/chat-export.test.ts.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen } from "@testing-library/react";
@@ -71,51 +72,11 @@ describe("code notes header", () => {
     expect(screen.queryByLabelText("Export as markdown")).toBeNull();
   });
 
-  it("copies the whole chat as markdown, not just the last answer", async () => {
-    const { container } = renderPanel(projectId);
+  it("offers the notes as a file once there is an answer, and no copy button", async () => {
+    renderPanel(projectId);
     await haveAnswer(projectId, "It stores the count.");
 
-    const copy = container.querySelector<HTMLButtonElement>('[aria-label="Copy as markdown"]')!;
-    await act(async () => { copy.click(); });
-
-    expect(written).toHaveLength(1);
-    expect(written[0]).toContain("# Demo - ExplainLLM notes");
-    expect(written[0]).toContain("## You");
-    expect(written[0]).toContain("Explain this");
-    expect(written[0]).toContain("## Singularity");
-    expect(written[0]).toContain("It stores the count.");
-    expect(written[0]).toContain("src/App.tsx");
-  });
-
-  it("says it copied, then goes back to offering to", async () => {
-    vi.useFakeTimers();
-    const { container } = renderPanel(projectId);
-    await haveAnswer(projectId, "It stores the count.");
-
-    const copy = container.querySelector<HTMLButtonElement>('[aria-label="Copy as markdown"]')!;
-    await act(async () => { copy.click(); });
-
-    expect(container.querySelector('[aria-label="Copied"]')).not.toBeNull();
-
-    act(() => { vi.advanceTimersByTime(2000); });
-    expect(container.querySelector('[aria-label="Copied"]')).toBeNull();
-    expect(container.querySelector('[aria-label="Copy as markdown"]')).not.toBeNull();
-    vi.useRealTimers();
-  });
-
-  it("survives a refused clipboard rather than breaking the panel", async () => {
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: vi.fn(async () => { throw new Error("denied"); }) },
-    });
-
-    const { container } = renderPanel(projectId);
-    await haveAnswer(projectId, "It stores the count.");
-
-    const copy = container.querySelector<HTMLButtonElement>('[aria-label="Copy as markdown"]')!;
-    await act(async () => { copy.click(); });
-
-    expect(container.querySelector('[aria-label="Copied"]')).toBeNull();
-    expect(container.textContent).toContain("It stores the count.");
+    expect(screen.queryByLabelText("Export as markdown")).not.toBeNull();
+    expect(screen.queryByLabelText("Copy as markdown")).toBeNull();
   });
 });

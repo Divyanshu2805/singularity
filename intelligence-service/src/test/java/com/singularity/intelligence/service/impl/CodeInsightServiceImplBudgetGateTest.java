@@ -38,7 +38,9 @@ class CodeInsightServiceImplBudgetGateTest {
     private final CodeInsightServiceImpl service = new CodeInsightServiceImpl(
             chatClient, new com.singularity.intelligence.llm.ModelCalls(com.singularity.intelligence.config.AiCallProperties.defaults()), mock(AiUsageRecorder.class), mock(WorkspaceServiceClient.class), mock(ProjectFileReader.class),
             usageService, mock(CodeNoteRepository.class), mock(ChatEventRepository.class), mock(ChatMessageRepository.class),
-            mock(CodeNoteMapper.class), mock(AuthUtil.class));
+            mock(CodeNoteMapper.class), mock(AuthUtil.class),
+            mock(com.singularity.intelligence.repository.ProjectTourRepository.class),
+            mock(com.singularity.intelligence.repository.GlossaryEntryRepository.class));
 
     private void overBudget() {
         doThrow(new IllegalStateException("over the daily allowance")).when(usageService).reserveBudget(UsageFeature.EXPLAIN);
