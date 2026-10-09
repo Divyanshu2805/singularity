@@ -4,9 +4,10 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Binds the revision-publish subsystem's configuration (CODE_REVIEW.md AI-05/AI-09).
+ * Binds the revision-publish subsystem's configuration: build validation, and the limits on how large a project
+ * may grow.
  */
 @Configuration
-@EnableConfigurationProperties(RevisionValidationProperties.class)
+@EnableConfigurationProperties({RevisionValidationProperties.class, ProjectFileLimits.class})
 public class RevisionConfig {
 }

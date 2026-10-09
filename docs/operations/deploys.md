@@ -9,7 +9,7 @@ Every change goes through a pull request into `main`; `main` is never pushed to 
 3. **Approval** — the run pauses at "Approve the production deploy". Open the run, choose **Review deployments**, tick `release` and approve. Nothing is deployed until then. See [the release gate](../deployment/ci-cd.md#the-release-gate).
 4. **Deploy** — one at a time (a second push queues; it never cancels a deploy in progress). The job joins the tailnet, rebuilds every Secret, applies the `oracle` overlay with the new tag, and waits for each workload in dependency order.
 5. **Smoke test** — the app answers `200`, `/api/plans` returns the plan catalogue, and a preview hostname reaches the proxy.
-6. **Rollback** — any failure after the apply runs `kubectl rollout undo` on every workload the deploy changed.
+6. **Rollback** — any failure after the apply puts each workload the deploy changed back to the revision it was at. Workloads it did not change are left alone, and a failure before the apply rolls nothing back.
 
 A pull request runs only the tests. Full details: [CI/CD pipeline](../deployment/ci-cd.md).
 

@@ -4,6 +4,7 @@ import com.singularity.common.dto.FileChangeDto;
 import com.singularity.common.dto.PublishRevisionRequest;
 import com.singularity.common.dto.PublishRevisionResponse;
 import com.singularity.common.error.ResourceNotFoundException;
+import com.singularity.workspace.config.ProjectFileLimits;
 import com.singularity.workspace.entity.Project;
 import com.singularity.workspace.entity.ProjectFile;
 import com.singularity.workspace.entity.ProjectFileRevision;
@@ -53,6 +54,10 @@ import java.util.Optional;
  * external I/O it cannot roll back, and a same-class {@code this.method()} call would have silently dropped
  * {@code @Transactional} entirely (Spring's proxy-based AOP only intercepts calls through the bean's proxy).
  *
+ * <p>Before anything is stored the change set is held against the project's size limits ({@link ProjectFileLimits}).
+ * A change that would take the project past one is refused with a reason the caller can show, and nothing is staged.
+ * A path the limits cannot read is not this check's to refuse: staging rejects it a moment later, as before.
+ *
  * <p>A revision that lands is announced ({@link ProjectFilesChanged}), which is how a running preview learns it has
  * a change to take in. Only a published one: a failed or conflicting publish left the live files as they were.
  */
@@ -68,12 +73,13 @@ public class RevisionPublisherImpl implements RevisionPublisher {
     private final MinioClient minioClient;
     private final String projectBucket;
     private final ApplicationEventPublisher events;
+    private final ProjectFileLimits limits;
 
     public RevisionPublisherImpl(ProjectRepository projectRepository, ProjectFileRepository projectFileRepository,
                                   RevisionManifestStore manifestStore, BlobStore blobStore,
                                   List<RevisionValidator> validators, MinioClient minioClient,
                                   @Value("${minio.project-bucket}") String projectBucket,
-                                  ApplicationEventPublisher events) {
+                                  ApplicationEventPublisher events, ProjectFileLimits limits) {
         this.projectRepository = projectRepository;
         this.projectFileRepository = projectFileRepository;
         this.manifestStore = manifestStore;
@@ -82,6 +88,7 @@ public class RevisionPublisherImpl implements RevisionPublisher {
         this.minioClient = minioClient;
         this.projectBucket = projectBucket;
         this.events = events;
+        this.limits = limits;
     }
 
     record StagedEntry(String path, RevisionChangeType changeType, String contentHash,
@@ -97,6 +104,13 @@ public class RevisionPublisherImpl implements RevisionPublisher {
 
         if (request.expectedParentRevisionId() != null && !Objects.equals(request.expectedParentRevisionId(), actualParentId)) {
             return new PublishRevisionResponse(null, PublishRevisionResponse.Status.CONFLICT, actualParentId, changedPaths, Map.of());
+        }
+
+        Optional<String> tooLarge = sizeProblem(projectId, request.changes());
+        if (tooLarge.isPresent()) {
+            log.warn("Revision for projectId: {} refused before anything was stored: {}", projectId, tooLarge.get());
+            return new PublishRevisionResponse(null, PublishRevisionResponse.Status.FAILED, actualParentId, changedPaths,
+                    Map.of(), tooLarge.get());
         }
 
         List<StagedEntry> staged;
@@ -156,6 +170,14 @@ public class RevisionPublisherImpl implements RevisionPublisher {
 
         events.publishEvent(new ProjectFilesChanged(projectId));
         return new PublishRevisionResponse(revisionId, PublishRevisionResponse.Status.APPLIED, revisionId, List.of(), previousContent);
+    }
+
+    private Optional<String> sizeProblem(Long projectId, List<FileChangeDto> changes) {
+        try {
+            return limits.exceededBy(projectFileRepository.findByProjectId(projectId), changes);
+        } catch (RuntimeException e) {
+            return Optional.empty();
+        }
     }
 
     /**
