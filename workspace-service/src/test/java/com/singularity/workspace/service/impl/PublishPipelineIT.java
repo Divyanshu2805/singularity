@@ -10,6 +10,7 @@ import com.singularity.common.util.WindowsTimezoneWorkaround;
 import com.singularity.workspace.config.InstanceId;
 import com.singularity.workspace.config.KubernetesConfig;
 import com.singularity.workspace.config.PreviewProperties;
+import com.singularity.workspace.config.ProjectFileLimits;
 import com.singularity.workspace.config.PublishingProperties;
 import com.singularity.workspace.config.StorageConfig;
 import com.singularity.workspace.dto.publish.PublishRequest;
@@ -203,7 +204,7 @@ class PublishPipelineIT {
     }
 
     @EnableAsync
-    @EnableConfigurationProperties({PreviewProperties.class, PublishingProperties.class})
+    @EnableConfigurationProperties({PreviewProperties.class, ProjectFileLimits.class, PublishingProperties.class})
     static class TestBeans {
 
         private final AuthUtil authUtil = mock(AuthUtil.class);
