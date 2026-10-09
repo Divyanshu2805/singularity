@@ -32,7 +32,8 @@ import java.util.Map;
  * <p>Handles: storing the user's message and the assistant's reply - marked as a teaching turn when it was asked for
  * as one - publishing the turn's file changes atomically
  * after rechecking that the person who asked may still edit the project, recording each edited file's previous
- * version for the diff view, and writing the turn's events - the "worked for" line first, carrying how the turn ended.
+ * version for the diff view, recording on the reply the revision its files were published as - which is what the
+ * chat's Undo restores to just before - and writing the turn's events - the "worked for" line first, carrying how the turn ended.
  *
  * <p>Every ending is recorded, not only a successful one. A turn that was stopped or that failed used to leave no
  * trace on the server: the question and whatever had been said were kept only by the browser that asked, and were
@@ -42,7 +43,9 @@ import java.util.Map;
  * were paid for, so they are published and the note says what is still to come.
  *
  * <p>A failed publish is never recorded as if it had succeeded: every changed path's event is removed before the turn
- * is saved, with a message naming what didn't save. The whole turn's files go in one publish call, so a rename - a
+ * is saved, with a message naming what didn't save - or, when workspace-service refused the change for a reason the
+ * person can act on (the project would grow past its size limits), with that reason as it was given. The whole
+ * turn's files go in one publish call, so a rename - a
  * new file plus a delete of the old path - can no longer be left half applied.
  *
  * <p>Access is rechecked here, right before the files commit, because the permission check on the request ran once,
@@ -118,11 +121,15 @@ public class TurnRecorder {
                             .filter(event -> event.getType() == ChatEventType.FILE_EDIT)
                             .forEach(event -> event.setPreviousContent(before.get(event.getFilePath())));
                     outcome = outcome == null ? TurnOutcome.SAVED : outcome;
+                    reply.setRevisionId(revision.revisionId());
+                    chatMessageRepository.save(reply);
                 } else {
                     List<String> failedPaths = revision.failedPaths();
                     events.removeIf(TurnRecorder::isFileChange);
-                    notices.add("Couldn't save " + (failedPaths.size() == 1 ? "this file" : "these files") + ": "
-                            + String.join(", ", failedPaths) + ". Please try again.");
+                    notices.add(revision.reason() != null && !revision.reason().isBlank()
+                            ? revision.reason()
+                            : "Couldn't save " + (failedPaths.size() == 1 ? "this file" : "these files") + ": "
+                                    + String.join(", ", failedPaths) + ". Please try again.");
                     outcome = TurnOutcome.NOT_SAVED;
                 }
             }
@@ -191,7 +198,7 @@ public class TurnRecorder {
             log.error("Revision for projectId: {} was not applied ({}) - {} file change(s) not saved.",
                     projectId, response.status(), changes.size());
             return new PublishRevisionResponse(response.revisionId(), response.status(), response.currentRevisionId(),
-                    paths, response.previousContent() == null ? Map.of() : response.previousContent());
+                    paths, response.previousContent() == null ? Map.of() : response.previousContent(), response.reason());
         } catch (Exception e) {
             log.error("Failed to publish revision for projectId: {} - {} file change(s) not saved.", projectId, changes.size(), e);
             return new PublishRevisionResponse(null, PublishRevisionResponse.Status.FAILED, null, paths, Map.of());

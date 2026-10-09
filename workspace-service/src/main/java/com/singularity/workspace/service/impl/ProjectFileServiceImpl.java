@@ -16,6 +16,7 @@ import com.singularity.workspace.repository.ProjectFileRepository;
 import com.singularity.workspace.repository.ProjectRepository;
 import com.singularity.workspace.service.ProjectFileService;
 import com.singularity.workspace.util.CodeSearchScanner;
+import com.singularity.workspace.util.ContentHash;
 import com.singularity.workspace.util.ProjectFilePath;
 import io.minio.CopyObjectArgs;
 import io.minio.CopySource;
@@ -97,8 +98,8 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                                 .object(objectName)
                                 .build())) {
 
-            String content = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-            return new FileContentResponse(cleanPath, content);
+            byte[] bytes = is.readAllBytes();
+            return new FileContentResponse(cleanPath, new String(bytes, StandardCharsets.UTF_8), ContentHash.sha256Hex(bytes));
         } catch (ErrorResponseException e) {
             if ("NoSuchKey".equals(e.errorResponse().code())) {
                 log.debug("File not found in storage: {}", objectName);

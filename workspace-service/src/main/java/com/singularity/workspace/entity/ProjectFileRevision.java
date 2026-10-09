@@ -53,4 +53,10 @@ public class ProjectFileRevision {
     Instant createdAt;
 
     Instant appliedAt;
+
+    /** On a revision made by going back: the revision that was chosen. Null on every other kind. */
+    Long restoredRevisionId;
+
+    /** On such a revision: whether the project was put back to just before the chosen revision rather than just after. */
+    Boolean restoredBefore;
 }
