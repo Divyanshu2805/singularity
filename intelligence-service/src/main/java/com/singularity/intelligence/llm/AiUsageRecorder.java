@@ -25,12 +25,21 @@ import org.springframework.stereotype.Component;
  * the lookup threw, this class swallowed it, and those tokens were never billed. A reservation already carries its
  * user id for exactly this reason, so every reconcile/release call is safe off the request thread.
  *
+ * <p>A streamed answer whose reader went away before the end is still charged ({@code reconcileUnfinished}). Such a
+ * call used to be released like one that never ran, so closing the connection a moment before the last word made
+ * every explanation, answer and lesson free, and the daily allowance could not stop it. The provider's own count is
+ * used when it had already arrived; it usually comes with the last chunk, so otherwise the cost is estimated from the
+ * length of the prompt and of what was written, at four characters a token. An estimate, and on the low side when
+ * the model read files - but no longer nothing. A call cancelled before it wrote a word is released as before.
+ *
  * <p>Never throws: failing to write a usage row must not fail the user's request.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class AiUsageRecorder {
+
+    private static final int CHARS_PER_TOKEN = 4;
 
     private final UsageService usageService;
     private final AuthUtil authUtil;
@@ -79,6 +88,27 @@ public class AiUsageRecorder {
             usageService.reconcileBudget(reservation, toRecord(reservation, usage, feature, projectId));
         } catch (Exception e) {
             log.warn("Couldn't reconcile token usage for {}", feature, e);
+        }
+    }
+
+    public void reconcileUnfinished(UsageReservation reservation, Usage reported, UsageFeature feature, Long projectId,
+                                    int promptChars, int writtenChars) {
+        Integer total = reported == null ? null : reported.getTotalTokens();
+        if (total != null && total > 0) {
+            reconcile(reservation, reported, feature, projectId);
+            return;
+        }
+        if (writtenChars <= 0) {
+            release(reservation);
+            return;
+        }
+        int input = Math.max(1, promptChars / CHARS_PER_TOKEN);
+        int output = Math.max(1, writtenChars / CHARS_PER_TOKEN);
+        try {
+            usageService.reconcileBudget(reservation,
+                    new UsageRecord(reservation.userId(), projectId, feature, input, output, input + output));
+        } catch (Exception e) {
+            log.warn("Couldn't record the usage of an unfinished {} call", feature, e);
         }
     }
 

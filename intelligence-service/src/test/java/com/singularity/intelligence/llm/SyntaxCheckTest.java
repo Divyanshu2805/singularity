@@ -132,4 +132,23 @@ class SyntaxCheckTest {
 
         assertThat(problems).extracting(Problem::path).containsExactly("src/a.ts", "src/c.tsx");
     }
+
+    @Test
+    void aFileTheParserCannotFinishIsStoppedAndTheNextFileIsStillChecked() {
+        SyntaxCheck limited = new SyntaxCheck(java.time.Duration.ofSeconds(2));
+        try {
+            assertThat(limited.checkOne("src/warm.ts", "export const a = 1;\n")).isNull();
+            String nested = "f(" + "<T>(".repeat(40) + "x" + ")".repeat(40) + ");\n";
+
+            long started = System.nanoTime();
+            Problem stopped = limited.checkOne("src/nested.ts", nested);
+            long seconds = java.time.Duration.ofNanos(System.nanoTime() - started).toSeconds();
+
+            assertThat(stopped).isNull();
+            assertThat(seconds).isLessThan(20);
+            assertThat(limited.checkOne("src/after.ts", "export const b = ;\n")).isNotNull();
+        } finally {
+            limited.close();
+        }
+    }
 }
