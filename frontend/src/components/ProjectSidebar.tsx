@@ -397,7 +397,7 @@ function ProjectItem({ project, isCurrent, isRenaming, onOpen, onStartRename, on
               Fork project
             </DropdownMenuItem>
           )}
-          {canEdit && (
+          {project.role && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem

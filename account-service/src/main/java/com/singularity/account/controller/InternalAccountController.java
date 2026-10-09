@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * account-service's API for the other services, not the browser.
  *
- * <p>Handles: resolving a user by id, username or Firebase uid; answering whether a session cookie hash has been
+ * <p>Handles: resolving a user by id or Firebase uid; answering whether a session cookie hash has been
  * revoked; and serving a user's effective plan limits with the free-tier fallback already folded in, so no caller has
  * to know what "no subscription" means.
  *
@@ -27,6 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
  * guarded by the shared internal-service secret rather than a session - the caller is another service acting on a
  * request it has already authenticated itself, so these endpoints answer for an arbitrary user id with no ownership
  * check of their own.
+ *
+ * <p>The lookup by Firebase uid is the one every other service authenticates a session with, so it answers 404 for a
+ * deleted account exactly as for one that never existed: before that, a deleted user's still-valid cookie was
+ * refused here in account-service and accepted everywhere else. The lookup by id still returns a deleted account,
+ * because it only ever names someone - a member list or the sender of an invitation - and never authenticates.
  */
 @RestController
 @RequiredArgsConstructor
@@ -43,15 +48,10 @@ public class InternalAccountController {
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString())));
     }
 
-    @GetMapping("/users/by-username")
-    public UserDto getUserByUsername(@RequestParam String username) {
-        return toDto(userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User", username)));
-    }
-
     @GetMapping("/users/by-firebase-uid")
     public UserDto getUserByFirebaseUid(@RequestParam String uid) {
         return toDto(userRepository.findByFirebaseUid(uid)
+                .filter(user -> user.getDeletedAt() == null)
                 .orElseThrow(() -> new ResourceNotFoundException("User", uid)));
     }
 

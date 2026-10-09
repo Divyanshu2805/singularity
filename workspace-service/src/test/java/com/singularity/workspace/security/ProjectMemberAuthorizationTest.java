@@ -39,7 +39,7 @@ import static org.mockito.Mockito.when;
  * QA-02's role-matrix extension for {@link ProjectMemberServiceImpl}, the same expression-level technique
  * {@link FileReadAuthorizationTest} established. {@code getProjectMembers} needs only VIEW_MEMBERS (every
  * role has it - {@code ProjectRole.VIEWER} included); {@code inviteMember}/{@code updateMemberRole}/
- * {@code removeProjectMember} need MANAGE_MEMBERS, which only {@code OWNER} carries - so an editor, who can
+ * {@code withdrawInvite}/{@code removeProjectMember} need MANAGE_MEMBERS, which only {@code OWNER} carries - so an editor, who can
  * edit and even delete the project itself, still cannot touch its membership.
  */
 class ProjectMemberAuthorizationTest {
@@ -49,7 +49,7 @@ class ProjectMemberAuthorizationTest {
     private static final long USER_ID = 7L;
 
     private static final ProjectMemberServiceImpl SERVICE =
-            new ProjectMemberServiceImpl(null, null, null, null, null, null, null);
+            new ProjectMemberServiceImpl(null, null, null, null, null, null, null, null);
 
     private final ProjectMemberRepository members = mock(ProjectMemberRepository.class);
     private final GenericApplicationContext context = new GenericApplicationContext();
@@ -75,7 +75,8 @@ class ProjectMemberAuthorizationTest {
     }
 
     static Stream<Arguments> manageGated() {
-        return Stream.of(arguments("inviteMember"), arguments("updateMemberRole"), arguments("removeProjectMember"));
+        return Stream.of(arguments("inviteMember"), arguments("withdrawInvite"), arguments("updateMemberRole"),
+                arguments("removeProjectMember"));
     }
 
     static Stream<Arguments> allGuarded() {
@@ -134,10 +135,11 @@ class ProjectMemberAuthorizationTest {
         assertThat(allowed(method, PROJECT_ID)).isTrue();
     }
 
-    @Test
-    @DisplayName("accepting an invite carries no guard - the invitee isn't a member yet, so there's nothing to check")
-    void acceptInviteStaysUnguarded() {
-        assertThat(AnnotatedElementUtils.hasAnnotation(methodNamed("acceptInvite"), PreAuthorize.class)).isFalse();
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"acceptInvite", "declineInvite", "getMyInvitations"})
+    @DisplayName("an invitee's own calls carry no guard - they are not a member yet, and each is tied to the caller's own email")
+    void theInviteesOwnCallsStayUnguarded(String method) {
+        assertThat(AnnotatedElementUtils.hasAnnotation(methodNamed(method), PreAuthorize.class)).isFalse();
     }
 
     @Test
