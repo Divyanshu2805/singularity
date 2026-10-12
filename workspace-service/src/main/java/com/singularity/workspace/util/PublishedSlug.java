@@ -14,7 +14,8 @@ import java.util.regex.Pattern;
  * <p>Handles: checking a chosen name - one DNS label of lower-case letters, digits and hyphens, 3 to 40 characters,
  * not starting or ending with a hyphen, with no two hyphens in a row (a label with "--" in its third and fourth place
  * is reserved for internationalised names), not one of the product's own words, and not shaped like a preview's
- * hostname - and making a name from a project's title with four random characters on the end.
+ * hostname - and making a name from a project's title: the title itself as a link name when the rules allow it, and
+ * the title with four random characters on the end for when that one is taken or not allowed.
  *
  * <p>The name becomes the first label of a hostname on a domain the product owns, so this is a security boundary and
  * not tidiness: {@code www}, {@code api}, {@code singularity} and their kind would let a page pass for the product,
@@ -69,6 +70,16 @@ public final class PublishedSlug {
         } catch (BadRequestException e) {
             return false;
         }
+    }
+
+    /**
+     * The project's own name as a link name - "Kanban board" as {@code kanban-board} - or null when the rules do not
+     * allow it (too short, one of the product's words, shaped like a preview's hostname). Whether it is free is the
+     * caller's to find out.
+     */
+    public static String plain(String projectName) {
+        String stem = stemOf(projectName);
+        return isValid(stem) ? stem : null;
     }
 
     public static String suggest(String projectName) {

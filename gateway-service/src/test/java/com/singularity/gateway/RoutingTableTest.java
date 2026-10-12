@@ -78,12 +78,18 @@ class RoutingTableTest {
                         "/api/projects/7/files/content",
                         "/api/projects/7/files/search",
                         "/api/projects/7/files/download-zip",
+                        "/api/projects/7/thumbnail",
                         "/api/projects/7/preview",
                         "/api/projects/7/preview/restart",
                         "/api/projects/7/preview/logs",
                         "/api/projects/7/publish",
                         "/api/projects/7/publish/sharing",
                         "/api/projects/7/publish/log",
+                        "/api/projects/7/github",
+                        "/api/projects/7/github/push",
+                        "/api/github",
+                        "/api/github/connect",
+                        "/api/github/callback",
                         "/api/projects/7/revisions",
                         "/api/projects/7/revisions/12/preview",
                         "/api/projects/7/revisions/12/restore",
@@ -130,6 +136,7 @@ class RoutingTableTest {
                         "/api/projects-archive",
                         "/api/chatter",
                         "/api/publicity/apps/demo",
+                        "/api/githubs",
                         "/nope"));
 
         return pathsByRoute.entrySet().stream()

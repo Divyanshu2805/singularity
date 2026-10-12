@@ -30,6 +30,14 @@ import java.util.concurrent.TimeUnit;
  * <p>It exists because kind has no load balancer or host port mappings, so without these forwards previews cannot be
  * routed or reached. A forward is pinned to one pod and dies silently with it, which is why the watchdog is needed
  * rather than a one-off setup step.
+ *
+ * <p>A forward is replaced when its listener has closed or its pod is no longer ready, and for nothing else. It used
+ * to be replaced as well whenever the client had recorded an error on it - but that record is of every connection
+ * that ever went through, and one browser request cut short is enough to set it: a frame navigating away, a
+ * hot-reload socket closing. Replacing the forward then cut every other connection through it, so a page that was
+ * loading in the Preview tab lost its requests and came up blank until it was reloaded. That was seen twice in
+ * fourteen minutes of the browser journey, both times with the same pod still ready. Each connection opens its own
+ * stream to the cluster, so one that failed says nothing about the next.
  */
 @Component
 @ConditionalOnProperty(prefix = "preview.port-forward", name = "enabled", havingValue = "true")
@@ -80,7 +88,7 @@ public class PreviewPortForwarder implements SmartLifecycle {
         return Integer.MIN_VALUE + 1000;
     }
 
-    private void ensure(ForwardState state) {
+    void ensure(ForwardState state) {
         var forward = state.forward;
         try {
             if (state.isHealthy() && podIsReady(state.podName)) return;
@@ -156,7 +164,7 @@ public class PreviewPortForwarder implements SmartLifecycle {
         }
     }
 
-    private static final class ForwardState {
+    static final class ForwardState {
         final PreviewPortForwardProperties.Forward forward;
         LocalPortForward current;
         String podName;
@@ -168,7 +176,7 @@ public class PreviewPortForwarder implements SmartLifecycle {
         }
 
         boolean isHealthy() {
-            return current != null && current.isAlive() && !current.errorOccurred();
+            return current != null && current.isAlive();
         }
 
         void close() {

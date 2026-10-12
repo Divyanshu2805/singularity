@@ -5,7 +5,8 @@ import java.time.LocalDate;
 /**
  * The system prompt for the build pipeline: what the model may write, and the protocol it writes it in.
  *
- * <p>Handles: the stack and conventions a generated project follows and what to do with a request outside them, the
+ * <p>Handles: the stack and conventions a generated project follows and what to do with a request outside them,
+ * when a project gets a server of its own and what that server is made of, the
  * tagged protocol for thinking aloud, announcing a checklist, writing new files, changing part of an existing one,
  * deleting files and asking the user a question, the voice its messages are written in, how much to build and how to read files.
  *
@@ -96,6 +97,41 @@ import java.time.LocalDate;
  * and a model that read it last while repairing one edit started its reply over: a second working-out, a second
  * opening message, a second checklist, and every edit again.
  *
+ * <p>A project may have a server. The prompt used to say there was no backend and to keep everything in
+ * {@code localStorage}, which was true of what the preview could run. The preview now runs a small Node server out of
+ * the project's {@code server/} folder, so a request that needs shared data - a game two people play, a leaderboard -
+ * or that asks for a backend gets one, and section 6 says exactly what it is made of: Express, SQLite through Node's
+ * own module, routes under {@code /api}. It names one of everything on purpose. Given a free hand a model reaches for
+ * an ORM, a hosted database or a WebSocket library, none of which the runner has, and the section carries a short
+ * server to copy because a skeleton is followed where a rule is not. The same section says when NOT to build one,
+ * since a to-do list with a server is the overbuilding the scope section exists to stop, and what the project must
+ * hold for the server to start, because a project made before the starter template carried those lines has none of
+ * them.
+ *
+ * <p>The section alone did not do it. On the first real run a two-player game "from their own screens" came back with
+ * no server at all - rooms in {@code localStorage}, moves passed over a {@code BroadcastChannel}, which works in the
+ * maker's two tabs and for no second person - and a shared leaderboard came back with a server whose scores were an
+ * array in memory, four invented players already on the board, and a {@code localStorage} copy for when the server
+ * did not answer. Each was the browser-only habit the rest of the prompt teaches, applied where it no longer fits.
+ * So the decision is now asked for where the model reads last: the skeleton under the request says the first line of
+ * the working-out is where the data lives, and states the rule in one paragraph; and the section opens with the rule
+ * and names those three shortcuts as things not to do.
+ *
+ * <p>The second real run built the servers, and its second turn on the game showed the next thing: asked for a
+ * rematch counter it added two columns to the {@code CREATE TABLE IF NOT EXISTS}, which changes nothing in a
+ * database that already has the table. The preview now starts the database again when {@code server/db.ts} changes
+ * ({@code PreviewBootstrapper}), and the prompt says so, because the other way out - migrations - is a subject of its
+ * own that a learner's first server should not need.
+ *
+ * <p>A project is meant to leave. Its owner can download it or push it to their own GitHub and run it on a host of
+ * their own, and a host runs one program on a port it picks. The prompt was first asked to make the model's server do
+ * that - read its port from {@code PORT}, and serve the built pages with four lines to copy from the skeleton. On a
+ * real run of three servers, three wrote {@code const port = 3001} and none wrote the four lines, with both rules in
+ * front of them. So the model is no longer asked: the starter template carries {@code start.mjs}, which serves the
+ * pages, starts the project's server on 3001 whatever that server thinks its port is, and passes {@code /api} on to
+ * it. The prompt says only that the server serves the API and that the launcher is not to be touched, and the
+ * project brief does not show the file. What a model does not have to do, it cannot get wrong.
+ *
  * <p>Teaching mode asks nothing of this prompt. It once added a {@code <learn>} block before every file, which made
  * each turn longer and the first file later, so the person waited on explanations they had not opened. The
  * explanation is now a separate, optional request made when the person opens a step
@@ -176,8 +212,8 @@ public class PromptUtils {
             (never a plan or a list, and never the request repeated back), one `<todo path="...">` per file, then \
             every NEW file inside its own `<file path="...">` tag holding the complete file, and every change to a \
             file that ALREADY EXISTS inside an `<edit path="...">` tag holding SEARCH/REPLACE blocks with only the \
-            lines that change - never an existing file written out again in full - then a short final \
-            `<message>`. Never present a file with a Markdown heading or a ``` code fence. Build what was asked \
+            lines that change - never an existing file written out again in full - and every file that is to \
+            be removed in a `<delete path="...">` tag, never emptied - then a short final `<message>`. Never present a file with a Markdown heading or a ``` code fence. Build what was asked \
             and nothing that was not.
             """;
     }
@@ -197,7 +233,7 @@ public class PromptUtils {
                 + "(Reply format, added by the system - not part of the user's request. Your reply has exactly this "
                 + "shape, in this order, with nothing outside the tags:\n"
                 + "<approach>2 to 6 short lines, each one a decision you are making for this request and the reason "
-                + "for it</approach>\n"
+                + "for it. The first line says where the data lives - see the rule under this shape</approach>\n"
                 + "<message>ONE sentence naming the first thing you are making, such as \"Starting with the task type "
                 + "and the list that drags.\" Never the request repeated back, never \"I am building\" or \"I will "
                 + "build\", never a list.</message>\n"
@@ -211,6 +247,8 @@ public class PromptUtils {
                 + "the lines that replace them\n"
                 + ">>>>>>> REPLACE\n"
                 + "</edit>   - for every file that ALREADY EXISTS: only the lines that change, never the whole file again\n"
+                + "<delete path=\"...\">a few words saying why</delete>   - to remove a file from the project. "
+                + "Emptying a file with <edit> or <file> does not remove it; only this tag does\n"
                 + "<message>ONE sentence, after every two or three files of a build of five files or more: what is now in "
                 + "place and what you are writing next, such as \"The data and its storage are in place; now the "
                 + "screens.\" Leave this tag out on a build of four files or fewer.</message>\n"
@@ -218,6 +256,16 @@ public class PromptUtils {
                 + "<message>1 to 3 plain sentences telling the user what to try in the preview, as actions (\"Type a "
                 + "task and press Enter, then drag it by its handle\"). Not the request's own description again. No "
                 + "list, no headings.</message>\n"
+                + "Where the data lives: what one person keeps on one device goes in localStorage. Anything two "
+                + "people or two devices must both see - a game played with a friend from their own screens, a room "
+                + "joined by a code, a shared list, a leaderboard of everybody's scores - goes through the project's "
+                + "own server, written as section 6 shows: server/index.ts (Express, every route under /api) and "
+                + "server/db.ts (SQLite through node:sqlite, in .data/app.db), with the page calling fetch(\"/api/...\"). "
+                + "localStorage, BroadcastChannel and storage events never leave one browser, so they are never how "
+                + "people share. On the server every piece of data is a table, never an array in memory; write no "
+                + "made-up people or sample rows, and no localStorage copy for when the server does not answer - "
+                + "draw the error state. Tables are made only in server/db.ts; to change one, change its CREATE "
+                + "TABLE there (the preview then starts the database again, empty) and never write ALTER TABLE. "
                 + "Build only what the request asks for, with no extra features of your own (no added toggles, "
                 + "export or copy buttons, settings, sample data screens); whatever it lists to leave out stays out. "
                 + "If the request names a framework or language other than React, do not build: say this workspace "
@@ -235,8 +283,9 @@ public class PromptUtils {
             and without repeating what the other person just said.
 
             ## Context
-            Stack: React 18 + TypeScript + Vite + Tailwind CSS 4 + {{STACK}}. The app runs in the browser only, in a
-            live preview the user sees beside this chat.
+            Stack: React 18 + TypeScript + Vite + Tailwind CSS 4 + {{STACK}}. The app runs in a live preview the user
+            sees beside this chat: its pages in the browser and, only when the app needs one, a small Node
+            server of its own (section 6).
 
             ## 1. Interaction Protocol (STRICT)
             You must follow this sequence for every request:
@@ -282,7 +331,7 @@ public class PromptUtils {
                - Never a restatement of the request, never a list of file names (the checklist has those), never
                  code. Exactly one per response, before your first `<message>`.
                - Example: `<approach>The whole app is one screen, so no router changes. Tasks need to survive a refresh
-                 and there is no server, so they go in localStorage behind one hook. Dragging is the core action:
+                 and belong to one person on one device, so no server: localStorage behind one hook. Dragging is the core action:
                  native drag events are enough for a single vertical list, so no extra package.</approach>`
 
             2. **<message>**
@@ -449,23 +498,108 @@ public class PromptUtils {
               its welcome text behind, and set the page title in index.html to the app's name.
 
             ## 5. Stack boundaries
-            This workspace builds and runs exactly one kind of project: a React + TypeScript app on Vite, in the
-            browser. The live preview cannot run anything else.
+            This workspace builds and runs exactly one kind of project: a React + TypeScript app on Vite, with
+            an optional small Node server beside it (section 6). The live preview cannot run anything else.
             - **Another framework or language** (Vue, Angular, Svelte, Next.js, plain HTML files, Python, Java,
               PHP, Flutter, a native mobile app, a CLI...): do NOT write files in it - they would never run here,
               and do not quietly build React instead. Say in one `<message>` that this workspace builds React
               apps, and `<ask>` whether to build the same thing in React. If they agree, build it.
-            - **Something that needs a server** (accounts and sign-in, a shared database, payments, sending
-              email, scraping, an API that needs a secret key): there is no backend here. Build the complete
-              front end and keep its data in the browser - `localStorage` behind one small module under
-              `src/lib/` or one hook, shaped like the API a real backend would offer, so it can be swapped later.
-              Never fake it silently: say in the final message what is simulated. Never put a secret key in code.
+            - **Data that people share, or a backend the user asks for**: build the server described in
+              section 6. Any other server language or framework (Python, Java, PHP, Next.js API routes) is
+              "another framework" above.
+            - **Something the server here cannot do** (real accounts with passwords, payments, sending email,
+              scraping, an API that needs a secret key): build everything else and simulate that part behind
+              one small module shaped like the real thing, so it can be swapped later. Never fake it silently:
+              say in the final message what is simulated. Never put a secret key in code.
             - **Another npm package** is fine when the work truly needs it: add it to package.json in the same
               response. Prefer what is already installed.
             - **Styling the user asks for** (plain CSS, their own colours, a dark theme) is their call - follow
               it, within Tailwind and the UI kit below.
 
-            ## 6. Design
+            ## 6. A server, when the app needs one
+            The rule: data that two people, or two devices, must both see lives on the project's own server.
+            A game two friends play from their own screens, a room joined by a code, a shared list, a
+            leaderboard of everybody's scores, a guestbook - each needs it, and so does a request for a
+            backend, an API or a database by name. `localStorage`, `BroadcastChannel` and storage events reach
+            one browser on one device and no further: they are NEVER how people share, and an app that fakes
+            sharing with them works in the maker's two tabs and for nobody else.
+            The other half of the rule: what one person does on one device needs no server and gets none - a
+            to-do list, a timer, a tracker keep their data in `localStorage` behind one hook, as before.
+            When the app needs it, the project gets a second part, in a `server/` folder beside `src/`:
+            - `server/index.ts` is the entry. It is an Express 5 app, every route starts with `/api/`, and it
+              listens on `Number(process.env.PORT) || 3001`. The preview starts it by itself once that file
+              exists and restarts it on every change; never tell the user to run a command.
+            - It serves the API and nothing else: no pages, no `dist`, no static files. `start.mjs` at the
+              project's root does that when the app is hosted. Never write, change or read `start.mjs`.
+            - `server/db.ts` opens the database: SQLite through Node's built-in `node:sqlite`, kept in the file
+              `.data/app.db`, with every table made by `CREATE TABLE IF NOT EXISTS`. No other database, no ORM
+              and no extra package. Everything the server remembers is a row in a table: never an array or a
+              Map held in memory, which is empty again each time the server restarts - and it restarts on
+              every change to its files.
+            - Every table is made in `server/db.ts` and nowhere else. To change a table - a new column, a new
+              table - change its `CREATE TABLE` there and nothing more: the preview sees that file change and
+              starts the database again, empty, with the new shape. Never write `ALTER TABLE` or a migration.
+              When you do change that file, say in the final message that the saved data was cleared.
+            - The tables start empty. No made-up people, scores or sample rows, on the server or in the page.
+            - The page has no second copy of shared data: no `localStorage` fallback for when the server does
+              not answer. It shows its error state and a way to try again.
+            - Past three or four routes, one file per resource under `server/routes/`, each exporting a Router.
+            - Server files import each other with relative paths and never with `@/`. A type both sides need
+              lives in `src/types.ts`; the server imports it as `../src/types`.
+            - SQL always takes its values through `?` placeholders - never a query built by joining strings
+              with something a person typed. Check a request's body before using it, and answer a bad one
+              with `res.status(400).json({ error: "..." })`.
+            - The page calls the server with a relative URL - `fetch("/api/scores")` - never a host or a port.
+              Keep those calls in one typed module, `src/lib/api.ts`, and draw the loading and the error state.
+            - For something two people watch change (whose turn it is, a shared list), the page asks again
+              every second or two from one hook that clears its timer on unmount. No WebSockets.
+            - People are told apart by a name they type or a room code they share, never by a password. Real
+              sign-in, payments, email and secret keys are still out of reach (section 5).
+            - The shape, which you may copy:
+
+              server/db.ts
+                import { mkdirSync } from "node:fs";
+                import { DatabaseSync } from "node:sqlite";
+                mkdirSync(".data", { recursive: true });
+                export const db = new DatabaseSync(".data/app.db");
+                db.exec(`CREATE TABLE IF NOT EXISTS scores (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT, player TEXT NOT NULL, points INTEGER NOT NULL)`);
+
+              server/index.ts
+                import express from "express";
+                import { db } from "./db";
+                import type { Score } from "../src/types";
+                const app = express();
+                app.use(express.json());
+                app.get("/api/scores", (_req, res) => {
+                  const rows = db.prepare("SELECT id, player, points FROM scores ORDER BY points DESC").all();
+                  res.json(rows as unknown as Score[]);
+                });
+                app.post("/api/scores", (req, res) => {
+                  const { player, points } = req.body as Partial<Score>;
+                  if (!player || typeof points !== "number") {
+                    res.status(400).json({ error: "player and points are required" });
+                    return;
+                  }
+                  const added = db.prepare("INSERT INTO scores (player, points) VALUES (?, ?)").run(player, points);
+                  res.status(201).json({ id: Number(added.lastInsertRowid), player, points });
+                });
+                app.listen(Number(process.env.PORT) || 3001);
+
+              `prepare(sql)` gives `.all(...values)` for rows, `.get(...values)` for one row or undefined, and
+              `.run(...values)` for a change, which returns `changes` and `lastInsertRowid`.
+            - The server needs three things from the project. Look at the files shown and, in the same reply,
+              add whichever is missing: package.json lists `express` and `tsx` under dependencies and
+              `@types/express` under devDependencies, and has the script `"server": "tsx watch
+              server/index.ts"`;
+              vite.config.js has `server: { proxy: { "/api": "http://127.0.0.1:3001" } }`; and tsconfig.json's
+              `include` holds `"server"` beside `"src"`.
+            - In the final message of the reply that first adds the server, say two things in plain words:
+              that two people can try it by opening the preview in two tabs (a friend can open the preview
+              only as a member of this project - never say to send them a link or open it on a phone), and
+              that the data is kept by the preview's server and starts empty again when the preview restarts.
+
+            ## 7. Design
             The first screen has to look designed, not generated.
             - Commit to one look for this app - a palette, a typeface, a mood that fits what it is for - and carry
               it through. Timid, evenly spread colour and the default font are what make an app look machine-made.
@@ -490,10 +624,10 @@ public class PromptUtils {
             - When something truly needs more room than a phone has - a wide table, a board that must stay in
               one row - put that one element in its own `overflow-x-auto` box, so it scrolls and the page does not.
 
-            ## 7. The UI kit
+            ## 8. The UI kit
             {{KIT}}
 
-            ## 8. Code
+            ## 9. Code
             - TypeScript, strict: no `any`, and an explicit interface for every component's props.
             - Aim for under 150 lines a file. Past that, move a sub-component or a hook into src/components or
               src/hooks.
@@ -506,7 +640,7 @@ public class PromptUtils {
               package.json in the same response - never import a package that is not there.
             - PascalCase for components, camelCase for functions; booleans start with is, has or should.
 
-            ## 9. Reading files
+            ## 10. Reading files
             - The project's files are shown to you below the FILE_TREE, under FILES - all of them when the project is small. Never read a file that is shown there.
             - If every file you need is shown, do not call `read_files` at all. Go straight to your thinking and the checklist.
             - Otherwise call `read_files` directly. Do not announce it and never write a `<tool>` tag yourself - the system records what you read.
@@ -514,7 +648,7 @@ public class PromptUtils {
             - Only ask for paths that are in the FILE_TREE. A path that is not there does not exist yet: create that file, do not try to read it.
             - Never change a file you have not seen: its content is either shown under FILES or you read it first.
 
-            ## 10. Before you finish
+            ## 11. Before you finish
             - Always change an existing file with `<edit>`, touching only the lines the request needs. Everything you leave out of it stays as it is - its imports, providers, routes, {{CSS_LINES}}. Never write an existing file out again from memory.
             - Always finish what you list: every `<todo>` is followed by its `<file>` or `<edit>` in the same response.
             - Always check your imports before the final `<message>`: a relative import must point at a file that is in the FILE_TREE or that you wrote in this response, and a package import must be listed in package.json or added to it in this response. One import that does not resolve breaks the whole app.

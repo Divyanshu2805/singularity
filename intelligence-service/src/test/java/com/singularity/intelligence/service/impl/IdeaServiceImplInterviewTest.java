@@ -68,7 +68,7 @@ class IdeaServiceImplInterviewTest {
     @Test
     @DisplayName("an idea the model judges complete gets no questions, and that is a tailored answer")
     void noQuestionsIsAValidTailoredAnswer() {
-        ClarifyIdeaResponse response = service.tailoredInterview(new GeneratedInterview(List.of()));
+        ClarifyIdeaResponse response = service.tailoredInterview(new GeneratedInterview(List.of(), null, null));
 
         assertThat(response.tailored()).isTrue();
         assertThat(response.questions()).isEmpty();
@@ -78,7 +78,7 @@ class IdeaServiceImplInterviewTest {
     @DisplayName("the model's own number of questions is kept: one stays one, it is not padded to a fixed count")
     void theModelsOwnCountIsKept() {
         ClarifyIdeaResponse response = service.tailoredInterview(new GeneratedInterview(List.of(
-                question("booking_window", "How far ahead can members book?", "Same day", "A week", "A month"))));
+                question("booking_window", "How far ahead can members book?", "Same day", "A week", "A month")), null, null));
 
         assertThat(response.tailored()).isTrue();
         assertThat(response.questions()).extracting(ClarifyingQuestion::id).containsExactly("booking_window");
@@ -92,7 +92,7 @@ class IdeaServiceImplInterviewTest {
             many.add(question("q" + i, "Question " + i + "?", "One", "Two", "Three"));
         }
 
-        ClarifyIdeaResponse response = service.tailoredInterview(new GeneratedInterview(many));
+        ClarifyIdeaResponse response = service.tailoredInterview(new GeneratedInterview(many, null, null));
 
         assertThat(response.questions()).hasSize(5);
         assertThat(response.questions().getFirst().id()).isEqualTo("q1");
@@ -102,11 +102,11 @@ class IdeaServiceImplInterviewTest {
     @DisplayName("a reply with no question list, or with only unusable questions, falls back and says so")
     void anUnusableReplyFallsBackAndSaysSo() {
         assertThat(service.tailoredInterview(null).tailored()).isFalse();
-        assertThat(service.tailoredInterview(new GeneratedInterview(null)).tailored()).isFalse();
+        assertThat(service.tailoredInterview(new GeneratedInterview(null, null, null)).tailored()).isFalse();
 
         ClarifyIdeaResponse onlyBroken = service.tailoredInterview(new GeneratedInterview(List.of(
                 question("no_options", "A question with one option?", "Only one"),
-                question("blank", "   ", "One", "Two"))));
+                question("blank", "   ", "One", "Two")), null, null));
 
         assertThat(onlyBroken.tailored()).isFalse();
         assertThat(onlyBroken.questions()).isNotEmpty();
@@ -121,11 +121,23 @@ class IdeaServiceImplInterviewTest {
     }
 
     @Test
+    @DisplayName("the app's name is kept to two words and its line to eight, whatever the model wrote")
+    void theNameAndTheLineAreCutToSize() {
+        ClarifyIdeaResponse response = service.tailoredInterview(new GeneratedInterview(List.of(),
+                "**Recipe Box Deluxe Edition**", "A place to keep every recipe you have ever cooked or wanted to."));
+
+        assertThat(response.name()).isEqualTo("Recipe Box");
+        assertThat(response.summary()).isEqualTo("A place to keep every recipe you have");
+        assertThat(service.tailoredInterview(new GeneratedInterview(List.of(), "  ", null)).name()).isNull();
+        assertThat(IdeaServiceImpl.generalInterview().name()).isNull();
+    }
+
+    @Test
     @DisplayName("a question the model sent without a usable id still gets a unique one")
     void idsAreMadeUnique() {
         ClarifyIdeaResponse response = service.tailoredInterview(new GeneratedInterview(List.of(
                 question("style", "What should it look like?", "Clean", "Bold", "Dark"),
-                question("style", "And the tone of the writing?", "Formal", "Friendly", "Playful"))));
+                question("style", "And the tone of the writing?", "Formal", "Friendly", "Playful")), null, null));
 
         assertThat(response.questions()).extracting(ClarifyingQuestion::id).containsExactly("style", "style_2");
     }

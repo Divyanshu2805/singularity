@@ -30,7 +30,9 @@ import java.util.stream.Collectors;
 /**
  * The pre-project idea interview and the brief compiled from it.
  *
- * <p>Handles: asking the model which decisions an idea leaves open and for a question about each, validating and
+ * <p>Handles: asking the model which decisions an idea leaves open and for a question about each - and, in the same
+ * call, what the app should be called (one or two words) and a line saying what it is (eight at most), which the
+ * project is then created with - validating and
  * bounding what comes back (question and helper length, option counts, unique ids), turning the answers into a brief,
  * and billing both calls to the caller's usage.
  *
@@ -46,8 +48,10 @@ import java.util.stream.Collectors;
  * kind of failure only: the parser's own message quotes the text it choked on, which is the model's reply about
  * someone's idea, and logging the exception put that in the service log.
  *
- * <p>Both prompts say what the product can build: an app that runs in the browser, with no accounts, payments,
- * shared data or notifications. Run on real ideas, the interview offered "client login", "deposit required" and
+ * <p>Both prompts say what the product can build: a web app with no accounts, payments or notifications, whose
+ * data stays on the device unless people have to share it, in which case it has a small server of its own. Shared
+ * data was on the list of things it could not do until the preview could run a project's server; it is now the one
+ * thing from that list the brief may promise, and it says so in words the build prompt acts on. Run on real ideas, the interview offered "client login", "deposit required" and
  * "photo proof" as answers and the brief then promised a client portal and a card form - things the build can only
  * fake or refuse. The brief is also held to three screens and 180 words: a four-screen brief was a first build of
  * twelve files and two and a half minutes, watched by someone waiting for their first result. What has to be
@@ -114,6 +118,8 @@ public class IdeaServiceImpl implements IdeaService {
 
     private static final int MAX_ID_CHARS = 50;
     private static final Pattern NON_SLUG = Pattern.compile("[^a-z0-9]+");
+    static final int MAX_NAME_WORDS = 2;
+    static final int MAX_SUMMARY_WORDS = 8;
 
     static final String CLARIFY_SYSTEM_PROMPT_TEMPLATE = """
             You run a short interview about an app someone wants built, before any code is written. Your job is
@@ -134,14 +140,15 @@ public class IdeaServiceImpl implements IdeaService {
             Ask about the look and feel only when the description does not already settle it. When you do ask
             it, make it the last question.
 
-            What gets built is a web app that runs entirely in the visitor's own browser. It has no accounts or
-            sign-in, takes no payments, shares no data between people or devices, and cannot send email, texts
-            or notifications or use the camera, microphone, voice or location. So never ask about any of
-            those, and never offer an option that needs one - not "client login", "password-protected link",
-            "deposit required", "photo proof", "community-shared", "pay by card". When the idea itself is
-            about such a thing (a shop, a booking, a leaderboard among friends), ask about the part a person
-            sees and does - what they browse, what they pick, what the form asks for, how things are ranked -
-            because the first version keeps its data on the device and shows the rest as it would look.
+            What gets built is a web app. It can have a small server of its own, so several people can share
+            something from their own screens - a game two friends play, a shared list, a leaderboard - joining
+            with a name they type or a room code. It has no accounts or sign-in, takes no payments, and cannot
+            send email, texts or notifications or use the camera, microphone, voice or location. So never ask
+            about any of those, and never offer an option that needs one - not "client login",
+            "password-protected link", "deposit required", "photo proof", "pay by card". When the idea itself
+            is about such a thing (a shop, a booking), ask about the part a person sees and does - what they
+            browse, what they pick, what the form asks for - because the first version shows that part as it
+            would look.
 
             Give each question:
             - id: a short snake_case label for what it asks about, such as "seat_limits" or "visual_style".
@@ -154,6 +161,13 @@ public class IdeaServiceImpl implements IdeaService {
 
             Never ask about technology, frameworks, budgets, or deadlines, and never ask two questions about
             the same decision.
+
+            Whatever the number of questions, also name the app and say what it is:
+            - name: what the app is called. ONE word where one fits, and never more than two: "Guestbook",
+                  "Kanban", "Recipe Box", "Pomodoro". A name, in title case - not a description, no "App" or
+                  "Tool" on the end unless the name is nothing without it, no quotation marks.
+            - summary: what the app is, in at most eight plain words, such as "A guestbook every visitor can
+                  sign" or "A kanban board for one person's tasks". No full stop.
             """;
 
     static final String COMPILE_SYSTEM_PROMPT = """
@@ -174,16 +188,19 @@ public class IdeaServiceImpl implements IdeaService {
 
             This is a first version that someone watches being built, so keep it small enough to finish well:
             - At most three screens, and one is often right. A screen's bullet names at most three things on it.
-            - It runs entirely in the browser: no accounts or sign-in, no payments, no data shared between
-              people, no email or notifications. Where the idea needs one of those, describe what the person
-              sees instead - a booking form that confirms on screen, a cart whose checkout shows an order
-              summary, a leaderboard of names kept on this device - and make the FIRST "Keep it simple" bullet
-              say plainly what is simulated ("Bookings are saved on this device only; nothing is sent").
+            - It has no accounts or sign-in, no payments, no email or notifications. Where the idea needs one
+              of those, describe what the person sees instead - a booking form that confirms on screen, a cart
+              whose checkout shows an order summary - and make the FIRST "Keep it simple" bullet say plainly
+              what is simulated ("Bookings are saved on this device only; nothing is sent").
             - Never promise a login, a client portal, card payment or anything else from that list.
+            - Data stays on the person's own device unless several people have to share it. When they do - a
+              game friends play from their own screens, a shared list, a leaderboard - say so in the Core
+              action in these words: "kept on the app's own server", with people joining by a name they type
+              or a room code. Do not give an app a server it does not need.
             Keep the whole brief under 180 words.
             """;
 
-    record GeneratedInterview(List<ClarifyingQuestion> questions) {
+    record GeneratedInterview(List<ClarifyingQuestion> questions, String name, String summary) {
     }
 
     static final BeanOutputConverter<GeneratedInterview> QUESTIONS_CONVERTER =
@@ -232,7 +249,8 @@ public class IdeaServiceImpl implements IdeaService {
         }
         if (generated.questions().isEmpty()) {
             log.info("The model judged this idea needs no clarifying questions");
-            return new ClarifyIdeaResponse(List.of(), true);
+            return new ClarifyIdeaResponse(List.of(), true, shortText(generated.name(), MAX_NAME_WORDS),
+                    shortText(generated.summary(), MAX_SUMMARY_WORDS));
         }
         List<ClarifyingQuestion> cleaned = cleanQuestions(generated.questions());
         if (cleaned.isEmpty()) {
@@ -240,11 +258,30 @@ public class IdeaServiceImpl implements IdeaService {
                     + "and flagged as untailored", generated.questions().size());
             return generalInterview();
         }
-        return new ClarifyIdeaResponse(cleaned, true);
+        return new ClarifyIdeaResponse(cleaned, true, shortText(generated.name(), MAX_NAME_WORDS),
+                shortText(generated.summary(), MAX_SUMMARY_WORDS));
+    }
+
+    /**
+     * The model's name or summary as one short line - its first line, without markup or quotation marks, cut to a
+     * number of words - or null when it wrote none. The project service cuts it again; this keeps a reply that ran
+     * on from travelling any further than here.
+     */
+    static String shortText(String text, int maxWords) {
+        if (isBlank(text)) {
+            return null;
+        }
+        String line = text.lines().map(String::strip).filter(part -> !part.isEmpty()).findFirst().orElse("")
+                .replaceAll("[*_`#\"]", "").replaceAll("\\s+", " ").replaceAll("[.]+$", "").strip();
+        if (line.isEmpty()) {
+            return null;
+        }
+        String[] words = line.split(" ");
+        return words.length <= maxWords ? line : String.join(" ", java.util.Arrays.copyOf(words, maxWords));
     }
 
     static ClarifyIdeaResponse generalInterview() {
-        return new ClarifyIdeaResponse(fallbackQuestions(FALLBACK_QUESTION_COUNT), false);
+        return new ClarifyIdeaResponse(fallbackQuestions(FALLBACK_QUESTION_COUNT), false, null, null);
     }
 
     static String describeFailure(Exception e) {

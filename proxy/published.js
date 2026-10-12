@@ -15,6 +15,11 @@
  * asked for, such as another app's or the sources stored beside the site. The content type comes from the file's
  * extension in a fixed table, never from what storage holds, and a file with an unknown extension is served as an opaque
  * download with nosniff, so an upload cannot choose to be a page.
+ *
+ * A path under /api/ never falls back to the page. A project may hold a server of its own, which its preview runs and
+ * a published app does not; the page's request for /api/scores used to be answered with index.html and a 200, which
+ * the app then failed to read as JSON with a message about an unexpected "<". It is a plain 404 now, so the app's own
+ * "could not load" state is what shows.
  */
 const MAX_SLUG = 40;
 const MIN_SLUG = 3;
@@ -128,20 +133,22 @@ function extensionOf(name) {
 /**
  * The files to try, in order, for a request. Each is { key, fallback }: the key relative to the build, and whether it is
  * the single-page fallback (index.html answering for a route that is not a file). A path whose last segment has an
- * extension is a file and has no fallback - a missing image is a 404, not a blank page.
+ * extension is a file and has no fallback - a missing image is a 404, not a blank page - and neither has a path under
+ * /api/, which is a call to a server this app does not have here.
  */
 function candidatesFor(parsed) {
     if (!parsed) return [];
     const { segments, trailingSlash } = parsed;
     if (segments.length === 0) return [{ key: 'index.html', fallback: false }];
     const joined = segments.join('/');
-    if (trailingSlash) return [{ key: joined + '/index.html', fallback: false }, { key: 'index.html', fallback: true }];
+    const page = segments[0] === 'api' && segments.length > 1 ? [] : [{ key: 'index.html', fallback: true }];
+    if (trailingSlash) return [{ key: joined + '/index.html', fallback: false }, ...page];
     if (extensionOf(segments[segments.length - 1])) return [{ key: joined, fallback: false }];
     return [
         { key: joined, fallback: false },
         { key: joined + '.html', fallback: false },
         { key: joined + '/index.html', fallback: false },
-        { key: 'index.html', fallback: true },
+        ...page,
     ];
 }
 

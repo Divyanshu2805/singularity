@@ -135,6 +135,18 @@ test('a refresh on any route of the app gets index.html, and about.html is found
     }
 });
 
+test('a request under /api/ is a 404, not the app answering 200 with a page where JSON was expected', async () => {
+    const app = await serve(fakeStore(build()));
+    try {
+        const res = await app.get('/api/scores');
+
+        assert.strictEqual(res.status, 404);
+        assert.doesNotMatch(await res.text(), /<div id="root">/);
+    } finally {
+        await app.close();
+    }
+});
+
 test('a missing file with an extension is a 404 page, not the app', async () => {
     const app = await serve(fakeStore(build()));
     try {

@@ -47,6 +47,11 @@ import static org.mockito.Mockito.when;
  * copy is one command that stops the watcher, copies under a time limit of its own, and starts the watcher again -
  * never a second writer beside the first.
  *
+ * <p>And the order of a start: the copy leaves no watcher behind, the dev server is made to finish starting, a
+ * revision saved in the meantime is copied and the dev server alone started again on it before the route is
+ * published, and it is the one recorded - unless it brought a different package.json, when the dev server is left
+ * alone and the older one stays recorded for the synchronizer to act on - and the watcher is started only then.
+ *
  * <p>The runner is scripted by what each command contains rather than by call order, since a start runs the same
  * probe a varying number of times.
  */
@@ -74,6 +79,7 @@ class PreviewBootstrapperTest {
 
     private String probe = "0||up";
     private String logs = "";
+    private String packages = "same";
 
     @BeforeEach
     void runWithoutPauses() {
@@ -95,6 +101,7 @@ class PreviewBootstrapperTest {
         when(runnerPool.exec(eq(POD_NAME), eq(SYNCER_CONTAINER), any(), any())).thenReturn(new ExecResult(0, "started"));
         when(runnerPool.exec(eq(POD_NAME), eq(RUNNER_CONTAINER), any(), any())).thenAnswer(call -> {
             String script = call.getArgument(3);
+            if (script.contains("echo changed")) return new ExecResult(0, packages);
             if (script.contains("wget")) return new ExecResult(0, probe);
             if (script.contains("tail -n")) return new ExecResult(0, logs);
             return new ExecResult(0, "started");
@@ -141,7 +148,65 @@ class PreviewBootstrapperTest {
         verify(router).register("p9-abc.localhost", "10.0.0.7");
         verify(previewRepository).markRunning(eq(PREVIEW_ID), any(), eq(REVISION));
         verify(events).publishEvent(new ProjectFilesChanged(PROJECT_ID));
-        verify(runnerPool, times(1)).exec(eq(POD_NAME), eq(SYNCER_CONTAINER), any(), contains("mc mirror"));
+    }
+
+    @Test
+    void aStartWritesNothingUnderADevServerThatIsStartingAndWatchesOnlyOnceItHasSettled() {
+        creating(POD_NAME);
+        scriptTheRunner();
+
+        bootstrapper.start(PREVIEW_ID, PROJECT_ID);
+
+        org.mockito.ArgumentCaptor<String> synced = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(runnerPool, router, previewRepository);
+        order.verify(runnerPool).exec(eq(POD_NAME), eq(SYNCER_CONTAINER), any(), synced.capture());
+        order.verify(runnerPool).exec(eq(POD_NAME), eq(RUNNER_CONTAINER), any(), contains("npm install"));
+        order.verify(runnerPool).exec(eq(POD_NAME), eq(RUNNER_CONTAINER), any(), contains("${e:-/src/main.tsx}"));
+        order.verify(runnerPool).exec(eq(POD_NAME), eq(SYNCER_CONTAINER), any(), contains("--watch local/projects/9/ /app/"));
+        order.verify(router).register("p9-abc.localhost", "10.0.0.7");
+        order.verify(previewRepository).markRunning(eq(PREVIEW_ID), any(), eq(REVISION));
+        assertThat(synced.getValue()).contains("kill \"$pid\"").contains("mc mirror --overwrite").doesNotContain("--watch");
+        verify(runnerPool, times(2)).exec(eq(POD_NAME), eq(SYNCER_CONTAINER), any(), any());
+    }
+
+    @Test
+    void aRevisionSavedWhileStartingIsCopiedAndTheDevServerStartedAgainOnItBeforeThePreviewOpens() {
+        creating(POD_NAME);
+        scriptTheRunner();
+        when(projectRepository.findCurrentFileRevisionId(PROJECT_ID)).thenReturn(Optional.of(REVISION), Optional.of(REVISION + 1));
+
+        bootstrapper.start(PREVIEW_ID, PROJECT_ID);
+
+        org.mockito.ArgumentCaptor<String> ran = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(runnerPool, org.mockito.Mockito.atLeastOnce()).exec(eq(POD_NAME), eq(RUNNER_CONTAINER), any(), ran.capture());
+        java.util.List<String> starts = ran.getAllValues().stream().filter(script -> script.contains("npm run dev")).toList();
+        assertThat(starts).hasSize(2);
+        assertThat(starts.get(0)).contains("npm install");
+        assertThat(starts).allMatch(script -> script.contains("--strictPort --force > /tmp/dev.log"));
+        assertThat(starts.get(1)).doesNotContain("npm install").doesNotContain("install.exit")
+                .contains("rm -f /tmp/dev.exit /tmp/dev.log /tmp/server.log &&").contains("if [ -f server/index.ts ]");
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(runnerPool, router, previewRepository);
+        order.verify(runnerPool, times(2)).exec(eq(POD_NAME), eq(SYNCER_CONTAINER), any(), contains("timeout -k 5 45 mc mirror"));
+        order.verify(runnerPool).exec(eq(POD_NAME), eq(RUNNER_CONTAINER), any(), contains("kill -TERM"));
+        order.verify(runnerPool).exec(eq(POD_NAME), eq(RUNNER_CONTAINER), any(), eq(starts.get(1)));
+        order.verify(runnerPool).exec(eq(POD_NAME), eq(SYNCER_CONTAINER), any(), contains("--watch"));
+        order.verify(router).register("p9-abc.localhost", "10.0.0.7");
+        order.verify(previewRepository).markRunning(eq(PREVIEW_ID), any(), eq(REVISION + 1));
+    }
+
+    @Test
+    void aRevisionSavedWhileStartingThatChangedThePackagesLeavesTheOlderOneRecorded() {
+        creating(POD_NAME);
+        scriptTheRunner();
+        packages = "changed";
+        when(projectRepository.findCurrentFileRevisionId(PROJECT_ID)).thenReturn(Optional.of(REVISION), Optional.of(REVISION + 1));
+
+        bootstrapper.start(PREVIEW_ID, PROJECT_ID);
+
+        verify(previewRepository).markRunning(eq(PREVIEW_ID), any(), eq(REVISION));
+        verify(events).publishEvent(new ProjectFilesChanged(PROJECT_ID));
+        verify(runnerPool, never()).exec(eq(POD_NAME), eq(RUNNER_CONTAINER), any(), contains("kill -TERM"));
     }
 
     @Test
@@ -154,7 +219,7 @@ class PreviewBootstrapperTest {
         verify(runnerPool).exec(eq(POD_NAME), eq(SYNCER_CONTAINER), any(), script.capture());
         String ran = script.getValue();
         int stop = ran.indexOf("kill \"$pid\"");
-        int copy = ran.indexOf("timeout -k 5 45 mc mirror --overwrite --remove --quiet --exclude 'node_modules/*' local/projects/9/ /app/");
+        int copy = ran.indexOf("timeout -k 5 45 mc mirror --overwrite --remove --quiet --exclude 'node_modules/*' --exclude '.data/*' local/projects/9/ /app/");
         int watch = ran.indexOf("--watch local/projects/9/ /app/");
         assertThat(stop).isPositive();
         assertThat(copy).isGreaterThan(stop);
@@ -170,6 +235,32 @@ class PreviewBootstrapperTest {
         bootstrapper.start(PREVIEW_ID, PROJECT_ID);
 
         verify(runnerPool).exec(eq(POD_NAME), eq(RUNNER_CONTAINER), any(), contains("> /tmp/installed.pkg"));
+    }
+
+    @Test
+    void theBootScriptRunsTheProjectsServerBesideTheDevServerOnceThereIsOne() {
+        creating(POD_NAME);
+        scriptTheRunner();
+
+        bootstrapper.start(PREVIEW_ID, PROJECT_ID);
+
+        org.mockito.ArgumentCaptor<String> script = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(runnerPool).exec(eq(POD_NAME), eq(RUNNER_CONTAINER), any(), contains("npm install"));
+        verify(runnerPool, org.mockito.Mockito.atLeastOnce())
+                .exec(eq(POD_NAME), eq(RUNNER_CONTAINER), any(), script.capture());
+        String boot = script.getAllValues().stream().filter(ran -> ran.contains("npm install")).findFirst().orElseThrow();
+        int installed = boot.indexOf("> /tmp/installed.pkg");
+        int server = boot.indexOf("if [ -f server/index.ts ] && [ -x node_modules/.bin/tsx ]; then ");
+        int dev = boot.indexOf("npm run dev");
+        assertThat(server).isGreaterThan(installed);
+        assertThat(dev).isGreaterThan(server);
+        assertThat(boot).contains("PORT=3001 NODE_NO_WARNINGS=1 node_modules/.bin/tsx server/index.ts >> /tmp/server.log 2>&1 & pid=$!; fi; fi; sleep 1; done) & ");
+        assertThat(boot).contains("[ \"$now\" != \"$seen\" ] || { [ $up = no ] && [ $waited -ge 5 ]; }");
+        int cleared = boot.indexOf("if [ -d .data ] && [ \"$(cat .data/.shape 2>/dev/null)\" != \"$shape\" ]; then rm -rf .data;");
+        assertThat(cleared).isGreaterThan(boot.indexOf("shape=$(md5sum server/db.ts"));
+        assertThat(boot.indexOf("echo \"$shape\" > .data/.shape")).isGreaterThan(cleared);
+        assertThat(boot.indexOf("node_modules/.bin/tsx server/index.ts")).isGreaterThan(boot.indexOf("echo \"$shape\" > .data/.shape"));
+        assertThat(boot.substring(boot.indexOf("setsid sh -c '") + 14, boot.lastIndexOf("' > /dev/null"))).doesNotContain("'");
     }
 
     @Test

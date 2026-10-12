@@ -96,6 +96,22 @@ class ProjectBriefTest {
     }
 
     @Test
+    void aProjectsServerFilesAreShownLikeItsPagesAndTheLauncherIsListedButNeverShown() {
+        starterProject();
+        file("server/index.ts", "import express from \"express\";\n");
+        file("server/routes/rooms.ts", "export const rooms = 1;\n");
+        file("start.mjs", "console.log('the launcher');\n");
+
+        ProjectBrief brief = brief();
+
+        assertThat(brief.showsEverySourceFile()).isTrue();
+        assertThat(brief.shownPaths()).contains("server/index.ts", "server/routes/rooms.ts").doesNotContain("start.mjs");
+        assertThat(brief.text()).contains("import express from \"express\";")
+                .contains("start.mjs runs the built app on a host. It is not shown and is never read or changed.")
+                .doesNotContain("the launcher");
+    }
+
+    @Test
     void imagesAndTheLockFileAreListedButNeverShownAndDoNotCountAgainstTheProject() {
         starterProject();
         file("package-lock.json", "l".repeat(200_000));

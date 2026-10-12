@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static com.singularity.workspace.service.impl.PreviewRunnerPool.RUNNER_CONTAINER;
@@ -38,7 +39,8 @@ import static com.singularity.workspace.service.impl.PreviewRunnerPool.RUNNER_CO
  * <p>Handles: finding the project's running preview; laying out, in a scratch folder of its runner container, the
  * project as the turn would leave it - a copy of the pod's own files with the turn's files written over them and its
  * deletes removed; running the TypeScript compiler there against the packages the pod already has installed; asking
- * the registry whether each package the turn adds exists; and reporting what was found, or that no check was made.
+ * the registry whether each package the turn adds exists; starting the project's own server there, when the turn
+ * wrote any of it, to see that it comes up; and reporting what was found, or that no check was made.
  *
  * <p>It runs in the preview pod because that is the one place the project's code and its {@code node_modules} are
  * together. The build pipeline can parse a file and resolve an import by name, but only a compiler with the packages
@@ -49,6 +51,17 @@ import static com.singularity.workspace.service.impl.PreviewRunnerPool.RUNNER_CO
  * <p>The scratch folder is the point. The pod's own copy of the project is what the person's preview is serving, and
  * it is kept in step with storage by a watcher; writing an unsaved turn over it would show the person files that may
  * never be saved, and the watcher would then take them away again. {@code node_modules} is linked, not copied.
+ *
+ * <p>Starting the server is the one step that runs the turn's code rather than reading it, and the runner pod is
+ * where that is allowed. It exists because of what a server keeps in strings: the SQL that makes its tables is text
+ * to the parser and to the compiler alike, and a real model wrote {@code PRIMARY ikey} in one - a turn that was right
+ * by every other check and whose server died on its first line, in front of a page that could only say it could not
+ * load. So the server is started from the scratch folder, on a port of its own and with an empty database of its
+ * own, for a few seconds: one that is listening or still running at the end is fine, and one that has exited with
+ * an error is reported with the error, which the pipeline sends back to the model like any compiler error. A server
+ * that names its port in code instead of reading {@code PORT} collides with the preview's own and says so; that is
+ * taken as having started, since the tables are made before anything listens. It runs only after a clean compile,
+ * so the model is never handed two accounts of one mistake.
  *
  * <p>Everything here fails open. No preview, a pod that has gone, a cluster that cannot be reached, a project with no
  * {@code tsconfig.json}, a check that outruns its time: each is reported as "not checked", and the turn is saved on
@@ -84,6 +97,33 @@ public class CodeCheckServiceImpl implements CodeCheckService {
             + "code=$?\n"
             + "head -c 24000 /tmp/check.out\n"
             + "exit $code\n";
+
+    static final String SERVER_FOLDER = "server/";
+    static final String SERVER_ENTRY = "server/index.ts";
+    static final int SERVER_CHECK_PORT = 3999;
+    static final int SERVER_DID_NOT_START = 96;
+    private static final Duration SERVER_START_LIMIT = Duration.ofSeconds(20);
+    private static final int SERVER_START_SECONDS = 8;
+    private static final int MAX_SERVER_ERROR_CHARS = 700;
+    private static final Pattern SERVER_FRAME = Pattern.compile("(server/[\\w./-]+\\.[cm]?[jt]s):(\\d+)");
+
+    static final String SERVER_START_SCRIPT = "cd " + SCRATCH + " || exit 0\n"
+            + "[ -f " + SERVER_ENTRY + " ] && [ -d node_modules/tsx ] || exit 0\n"
+            + "rm -rf .data /tmp/check.server\n"
+            + "PORT=" + SERVER_CHECK_PORT + " NODE_NO_WARNINGS=1 node --import tsx " + SERVER_ENTRY + " > /tmp/check.server 2>&1 &\n"
+            + "pid=$!\n"
+            + "i=0\n"
+            + "while [ $i -lt " + SERVER_START_SECONDS + " ]; do\n"
+            + "  sleep 1; i=$((i + 1))\n"
+            + "  kill -0 $pid 2>/dev/null || break\n"
+            + "  nc -z 127.0.0.1 " + SERVER_CHECK_PORT + " 2>/dev/null && break\n"
+            + "done\n"
+            + "if kill -0 $pid 2>/dev/null; then kill $pid 2>/dev/null; wait $pid 2>/dev/null; exit 0; fi\n"
+            + "wait $pid; code=$?\n"
+            + "[ $code -eq 0 ] && exit 0\n"
+            + "grep -q EADDRINUSE /tmp/check.server && exit 0\n"
+            + "head -c 4000 /tmp/check.server\n"
+            + "exit " + SERVER_DID_NOT_START + "\n";
 
     private final PreviewRepository previewRepository;
     private final PreviewRunnerPool runnerPool;
@@ -148,6 +188,14 @@ public class CodeCheckServiceImpl implements CodeCheckService {
                 problems.addAll(TypeCheckOutput.problems(compiled.output(), files.keySet(), added,
                         Math.max(1, properties.maxProblems() - problems.size())));
             }
+            if (problems.isEmpty() && files.keySet().stream().anyMatch(path -> path.startsWith(SERVER_FOLDER))
+                    && remaining(deadline).compareTo(Duration.ofSeconds(SERVER_START_SECONDS).plus(SHORTEST_USEFUL_RUN)) > 0) {
+                Duration limit = remaining(deadline).compareTo(SERVER_START_LIMIT) < 0 ? remaining(deadline) : SERVER_START_LIMIT;
+                ExecResult started = runnerPool.exec(pod, RUNNER_CONTAINER, limit, SERVER_START_SCRIPT);
+                if (started.exitCode() == SERVER_DID_NOT_START) {
+                    problems.add(serverProblem(started.output(), files.keySet()));
+                }
+            }
             log.info("Type-checked {} file(s) for projectId: {} in {} - {} problem(s)", files.size(), projectId, pod, problems.size());
             return CodeCheckResponse.of(problems);
         } catch (ExternalServiceException e) {
@@ -160,10 +208,33 @@ public class CodeCheckServiceImpl implements CodeCheckService {
 
     private void cleanUp(String pod) {
         try {
-            runnerPool.exec(pod, RUNNER_CONTAINER, CLEAN_UP_TIMEOUT, "rm -rf " + SCRATCH + " /tmp/check.out; true");
+            runnerPool.exec(pod, RUNNER_CONTAINER, CLEAN_UP_TIMEOUT, "rm -rf " + SCRATCH + " /tmp/check.out /tmp/check.server; true");
         } catch (RuntimeException e) {
             log.debug("Couldn't remove the type-check scratch folder from {}", pod, e);
         }
+    }
+
+    static Problem serverProblem(String output, Set<String> written) {
+        String text = (output == null ? "" : output).replace("file://" + SCRATCH + "/", "").replace(SCRATCH + "/", "").strip();
+        String path = null;
+        int line = 0;
+        Matcher frame = SERVER_FRAME.matcher(text);
+        while (frame.find()) {
+            boolean fromTheTurn = written.contains(frame.group(1));
+            if (path == null || fromTheTurn) {
+                path = frame.group(1);
+                line = Integer.parseInt(frame.group(2));
+            }
+            if (fromTheTurn) {
+                break;
+            }
+        }
+        if (path == null) {
+            path = SERVER_ENTRY;
+        }
+        String error = text.length() > MAX_SERVER_ERROR_CHARS ? text.substring(0, MAX_SERVER_ERROR_CHARS) + " ..." : text;
+        return new Problem(path, line, 0, "SERVER", "The project's server was started with these files and stopped at once with this error: "
+                + (error.isEmpty() ? "(it printed nothing)" : error));
     }
 
     private static Duration remaining(long deadline) {
@@ -183,7 +254,7 @@ public class CodeCheckServiceImpl implements CodeCheckService {
                 .append("rm -rf ").append(SCRATCH).append("\n")
                 .append("mkdir -p ").append(SCRATCH).append("\n")
                 .append("cd /app\n")
-                .append("find . -mindepth 1 -maxdepth 1 ! -name node_modules ! -name dist ! -name .git -exec cp -R {} ")
+                .append("find . -mindepth 1 -maxdepth 1 ! -name node_modules ! -name dist ! -name .git ! -name .data -exec cp -R {} ")
                 .append(SCRATCH).append("/ \\;\n")
                 .append("if [ -d /app/node_modules ]; then ln -s /app/node_modules ").append(SCRATCH).append("/node_modules; fi\n");
         if (!folders.isEmpty()) {
