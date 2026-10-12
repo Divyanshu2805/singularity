@@ -13,20 +13,22 @@
 # In `singularity` everything is refused unless a rule below allows it. In `singularity-ai` only Redis and the
 # preview proxy are covered; the runner pods keep their own policy.
 #
-# Not part of base and not applied by CI. A wrong rule here takes the app down, and it has only been checked by
-# reading the manifests, not on a running cluster. Apply it by hand, after a deploy, with the app open:
+# Not part of base and not applied by CI. A wrong rule here takes the app down. Every rule has been checked on a kind
+# cluster with stand-in pods - each connection the app makes is let through and every other one is refused
+# (deploy/scripts/check-network-policies.sh, which also fails when a rule is missing or one too many), and it has
+# been on in production since 2026-10-10. On a new cluster, apply it by hand, after a deploy, with the app open:
 #
 #   kubectl --context <cluster> apply -k deploy/k8s/network-policies
 #
-# then sign in, open a project, send one build and start one preview. `kubectl delete -k` on the same folder undoes
-# it at once. Once it has run for a while it can be added to base/kustomization.yaml.
+# then sign in, open a project, send one build, start one preview and open one published app. `kubectl delete -k` on
+# the same folder undoes it at once. Once it has run for a while it can be added to base/kustomization.yaml.
 #
 # The node's own probes are not affected: a connection from the node a pod runs on is always let in. `kubectl
 # port-forward` is not affected either. It needs a network plugin that enforces NetworkPolicy; k3s does out of the
-# box.
+# box, and so does kind.
 #
-# A new workload that needs to reach one of these needs a line here, or its connections are refused: the published
-# apps' reader, when publishing lands, needs MinIO from the preview proxy.
+# A new workload that needs to reach one of these needs a line here and in the check's table, or its connections are
+# refused.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -225,9 +227,10 @@ spec:
         - protocol: TCP
           port: 5432
 ---
-# MinIO: workspace-service, the backup and a restore, the job that creates the runners' read-only user (a Job's pods
-# carry its name as the job-name label), and the runner pods in the other namespace, which mirror a project's files.
-# The console port (9001) is opened to nobody; use `kubectl port-forward` for it.
+# MinIO: workspace-service, the backup and a restore, the two jobs that create the read-only users - the runners' and
+# the one published apps are served with (a Job's pods carry its name as the job-name label) - and, from the other
+# namespace, the runner pods, which mirror a project's files, and the preview proxy, which serves published apps
+# straight from storage. The console port (9001) is opened to nobody; use `kubectl port-forward` for it.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -253,12 +256,21 @@ spec:
         - podSelector:
             matchLabels:
               job-name: minio-bootstrap-preview-reader
+        - podSelector:
+            matchLabels:
+              job-name: minio-bootstrap-published-reader
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: singularity-ai
           podSelector:
             matchLabels:
               app: runner
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: singularity-ai
+          podSelector:
+            matchLabels:
+              app: singularity-proxy
       ports:
         - protocol: TCP
           port: 9000
