@@ -5,7 +5,7 @@
 | Suite | Command | Size | Needs |
 |---|---|---|---|
 | Backend (all modules) | `./mvnw test` | 1,515 tests — common-lib 31, gateway 92, account 55, workspace 705, intelligence 632 | Docker, for one integration test (below) |
-| Frontend | `cd frontend && npm test` | 915 tests in 68 files (Vitest) | — |
+| Frontend | `cd frontend && npm test` | 919 tests in 69 files (Vitest) | — |
 | Preview proxy | `cd proxy && node --test` | 82 tests: the access token, routing, the script injected into a previewed page (run against a stand-in window), the card picture the page draws of itself (`snapshot.js`), and publishing - the host and path rules, the headers, the storage signature (checked against AWS's own worked example) and the whole handler against a stand-in store | — |
 | The starter template's launcher | `node --test scripts/starter-launcher.test.mjs` | 8 tests: `start.mjs`, which runs a built project as one program on a host - the pages, the fallback for an app's own addresses, files outside the build staying out of reach, and `/api` on an app with no server | — |
 | A real preview on kind | see [below](#the-preview-pipeline-test) | 11 steps on one project (`PreviewPipelineIT`); not part of `./mvnw test` | A kind cluster and Docker |
