@@ -79,7 +79,7 @@ test("an owner shares a project with someone who accepts, works beside them and 
     await friendPage.goto("/projects");
     const invitations = friendPage.getByRole("region", { name: "Invitations" });
     await expect(invitations.getByText(projectName)).toBeVisible();
-    await expect(invitations.getByText("invited you to edit this project")).toBeVisible();
+    await expect(invitations.getByText(/· to edit$/)).toBeVisible();
     await invitations.getByRole("button", { name: "Accept" }).click();
     await expect(invitations).toHaveCount(0);
 
@@ -87,7 +87,6 @@ test("an owner shares a project with someone who accepts, works beside them and 
     expect(await asFriend(savedFile(projectId, "src/pages/Index.tsx"))).toBe(200);
     await friendPage.goto(projectUrl);
     await expect(friendPage.getByRole("textbox", { name: "Message Singularity" })).toBeVisible();
-    await friendPage.getByRole("button", { name: "Skip" }).click();
   });
 
   await test.step("the owner sees who accepted and withdraws the invitation nobody took", async () => {

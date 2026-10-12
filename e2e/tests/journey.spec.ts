@@ -164,7 +164,7 @@ test("a person signs in, builds an app, runs it, learns from it and signs out", 
 
     const panel = page.getByRole("dialog", { name: "Learn your project" });
     await expect(panel.getByText("Something a page remembers between clicks")).toBeVisible({ timeout: 60_000 });
-    await expect(panel.getByRole("list", { name: "Your words" }).getByRole("button", { name: "State" })).toBeVisible();
+    await expect(panel.getByRole("list", { name: "Your words" }).getByRole("button", { name: "State", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(panel).toBeHidden();
   });
