@@ -5,11 +5,17 @@
  * they happen, the live link with Copy and Open, "You have changes that are not published" with Update, switching the
  * sharing of the code on and off with the page's address to copy, Unpublish behind a confirmation, and - when a build
  * fails - the sentence that says why, what to do about it, and the output one press away. For everyone else in the
- * project it shows whether the app is published and where, and no controls.
+ * project it shows whether the app is published and where, and no controls. An app with a server of its own is told,
+ * in the panel's foot, that a published link shows its pages only: the preview runs that server and a published app
+ * is still files with nothing behind them, and a game that works in the preview and loads forever from its link is
+ * worse than being told first. The file list that answers it is asked for when the panel is opened, not before.
  *
- * The header button and the panel are drawn exactly as Share's beside them are: the same glass button, the same
- * heading with one line under it, a field and the app's primary button on one row, and the same foot that says in
- * two lines who can open what - there, a private project; here, that a published app is public.
+ * The header button is a round one holding only the rocket, as GitHub's beside it holds only its mark - the owner
+ * asked for the icon in place of the word - with what it would do in a tooltip and a small dot on it once the app is
+ * live: green when the link is up to date, gold when there are changes not yet published. The panel is drawn exactly
+ * as Share's is: the same heading with one line under it, a field and the app's primary button on one row, and the
+ * same foot that says in two lines who can open what - there, a private project; here, that a published app is
+ * public.
  *
  * Drawn with the app's own pieces and folded until pressed, as the rest of the workspace is: a popover on the header's
  * quiet chip, the .ws-card for the build's steps, .app-chip for actions, gold only for selection. Nothing opens by
@@ -21,6 +27,7 @@
  * than an error.
  */
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Copy, ExternalLink, Globe, Loader2, Rocket, Share2 } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { QuotaDialog } from "@/components/QuotaDialog";
@@ -36,12 +43,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCopyFeedback } from "@/hooks/use-copy-feedback";
 import { useProjectPublish } from "@/hooks/use-publish";
 import { useToast } from "@/hooks/use-toast";
 import { ApiRequestError, api, isQuotaError } from "@/lib/api";
 import {
   PUBLISH_STEPS,
+  SERVER_NOTICE,
+  appHasServer,
   buttonLabel,
   canPublish,
   failureAdvice,
@@ -127,6 +137,14 @@ export function PublishMenu({ projectId, role, projectName }: { projectId: strin
   const [copiedPage, copyPage] = useCopyFeedback();
   const { toast } = useToast();
   const publish = useProjectPublish(projectId, isOpen);
+  const filePaths = useQuery({
+    queryKey: ["publish-file-paths", projectId],
+    queryFn: () => api.getFilePaths(projectId),
+    enabled: isOpen,
+    staleTime: 0,
+    retry: false,
+  });
+  const hasServer = appHasServer(filePaths.data);
 
   const state = publish.state;
   const phase = publishPhase(state);
@@ -158,16 +176,28 @@ export function PublishMenu({ projectId, role, projectName }: { projectId: strin
   return (
     <>
       <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label={`Publish. ${text.title}`}
-            className="btn btn-glass flex h-8 items-center gap-2 rounded-full px-3 text-xs font-medium active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35 data-[state=open]:border-primary/50"
-          >
-            {building ? <OrbitSpinner /> : state?.live ? <span className="h-1.5 w-1.5 rounded-full bg-syntax-string" /> : <Rocket className="h-3.5 w-3.5" />}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label={`Publish. ${text.title}`}
+                className="btn btn-glass relative flex h-8 w-8 items-center justify-center rounded-full active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35 data-[state=open]:border-primary/50"
+              >
+                {building ? <OrbitSpinner /> : <Rocket className="h-4 w-4" />}
+                {state?.live && !building && (
+                  <span
+                    aria-hidden="true"
+                    className={cn("absolute right-1 top-1 h-1.5 w-1.5 rounded-full", state.hasChanges ? "bg-primary" : "bg-syntax-string")}
+                  />
+                )}
+              </button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="px-2 py-1 text-xs">
             {state?.live && !state.hasChanges && !building ? "Published" : label}
-          </button>
-        </PopoverTrigger>
+          </TooltipContent>
+        </Tooltip>
 
         <PopoverContent align="end" sideOffset={8} className="w-[380px] overflow-hidden rounded-2xl p-0">
           <div className="flex items-start justify-between gap-3 px-3.5 pb-2.5 pt-3.5">
@@ -310,6 +340,7 @@ export function PublishMenu({ projectId, role, projectName }: { projectId: strin
             <div className="min-w-0">
               <p className="text-xs font-medium">{state?.live ? "Public app" : "Public once published"}</p>
               <p className="text-[11px] text-muted-foreground">Anyone with the link can open it, no account needed.</p>
+              {hasServer && <p className="mt-1 text-[11px] text-muted-foreground">{SERVER_NOTICE}</p>}
             </div>
           </div>
         </PopoverContent>

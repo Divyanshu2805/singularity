@@ -8,8 +8,10 @@
  *
  * Every answer describes what the app does today. Three differ from the first landing page's list on purpose: the
  * interview is "a few questions" rather than four (it asks two to four), the stack is named in full (React,
- * TypeScript, Vite and Tailwind), and "what can't it build yet?" is new - generated apps run entirely in the browser,
- * with no server or database of their own and one stack, and the page should say so before a visitor finds out.
+ * TypeScript, Vite and Tailwind), and "what can't it build yet?" is new - there is one stack, no sign-in, payments or
+ * email, and an app's own server runs in its preview but not behind a published link, and the page should say so
+ * before a visitor finds out. That answer used to say apps had no server or database at all, which stopped being true
+ * when the preview began running one out of the project's server folder.
  * The sandbox's ten idle minutes are workspace-service's preview idle-timeout.
  */
 import { Boxes, Container, CreditCard, Database, FlaskConical, Gauge, GraduationCap, PackageOpen, ShieldCheck, Users } from "lucide-react";
@@ -20,7 +22,7 @@ const ALWAYS: Question[] = [
   {
     icon: Boxes,
     q: "What does Singularity actually build?",
-    a: "Web apps that run in the browser. Describe an idea, answer a few questions, and it writes a React, TypeScript, Vite and Tailwind project file by file. Keep asking for changes until it's what you wanted.",
+    a: "Web apps. Describe an idea, answer a few questions, and it writes a React, TypeScript, Vite and Tailwind project file by file, with a small server and database of its own when the app needs to share data. Keep asking for changes until it's what you wanted.",
   },
   {
     icon: GraduationCap,
@@ -30,7 +32,7 @@ const ALWAYS: Question[] = [
   {
     icon: Database,
     q: "What can't it build yet?",
-    a: "Apps that need their own server or database. Projects are front-end apps, so anything they save stays in the browser. There is one stack for now: React with Vite.",
+    a: "Sign-in, payments and email. An app can have a small server and database, but they run in its live preview only: a published link shows the pages without them for now. There is one stack: React with Vite, and Node on the server.",
   },
   {
     icon: Container,

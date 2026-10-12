@@ -285,8 +285,9 @@ describe("the questions a lesson sends to ExplainLLM", () => {
   });
 
   it("asks what a term means on one line, however the term was written", () => {
-    expect(termQuestion("  State\n")).toBe('What does "State" mean? Explain it in plain words, then show me where it appears in this project.');
-    expect(termQuestion("x".repeat(500)).length).toBeLessThan(250);
+    expect(termQuestion("  State\n")).toMatch(/^Tell me more about "State"\. Explain it properly: what it is, what it is for, and how it works/);
+    expect(termQuestion("State")).toContain("quote the real lines where it is used with the file each is in");
+    expect(termQuestion("x".repeat(500)).length).toBeLessThan(520);
   });
 
   it("sends the reader's own answer with the question it answers, bounded however long either is", () => {

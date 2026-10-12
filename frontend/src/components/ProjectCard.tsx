@@ -1,7 +1,8 @@
 /**
  * One project, as a card on the dashboard or as a row in a list.
  *
- * Handles: the name with inline renaming, the generated gradient thumbnail, the last-edited time, the caller's role,
+ * Handles: the name with inline renaming, the thumbnail - a picture of the app itself once its preview has run, and
+ * until then (or if the picture will not load) the gradient generated from its name - the last-edited time, the caller's role,
  * the actions menu - pin, star, fork, delete - and, for a project with a live published app, a "Published" mark that
  * links to the app and is shown to every member alike. Delete is offered to every member, a viewer included: for
  * anyone but the owner it removes the project from their own list only.
@@ -35,6 +36,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { projectThumbnailUrl } from "@/lib/api";
 import { ProjectRole, ProjectSummaryResponse } from "@/lib/types";
 import { cn, generateGradient } from "@/lib/utils";
 
@@ -227,6 +229,8 @@ const openOnEnter = (onOpen: () => void) => (e: React.KeyboardEvent) => {
 
 export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, isLeaving, onRenameDone, ...props }: ProjectItemProps & { thumbnailClassName?: string }) {
     const { project } = props;
+    const [failedPicture, setFailedPicture] = useState<string | null>(null);
+    const picture = project.thumbnailAt && failedPicture !== project.thumbnailAt ? project.thumbnailAt : null;
     return (
         <div
             role={isRenaming ? undefined : "link"}
@@ -248,7 +252,19 @@ export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, isLeaving,
                     className="card-thumb absolute inset-0 group-hover:scale-[1.06]"
                     style={generateGradient(project.name)}
                 />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.14),transparent_55%)]" />
+                {picture ? (
+                    <img
+                        src={projectThumbnailUrl(project.id, picture)}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        draggable={false}
+                        onError={() => setFailedPicture(picture)}
+                        className="card-thumb absolute inset-0 h-full w-full object-cover object-top group-hover:scale-[1.06]"
+                    />
+                ) : (
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.14),transparent_55%)]" />
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-[hsl(30_11%_3.7%/0.6)] via-transparent to-transparent" />
                 {project.role && project.role !== "OWNER" && (
                     <span className="role-chip absolute left-2.5 top-2.5" data-on="thumb">

@@ -5,6 +5,23 @@
  * project, the links to the dashboard, billing and settings, marking the row for the page you are on, and laying all
  * of it out for both the open panel and the closed icon rail (AppSidebar).
  *
+ * A project's row opens with a small tile holding the first letter of its name, in the sidebar's own quiet glass,
+ * gold on the row for the open project. The tile was a square of colour generated from the name (the dashboard's
+ * cards and the project's header still use it); the owner asked for no colours here, and a column of them beside a
+ * list that is otherwise two tones read as noise.
+ *
+ * Above the groups there are three rows only - search, the dashboard and all projects. A "Projects" section used to
+ * add Owned by me and Shared with me under All projects; both are filters on the All projects page itself, and the
+ * owner asked for the one way in. The dashboard's icon is a house and all projects' a stack of folders, since two
+ * grids side by side could not be told apart.
+ *
+ * The account menu at its foot leads to Settings, to Account - one entry for the profile, Plans & billing and
+ * Security, which are three tabs of one place (components/app/AccountTabs) - and to Usage, opens the panel of
+ * project invitations (InvitationsDialog) with the number waiting beside it, opens the Privacy and Terms page, and
+ * signs out. While an invitation is waiting the avatar itself
+ * carries a small gold dot, so it is seen without opening the menu. The invitations are asked for when the sidebar
+ * mounts, as the projects are.
+ *
  * Its rows follow the owner's BitBin sidebar: Inter at 13.5px, under the landing page's small mono capitals for
  * section labels (BitBin's "// projects" code-comment labels were tried and turned down), with BitBin's two gliding
  * highlights - one that follows the pointer from row to row (use-glide-highlight) and one under the row for the page
@@ -42,24 +59,24 @@ import {
   ChevronDown,
   ChevronsUpDown,
   BarChart3,
-  CreditCard,
   Download,
   GitFork,
-  LayoutDashboard,
-  LayoutGrid,
+  Folders,
+  House,
+  FileText,
   LogOut,
+  Mail,
   MoreHorizontal,
   Pencil,
   Pin,
   PinOff,
   Plus,
   Search,
-  ShieldCheck,
+  Settings as SettingsIcon,
   Star,
   StarOff,
   Trash2,
-  User,
-  Users,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -72,6 +89,9 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { OverflowSlideText } from "@/components/OverflowSlideText";
 import { ProjectCommandPalette } from "@/components/ProjectCommandPalette";
+import { InvitationsDialog } from "@/components/InvitationsDialog";
+import { isAccountPath } from "@/lib/account-pages";
+import { useInvitations } from "@/hooks/use-invitations";
 import { OPEN_SEARCH_EVENT } from "@/lib/search-event";
 import { useBilling } from "@/hooks/use-billing";
 import { useProjectActions } from "@/hooks/use-project-actions";
@@ -81,7 +101,7 @@ import { groupSidebarSections } from "@/lib/project-filters";
 import type { ProjectSummaryResponse } from "@/lib/types";
 import { useActivePill } from "@/hooks/use-active-pill";
 import { useGlideHighlight } from "@/hooks/use-glide-highlight";
-import { cn, generateGradient } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 const RECENT_LIMIT = 12;
 const SECTION_LIMIT = 2;
@@ -89,6 +109,20 @@ const SEARCH_SHORTCUT = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.te
 const COLLAPSED_SECTIONS_KEY = "sidebar_collapsed_sections";
 
 type ProjectActions = ReturnType<typeof useProjectActions>;
+
+function ProjectLetter({ name, current }: { name: string; current?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-[10px] font-semibold uppercase leading-none ring-1 ring-inset transition-colors duration-300",
+        current ? "bg-primary/15 text-primary ring-primary/40" : "bg-white/[0.05] text-foreground/60 ring-white/10 group-hover/row:text-foreground/90"
+      )}
+    >
+      {name.trim().charAt(0) || "?"}
+    </span>
+  );
+}
 
 interface SidebarPanelProps {
   currentProjectId?: string;
@@ -276,7 +310,7 @@ function RenameField({ project, onDone }: { project: ProjectSummaryResponse; onD
 
   return (
     <div className="flex h-8 items-center gap-3 rounded-lg bg-background px-3 ring-1 ring-inset ring-primary/60">
-      <span aria-hidden="true" className="h-4 w-4 shrink-0 rounded ring-1 ring-inset ring-white/10" style={generateGradient(project.name)} />
+      <ProjectLetter name={project.name} current />
       <input
         ref={inputRef}
         value={draft}
@@ -334,10 +368,7 @@ function ProjectItem({ project, isCurrent, isRenaming, onOpen, onStartRename, on
             isCurrent ? "font-medium text-foreground" : "text-foreground/70 hover:text-foreground"
           )}
         >
-          <span
-            className="h-4 w-4 shrink-0 rounded-[5px] ring-1 ring-inset ring-white/15 transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
-            style={generateGradient(project.name)}
-          />
+          <ProjectLetter name={project.name} current={isCurrent} />
           <OverflowSlideText text={project.name} />
         </button>
       )}
@@ -531,6 +562,8 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
   const navigate = useNavigate();
   const location = useLocation();
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [isInvitesOpen, setIsInvitesOpen] = useState(false);
+  const { invitations } = useInvitations();
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const sections = useCollapsedSections();
   const { data: projects, isLoading, isError } = useQuery({
@@ -618,43 +651,24 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
           trailing={<kbd className="sidebar-kbd px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{SEARCH_SHORTCUT}</kbd>}
         />
         <NavItem
-          icon={LayoutDashboard}
+          icon={House}
           label="Dashboard"
           rail={collapsed}
           active={isAt("/projects")}
           motion="scale(1.14)"
           onClick={() => go("/projects")}
         />
+        <NavItem
+          icon={Folders}
+          label="All projects"
+          rail={collapsed}
+          active={location.pathname === "/projects/all"}
+          motion="translateY(-1.5px) scale(1.08)"
+          onClick={() => go("/projects/all")}
+        />
       </nav>
 
       <div className="flex min-h-0 flex-1 flex-col px-3 pb-2">
-        <div className="shrink-0 space-y-0.5">
-          <SectionLabel>Projects</SectionLabel>
-          <NavItem
-            icon={LayoutGrid}
-            label="All projects"
-            rail={collapsed}
-            active={isAt("/projects/all")}
-            motion="rotate(90deg) scale(1.08)"
-            onClick={() => go("/projects/all")}
-          />
-          <NavItem
-            icon={User}
-            label="Owned by me"
-            rail={collapsed}
-            active={isAt("/projects/all", "owned")}
-            motion="scale(1.08)"
-            onClick={() => go("/projects/all?filter=owned")}
-          />
-          <NavItem
-            icon={Users}
-            label="Shared with me"
-            rail={collapsed}
-            active={isAt("/projects/all", "shared")}
-            motion="scale(1.08)"
-            onClick={() => go("/projects/all?filter=shared")}
-          />
-        </div>
 
         <div ref={setInert(collapsed)} className="sidebar-fade flex min-h-0 flex-1 flex-col">
           {!isLoading && !isError && (
@@ -721,8 +735,17 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
                 style={iconMotion("scale(1.15)")}
                 className="group relative flex h-11 w-full items-center gap-2.5 whitespace-nowrap rounded-lg px-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50 data-[state=open]:bg-primary/10"
               >
-                <span className="avatar-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-primary-foreground">
-                  {initial}
+                <span className="relative shrink-0">
+                  <span className="avatar-ring flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-primary-foreground">
+                    {initial}
+                  </span>
+                  {invitations.length > 0 && (
+                    <span
+                      role="status"
+                      aria-label={`${invitations.length} project ${invitations.length === 1 ? "invite" : "invites"} waiting`}
+                      className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-[hsl(var(--background))]"
+                    />
+                  )}
                 </span>
                 <span className="sidebar-fade min-w-0 flex-1">
                   <span className="block truncate text-[13.5px] font-medium">{userInfo?.name || "Signed in"}</span>
@@ -737,17 +760,30 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
             align={collapsed ? "end" : "start"}
             className={cn("min-w-[220px]", !collapsed && "w-[var(--radix-dropdown-menu-trigger-width)]")}
           >
+            <DropdownMenuItem onClick={() => go("/settings")} data-current={location.pathname === "/settings"}>
+              <SettingsIcon />
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => go("/account")} data-current={isAccountPath(location.pathname)}>
+              <UserRound />
+              Account
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => go("/usage")} data-current={location.pathname === "/usage"}>
               <BarChart3 />
               Usage
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => go("/settings/billing")} data-current={location.pathname === "/settings/billing"}>
-              <CreditCard />
-              Plans &amp; billing
+            <DropdownMenuItem onClick={() => setIsInvitesOpen(true)}>
+              <Mail />
+              Project invites
+              {invitations.length > 0 && (
+                <span aria-label={`${invitations.length} waiting`} className="ml-auto rounded-full bg-primary/20 px-1.5 text-[11px] font-medium leading-5 text-primary">
+                  {invitations.length}
+                </span>
+              )}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => go("/settings/security")} data-current={location.pathname === "/settings/security"}>
-              <ShieldCheck />
-              Security
+            <DropdownMenuItem onClick={() => go("/privacy")}>
+              <FileText />
+              Privacy &amp; terms
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} data-danger="">
@@ -759,6 +795,7 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
       </div>
 
       <ProjectCommandPalette open={isPaletteOpen} onOpenChange={setIsPaletteOpen} projects={projects ?? []} onNavigate={go} />
+      <InvitationsDialog open={isInvitesOpen} onOpenChange={setIsInvitesOpen} />
       {actions.deleteDialog}
       {actions.forkDialog}
     </div>
