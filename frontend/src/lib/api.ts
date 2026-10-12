@@ -25,13 +25,17 @@
  * Requests are relative by default: in development Vite proxies them to the Gateway, so the browser only ever talks
  * to one origin and the SameSite cookie is always sent.
  */
-import { Preview, PreviewLogs, ProjectInvitation, PublishState, PublicApp, PublicFile, PublicFileContent, FileContent, SavedFile, RevisionSummary, RevisionChange, RestoreResult, ActiveGeneration, AuthSecurityEvent, AuthSecurityEventType, SessionResponse, ChatMessage, ClarifyingQuestion, CodeNote, CodeSearchResponse, GlossaryEntry, ProjectTour, CodeSelection, FileNode, Plan, QuotaDetails, Subscription, UsageEventPage, UsageInsights, UsageRange, UsageToday, IdeaAnswer, IdeaInterview, ProjectSummaryResponse, ProjectResponse, ProjectMember, ProjectRole } from "./types";
+import { Preview, PreviewLogs, ProjectInvitation, GitHubStatus, ProjectGitHub, PublishState, PublicApp, PublicFile, PublicFileContent, FileContent, SavedFile, RevisionSummary, RevisionChange, RestoreResult, ActiveGeneration, AuthSecurityEvent, AuthSecurityEventType, SessionResponse, ChatMessage, ClarifyingQuestion, CodeNote, CodeSearchResponse, GlossaryEntry, ProjectTour, CodeSelection, FileNode, Plan, QuotaDetails, Subscription, UsageEventPage, UsageInsights, UsageRange, UsageToday, IdeaAnswer, IdeaInterview, ProjectSummaryResponse, ProjectResponse, ProjectMember, ProjectRole } from "./types";
 import { splitPeople, type ProjectPeople } from "./members";
 import { createSseParser, type SseEvent } from "./sse";
 import { CSRF_HEADER, ensureCsrfToken, needsCsrf, readCsrfToken } from "./csrf";
 import { clearSignedInState, signOutRedirect } from "./session";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+
+/** The address of a project's picture; the time it was taken is part of it, so a newer picture is fetched afresh. */
+export const projectThumbnailUrl = (projectId: number | string, takenAt: string) =>
+  `${BASE_URL}/api/projects/${projectId}/thumbnail?v=${encodeURIComponent(takenAt)}`;
 
 const SERVER_UNREACHABLE = import.meta.env.DEV
   ? "Can't reach the Singularity server. Make sure the backend is running (the Gateway listens on port 8000)."
@@ -379,6 +383,23 @@ export const api = {
     return response.json();
   },
 
+  async createFile(projectId: string, path: string): Promise<SavedFile> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/files`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    await ensureOk(response, "Couldn't add this file");
+    return response.json();
+  },
+
+  async deleteFile(projectId: string, path: string): Promise<void> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/files?path=${encodeURIComponent(path)}`, {
+      method: "DELETE",
+    });
+    await ensureOk(response, "Couldn't delete this file");
+  },
+
   async getRevisions(projectId: string): Promise<RevisionSummary[]> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/revisions`);
     await ensureOk(response, "Couldn't load this project's history");
@@ -560,6 +581,63 @@ export const api = {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/publish/log`);
     await ensureOk(response, "Couldn't load the build output");
     return (await response.json()).log ?? null;
+  },
+
+  async getProjectGitHub(projectId: string): Promise<ProjectGitHub> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/github`);
+    await ensureOk(response, "Couldn't check this project's repository");
+    return response.json();
+  },
+
+  async pushToGitHub(projectId: string, name?: string, privateRepo = true, message?: string): Promise<ProjectGitHub> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/github/push`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name?.trim() || null, privateRepo, message: message || null }),
+    });
+    await ensureOk(response, "Couldn't push to GitHub");
+    return response.json();
+  },
+
+  async forgetGitHubRepository(projectId: string): Promise<void> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/github`, { method: "DELETE" });
+    await ensureOk(response, "Couldn't forget the repository");
+  },
+
+  async startGitHubConnect(): Promise<string> {
+    const response = await apiFetch(`${BASE_URL}/api/github/connect`, { method: "POST" });
+    await ensureOk(response, "Couldn't start connecting GitHub");
+    return (await response.json()).url;
+  },
+
+  async saveProjectThumbnail(projectId: string, picture: Blob): Promise<void> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/thumbnail`, {
+      method: "PUT",
+      headers: { "Content-Type": picture.type || "image/webp" },
+      body: picture,
+    });
+    await ensureOk(response, "Couldn't save the project's picture");
+  },
+
+  async getGitHubStatus(): Promise<GitHubStatus> {
+    const response = await apiFetch(`${BASE_URL}/api/github`);
+    await ensureOk(response, "Couldn't check GitHub");
+    return response.json();
+  },
+
+  async finishGitHubConnect(code: string, state: string): Promise<GitHubStatus> {
+    const response = await apiFetch(`${BASE_URL}/api/github/callback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, state }),
+    });
+    await ensureOk(response, "Couldn't finish connecting GitHub");
+    return response.json();
+  },
+
+  async disconnectGitHub(): Promise<void> {
+    const response = await apiFetch(`${BASE_URL}/api/github`, { method: "DELETE" });
+    await ensureOk(response, "Couldn't disconnect GitHub");
   },
 
   async getPublicApp(slug: string): Promise<PublicApp> {

@@ -9,8 +9,8 @@
  * since the one in progress may be another member's and would otherwise hold the project until it ended - bringing
  * the preview up to date when a response has changed files,
  * the publish, share, fork and delete actions, the History panel and the question asked before going back to a version,
- * Undo on a chat reply, clearing the chat, the first-run guide, and the page shown instead of all of it when the
- * project cannot be opened.
+ * Undo on a chat reply, clearing the chat, and the page shown instead of all of it when the project cannot be
+ * opened.
  *
  * A project that is not this person's to open - deleted, never shared with them, a wrong address - used to leave an
  * empty workspace under an error toast. It is now a page of its own that says what the possibilities are and leads
@@ -22,9 +22,12 @@
  * and a running preview is asked about so its "Updating" shows. After a restore the preview is also reloaded once it
  * has had a moment to catch up, since a restore can swap out a page the browser is still showing.
  *
- * The guide (components/WorkspaceGuide) opens by itself once, the first time a person opens a project they can build
- * in, and afterwards only from the header's help button.
+ * There is no first-run guide and no help button: a card that pointed at the chat, the preview, the code and History
+ * was built and then removed at the owner's word, with the header's "Export as markdown" (the chat's own copy and
+ * export remain in the chat).
  *
+ * GitHub is a round button with GitHub's mark and a panel of its own (components/GitHubMenu); it draws nothing when
+ * the deployment has no GitHub app registered.
  * Publish is the header's chip with its own panel (components/PublishMenu), shown to every member - the owner
  * changes it, the others see where it stands.
  *
@@ -59,7 +62,7 @@
 import { useState, useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleHelp, CodeXml, Download, Eraser, Eye, FileDown, GitFork, GraduationCap, History, Pin, Star, Trash2, type LucideIcon } from "lucide-react";
+import { CodeXml, Download, Eraser, Eye, GitFork, GraduationCap, History, Pin, Star, Trash2, type LucideIcon } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { ForkProjectDialog } from "@/components/ForkProjectDialog";
 import { canForkProject } from "@/lib/project-fork";
@@ -90,12 +93,10 @@ import { useTeachingMode } from "@/hooks/use-teaching-mode";
 import { api, getUserInfo, isAuthenticated, loginRedirectPath } from "@/lib/api";
 import { projectChat, useProjectChat, type ChatMessage } from "@/lib/project-chat-store";
 import { projectLoadFailure, type ProjectLoadFailure } from "@/lib/project-access";
-import { hasSeenGuide, markGuideSeen } from "@/lib/guide";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { LearnPanel } from "@/components/LearnPanel";
 import { learnPanel } from "@/lib/learn-panel-store";
 import { RestoreDialog, type RestoreTarget } from "@/components/RestoreDialog";
-import { WorkspaceGuide } from "@/components/WorkspaceGuide";
 import { Button } from "@/components/ui/button";
 import { codeLens, useCodeLens, type BuildStepQuestion } from "@/lib/code-lens-store";
 import type { LessonQuestion } from "@/lib/lesson";
@@ -105,8 +106,9 @@ import { generateGradient, cn } from "@/lib/utils";
 import { ProjectResponse, type ProjectSummaryResponse } from "@/lib/types";
 import type { CodeTarget } from "@/lib/lesson";
 import { ShareDialog } from "@/components/ShareDialog";
+import { GitHubMenu } from "@/components/GitHubMenu";
+import { gitHubQueryKey } from "@/hooks/use-github";
 import { PublishMenu } from "@/components/PublishMenu";
-import { buildChatMarkdown, downloadMarkdown, exportFilename } from "@/lib/chat-export";
 import { deleteCopy } from "@/lib/project-delete";
 import { ToastAction } from "@/components/ui/toast";
 import { useBilling } from "@/hooks/use-billing";
@@ -125,11 +127,10 @@ const CHAT_PANEL_PERCENT = { sidebarCollapsed: 45, sidebarPinned: 44 };
 const PREVIEW_SYNC_GRACE_MS = 2500;
 const CHAT_PANEL_PERCENT_WITH_NOTES = 28;
 
-function HeaderIconButton({ label, onClick, disabled, destructive, star, guide, motion = "scale(1.14)", children }: {
+function HeaderIconButton({ label, onClick, disabled, destructive, star, motion = "scale(1.14)", children }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  guide?: string;
   destructive?: boolean;
   star?: boolean;
   motion?: string;
@@ -141,7 +142,6 @@ function HeaderIconButton({ label, onClick, disabled, destructive, star, guide, 
         <button
           type="button"
           aria-label={label}
-          data-guide={guide}
           onClick={onClick}
           disabled={disabled}
           style={{ "--icon-hover": motion } as CSSProperties}
@@ -277,7 +277,6 @@ function ProjectWorkspace() {
   const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null);
   const [filesVersion, setFilesVersion] = useState(0);
   const [isClearChatOpen, setIsClearChatOpen] = useState(false);
-  const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   const initialPromptRef = useRef<string | null>(
     (location.state as { initialPrompt?: string } | null)?.initialPrompt ?? null
@@ -338,16 +337,6 @@ function ProjectWorkspace() {
     if (!chat.historyError) return;
     toast({ title: "Couldn't load the chat", description: chat.historyError, variant: "destructive" });
   }, [chat.historyError, toast]);
-
-  const canBuildHere = role === "OWNER" || role === "EDITOR";
-  useEffect(() => {
-    if (!canBuildHere || !chat.isHistoryLoaded) return;
-    const userId = getUserInfo()?.id;
-    if (hasSeenGuide(userId)) return;
-    markGuideSeen(userId);
-    setIsGuideOpen(true);
-  }, [canBuildHere, chat.isHistoryLoaded]);
-  const closeGuide = useCallback(() => setIsGuideOpen(false), []);
 
   useEffect(() => {
     if (!chat.notice || !projectId) return;
@@ -466,6 +455,7 @@ function ProjectWorkspace() {
     wasStreamingForPreviewRef.current = chat.isStreaming;
     if (!finished) return;
 
+    if (projectId) void queryClient.invalidateQueries({ queryKey: gitHubQueryKey(projectId) });
     const followUp = previewFollowUp(
       { outcome: lastTurnOutcome, files: chat.lastTurnFiles },
       { isRunning: currentPreview?.status === "RUNNING", hadError: previewHadErrorRef.current }
@@ -481,12 +471,13 @@ function ProjectWorkspace() {
       setRuntimeError(null);
       setPreviewReloadSignal((signal) => signal + 1);
     }, PREVIEW_SYNC_GRACE_MS);
-  }, [chat.isStreaming, chat.lastTurnFiles, lastTurnOutcome, currentPreview?.status, refreshPreview]);
+  }, [chat.isStreaming, chat.lastTurnFiles, lastTurnOutcome, currentPreview?.status, refreshPreview, projectId, queryClient]);
 
   const handleFilesChanged = useCallback((paths?: readonly string[]) => {
     if (!projectId) return;
     projectChat.filesChangedOutside(projectId, paths);
     queryClient.invalidateQueries({ queryKey: ["revisions", projectId] });
+    queryClient.invalidateQueries({ queryKey: gitHubQueryKey(projectId) });
     if (currentPreview?.status === "RUNNING") {
       refreshPreview().catch(() => {
       });
@@ -587,14 +578,7 @@ function ProjectWorkspace() {
     if (wasStreamingRef.current && !chat.isStreaming) void refreshBilling();
     wasStreamingRef.current = chat.isStreaming;
   }, [chat.isStreaming, refreshBilling]);
-  const hasChatToExport = chat.isHistoryLoaded && chat.messages.length > 0;
-
-  const chatMarkdown = () => buildChatMarkdown(chat.messages, projectName);
-
-  const handleExportChat = () => {
-    downloadMarkdown(exportFilename(projectName, "chat"), chatMarkdown());
-  };
-
+  const hasChat = chat.isHistoryLoaded && chat.messages.length > 0;
 
   const wasNotesOpenRef = useRef(isNotesOpen);
   useEffect(() => {
@@ -741,11 +725,15 @@ function ProjectWorkspace() {
                   >
                     <Star className={cn(projectSummary?.starredAt && "fill-current")} />
                   </HeaderIconButton>
-                  {canEdit && (
-                    <HeaderIconButton label="Show me around" motion="scale(1.12)" onClick={() => setIsGuideOpen(true)} disabled={!project}>
-                      <CircleHelp />
-                    </HeaderIconButton>
-                  )}
+
+                  <HeaderIconButton
+                    label="Learn your project"
+                    motion="translateY(-2px) scale(1.1)"
+                    onClick={() => projectId && learnPanel.open(projectId)}
+                    disabled={!project}
+                  >
+                    <GraduationCap />
+                  </HeaderIconButton>
                 </div>
               </div>
             ) : (
@@ -766,7 +754,6 @@ function ProjectWorkspace() {
                 key={mode}
                 type="button"
                 role="tab"
-                data-guide={mode}
                 aria-selected={viewMode === mode}
                 onClick={() => setViewMode(mode)}
                 className={cn(
@@ -792,17 +779,7 @@ function ProjectWorkspace() {
             )}
 
             <HeaderIconButton
-              label="Learn your project"
-              motion="translateY(-2px) scale(1.1)"
-              onClick={() => projectId && learnPanel.open(projectId)}
-              disabled={!project}
-            >
-              <GraduationCap />
-            </HeaderIconButton>
-
-            <HeaderIconButton
               label="History"
-              guide="history"
               motion="rotate(-40deg) scale(1.08)"
               onClick={() => setIsHistoryOpen(true)}
               disabled={!project}
@@ -815,7 +792,7 @@ function ProjectWorkspace() {
                 label="Clear chat"
                 motion="rotate(-12deg) scale(1.08)"
                 onClick={() => setIsClearChatOpen(true)}
-                disabled={!hasChatToExport || chat.isStreaming}
+                disabled={!hasChat || chat.isStreaming}
               >
                 <Eraser />
               </HeaderIconButton>
@@ -824,17 +801,6 @@ function ProjectWorkspace() {
             <HeaderIconButton label="Download ZIP" motion="translateY(2px)" onClick={handleDownloadProject} disabled={!project || isDownloading}>
               {isDownloading ? <OrbitSpinner /> : <Download />}
             </HeaderIconButton>
-
-            {!isViewer && (
-              <HeaderIconButton
-                label="Export as markdown"
-                motion="translateY(1.5px) scale(1.08)"
-                onClick={handleExportChat}
-                disabled={!hasChatToExport}
-              >
-                <FileDown />
-              </HeaderIconButton>
-            )}
 
             {canForkProject(role) && (
               <HeaderIconButton label="Fork project" motion="rotate(-14deg) scale(1.1)" onClick={() => setIsForkDialogOpen(true)} disabled={!project}>
@@ -849,6 +815,8 @@ function ProjectWorkspace() {
             )}
 
             <span aria-hidden="true" className="mx-1 h-5 w-px bg-white/[0.1]" />
+
+            <GitHubMenu projectId={projectId} role={role} projectName={projectName} turns={chat.messages} />
 
             <PublishMenu projectId={projectId} role={role} projectName={projectName} />
 
@@ -924,8 +892,6 @@ function ProjectWorkspace() {
           onClose={() => setRestoreTarget(null)}
           onRestored={handleRestored}
         />
-
-        <WorkspaceGuide open={isGuideOpen} onClose={closeGuide} />
 
         <AlertDialog open={isClearChatOpen} onOpenChange={setIsClearChatOpen}>
           <AlertDialogContent className="sm:max-w-md">

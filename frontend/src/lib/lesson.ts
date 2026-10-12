@@ -332,7 +332,9 @@ const MAX_CHECK_ANSWER_CHARS = 1000;
 const oneLine = (text: string, max: number) => text.replace(/\s+/g, " ").trim().slice(0, max);
 
 export const termQuestion = (term: string) =>
-  `What does "${oneLine(term, MAX_TERM_CHARS)}" mean? Explain it in plain words, then show me where it appears in this project.`;
+  `Tell me more about "${oneLine(term, MAX_TERM_CHARS)}". Explain it properly: what it is, what it is for, and how it works, one step at a time. `
+  + "Then show it in this project: read the files, quote the real lines where it is used with the file each is in, and say what each of those lines does. "
+  + "End with one mistake people often make with it.";
 
 export function checkAnswerQuestion(path: string, asked: string, answer: string) {
   return `The lesson on \`${path}\` asked me: "${oneLine(asked, MAX_CHECK_QUESTION_CHARS)}"\n\n`

@@ -3,8 +3,9 @@
  *
  * Handles: the copy with its own tick-then-revert state, tangled up with the row's hover reveal, the timestamp
  * beside them - a time for something today, a date once it is not - and Undo on a reply whose files were saved. Undo
- * is a labelled chip and not a bare icon, since it is the one action here a beginner must be able to find, and the
- * row can be pinned open so the newest reply shows it without the pointer having to find it first.
+ * is the arrow alone, like the buttons beside it, naming itself in a tooltip: it was a labelled chip, so a beginner
+ * could not miss it, until the owner asked for just the arrow. The row can still be pinned open so the newest reply
+ * shows it without the pointer having to find it first.
  *
  * Its buttons are the app's icon buttons (index.css, .icon-btn), each icon with a small motion of its own.
  */
@@ -112,15 +113,20 @@ export function MessageActions({ at, onCopy, onEdit, onUndo, pinned, onDelete, d
         </Tooltip>
       )}
       {onUndo && (
-        <button
-          type="button"
-          onClick={onUndo}
-          style={{ "--icon-hover": "rotate(-30deg)" } as CSSProperties}
-          className="app-chip group ml-1 inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-foreground/85"
-        >
-          <Undo2 className="icon-pop h-3 w-3" />
-          Undo
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Undo this change"
+              onClick={onUndo}
+              style={{ "--icon-hover": "rotate(-30deg)" } as CSSProperties}
+              className="icon-btn h-6 w-6 rounded-md focus-visible:opacity-100"
+            >
+              <Undo2 className="h-3 w-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Undo this change</TooltipContent>
+        </Tooltip>
       )}
       {onDelete && (
         <Tooltip>

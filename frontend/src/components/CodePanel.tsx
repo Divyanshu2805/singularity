@@ -3,7 +3,7 @@
  *
  * Handles: opening files and remembering the open tabs, showing which files the last turn changed, the diff toggle
  * and scrolling to the first change, find-in-files, copying and downloading, docking the code lens beside the
- * editor, and editing a file by hand.
+ * editor, editing a file by hand, and adding and deleting files by hand from the Files window.
  *
  * A file is read-only until someone who may edit the project presses Edit on it. Editing starts from a fresh read of
  * the file, never from the copy a build left in the browser, because a save is checked against the hash of exactly
@@ -12,6 +12,12 @@
  * files), and leaving the page with unsaved changes asks first. A save lands as a revision, so it is in the History
  * and a running preview picks it up by itself. When the files change from outside this panel - a restore - the
  * parent bumps filesVersion and the panel drops what it had read and any tab whose file is gone.
+ *
+ * Someone who may edit can also add a file and delete one here, so neither needs the chat: the Files header's plus
+ * opens a field for the new file's path (folders in it are made by naming them; lib/file-path checks it before it is
+ * sent), and a file's row carries a delete button that asks first. A new file starts empty and opens ready to be
+ * edited. Both land as revisions like a save, so History can undo them, and both are held while a response is being
+ * written. The file being edited cannot be deleted until its changes are saved or discarded.
  *
  * Whether the files column is open is a preference about the editor layout rather than anything to do with one
  * project, so it is remembered per browser.
@@ -27,7 +33,19 @@
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { memo, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
 import { ResizablePanelGroup, ResizablePanel, ResizableGutter } from "@/components/ui/resizable";
-import { Check, ChevronsDownUp, ChevronsUpDown, Copy, Download, GitCompare, MessagesSquare, PanelLeftClose, PanelLeftOpen, Pencil } from "lucide-react";
+import { Check, ChevronsDownUp, ChevronsUpDown, Copy, Download, FilePlus2, GitCompare, MessagesSquare, PanelLeftClose, PanelLeftOpen, Pencil } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { buttonVariants } from "@/components/ui/button";
+import { newFilePathProblem, tidyFilePath, FILE_PATH_MAX } from "@/lib/file-path";
 import { FileTree, type TreeExpansionCommand } from "./FileTree";
 import { CodeEditor } from "./CodeEditor";
 import { FileTabs } from "./FileTabs";
@@ -389,6 +407,64 @@ export const CodePanel = memo(function CodePanel({
   saveEditRef.current = saveEdit;
   const handleSaveShortcut = useCallback(() => void saveEditRef.current(), []);
 
+  const [newFilePath, setNewFilePath] = useState<string | null>(null);
+  const [isCreatingFile, setIsCreatingFile] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const allPaths = useMemo(() => {
+    const paths = new Set(serverPaths);
+    deletedFiles?.forEach((path) => paths.delete(path));
+    completedFiles.forEach((_, path) => paths.add(path));
+    return [...paths];
+  }, [serverPaths, completedFiles, deletedFiles]);
+  const newFileProblem = newFilePath === null ? null : newFilePathProblem(newFilePath, allPaths);
+
+  const createFile = async () => {
+    if (newFilePath === null || isCreatingFile || isStreaming) return;
+    const path = tidyFilePath(newFilePath);
+    if (!path || newFileProblem) return;
+    setIsCreatingFile(true);
+    try {
+      const made = await api.createFile(projectId, path);
+      setNewFilePath(null);
+      setServerPaths((prev) => (prev.includes(path) ? prev : [...prev, path]));
+      setFetchedContents((prev) => new Map(prev).set(path, ""));
+      setOpenTabs((prev) => addTab(prev, path));
+      setActiveTab(path);
+      onFileSaved?.(path);
+      if (!isDirty) setEdit({ path, baseHash: made.hash, saved: "", draft: "" });
+      toast({ title: `Added ${splitPath(path).base}`, description: "It's empty and open for you to write in. It's in History, so you can undo it." });
+    } catch (error) {
+      toast({ title: "Couldn't add this file", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+    } finally {
+      setIsCreatingFile(false);
+    }
+  };
+
+  const askToDelete = useCallback((path: string) => setDeleteTarget(path), []);
+  const deleteBlockedReason = !deleteTarget
+    ? null
+    : isStreaming
+      ? "A response is being written. You can delete this file once it has finished."
+      : edit && isDirty && edit.path === deleteTarget
+        ? "Save or discard your changes to this file first."
+        : null;
+
+  const deleteFile = async () => {
+    const path = deleteTarget;
+    if (!path || deleteBlockedReason) return;
+    setDeleteTarget(null);
+    try {
+      await api.deleteFile(projectId, path);
+      setEdit((current) => (current && current.path === path ? null : current));
+      setServerPaths((prev) => prev.filter((other) => other !== path));
+      handleCloseTab(path);
+      onFileSaved?.(path);
+      toast({ title: `Deleted ${splitPath(path).base}`, description: "It's in History, so you can bring it back." });
+    } catch (error) {
+      toast({ title: "Couldn't delete this file", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+    }
+  };
+
   const handleCopyFile = async () => {
     if (!activeTab) return;
     try {
@@ -426,6 +502,23 @@ export const CodePanel = memo(function CodePanel({
           <div className="ws-bar flex h-11 shrink-0 items-center justify-between pl-3.5 pr-1.5">
             <span className="text-[13.5px] font-medium text-foreground/70">Files</span>
             <div className="flex items-center">
+              {canEdit && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="New file"
+                      disabled={isStreaming}
+                      onClick={() => setNewFilePath((current) => (current === null ? "" : null))}
+                      style={{ "--icon-hover": "rotate(90deg) scale(1.1)" } as CSSProperties}
+                      className={cn("icon-btn h-7 w-7", newFilePath !== null && "text-primary")}
+                    >
+                      <FilePlus2 className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">{isStreaming ? "Wait for the response to finish, then add a file" : "New file"}</TooltipContent>
+                </Tooltip>
+              )}
               {([
                 { mode: "expand", label: "Expand all folders", Icon: ChevronsUpDown, motion: "scaleY(1.25)" },
                 { mode: "collapse", label: "Collapse all folders", Icon: ChevronsDownUp, motion: "scaleY(0.75)" },
@@ -471,6 +564,47 @@ export const CodePanel = memo(function CodePanel({
             activePath={activeTab}
           />
 
+          {newFilePath !== null && (
+            <form
+              className="px-2.5 pb-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void createFile();
+              }}
+            >
+              <div
+                className={cn(
+                  "app-field flex h-8 items-center gap-1.5 rounded-lg pl-2.5 pr-1",
+                  newFileProblem && "border-destructive/60 focus-within:border-destructive/60 focus-within:shadow-[0_0_0_3px_hsl(var(--destructive)/0.15)]"
+                )}
+              >
+                <FilePlus2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <input
+                  autoFocus
+                  value={newFilePath}
+                  onChange={(event) => setNewFilePath(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setNewFilePath(null);
+                  }}
+                  maxLength={FILE_PATH_MAX}
+                  placeholder="src/lib/notes.ts"
+                  aria-label="New file path"
+                  aria-invalid={!!newFileProblem}
+                  spellCheck={false}
+                  className="h-full min-w-0 flex-1 bg-transparent text-[12.5px] caret-primary outline-none placeholder:text-muted-foreground"
+                />
+                <button
+                  type="submit"
+                  disabled={isCreatingFile || !!newFileProblem || tidyFilePath(newFilePath).length === 0}
+                  className="flex h-6 shrink-0 items-center rounded-md px-2 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:text-muted-foreground disabled:hover:bg-transparent"
+                >
+                  {isCreatingFile ? <OrbitSpinner className="h-3 w-3" /> : "Add"}
+                </button>
+              </div>
+              {newFileProblem && <p className="mt-1 px-0.5 text-[11px] leading-snug text-destructive">{newFileProblem}</p>}
+            </form>
+          )}
+
           {searchQuery.trim().length === 0 && (
             <div className="min-h-0 flex-1 overflow-auto [scrollbar-gutter:stable]">
               <FileTree
@@ -480,9 +614,29 @@ export const CodePanel = memo(function CodePanel({
                 isLoading={isLoadingTree && files.length === 0}
                 changedPaths={changedPaths}
                 expansion={treeExpansion}
+                onDeleteFile={canEdit ? askToDelete : undefined}
               />
             </div>
           )}
+
+          <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+            <AlertDialogContent className="sm:max-w-md">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete {deleteTarget ? splitPath(deleteTarget).base : "this file"}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {deleteBlockedReason ?? `${deleteTarget} will be removed from the project. Anything that imports it will stop working until you change it. You can bring it back from History.`}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                {!deleteBlockedReason && (
+                  <AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={() => void deleteFile()}>
+                    Delete file
+                  </AlertDialogAction>
+                )}
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
@@ -521,7 +675,6 @@ export const CodePanel = memo(function CodePanel({
                         <TooltipTrigger asChild>
                           <button
                             type="button"
-                            data-guide="edit-file"
                             aria-label="Edit this file"
                             onClick={() => void startEditing()}
                             disabled={isOpeningEdit || isStreaming || isBeingWritten || (!!edit && isDirty)}

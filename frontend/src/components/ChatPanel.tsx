@@ -464,7 +464,7 @@ export function ChatPanel({
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} data-guide="chat" className="app-glass app-prompt group relative rounded-[20px] p-2.5">
+          <form onSubmit={handleSubmit} className="app-glass app-prompt group relative rounded-[20px] p-2.5">
             <div className="flex items-start gap-1">
               <span
                 aria-hidden="true"

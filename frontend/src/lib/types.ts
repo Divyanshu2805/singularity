@@ -140,6 +140,9 @@ export interface RevisionSummary {
   createdAt: string | null;
   appliedAt: string | null;
   changedPaths: string[];
+  /** Of the changed paths, the ones this revision made new and the ones it removed. Absent from an older server. */
+  addedPaths?: string[];
+  deletedPaths?: string[];
   /** On a revision made by going back: the revision that was chosen, and whether the project went to just before it. */
   restoredRevisionId?: number | null;
   restoredBefore?: boolean | null;
@@ -182,6 +185,8 @@ export interface ProjectSummaryResponse {
   pinnedAt?: string | null;
   starredAt?: string | null;
   publishedUrl?: string | null;
+  /** When the picture of the app was last taken; absent or null while the card should keep its colours. */
+  thumbnailAt?: string | null;
 }
 
 export interface ProjectResponse {
@@ -440,4 +445,21 @@ export interface ActiveGeneration {
   userMessage: string;
   startedAt: string;
   status: "RUNNING" | "SAVING" | "FINISHED";
+}
+
+export interface GitHubStatus {
+  available: boolean;
+  connected: boolean;
+  login: string | null;
+}
+
+export interface ProjectGitHub extends GitHubStatus {
+  linked: boolean;
+  fullName: string | null;
+  url: string | null;
+  privateRepo: boolean | null;
+  lastPushedAt: string | null;
+  hasChanges: boolean;
+  suggestedName: string | null;
+  leftOut: string[];
 }

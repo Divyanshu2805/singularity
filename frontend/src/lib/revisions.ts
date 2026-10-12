@@ -3,13 +3,17 @@
  *
  * Handles: turning the server's list of revisions into the entries the History panel shows - what each one was, who
  * made it, which files it touched, which one the project is on now - naming a revision made by a build after the
- * request that asked for it, saying in one sentence what a restore would do to the files, and deciding which chat
- * turns can be undone.
+ * request that asked for it, naming the newest change alone for a push to GitHub, saying in one sentence what a
+ * restore would do to the files, and deciding which chat turns can be undone.
  *
  * A revision made by going back is named after what it went back to - "Went back to: Add a search box", "Undid: Add
  * a search box" - and the entry the project now matches is marked, because three entries all reading "Went back to an
  * earlier version" told nobody which version they were on. A restore made before the server recorded its target keeps
  * the plain wording.
+ *
+ * A change made by hand says what it did to its file - "Added notes.ts by hand", "Deleted Old.tsx by hand", "Edited
+ * App.tsx by hand" - from the server's own account of which paths the revision made new or removed; all three once
+ * read "Edited".
  *
  * A revision is named from the caller's own conversation, since each person has their own chat: a build somebody
  * else asked for is named by who made it, not by words this person never saw. Only revisions that landed are shown;
@@ -75,6 +79,7 @@ export function requestsByRevision(turns: readonly TurnForHistory[]): Map<number
 }
 
 const STARTING_POINT = "the starting point";
+const UNNAMED_CHANGE = "A change built with AI";
 
 function titleFor(
   revision: RevisionSummary,
@@ -91,12 +96,13 @@ function titleFor(
   }
   const request = requests.get(revision.id);
   if (revision.source === "MANUAL_EDIT") {
-    return revision.changedPaths.length === 1
-      ? `Edited ${fileName(revision.changedPaths[0])} by hand`
-      : "Edited by hand";
+    if (revision.changedPaths.length !== 1) return "Edited by hand";
+    const path = revision.changedPaths[0];
+    const verb = revision.deletedPaths?.includes(path) ? "Deleted" : revision.addedPaths?.includes(path) ? "Added" : "Edited";
+    return `${verb} ${fileName(path)} by hand`;
   }
   const asked = request ? shorten(request) : "";
-  return asked || "A change built with AI";
+  return asked || UNNAMED_CHANGE;
 }
 
 /**
@@ -142,6 +148,17 @@ export function historyEntries(
       matchesCurrent: index !== 0 && now === revision.id,
     };
   });
+}
+
+/**
+ * What the project's newest change was, in the words History gives it, or null when there is no change yet or
+ * nothing better to say than that the AI made one. The GitHub panel sends it with a push as the commit's message.
+ */
+export function newestChangeTitle(revisions: readonly RevisionSummary[], turns: readonly TurnForHistory[]): string | null {
+  const applied = revisions.filter((revision) => revision.status === "APPLIED").sort((a, b) => b.id - a.id);
+  if (applied.length === 0) return null;
+  const title = titleFor(applied[0], requestsByRevision(turns), new Map(applied.map((revision) => [revision.id, revision])));
+  return title === UNNAMED_CHANGE ? null : title;
 }
 
 /** One sentence saying what a restore would do, or that it would do nothing. */

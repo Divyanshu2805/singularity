@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PUBLISH_STEPS,
+  appHasServer,
   buttonLabel,
   canPublish,
   failureAdvice,
@@ -139,6 +140,13 @@ describe("addresses", () => {
     expect(linkLabel("https://my-app-ab12.example.dev/")).toBe("my-app-ab12.example.dev");
     expect(linkLabel("http://a.localhost:8090/")).toBe("a.localhost:8090");
     expect(linkLabel(null)).toBe("");
+  });
+
+  it("knows an app with a server by its entry file, and nothing else under that folder", () => {
+    expect(appHasServer(["package.json", "src/App.tsx", "server/index.ts", "server/db.ts"])).toBe(true);
+    expect(appHasServer(["package.json", "src/server/index.ts", "server/db.ts"])).toBe(false);
+    expect(appHasServer([])).toBe(false);
+    expect(appHasServer(undefined)).toBe(false);
   });
 
   it("builds the share page's address", () => {
