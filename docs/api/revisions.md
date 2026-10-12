@@ -6,7 +6,7 @@ A project's file history and restore. **Service:** workspace-service · **Contro
 
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
-| `GET` | `/revisions` | — | `List<RevisionSummaryResponse { id, parentRevisionId, status, source, createdByUserId, createdAt, appliedAt, changedPaths }>` | Newest first, including `FAILED` and `CONFLICT` revisions. `source` is `AI_GENERATION`, `MANUAL_EDIT` or `RESTORE`; `changedPaths` are the files that revision touched. Project `VIEW`. |
+| `GET` | `/revisions` | — | `List<RevisionSummaryResponse { id, parentRevisionId, status, source, createdByUserId, createdAt, appliedAt, changedPaths, addedPaths, deletedPaths }>` | Newest first, including `FAILED` and `CONFLICT` revisions. `source` is `AI_GENERATION`, `MANUAL_EDIT` or `RESTORE`; `changedPaths` are the files that revision touched. Project `VIEW`. |
 | `GET` | `/revisions/{revisionId}/preview?before=` | — | `RevisionPreviewResponse { revisionId, changes: [{ path, kind: ADDED \| MODIFIED \| DELETED }] }` | What restoring to that revision would change, relative to the current files - or, with `before=true`, what restoring to the project as it stood just before that revision would change. Read-only. Project `VIEW`. |
 | `POST` | `/revisions/{revisionId}/restore?before=` | — | `PublishRevisionResponse { revisionId, status: APPLIED \| FAILED \| CONFLICT, currentRevisionId, failedPaths, previousContent }` | Publishes the difference as a new, forward-only `RESTORE` revision through the same all-or-nothing pipeline as an AI write; history is never rewritten. A lost race is reported as `status: CONFLICT`, not an HTTP error. Project `EDIT`. |
 

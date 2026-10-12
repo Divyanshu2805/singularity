@@ -173,7 +173,7 @@ describe("the glossary", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "State" }));
     fireEvent.click(screen.getByRole("button", { name: /ask explainllm more/i }));
-    expect(onAsk).toHaveBeenCalledWith({ question: expect.stringContaining('What does "State" mean?') });
+    expect(onAsk).toHaveBeenCalledWith({ question: expect.stringContaining('Tell me more about "State"') });
     expect(learnPanel.state().projectId).toBeNull();
   });
 

@@ -21,7 +21,7 @@ Reading the state needs project `VIEW` (any member). Everything that changes it 
 | `live` | Whether an app is being served. |
 | `url` | The link, when live. |
 | `slug` | The link's name; `null` only for a project never published (an unpublished one keeps its name). |
-| `suggestedSlug` | The name the link would get, when there is no `slug` yet. |
+| `suggestedSlug` | The name the link would get, when there is no `slug` yet: the project's own name when that is allowed and free, otherwise the name with four random characters on the end. |
 | `publishedAt` | When the live build was made. |
 | `hasChanges` | The project has moved since the live build was made - the panel offers **Update**. |
 | `shared` | The code is on the public page. |

@@ -17,6 +17,7 @@ Credentials and private hostnames — the tailnet hostname, the tunnel's credent
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | The Firebase Admin service-account key file's contents |
 | `OPENROUTER_API_KEY` | A Gemini API key used only by the deployment, with a spending cap. The name is historical: the deployment calls Google's API directly (below), and whatever this holds is sent to that endpoint |
 | `STRIPE_SECRET`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS` | Stripe keys and price ids |
+| `GH_OAUTH_CLIENT_ID`, `GH_OAUTH_CLIENT_SECRET`, `GH_OAUTH_TOKEN_KEY` | Optional, all three or none. An OAuth app registered on GitHub with the callback `https://<the app's address>/github/callback`, and 32 random bytes in base64 that encrypt every stored GitHub token. With all three the deploy switches connecting GitHub on; with none it is off; with some the deploy stops. They cannot be named `GITHUB_*`, which GitHub reserves. Changing the key disconnects everyone |
 | `CLOUDFLARE_TUNNEL_CREDENTIALS` | The tunnel's credentials JSON |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT` | The backup bucket's token and S3 endpoint (`https://<account id>.r2.cloudflarestorage.com`) |
 | `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` | A Tailscale OAuth client (scope **Auth Keys: Write**, tag `tag:ci`) that lets CI join the tailnet |

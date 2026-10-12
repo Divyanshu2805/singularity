@@ -4,12 +4,13 @@
 
 | Suite | Command | Size | Needs |
 |---|---|---|---|
-| Backend (all modules) | `./mvnw test` | 1,308 tests — common-lib 31, gateway 78, account 55, workspace 584, intelligence 560 | Docker, for one integration test (below) |
-| Frontend | `cd frontend && npm test` | 845 tests in 62 files (Vitest) | — |
-| Preview proxy | `cd proxy && node --test` | 69 tests: the access token, routing, the script injected into a previewed page (run against a stand-in window), and publishing - the host and path rules, the headers, the storage signature (checked against AWS's own worked example) and the whole handler against a stand-in store | — |
-| A real preview on kind | see [below](#the-preview-pipeline-test) | 9 steps on one project (`PreviewPipelineIT`); not part of `./mvnw test` | A kind cluster and Docker |
+| Backend (all modules) | `./mvnw test` | 1,515 tests — common-lib 31, gateway 92, account 55, workspace 705, intelligence 632 | Docker, for one integration test (below) |
+| Frontend | `cd frontend && npm test` | 919 tests in 69 files (Vitest) | — |
+| Preview proxy | `cd proxy && node --test` | 82 tests: the access token, routing, the script injected into a previewed page (run against a stand-in window), the card picture the page draws of itself (`snapshot.js`), and publishing - the host and path rules, the headers, the storage signature (checked against AWS's own worked example) and the whole handler against a stand-in store | — |
+| The starter template's launcher | `node --test scripts/starter-launcher.test.mjs` | 8 tests: `start.mjs`, which runs a built project as one program on a host - the pages, the fallback for an app's own addresses, files outside the build staying out of reach, and `/api` on an app with no server | — |
+| A real preview on kind | see [below](#the-preview-pipeline-test) | 11 steps on one project (`PreviewPipelineIT`); not part of `./mvnw test` | A kind cluster and Docker |
 | A real publish on kind | see [below](#the-publish-pipeline-test) | 6 steps on one project (`PublishPipelineIT`); not part of `./mvnw test` | A kind cluster and Docker |
-| The browser journey | see [below](#the-browser-journey) | One person's whole path in a real browser against every real service, 12 steps (`e2e/tests/journey.spec.ts`) | A kind cluster, Docker and Node |
+| The browser journey | see [below](#the-browser-journey) | Two tests in real browsers against every real service: one person's whole path, 16 steps (`e2e/tests/journey.spec.ts`), and two people sharing a project, 7 steps (`e2e/tests/sharing.spec.ts`) | A kind cluster, Docker and Node |
 
 Run the tests you changed by name while iterating:
 
@@ -22,7 +23,7 @@ Include `common-lib` in the `-pl` list so it is built from source rather than re
 
 ## The build benchmark
 
-Twenty fixed requests - first builds, changes to the apps those builds left, questions, requests for another stack - run as whole build turns against the configured model, in memory, with no sign-in and nothing saved (`BuildBenchmarkIT`, scenarios in `intelligence-service/src/test/resources/bench/scenarios.json`). It spends real tokens, so it is not part of the suite: its name keeps the build from picking it up, and it runs only when asked for.
+Twenty-three fixed requests - first builds, changes to the apps those builds left, questions, requests for another stack, and three that need a server of the project's own - run as whole build turns against the configured model, in memory, with no sign-in and nothing saved (`BuildBenchmarkIT`, scenarios in `intelligence-service/src/test/resources/bench/scenarios.json`). It spends real tokens, so it is not part of the suite: its name keeps the build from picking it up, and it runs only when asked for.
 
 ```bash
 ./mvnw -pl common-lib,intelligence-service test -Dtest=BuildBenchmarkIT -Dsurefire.failIfNoSpecifiedTests=false \
@@ -32,14 +33,16 @@ scripts/bench-verify.sh C:/path/to/out      # do the built projects install, typ
 
 Settings go inside `argLine` (a plain `-D` does not reach the forked test JVM): `-Dbench.only=todo-build,todo-dark-theme`, `-Dspring.ai.openai.chat.options.model=...`, `-Dai.calls.build.reasoning-effort=low`, and `-Dbench.price.input` / `.cached` / `.output` in dollars per million tokens for a cost column. It writes `report.md` (per kind: how many turns were right, time to the first word and the first file, total time, calls and tokens per turn), `results.json`, every reply's raw text with the provider's own usage lines, and each project as its turn left it.
 
-A turn counts as right when it ended the way its kind should and the server had nothing to add - no edit that could not be applied, no file that does not parse, no import that does not resolve. `scripts/bench-verify.sh` then compiles the written projects in a throwaway container, since generated code is never built on the machine itself. Do not compile the module while a run is in flight; copy the repository and run it from the copy.
+A turn counts as right when it ended the way its kind should and the server had nothing to add - no edit that could not be applied, no file that does not parse, no import that does not resolve. `scripts/bench-verify.sh` then compiles the written projects in a throwaway container, since generated code is never built on the machine itself, and starts the server of each project that has one to see that it listens. Do not compile the module while a run is in flight; copy the repository and run it from the copy.
 
 Run it before and after any change to the prompt, the project brief, the turn engine or the model, and add a row to [the results](build-benchmark-results.md). `BuildBenchmarkTest` runs the same path on the scripted model, so the benchmark itself is covered by the suite.
 
 
 ## The browser journey
 
-One person's whole path through the product, in a real browser, against the real services: a visitor who is not signed in is sent to sign in; signing in; an idea and the interview; the first build and its files; the preview coming up and the built app working (a note typed into it is kept); a change asked for in Teach me mode reaching the running preview without a reload; a step's lesson; a marked word opening in the glossary, which keeps it; the project's tour being written once, opening a file and being read back; the lesson's task being set and checked; a reload bringing the conversation back; the usage meter; a second person being refused the project, its files and its chat; stopping the preview; and signing out ending the session on the server.
+One person's whole path through the product, in a real browser, against the real services: a visitor who is not signed in is sent to sign in; signing in; an idea and the interview; the first build and its files; the preview coming up and the built app working (a note typed into it is kept); a change asked for in Teach me mode reaching the running preview without a reload; a step's lesson; a marked word opening in the glossary, which keeps it; the project's tour being written once, opening a file and being read back; the lesson's task being set and checked; a reload bringing the conversation back; the usage meter; the app being published, a visitor with no account opening it at its link, and the link answering `404` once it is unpublished; a second person being refused the project, its files and its chat; stopping the preview; and signing out ending the session on the server.
+
+A second test (`sharing.spec.ts`) is what needs two signed-in people, in two browsers: an invitation giving nothing until it is accepted, and being answered the same for an address nobody has an account under; the invited person accepting it from their dashboard and opening the project; the owner withdrawing an invitation; both of them seeing the one preview, and the page inside it being unable to take the workspace anywhere, by script or by a link aimed at the top window; one of them stopping a response the other started; and the invited person removing the project from their list, which ends their access and nobody else's. The response that is stopped is the scripted model's one slow reply: a request that says "take your time" is held back for a minute, so stopping it is what ends it.
 
 ```bash
 ./mvnw -DskipTests package                                  # once, and again after changing a service
@@ -49,7 +52,7 @@ e2e/stack.sh up --context kind-singularity                  # the whole applicat
 e2e/stack.sh down --context kind-singularity                # add --namespace-too to remove the namespace and database
 ```
 
-`e2e/stack.sh` starts a throwaway Postgres, the Firebase Auth emulator, the five services from their jars, the production build of the frontend, and a preview pipeline in a namespace of its own (`singularity-e2e`) - beside whatever you have running, on different ports, touching none of it. It takes about three minutes the first time and about ninety seconds after, and the test itself about thirty-five.
+`e2e/stack.sh` starts a throwaway Postgres, the Firebase Auth emulator, the five services from their jars, the production build of the frontend, and a preview pipeline in a namespace of its own (`singularity-e2e`) - beside whatever you have running, on different ports, touching none of it. It takes about three minutes the first time and about ninety seconds after, and the two tests about a minute and half a minute.
 
 Three things are stand-ins, and everything else is real:
 
@@ -59,9 +62,9 @@ Three things are stand-ins, and everything else is real:
 | The Firebase Auth emulator | Firebase | Reached through the same SDK calls in the browser and on the server; the session cookie it leads to is minted and checked by the real code. The frontend is pointed at it by `VITE_FIREBASE_AUTH_EMULATOR_URL`, which is honoured only for an address on this machine |
 | Dummy Stripe keys | Stripe | The journey never pays; billing has [its own tests](#backend) |
 
-CI runs it on every push and pull request (job `journey`). It does not gate the deploy yet; add it to `approve`'s needs once it has a few green runs on GitHub.
+CI runs both on every push and pull request (job `journey`), and a push to `main` is not deployed unless they pass.
 
-One [known gap](../known-gaps/constraints-and-trade-offs.md#a-build-saved-while-its-preview-is-starting) is allowed for: when the built app has not appeared in the preview after a minute, the test presses the panel's Reload, records `previewNeededReload` in its timings, and fails only if the app is still missing.
+The scripted model finishes a build in two seconds, so its files arrive while the preview's dev server is still starting. That used to leave the frame on the starter placeholder about one run in ten, and the test pressed Reload when it met it; the start is ordered on the server now ([pitfalls](gotchas/kubernetes.md#a-build-that-lands-while-the-dev-server-is-starting)), and the test fails if the built app does not appear.
 
 Run it after any change that crosses a service boundary or touches sign-in, the chat stream, the preview panel or the lesson panel. A step that fails leaves a trace, a video and every service's log in `e2e/test-results` and `e2e/.run/logs`.
 
@@ -90,7 +93,7 @@ Audits the pages anyone can open without signing in, as a phone and as a desktop
 
 ## The preview pipeline test
 
-A real preview, start to finish, on a real kind cluster: the starter template in a real MinIO, a warm runner pod claimed, a real `npm install` and Vite dev server, a real route in Redis, and the page fetched through the real proxy (`PreviewPipelineIT` in workspace-service). In one run on one project it covers a first start, a link that has run out or was forged, an edit arriving without a restart, code that does not compile, a new package installed by the server itself, a runner pod killed, a start waiting in line for a runner, Stop, and a package that does not exist.
+A real preview, start to finish, on a real kind cluster: the starter template in a real MinIO, a warm runner pod claimed, a real `npm install` and Vite dev server, a real route in Redis, and the page fetched through the real proxy (`PreviewPipelineIT` in workspace-service). In one run on one project it covers a first start, a link that has run out or was forged, an edit arriving without a restart, code that does not compile, a new package installed by the server itself, a server written into the project starting by itself, keeping its data through an edit and starting empty when its tables change, the code check starting a turn's server and reporting one that cannot start, a runner pod killed, a start waiting in line for a runner, Stop, and a package that does not exist.
 
 Like the benchmark it is not part of the suite - its name keeps the build from picking it up - because it needs a cluster. CI runs it on every push and pull request (job `preview-pipeline`); locally:
 
@@ -138,11 +141,13 @@ These are verified by hand. If you change one, verify it against the real thing 
 
 | Area | How to verify |
 |---|---|
-| What the Preview tab does in a browser - the frame being covered and uncovered, the address bar, back and forward, the console, "Up to date" and "Updating", the place in the line - and the cases that need two people or a long wait. The server and proxy side is covered by `PreviewPipelineIT` | Start the backend against a local kind cluster, open a real preview and go down the [preview checklist](../local-development/preview-checklist.md) |
+| What the Preview tab does in a browser - the frame being covered and uncovered, the address bar, back and forward, the console, "Up to date" and "Updating", the place in the line - and the cases that need a long wait. The server and proxy side is covered by `PreviewPipelineIT`, and two people on one preview by the browser journey's sharing test | Start the backend against a local kind cluster, open a real preview and go down the [preview checklist](../local-development/preview-checklist.md) |
 | What the Publish panel and the share page do in a browser - the steps advancing, the link and its copy and open buttons, Update, the failed-build message, sharing, fork, and the "Published" mark on the cards. The server and proxy side is covered by `PublishPipelineIT` | Go down the [publishing checklist](../local-development/publish-checklist.md) |
 | Stripe billing against Stripe itself - the hosted checkout page, the portal, a real webhook delivery. What the app does with a signed event once it arrives is covered by `BillingWebhookFlowTest` | Stripe test mode with card `4242 4242 4242 4242`, including the webhook |
 | What a real model does with the build prompt — whether it follows the output format, how it reads files, what it does after a tool call | Run one real turn against the configured model and read the raw text it wrote, after any change to `PromptUtils`, `ProjectBrief`, `BuildTurn`, `TurnReview`, `FileEdits` or the read tool - and one real lesson after a change to `CodeInsightPrompts.lessonSystemPrompt` or `lessonBlock` - and one real tour, glossary entry, task and task check (with the file edited and saved between two checks) after a change to the prompts of the same names, which `e2e/stack.sh up --real-ai` and a scratch browser script can drive without a sign-in of your own. Four such turns found what several hundred green tests had not ([pitfalls](gotchas/ai-generation.md)) |
-| The code check in a preview pod - what a real compiler in a real pod says, how long it takes, that the preview's own files are untouched | With a preview running, send a turn that writes a type error and one that adds a package that does not exist, and read workspace-service's log for the `Type-checked ... problem(s)` line; `CodeCheckServiceImplTest` drives a scripted pod only |
+| A generated app's own server, used the way a person uses it - two members adding to the same list from their own tabs, the page's error state when the server is down | With a preview running, go down the [preview checklist](../local-development/preview-checklist.md)'s server rows; `PreviewPipelineIT` proves the server starts, answers through the proxy and keeps its data through an edit, and nothing more |
+| Connecting GitHub, pushing to a real repository, and hosting a pushed project - what the real GitHub and a real host accept | Register an OAuth app and go down the [GitHub checklist](../local-development/github-checklist.md). The suite talks to a stand-in for GitHub (`GitHubClientTest`, `GitHubPushFlowTest`), and `scripts/bench-verify.sh` starts a built project as one program in a container |
+| The code check in a preview pod - what a real compiler in a real pod says about a type error, how long it takes | With a preview running, send a turn that writes a type error and one that adds a package that does not exist, and read workspace-service's log for the `Type-checked ... problem(s)` line. `PreviewPipelineIT` runs the real check in a real pod for a server that cannot start, one that can, and one on the preview's own port, and that the preview's files and data are untouched; `CodeCheckServiceImplTest` drives a scripted pod |
 | The **Fix this** button and the suggested next steps in the chat | In a running app: break a file so the preview throws, press the button, and check the fix turn is an edit; finish a build and press a suggestion |
 | Service start-up and bean wiring | `./mvnw -pl <module> spring-boot:run` — a wiring cycle or missing bean shows up only when a real context starts |
 | Backup and restore (`deploy/k8s/base/backup.yaml`, `deploy/scripts/restore-*`) | Rerun the restore drill on a dedicated kind cluster: seed, fingerprint, back up, damage, restore, compare ([backups](../operations/backups.md)) |

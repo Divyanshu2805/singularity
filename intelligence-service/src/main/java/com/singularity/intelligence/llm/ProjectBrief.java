@@ -22,9 +22,14 @@ import java.util.stream.Collectors;
  * <p>Handles: listing the file tree one path per line; choosing which files to hand over whole - every source and
  * configuration file when the project is small enough, otherwise only its entry points; fetching those within a size
  * budget; saying plainly which files are shown and what to do about the rest; and passing on an unfinished
- * starter-template problem. A source file is code, styles, markup or configuration at the project's root or under
- * {@code src/}; images, other assets, the lock file and the UI kit's own components are listed in the tree and never
- * shown.
+ * starter-template problem. A source file is code, styles, markup or configuration at the project's root, under
+ * {@code src/} or under {@code server/}; images, other assets, the lock file, the UI kit's own components and the
+ * launcher that runs the app on a host ({@code start.mjs}) are listed in the tree and never shown.
+ *
+ * <p>A project's server files are shown like its pages. They were left out at first, simply because the rule for what
+ * counts as source said {@code src/}; a real second turn on a game then had none of its own server in front of it and
+ * wrote both server files out again whole instead of editing them. The launcher is the opposite case: the model has
+ * no business in it, and the one sentence that says so costs less than showing it on every call.
  *
  * <p>It exists because a model left to discover a project through its read tool explores it one file at a time. Each
  * read is a round of the tool loop, and each round resends the whole conversation: a reply that read nine files in
@@ -110,8 +115,9 @@ public record ProjectBrief(String text, Set<String> shownPaths, boolean showsEve
             Pattern.compile("src/index\\.css"),
             Pattern.compile("src/App\\.css"));
     private static final Pattern SOURCE = Pattern.compile(
-            "src/.+\\.(tsx|ts|jsx|js|css|json)|[^/]+\\.(tsx|ts|jsx|js|mjs|cjs|css|json|html|md)");
-    private static final Set<String> NEVER_SHOWN = Set.of("package-lock.json");
+            "(src|server)/.+\\.(tsx|ts|jsx|js|css|json)|[^/]+\\.(tsx|ts|jsx|js|mjs|cjs|css|json|html|md)");
+    static final String LAUNCHER = "start.mjs";
+    private static final Set<String> NEVER_SHOWN = Set.of("package-lock.json", LAUNCHER);
     private static final String STARTER_PAGE = "src/pages/Index.tsx";
     private static final String STARTER_PAGE_MARK = "Placeholder home page";
     private static final Set<String> COMMON_WORDS = Set.of("that", "this", "with", "from", "have", "make", "show",
@@ -155,6 +161,10 @@ public record ProjectBrief(String text, Set<String> shownPaths, boolean showsEve
         if (files.stream().anyMatch(entry -> entry.path().startsWith(UiKit.KIT_FOLDER))) {
             text.append("\n\nThe files under ").append(UiKit.KIT_FOLDER).append(" are the UI kit described in the ")
                     .append("prompt. They are not shown and are never read or changed: import from them.");
+        }
+        if (files.stream().anyMatch(entry -> entry.path().equals(LAUNCHER))) {
+            text.append("\n\n").append(LAUNCHER).append(" runs the built app on a host. It is not shown and is never ")
+                    .append("read or changed.");
         }
         if (shown.isEmpty()) {
             text.append("\n\nNo file contents are shown here. Read the files you need with read_files - every one of ")

@@ -44,6 +44,7 @@ A path no route owns is a 404 from the Gateway. `RoutingTableTest` pins every do
 | Revision history and restore | workspace | [Revisions](revisions.md) |
 | Live previews | workspace | [Previews](previews.md) |
 | Publishing, and the public page of a shared app | workspace | [Publishing](publishing.md) |
+| Connecting GitHub and pushing a project to a repository | workspace | [GitHub](github.md) |
 | AI chat and code generation | intelligence | [Chat](chat.md) |
 | Idea clarifier | intelligence | [Ideas](ideas.md) |
 | Code explanations, questions and notes | intelligence | [Code insight](code-insight.md) |

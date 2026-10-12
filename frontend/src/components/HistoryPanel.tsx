@@ -15,6 +15,7 @@ import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api, getUserInfo } from "@/lib/api";
 import { historyEntries, timeAgo, type TurnForHistory } from "@/lib/revisions";
+import { cn } from "@/lib/utils";
 import type { RevisionSource } from "@/lib/types";
 import type { RestoreTarget } from "./RestoreDialog";
 
@@ -52,21 +53,25 @@ export function HistoryPanel({ projectId, open, onOpenChange, turns, canRestore,
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="flex max-h-[80vh] flex-col sm:max-w-lg">
-        <DialogHeader>
-          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-primary">
+      <DialogContent
+        aria-describedby={undefined}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        className="flex h-[min(34rem,calc(100dvh-2rem))] w-[calc(100vw-1.5rem)] flex-col gap-3.5 rounded-[22px] p-5 sm:max-w-lg sm:p-6"
+      >
+        <DialogHeader className="shrink-0 flex-row items-center gap-3 space-y-0 text-left sm:pr-9">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-primary">
             <History className="h-4 w-4" />
           </div>
           <DialogTitle>History</DialogTitle>
         </DialogHeader>
 
         {restoreBlockedReason && (
-          <p className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-muted-foreground">
+          <p className="app-field shrink-0 rounded-2xl px-3 py-2 text-xs text-muted-foreground">
             {restoreBlockedReason}
           </p>
         )}
 
-        <div className="-mx-2 min-h-[8rem] flex-1 overflow-y-auto px-2 [scrollbar-gutter:stable]">
+        <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-gutter:stable]">
           {revisions.isLoading ? (
             <p className="flex h-32 items-center justify-center gap-2 text-sm text-muted-foreground">
               <OrbitSpinner className="h-4 w-4" />
@@ -87,9 +92,17 @@ export function HistoryPanel({ projectId, open, onOpenChange, turns, canRestore,
                 return (
                   <li
                     key={entry.id}
-                    className="flex items-start gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5"
+                    className={cn(
+                      "app-field flex items-start gap-3 rounded-2xl px-3 py-2.5",
+                      entry.isCurrent && "border-primary/30 bg-primary/[0.05]"
+                    )}
                   >
-                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-muted-foreground">
+                    <span
+                      className={cn(
+                        "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06]",
+                        entry.isCurrent ? "text-primary" : "text-muted-foreground"
+                      )}
+                    >
                       <Icon className="h-3.5 w-3.5" />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -102,11 +115,12 @@ export function HistoryPanel({ projectId, open, onOpenChange, turns, canRestore,
                       </p>
                     </div>
                     {entry.isCurrent ? (
-                      <span className="mt-0.5 shrink-0 rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                      <span className="mt-0.5 inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-3 text-xs font-medium text-primary">
+                        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-primary" />
                         You are here
                       </span>
                     ) : entry.matchesCurrent ? (
-                      <span className="mt-0.5 shrink-0 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      <span className="mt-0.5 inline-flex h-7 shrink-0 items-center rounded-full bg-white/[0.05] px-3 text-xs font-medium text-muted-foreground">
                         Same as now
                       </span>
                     ) : canRestore ? (
@@ -114,7 +128,7 @@ export function HistoryPanel({ projectId, open, onOpenChange, turns, canRestore,
                         type="button"
                         disabled={!!restoreBlockedReason}
                         onClick={() => onRestore({ revisionId: entry.id, before: false, title: entry.title })}
-                        className="app-chip mt-0.5 inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-foreground/85 disabled:opacity-50"
+                        className="app-chip group mt-0.5 inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs text-foreground/90 disabled:pointer-events-none disabled:opacity-50"
                       >
                         <RotateCcw className="h-3 w-3" />
                         Go back

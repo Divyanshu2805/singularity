@@ -101,8 +101,8 @@ Open <http://localhost:5173>. The full guide, including live previews and troubl
 ## Testing
 
 ```bash
-./mvnw verify                # backend: 1,308 tests across all modules, and each module's coverage floor
-cd frontend && npm test      # frontend: 845 tests
+./mvnw verify                # backend: 1,515 tests across all modules, and each module's coverage floor
+cd frontend && npm test      # frontend: 919 tests
 cd proxy && node --test      # preview proxy
 (cd e2e && npm test)         # one person's whole path in a real browser, against the stack e2e/stack.sh starts
 ```

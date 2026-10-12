@@ -38,6 +38,8 @@ const AuthPage = lazy(() => import("./pages/AuthPage"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const AuthAction = lazy(() => import("./pages/AuthAction"));
 const SecuritySettings = lazy(() => import("./pages/SecuritySettings"));
+const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
+const Account = lazy(() => import("./pages/Account").then((m) => ({ default: m.Account })));
 const ProjectView = lazy(() => import("./pages/ProjectView").then((m) => ({ default: m.ProjectView })));
 const ProjectsDashboard = lazy(() => import("./pages/ProjectsDashboard").then((m) => ({ default: m.ProjectsDashboard })));
 const AllProjects = lazy(() => import("./pages/AllProjects").then((m) => ({ default: m.AllProjects })));
@@ -45,9 +47,9 @@ const Pricing = lazy(() => import("./pages/Pricing").then((m) => ({ default: m.P
 const BillingSettings = lazy(() => import("./pages/BillingSettings").then((m) => ({ default: m.BillingSettings })));
 const UsageInsights = lazy(() => import("./pages/UsageInsights").then((m) => ({ default: m.UsageInsights })));
 const SharedApp = lazy(() => import("./pages/SharedApp").then((m) => ({ default: m.SharedApp })));
+const GitHubCallback = lazy(() => import("./pages/GitHubCallback").then((m) => ({ default: m.GitHubCallback })));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const Privacy = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Privacy })));
-const Terms = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Terms })));
+const Legal = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Legal })));
 const Genesis = import.meta.env.DEV ? lazy(() => import("./pages/Genesis")) : null;
 
 const queryClient = new QueryClient();
@@ -72,12 +74,15 @@ const App = () => (
               <Route path="/projects/all" element={<AllProjects />} />
               <Route path="/projects/:projectId" element={<ProjectView />} />
               <Route path="/pricing" element={<Pricing />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/account" element={<Account />} />
               <Route path="/settings/billing" element={<BillingSettings />} />
               <Route path="/usage" element={<UsageInsights />} />
               <Route path="/settings/security" element={<SecuritySettings />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Legal />} />
+              <Route path="/terms" element={<Legal />} />
               <Route path="/p/:slug" element={<SharedApp />} />
+              <Route path="/github/callback" element={<GitHubCallback />} />
               {Genesis && <Route path="/genesis" element={<Genesis />} />}
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -12,6 +12,8 @@ Short records of the decisions that shape Singularity, each with the context tha
 | [0006](0006-flyway-owned-schemas.md) | Let Flyway own every schema, with no enum `CHECK` constraints | Accepted |
 | [0007](0007-single-node-k3s-deployment.md) | Deploy to a single k3s node behind a tunnel, with portable manifests | Accepted |
 | [0008](0008-published-apps.md) | Publish an app as a production build of one revision, served from storage | Accepted |
+| [0009](0009-a-server-in-the-preview.md) | Let a project hold a small server, run beside the dev server in its preview | Accepted |
+| [0010](0010-push-a-project-to-github.md) | Let a project leave: a README in every download, and a push to its owner's GitHub | Accepted |
 
 ## Writing a new record
 

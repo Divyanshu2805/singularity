@@ -10,6 +10,7 @@ import com.singularity.workspace.dto.revision.RevisionSummaryResponse;
 import com.singularity.workspace.entity.ProjectFile;
 import com.singularity.workspace.entity.ProjectFileRevision;
 import com.singularity.workspace.entity.ProjectFileRevisionEntry;
+import com.singularity.workspace.enums.RevisionChangeType;
 import com.singularity.workspace.enums.RevisionSource;
 import com.singularity.workspace.enums.RevisionStatus;
 import com.singularity.workspace.repository.ProjectFileRepository;
@@ -77,15 +78,15 @@ public class RevisionServiceImpl implements RevisionService {
     @Override
     public List<RevisionSummaryResponse> listRevisions(Long projectId) {
         List<ProjectFileRevision> revisions = revisionRepository.findByProjectIdOrderByIdDesc(projectId);
-        Map<Long, List<String>> pathsByRevision = new HashMap<>();
+        Map<Long, List<ProjectFileRevisionEntry>> entriesByRevision = new HashMap<>();
         if (!revisions.isEmpty()) {
             for (ProjectFileRevisionEntry entry : entryRepository.findByRevisionIdIn(
                     revisions.stream().map(ProjectFileRevision::getId).toList())) {
-                pathsByRevision.computeIfAbsent(entry.getRevisionId(), id -> new ArrayList<>()).add(entry.getPath());
+                entriesByRevision.computeIfAbsent(entry.getRevisionId(), id -> new ArrayList<>()).add(entry);
             }
         }
         return revisions.stream()
-                .map(revision -> toSummary(revision, pathsByRevision.getOrDefault(revision.getId(), List.of())))
+                .map(revision -> toSummary(revision, entriesByRevision.getOrDefault(revision.getId(), List.of())))
                 .toList();
     }
 
@@ -174,9 +175,16 @@ public class RevisionServiceImpl implements RevisionService {
         return changes;
     }
 
-    private RevisionSummaryResponse toSummary(ProjectFileRevision revision, List<String> changedPaths) {
+    private RevisionSummaryResponse toSummary(ProjectFileRevision revision, List<ProjectFileRevisionEntry> entries) {
+        List<String> deleted = entries.stream()
+                .filter(entry -> entry.getChangeType() == RevisionChangeType.DELETE)
+                .map(ProjectFileRevisionEntry::getPath).sorted().toList();
+        List<String> added = entries.stream()
+                .filter(entry -> entry.getChangeType() != RevisionChangeType.DELETE && entry.getPreviousContentHash() == null)
+                .map(ProjectFileRevisionEntry::getPath).sorted().toList();
         return new RevisionSummaryResponse(revision.getId(), revision.getParentRevisionId(), revision.getStatus(),
                 revision.getSource(), revision.getCreatedByUserId(), revision.getCreatedAt(), revision.getAppliedAt(),
-                changedPaths.stream().sorted().toList(), revision.getRestoredRevisionId(), revision.getRestoredBefore());
+                entries.stream().map(ProjectFileRevisionEntry::getPath).sorted().toList(), added, deleted,
+                revision.getRestoredRevisionId(), revision.getRestoredBefore());
     }
 }

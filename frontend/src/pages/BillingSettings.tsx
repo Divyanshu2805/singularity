@@ -16,6 +16,7 @@
 import { Nebula } from "@/components/app/Nebula";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { PageHeading } from "@/components/app/PageHeading";
+import { AccountTabs } from "@/components/app/AccountTabs";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowUpRight, CreditCard } from "lucide-react";
@@ -151,7 +152,7 @@ export function BillingSettings() {
                 <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
                     <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-4 sm:px-6">
                         <div className="mb-6">
-                            <PageHeading eyebrow="Account" title="Plans &" accent="billing">
+                            <PageHeading eyebrow="Account" title="Plans &" accent="billing" actions={<AccountTabs />}>
                                 What you're on, what you've used, and how to change it.
                             </PageHeading>
                             <PaymentsTestModeNotice className="mt-4" />

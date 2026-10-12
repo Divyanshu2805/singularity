@@ -6,7 +6,8 @@
  * where it is and whether there is anywhere to go back or forward to, reporting uncaught errors, unhandled
  * rejections and the dev server's compile-error overlay - and that the overlay has gone again, relaying what the app
  * writes to its console, noticing a page that loaded and drew nothing, and carrying out the tab's back, forward,
- * reload and go-to-address requests; and building the status pages, which say what they are to the tab too.
+ * reload and go-to-address requests - and its request for a small picture of the page, which the page draws of
+ * itself (snapshot.js) and posts back; and building the status pages, which say what they are to the tab too.
  *
  * Pulled out of index.js so it can be tested without a server: reporter.test.js runs the script against a stand-in
  * window. The script is written for whatever browser opens the preview, with no build step, so it stays ES5.
@@ -15,7 +16,9 @@
  * Outbound ones go to the parent whatever its origin - the script cannot know which app is showing it - and carry
  * nothing the page could not already read about itself. Inbound ones are taken only from the parent window and can
  * only do what a person at the page's own address bar could: go back, go forward, reload, or open a path on this
- * same origin. A path that resolves to any other origin is ignored.
+ * same origin. A path that resolves to any other origin is ignored. A picture is taken only when the parent asks,
+ * is of what the page is already showing that parent, and is not taken at all while the compile-error overlay is up
+ * or the page is blank - the answer then says so, as it does when the browser cannot draw one.
  *
  * Back and forward use the page's own history. A sandboxed frame without leave to navigate its parent has a
  * traversal that would move the parent refused by the browser, and the tab only offers the buttons when the frame
@@ -35,8 +38,11 @@
  * canvas, control or frame - and the compile-error overlay is not up. It is re-checked as the page changes, so an
  * app that renders late takes the notice back.
  */
+const { takeSnapshot } = require('./snapshot');
+
 const REPORTER_SOURCE = `(function () {
   if (window.parent === window) return;
+  ${takeSnapshot.toString()}
   var parentWindow = window.parent;
   var sent = {};
   function post(type, subType, payload) {
@@ -138,6 +144,12 @@ const REPORTER_SOURCE = `(function () {
       try { target = new URL(e.data.path, window.location.origin); } catch (err) { return; }
       if (target.origin !== window.location.origin) return;
       window.location.assign(target.pathname + target.search + target.hash);
+    }
+    else if (command === 'snapshot') {
+      if (overlayUp || isBlank()) { post('PreviewSnapshot', null, { failed: 'nothing to show' }); return; }
+      takeSnapshot(window, function (dataUrl, reason) {
+        post('PreviewSnapshot', null, dataUrl ? { dataUrl: dataUrl } : { failed: reason || 'could not' });
+      });
     }
   });
 

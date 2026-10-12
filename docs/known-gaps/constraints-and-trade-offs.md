@@ -27,17 +27,15 @@ In production the app is `singularity.divyanshuagrahari.dev` and previews are `*
 
 Published apps are served from `<name>.divyanshuagrahari.dev`, one label under the same registered domain as the app and the previews, for the same reason (the free wildcard certificate covers a single level). The [security model](../architecture/security-model.md#published-apps-and-the-shared-domain) goes through what that allows - a page can set cookies for the whole site, which can make the app unusable in that browser, and can imitate the product - and decides: acceptable while the audience is the owner's own, a domain of their own before it is not, and a configuration change when the time comes.
 
-## A build saved while its preview is starting
-
-A build request starts the project's preview, and the build's files are copied into the runner when the build is saved. If that copy lands in the first second or two after the dev server comes up, the page in the Preview tab can come up blank or on the starter template's placeholder, and stays that way until Reload is pressed. A real build takes long enough that this is rare; the browser journey test, whose scripted model builds in two seconds, sees it about one run in ten and presses Reload when it does.
-
-The panel reloads the frame by itself in one of the two forms this takes. The whole fix is on the server: do not copy a revision into a runner whose dev server has not finished starting, or start the dev server only after the newest revision is in place. It touches `PreviewBootstrapper` and `PreviewSynchronizer`, so it needs `PreviewPipelineIT` and the preview checklist, and was left out of the work that found it. See [pitfalls](../practices/gotchas/kubernetes.md#a-build-that-lands-while-the-dev-server-is-starting).
-
 ## Previews are single-stack
 
-Live previews support React + Vite projects. The pod pool, bootstrapper and routing are almost entirely stack-agnostic; only the runner image, the start-up script, the readiness probe (`/@vite/client`) and the port are specific to Vite. Supporting another stack is a change to those four pieces, not to the pipeline.
+Live previews support React + Vite projects, with an optional Node server of the project's own beside the dev server ([ADR 0009](../architecture/decisions/0009-a-server-in-the-preview.md)). The pod pool, bootstrapper and routing are almost entirely stack-agnostic; only the runner image, the start-up script, the readiness probe (`/@vite/client`) and the port are specific to Vite. Supporting another stack is a change to those four pieces, not to the pipeline.
 
-Until then every project is React + TypeScript on Vite, created from one starter template, and the build prompt says so: asked for another framework or language, the model writes nothing and asks whether to build the same thing in React; asked for something that needs a server, it builds the front end with its data in the browser and says what is simulated. See [the stack, and requests outside it](../architecture/flows/ai-generation.md#the-stack-and-requests-outside-it).
+Until then every project is React + TypeScript on Vite, created from one starter template, and the build prompt says so: asked for another framework or language, the model writes nothing and asks whether to build the same thing in React; asked for shared data or a backend, it builds the project's Express and SQLite server; asked for sign-in, payments or email, it simulates that part and says so. See [the stack, and requests outside it](../architecture/flows/ai-generation.md#the-stack-and-requests-outside-it).
+
+## A project's server and its data live in the preview's runner
+
+The server a project may hold runs in its preview pod and keeps its SQLite file there, outside the folder the project's files are copied into. The data survives edits and a reinstall and is gone when the runner is: Stop, the idle timeout, a pod that dies. It is also cleared whenever `server/db.ts` changes, which is how a table gets a new column without a migration. Nothing backs it up, and a published app has no server at all. Making it durable means storage that outlives a pod, and running it behind a published link means a process per published app on a machine with two cores and a boundary strong enough for code anyone on the internet can reach.
 
 ## The daily allowance is enforced on an estimate, by one instance
 

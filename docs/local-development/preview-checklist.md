@@ -61,6 +61,17 @@ Two kinds of row:
 | 23 | Back, forward and the address | In an app with two pages, click to the second; press Back, then Forward; type `/` into the address and press Enter | Each moves the page inside the frame only. Back is grey on the first page | In the tab: |
 | 24 | The app's console | Add a `console.log` to the app; open the output panel's Console tab | The line is there; errors are red and counted on the tab | In the tab: |
 
+## A project's server
+
+| # | Case | How to provoke it | What should happen | Verified |
+|---|---|---|---|---|
+| 25 | A server appears | On a new project, ask for something two people share ("a guestbook everyone who opens the app can sign") | The turn writes files under `server/`; with no restart the page loads its data from `/api`, and the output panel shows a `$ npm run server` section | Server and proxy: automated, kind, 2026-10-10 (answering 4 s after its file arrived). In the tab: |
+| 26 | Two people, one server | A second member opens the same project's preview and adds an entry | The first sees it within a couple of seconds, without reloading | By hand: |
+| 27 | Data through an edit, and after a stop | Add an entry, ask the chat for a small change, look again; then Stop, Start and look again | The entry is still there after the change; after Stop and Start the list is empty, and the chat's reply said it would be | Through an edit: automated, kind, 2026-10-10. In the tab, and after a stop: |
+| 28 | A table changes | Ask the chat to add a field to what is saved ("let people add a message to their entry") | The reply says the saved data was cleared; the list is empty and a new entry saves with the new field; the output panel says `server/db.ts changed, so the database starts again, empty.` | Server: automated, kind, 2026-10-10. In the tab: |
+| 29 | A server that fails to start | Edit `server/index.ts` by hand so it throws on its first line, and save (a build turn that writes such a server is caught and repaired before it is saved: automated, kind, 2026-10-10) | The page draws its own error state; the output panel shows the error under `$ npm run server`; mending the file brings the data back with no restart | By hand: |
+| 30 | Publishing an app with a server | Open Publish on that project | The panel's foot says a published link shows the pages only, and that the whole app can be shared by downloading it or pushing it to GitHub | Panel: unit-tested. In the tab: |
+
 ## Timings
 
 Measured by `PreviewPipelineIT`; the current numbers and how to re-measure are in [capacity](../deployment/capacity.md#measured-start-times). Production's own are measured by hand, with a stopwatch, from pressing the button to the app appearing: one first start of a fresh project, and one restart.

@@ -53,8 +53,8 @@ class PromptUtilsTest {
         assertThat(prompt).contains("NO shadcn/ui").contains("daisyUI component classes")
                 .contains("load Tailwind and daisyUI").contains("+ daisyUI v5.")
                 .doesNotContain("@/components/ui/button").doesNotContain("{{");
-        assertThat(prompt.substring(0, prompt.indexOf("## 7. The UI kit")).replace("daisyUI v5", "shadcn/ui components"))
-                .isEqualTo(PromptUtils.getSystemPrompt(UiKit.SHADCN).substring(0, PromptUtils.getSystemPrompt(UiKit.SHADCN).indexOf("## 7. The UI kit")));
+        assertThat(prompt.substring(0, prompt.indexOf("## 8. The UI kit")).replace("daisyUI v5", "shadcn/ui components"))
+                .isEqualTo(PromptUtils.getSystemPrompt(UiKit.SHADCN).substring(0, PromptUtils.getSystemPrompt(UiKit.SHADCN).indexOf("## 8. The UI kit")));
     }
 
     @Test
@@ -110,8 +110,57 @@ class PromptUtilsTest {
         String prompt = PromptUtils.getSystemPrompt();
 
         assertThat(prompt).contains("## 5. Stack boundaries").contains("do NOT write files in it")
-                .contains("do not quietly build React instead").contains("there is no backend here")
+                .contains("do not quietly build React instead").contains("build the server described in")
+                .contains("real accounts with passwords, payments, sending email")
                 .contains("say in the final message what is simulated").contains("Never put a secret key in code");
+    }
+
+    @Test
+    @DisplayName("it says when a project gets a server, names the one thing each part is made of, and shows one to copy")
+    void itSaysWhatAProjectsServerIsMadeOf() {
+        String prompt = PromptUtils.getSystemPrompt();
+        String server = prompt.substring(prompt.indexOf("## 6. A server, when the app needs one"), prompt.indexOf("## 7. Design"));
+
+        assertThat(server).contains("data that two people, or two devices, must both see lives on the project's own server")
+                .contains("they are NEVER how people share").contains("needs no server and gets none")
+                .contains("never an array or a\n").contains("The tables start empty").contains("no `localStorage` fallback")
+                .contains("`server/index.ts` is the entry").contains("every route starts with `/api/`")
+                .contains("Number(process.env.PORT) || 3001").contains("`node:sqlite`").contains("`.data/app.db`")
+                .contains("through `?` placeholders").contains("never a host or a port").contains("No WebSockets")
+                .contains("never by a password")
+                .contains("starts empty again when the preview restarts")
+                .contains("Every table is made in `server/db.ts` and nowhere else").contains("Never write `ALTER TABLE`")
+                .contains("opening the preview in two tabs");
+        assertThat(server).contains("import { DatabaseSync } from \"node:sqlite\";")
+                .contains("app.listen(Number(process.env.PORT) || 3001);")
+                .contains("It serves the API and nothing else")
+                .contains("Never write, change or read `start.mjs`")
+                .doesNotContain("express.static").doesNotContain("existsSync");
+        assertThat(prompt).doesNotContain("there is no backend here").doesNotContain("runs in the browser only");
+    }
+
+    @Test
+    @DisplayName("the skeleton under the request asks first where the data lives, and says what sharing may never be faked with")
+    void theReplyShapeAsksWhereTheDataLives() {
+        String shape = PromptUtils.replyShape();
+
+        assertThat(shape).contains("The first line says where the data lives")
+                .contains("what one person keeps on one device goes in localStorage")
+                .contains("goes through the project's own server").contains("server/db.ts (SQLite through node:sqlite")
+                .contains("BroadcastChannel and storage events never leave one browser")
+                .contains("never an array in memory").contains("no made-up people or sample rows")
+                .contains("never write ALTER TABLE");
+        assertThat(shape.indexOf("Where the data lives:")).isLessThan(shape.indexOf("Build only what the request asks for"));
+    }
+
+    @Test
+    @DisplayName("a project made on the earlier kit is told the same about a server as a new one")
+    void theServerSectionIsTheSameForEveryKit() {
+        String shadcn = PromptUtils.getSystemPrompt(UiKit.SHADCN);
+        String daisy = PromptUtils.getSystemPrompt(UiKit.DAISYUI);
+
+        assertThat(daisy.substring(daisy.indexOf("## 6. A server"), daisy.indexOf("## 7. Design")))
+                .isEqualTo(shadcn.substring(shadcn.indexOf("## 6. A server"), shadcn.indexOf("## 7. Design")));
     }
 
     @Test
@@ -168,6 +217,15 @@ class PromptUtilsTest {
                 .contains("enough lines to appear only ONCE in the file");
         String example = prompt.substring(prompt.indexOf("## Complete Example Flow"), prompt.indexOf("## 3. Voice"));
         assertThat(example).contains("<edit path=\"src/main.tsx\">").contains("<<<<<<< SEARCH");
+    }
+
+    @Test
+    @DisplayName("the skeleton under the request and the closing reminder both show the delete, so a file to be removed is not emptied instead")
+    void theReplyShapeAndTheReminderShowTheDelete() {
+        assertThat(PromptUtils.replyShape())
+                .contains("<delete path=\"...\">a few words saying why</delete>")
+                .contains("Emptying a file with <edit> or <file> does not remove it");
+        assertThat(PromptUtils.closingReminder()).contains("`<delete path=\"...\">` tag, never emptied");
     }
 
     @Test

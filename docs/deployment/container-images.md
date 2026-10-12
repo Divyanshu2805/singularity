@@ -7,7 +7,7 @@ Eight arm64 images, built natively on GitHub's Arm runners (`ubuntu-24.04-arm`),
 | `discovery`, `gateway`, `account`, `workspace`, `intelligence` | `docker/java-service.Dockerfile` (`MODULE` build argument) | `eclipse-temurin:25-jre-alpine` | Built from the exact jars the test job produced. Spring Boot's layered extraction (`-Djarmode=tools extract --layers`) puts dependencies and application code in separate layers, so a typical deploy pulls only the small application layer. Runs as user `spring` (uid 1000). |
 | `frontend` | `frontend/Dockerfile` | `nginxinc/nginx-unprivileged:1.27-alpine` | `npm ci` and `vite build` with the public `VITE_*` values as build arguments. Hashed `/assets/*` are cached for a year; everything else, including deep links, falls back to `index.html` with `no-cache`, so a deploy is visible on the next load. |
 | `preview-proxy` | `proxy/Dockerfile` | `node:20-alpine` | `npm ci --omit=dev` from the lockfile; runs as `node`. |
-| `preview-runner` | `docker/preview-runner.Dockerfile` | `node:20-alpine` | Pre-installs the starter template's npm packages at `/opt/template-node-modules`. The runner pool's init container copies them into each warm pod, so a preview's `npm install` finds everything already present. |
+| `preview-runner` | `docker/preview-runner.Dockerfile` | `node:22-alpine` (22 for `node:sqlite`, which a project's server uses) | Pre-installs the starter template's npm packages at `/opt/template-node-modules`. The runner pool's init container copies them into each warm pod, so a preview's `npm install` finds everything already present. |
 
 `.dockerignore` files at the repository root, in `frontend/` and in `proxy/` keep each build context to what its Dockerfile needs.
 

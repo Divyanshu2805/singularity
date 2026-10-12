@@ -4,7 +4,8 @@
  * Handles: who sees which controls, the one headline for each state a published app can be in, the steps of a build and
  * how far along the current one is, how often to ask the server while a build runs (fast) and once it is live (slowly,
  * and only while the panel is open), checking a link name before it is sent, the sentence that tells a person what to
- * do about each kind of failure, and the addresses the panel copies and opens.
+ * do about each kind of failure, the addresses the panel copies and opens, and whether the app has a server of its
+ * own, which a published link does not run.
  *
  * The link-name rules repeat the server's (PublishedSlug.java): the server is what enforces them, this only saves a round
  * trip and says why in the field. A rule changed there must change here; publish.test.ts holds the cases both agree on.
@@ -85,7 +86,7 @@ export interface Headline {
 export function headline(state: PublishState | null | undefined): Headline {
   switch (publishPhase(state)) {
     case "never":
-      return { tone: "idle", title: "Not published", detail: "Put this app online at a link anyone can open - no account needed." };
+      return { tone: "idle", title: "Not published", detail: "Put this app online at a link anyone can open." };
     case "unpublished":
       return { tone: "idle", title: "Not published", detail: "Your link is kept for this project. Publish to put the app back online." };
     case "building":
@@ -152,3 +153,11 @@ export const shareUrl = (origin: string, slug: string) => `${origin}${sharePath(
 
 /** The text a person can paste to a friend. */
 export const shareMessage = (name: string, url: string) => `${name} - ${url}`;
+
+/** The file whose presence gives a project a server (PreviewBootstrapper.SERVER_ENTRY on the server side). */
+export const SERVER_ENTRY = "server/index.ts";
+
+export const appHasServer = (paths: readonly string[] | null | undefined) => !!paths?.includes(SERVER_ENTRY);
+
+export const SERVER_NOTICE =
+  "This app has a server. A published link shows its pages only. To share the whole app, download it or push it to GitHub: its README says how to put it online yourself.";

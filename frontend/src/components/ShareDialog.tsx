@@ -189,10 +189,7 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
         setIsInviting(true);
         try {
             await api.inviteMember(projectId, email, inviteRole);
-            toast({
-                title: "Invitation saved",
-                description: `When ${email} signs in with that address they can accept it and ${roleOffer(inviteRole)} this project.`,
-            });
+            toast({ title: "Invite sent" });
             setInviteEmail("");
             loadMembers();
             inviteInputRef.current?.focus();

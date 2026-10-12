@@ -69,6 +69,14 @@ test('a missing file with an extension has no fallback, so a missing image is a 
     assert.strictEqual(candidatesFor(pathSegments('/favicon.ico')).some((c) => c.fallback), false);
 });
 
+test('a path under /api/ has no fallback either: it is a call to a server a published app does not have', () => {
+    assert.strictEqual(candidatesFor(pathSegments('/api/scores')).some((c) => c.fallback), false);
+    assert.strictEqual(candidatesFor(pathSegments('/api/games/abc/moves/')).some((c) => c.fallback), false);
+    assert.strictEqual(candidatesFor(pathSegments('/api')).some((c) => c.fallback), true);
+    assert.strictEqual(candidatesFor(pathSegments('/apiary/list')).some((c) => c.fallback), true);
+    assert.strictEqual(candidatesFor(pathSegments('/docs/api/scores')).some((c) => c.fallback), true);
+});
+
 test('the query string and fragment are not part of the path', () => {
     assert.deepStrictEqual(candidatesFor(pathSegments('/app.js?v=3#x')), [{ key: 'app.js', fallback: false }]);
 });

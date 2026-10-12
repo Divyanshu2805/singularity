@@ -15,6 +15,7 @@ import reactor.core.publisher.Flux;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * A model that answers from a script, for running the service with no AI provider behind it.
@@ -27,6 +28,11 @@ import java.util.List;
  * <p>It calls no tool. The build's read tool is offered only for a project too large to show whole, and the scripted
  * app never is; the code lens's answers here do not depend on any file.
  *
+ * <p>One request is answered late on purpose. A scripted reply is over in a second or two, which leaves nothing to
+ * test of what happens while a turn is running - a second person being told one is in progress, and stopping it. A
+ * request that says "{@value #SLOW_REQUEST}" has its streamed reply held back for {@link #SLOW_START}, well inside
+ * the turn's own idle limit, and is otherwise the same reply.
+ *
  * <p>The usage it reports is a count of characters over four, the same rough measure the build turn uses for a call
  * that ended without a report. It is there so that everything downstream of a usage report is exercised, not to be a
  * believable number.
@@ -34,6 +40,8 @@ import java.util.List;
 public class StubChatModel implements ChatModel {
 
     static final int CHUNK_CHARS = 28;
+    static final String SLOW_REQUEST = "take your time";
+    static final Duration SLOW_START = Duration.ofSeconds(60);
     private static final int CHARS_PER_TOKEN = 4;
 
     private final Duration chunkDelay;
@@ -61,8 +69,17 @@ public class StubChatModel implements ChatModel {
             }
             pieces.add(last(reply.substring(from), prompt, reply));
             Flux<ChatResponse> stream = Flux.fromIterable(pieces);
-            return chunkDelay.isZero() ? stream : stream.delayElements(chunkDelay);
+            if (!chunkDelay.isZero()) stream = stream.delayElements(chunkDelay);
+            return asksForASlowReply(prompt) ? stream.delaySubscription(SLOW_START) : stream;
         });
+    }
+
+    private static boolean asksForASlowReply(Prompt prompt) {
+        String request = "";
+        for (Message message : prompt.getInstructions()) {
+            if (message.getMessageType() == MessageType.USER && message.getText() != null) request = message.getText();
+        }
+        return request.toLowerCase(Locale.ROOT).contains(SLOW_REQUEST);
     }
 
     private static String replyTo(Prompt prompt) {
