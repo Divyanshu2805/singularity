@@ -18,6 +18,7 @@ import com.singularity.workspace.service.ProjectFileService;
 import com.singularity.workspace.util.CodeSearchScanner;
 import com.singularity.workspace.util.ContentHash;
 import com.singularity.workspace.util.ProjectFilePath;
+import com.singularity.workspace.util.ProjectHandout;
 import io.minio.CopyObjectArgs;
 import io.minio.CopySource;
 import io.minio.GetObjectArgs;
@@ -41,7 +42,8 @@ import java.util.zip.ZipOutputStream;
  * A project's files: metadata in the database, bytes in MinIO.
  *
  * <p>Handles: listing the tree, reading one file, copying a whole project's files inside storage for a fork,
- * building a ZIP, and plain-text search with per-file and overall caps. Writing and deleting a file go through
+ * building a ZIP - with a README that says how to run and host the project, and a .gitignore, when it has none of
+ * its own ({@link ProjectHandout}) - and plain-text search with per-file and overall caps. Writing and deleting a file go through
  * {@link com.singularity.workspace.service.RevisionPublisher} instead (CODE_REVIEW.md AI-05), not this class.
  *
  * <p>Every path goes through the shared validator, so a path that could escape the project is rejected before it
@@ -119,6 +121,8 @@ public class ProjectFileServiceImpl implements ProjectFileService {
         List<ProjectFile> files = projectFileRepository.findByProjectId(projectId);
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         List<String> missing = new ArrayList<>();
+        List<String> written = new ArrayList<>();
+        String packageJson = null;
 
         try (ZipOutputStream zip = new ZipOutputStream(buffer)) {
             for (ProjectFile file : files) {
@@ -126,8 +130,15 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                 try (InputStream is = minioClient.getObject(
                         GetObjectArgs.builder().bucket(projectBucket).object(objectName).build())) {
                     zip.putNextEntry(new ZipEntry(file.getPath()));
-                    is.transferTo(zip);
+                    if (ProjectHandout.PACKAGE_JSON.equals(file.getPath())) {
+                        byte[] bytes = is.readAllBytes();
+                        packageJson = new String(bytes, StandardCharsets.UTF_8);
+                        zip.write(bytes);
+                    } else {
+                        is.transferTo(zip);
+                    }
                     zip.closeEntry();
+                    written.add(file.getPath());
                 } catch (ErrorResponseException e) {
                     if (!"NoSuchKey".equals(e.errorResponse().code())) throw e;
                     // Metadata claims this file exists but storage doesn't have it - a real gap, not a normal
@@ -135,6 +146,12 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                     log.warn("Skipping file missing from storage while zipping project {}: {}", projectId, objectName);
                     missing.add(file.getPath());
                 }
+            }
+            String name = projectRepository.findById(projectId).map(Project::getName).orElse(null);
+            for (ProjectHandout.Extra extra : ProjectHandout.extrasFor(name, written, packageJson)) {
+                zip.putNextEntry(new ZipEntry(extra.path()));
+                zip.write(extra.content().getBytes(StandardCharsets.UTF_8));
+                zip.closeEntry();
             }
         } catch (Exception e) {
             log.error("Failed to build ZIP for projectId: {}", projectId, e);

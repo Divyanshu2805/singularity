@@ -26,5 +26,6 @@ src/main.tsx
 src/pages/Index.tsx
 src/pages/NotFound.tsx
 src/vite-env.d.ts
+start.mjs
 tsconfig.json
 vite.config.js

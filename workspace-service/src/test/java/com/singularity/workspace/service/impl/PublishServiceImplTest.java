@@ -101,7 +101,7 @@ class PublishServiceImplTest {
     }
 
     @Test
-    @DisplayName("the first publish makes a row with a link name from the title, claims a build and starts it")
+    @DisplayName("the first publish makes a row whose link name is the project's own name, claims a build and starts it")
     void firstPublish() {
         when(appRepository.findByProjectId(PROJECT_ID)).thenReturn(Optional.empty());
         PublishedApp started = row(PublishStatus.UNPUBLISHED, PublishBuildStatus.BUILDING);
@@ -111,7 +111,7 @@ class PublishServiceImplTest {
 
         var saved = org.mockito.ArgumentCaptor.forClass(PublishedApp.class);
         verify(appRepository).save(saved.capture());
-        assertThat(saved.getValue().getSlug()).matches("my-todo-app-[a-z2-9]{4}");
+        assertThat(saved.getValue().getSlug()).isEqualTo("my-todo-app");
         assertThat(saved.getValue().getStatus()).isEqualTo(PublishStatus.UNPUBLISHED);
         verify(builder).run(APP_ID, "my-todo-app-ab12", 1L, PROJECT_ID);
         assertThat(response.build().status()).isEqualTo(PublishBuildStatus.BUILDING);
@@ -441,8 +441,23 @@ class PublishServiceImplTest {
 
         assertThat(response.live()).isFalse();
         assertThat(response.slug()).isNull();
-        assertThat(response.suggestedSlug()).matches("my-todo-app-[a-z2-9]{4}");
+        assertThat(response.suggestedSlug()).isEqualTo("my-todo-app");
         assertThat(response.build()).isNull();
+    }
+
+    @Test
+    @DisplayName("when the project's own name is taken, the name offered and the name used carry a few random characters")
+    void aTakenNameGetsASuffix() {
+        when(appRepository.findByProjectId(PROJECT_ID)).thenReturn(Optional.empty());
+        when(appRepository.existsBySlug("my-todo-app")).thenReturn(true);
+
+        assertThat(service.getStatus(PROJECT_ID).suggestedSlug()).matches("my-todo-app-[a-z2-9]{4}");
+
+        claimWillSucceed(row(PublishStatus.UNPUBLISHED, PublishBuildStatus.BUILDING));
+        service.publish(PROJECT_ID, null);
+        var saved = org.mockito.ArgumentCaptor.forClass(PublishedApp.class);
+        verify(appRepository).save(saved.capture());
+        assertThat(saved.getValue().getSlug()).matches("my-todo-app-[a-z2-9]{4}");
     }
 
     @Test

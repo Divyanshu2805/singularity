@@ -7,6 +7,7 @@ import com.singularity.common.error.BadRequestException;
 import com.singularity.common.error.ConflictException;
 import com.singularity.common.error.FileStorageException;
 import com.singularity.common.error.ResourceNotFoundException;
+import com.singularity.workspace.dto.project.CreateFileRequest;
 import com.singularity.workspace.dto.project.FileContentResponse;
 import com.singularity.workspace.dto.project.SaveFileRequest;
 import com.singularity.workspace.dto.project.SaveFileResponse;
@@ -41,7 +42,8 @@ import static org.mockito.Mockito.when;
  * a save made against content the file no longer holds is a conflict and publishes nothing; a path the project does
  * not have is not found, so a save can never create a file; a traversing path is rejected before anything is looked
  * up; saving unchanged content writes nothing; and a publish that loses a race or fails is reported, never passed
- * off as saved.
+ * off as saved. A new file is published empty as one such revision, and is refused where a file or a folder already
+ * has the path; a removal is published as a deletion, and a path the project does not have is not found.
  */
 class FileEditServiceImplTest {
 
@@ -93,6 +95,88 @@ class FileEditServiceImplTest {
         });
         assertThat(saved.hash()).isEqualTo(hash("export default 2"));
         assertThat(saved.revisionId()).isEqualTo(31L);
+    }
+
+    @Test
+    @DisplayName("a new file is published empty, as one MANUAL_EDIT revision by the caller")
+    void aNewFileIsPublishedEmpty() {
+        when(projectFileRepository.findByProjectIdAndPath(PROJECT_ID, "src/lib/notes.ts")).thenReturn(Optional.empty());
+        when(projectFileRepository.findByProjectId(PROJECT_ID)).thenReturn(List.of(ProjectFile.builder().path(PATH).build()));
+        stubPublish(PublishRevisionResponse.Status.APPLIED);
+
+        SaveFileResponse made = service.createFile(PROJECT_ID, new CreateFileRequest("src/lib/notes.ts"), USER_ID);
+
+        ArgumentCaptor<PublishRevisionRequest> request = ArgumentCaptor.forClass(PublishRevisionRequest.class);
+        verify(revisionPublisher).publish(eq(PROJECT_ID), request.capture());
+        assertThat(request.getValue().source()).isEqualTo("MANUAL_EDIT");
+        assertThat(request.getValue().createdByUserId()).isEqualTo(USER_ID);
+        assertThat(request.getValue().changes()).singleElement().satisfies(change -> {
+            assertThat(change.path()).isEqualTo("src/lib/notes.ts");
+            assertThat(change.changeType()).isEqualTo(FileChangeDto.ChangeType.EDIT);
+            assertThat(change.content()).isEmpty();
+        });
+        assertThat(made.hash()).isEqualTo(hash(""));
+        assertThat(made.revisionId()).isEqualTo(31L);
+    }
+
+    @Test
+    @DisplayName("a new file is refused where a file already is, where a folder is, and under a path that is a file")
+    void aNewFileIsRefusedWhereThePathIsTaken() {
+        when(projectFileRepository.findByProjectIdAndPath(PROJECT_ID, PATH))
+                .thenReturn(Optional.of(ProjectFile.builder().path(PATH).build()));
+        when(projectFileRepository.findByProjectIdAndPath(PROJECT_ID, "src")).thenReturn(Optional.empty());
+        when(projectFileRepository.findByProjectIdAndPath(PROJECT_ID, "src/App.tsx/inner.ts")).thenReturn(Optional.empty());
+        when(projectFileRepository.findByProjectId(PROJECT_ID)).thenReturn(List.of(ProjectFile.builder().path(PATH).build()));
+
+        assertThatThrownBy(() -> service.createFile(PROJECT_ID, new CreateFileRequest(PATH), USER_ID))
+                .isInstanceOf(ConflictException.class).hasMessageContaining("already a file");
+        assertThatThrownBy(() -> service.createFile(PROJECT_ID, new CreateFileRequest("src"), USER_ID))
+                .isInstanceOf(ConflictException.class).hasMessageContaining("folder");
+        assertThatThrownBy(() -> service.createFile(PROJECT_ID, new CreateFileRequest("src/App.tsx/inner.ts"), USER_ID))
+                .isInstanceOf(ConflictException.class).hasMessageContaining("folder");
+        verify(revisionPublisher, never()).publish(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("a new file with a traversing path is rejected before anything is looked up")
+    void aNewFileWithATraversingPathIsRejected() {
+        assertThatThrownBy(() -> service.createFile(PROJECT_ID, new CreateFileRequest("../2/.env"), USER_ID))
+                .isInstanceOf(BadRequestException.class);
+        verify(projectFileRepository, never()).findByProjectIdAndPath(anyLong(), any());
+        verify(revisionPublisher, never()).publish(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("a removal is published as one deletion by the caller")
+    void aRemovalIsPublishedAsADeletion() {
+        when(projectFileRepository.findByProjectIdAndPath(PROJECT_ID, PATH))
+                .thenReturn(Optional.of(ProjectFile.builder().path(PATH).build()));
+        stubPublish(PublishRevisionResponse.Status.APPLIED);
+
+        assertThat(service.deleteFile(PROJECT_ID, PATH, USER_ID)).isEqualTo(31L);
+
+        ArgumentCaptor<PublishRevisionRequest> request = ArgumentCaptor.forClass(PublishRevisionRequest.class);
+        verify(revisionPublisher).publish(eq(PROJECT_ID), request.capture());
+        assertThat(request.getValue().source()).isEqualTo("MANUAL_EDIT");
+        assertThat(request.getValue().changes()).singleElement().satisfies(change -> {
+            assertThat(change.path()).isEqualTo(PATH);
+            assertThat(change.changeType()).isEqualTo(FileChangeDto.ChangeType.DELETE);
+            assertThat(change.content()).isNull();
+        });
+    }
+
+    @Test
+    @DisplayName("removing a path the project does not have is not found, and one that lost a race is said so")
+    void aRemovalThatCannotHappenIsReported() {
+        when(projectFileRepository.findByProjectIdAndPath(PROJECT_ID, "src/Gone.tsx")).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.deleteFile(PROJECT_ID, "src/Gone.tsx", USER_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(revisionPublisher, never()).publish(anyLong(), any());
+
+        when(projectFileRepository.findByProjectIdAndPath(PROJECT_ID, PATH))
+                .thenReturn(Optional.of(ProjectFile.builder().path(PATH).build()));
+        stubPublish(PublishRevisionResponse.Status.CONFLICT);
+        assertThatThrownBy(() -> service.deleteFile(PROJECT_ID, PATH, USER_ID)).isInstanceOf(ConflictException.class);
     }
 
     @Test

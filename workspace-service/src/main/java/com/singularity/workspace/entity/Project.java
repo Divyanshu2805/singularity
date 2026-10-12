@@ -25,8 +25,9 @@ import java.time.Instant;
 /**
  * A project: the thing a user builds, and what every file, chat, preview and membership hangs off.
  *
- * <p>Handles: the name, whether it is public, the lifecycle timestamps, a nullable deletedAt for soft deletion, any
- * outstanding starter-template problem, and the project it was forked from.
+ * <p>Handles: the name - what the app is called, one or two words when it was made from an idea - a line saying what
+ * it is, whether it is public, the lifecycle timestamps, a nullable deletedAt for soft deletion, any
+ * outstanding starter-template problem, the project it was forked from, and when its picture was last taken.
  *
  * <p>Soft deletion is a plain column with no automatic filter, so every query that must exclude deleted projects has
  * to say so itself. The fork reference is a plain id rather than a relation: a fork is its own project from the
@@ -39,6 +40,10 @@ public class Project {
 
     @Column(nullable = false)
     String name;
+
+    /** What the app is, in at most eight words; null on a project made before there was one. */
+    @Column(length = 120)
+    String summary;
 
     @Builder.Default
     Boolean isPublic = false;
@@ -62,4 +67,8 @@ public class Project {
      * it as an entity here would fight that single-statement compare-and-swap.
      */
     Long currentFileRevisionId;
+
+    /** When the project's picture was last stored; null while it has none. Written by a query, never by a save. */
+    @Column(insertable = false, updatable = false)
+    Instant thumbnailAt;
 }

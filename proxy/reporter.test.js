@@ -7,7 +7,8 @@
  * same error can be reported again; console lines relayed in batches, shortened, capped, and still reaching the real
  * console; a blank page noticed, and the notice taken back when the app renders late; back, forward, reload and
  * go-to-address carried out only for the parent window, only when there is somewhere to go, and never to another
- * origin; and a status page escaping what it is given and telling the tab its status.
+ * origin; a picture of the page asked for by the parent and answered, with a reason when there is none to give; and
+ * a status page escaping what it is given and telling the tab its status.
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -257,6 +258,27 @@ test('reload reloads, and an address is opened only on this same origin', () => 
     go('javascript:alert(1)');
     go(42);
     assert.equal(p.location.assigned, null);
+});
+
+test('asked for a picture, a blank page says it has nothing to show and never tries to draw one', () => {
+    const p = page({ bodyText: '' });
+    p.fire('message', { source: p.parent, data: { type: 'PreviewCommand', command: 'snapshot' } });
+    assert.deepEqual(p.of('PreviewSnapshot').map((m) => m.payload), [{ failed: 'nothing to show' }]);
+});
+
+test('asked for a picture, a page that cannot be copied answers with the reason and does not throw', () => {
+    const p = page();
+    p.fire('message', { source: p.parent, data: { type: 'PreviewCommand', command: 'snapshot' } });
+    const answers = p.of('PreviewSnapshot');
+    assert.equal(answers.length, 1);
+    assert.equal(typeof answers[0].payload.failed, 'string');
+    assert.equal(answers[0].payload.dataUrl, undefined);
+});
+
+test('a picture is taken only for the parent window', () => {
+    const p = page();
+    p.fire('message', { source: {}, data: { type: 'PreviewCommand', command: 'snapshot' } });
+    assert.equal(p.of('PreviewSnapshot').length, 0);
 });
 
 test('a status page escapes what it is given and tells the tab its status', () => {

@@ -16,6 +16,10 @@
     "prompt": "Where are my tasks stored?"
   },
   {
+    "id": "todo-remove-page", "chain": "todo", "kind": "CHANGE",
+    "prompt": "Delete the NotFound page file. An address that does not exist should just show the list."
+  },
+  {
     "id": "habits-build", "chain": "habits", "kind": "FIRST_BUILD",
     "prompt": "**Build:** A habit tracker that shows a week at a glance.\n**For:** One person building two or three daily habits.\n**Core action:** Add a habit, then tick today's box for it; see the current streak beside each habit.\n**Screens:** One page: the list of habits, each with seven day boxes for this week and its streak.\n**Look and feel:** Friendly and bright, rounded shapes, a different colour per habit.\n**Data:** Kept in the browser.\n**Keep it simple:**\n- No reminders or notifications\n- No charts or history beyond this week\n- No accounts"
   },
@@ -70,6 +74,18 @@
   {
     "id": "kanban-clear-done", "chain": "kanban", "kind": "CHANGE",
     "prompt": "Add a \"Clear done\" button in the Done column's header that removes every card in that column."
+  },
+  {
+    "id": "tictactoe-build", "chain": "tictactoe", "kind": "FIRST_BUILD",
+    "prompt": "A tic-tac-toe game two friends play from their own screens: one starts a game and gets a short code, the other joins with the code, and each sees the other's move within a couple of seconds."
+  },
+  {
+    "id": "tictactoe-rematch", "chain": "tictactoe", "kind": "CHANGE",
+    "prompt": "When a game ends, add a Rematch button that starts a new round in the same game for both players and keeps a count of each player's wins."
+  },
+  {
+    "id": "flashcards-leaderboard", "chain": "flashcards", "kind": "CHANGE",
+    "prompt": "Add a leaderboard that everyone who uses the app shares: when I finish the deck I type my name, and it shows the ten best scores from everybody."
   },
   {
     "id": "offstack-vue", "chain": "offstack-vue", "kind": "OFF_STACK",

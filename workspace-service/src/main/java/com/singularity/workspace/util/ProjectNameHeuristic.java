@@ -7,51 +7,101 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Turns the description a user types on the dashboard into a short plain project name.
+ * What a project made from a typed description is called, and the line that says what it is.
  *
- * <p>Handles: stripping the leading filler people write ("can you build me a..."), cutting at the first clause
- * boundary, capping the word count, dropping a dangling connector word so the name does not end mid-phrase,
- * capitalising it and capping its length - falling back to a generic name if nothing usable is left.
+ * <p>Handles: the name - one or two words, what the app is called - and the summary - at most eight words, what the
+ * app is. Each is taken from a suggestion when there is one (the idea interview's model writes both) and cut to
+ * size, and made from the description itself when there is none: stripping the leading filler people write ("can
+ * you build me a..."), cutting at the first clause boundary, capping the word count, dropping a dangling connector
+ * word so it does not end mid-phrase, capitalising it and capping its length - falling back to a generic name if
+ * nothing usable is left.
  *
- * <p>This is workspace-service's only naming strategy and makes no AI call: an AI-quality name is
- * intelligence-service's concern, and this service deliberately carries no model dependency.
+ * <p>A name was once the first five words of the description, which made "Guestbook everyone who opens" the heading
+ * of a project's page and the start of its published link. Two words is the limit now because the name is used as a
+ * name - at the head of the page, in the link, as the repository - and the longer line has its own field.
+ *
+ * <p>This service makes no AI call and carries no model dependency: a suggestion arrives in the request, written by
+ * intelligence-service and passed on by the browser, so it is the caller's own text and is treated as that - trimmed
+ * to one line, stripped of control characters and held to the same limits as anything made here.
  */
 public final class ProjectNameHeuristic {
 
-    private static final int MAX_NAME_LENGTH = 60;
-    private static final int MAX_WORDS = 5;
+    static final int MAX_NAME_WORDS = 2;
+    static final int MAX_SUMMARY_WORDS = 8;
+    private static final int MAX_NAME_LENGTH = 40;
+    private static final int MAX_SUMMARY_LENGTH = 100;
     private static final String FALLBACK_NAME = "Untitled project";
 
     private static final Pattern LEADING_FILLER = Pattern.compile(
             "^(?:(?:please|can you|could you|i want(?: to)?|i need|i'd like(?: to)?|help me|let's|lets|build|create|make|"
-                    + "generate|design|develop|code|write|me|us|a|an|the|new)\\s+)+",
+                    + "generate|design|develop|code|write|me|us|a|an|the|new)(?:\\s+|$))+",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern DESCRIPTION_BOUNDARY = Pattern.compile(
             "\\s+(?:that|which|where|so that)\\s+|[,.;:!?\\n]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SENTENCE_END = Pattern.compile("[.;:!?\\n]");
     private static final Set<String> TRAILING_STOPWORDS = Set.of(
-            "and", "or", "with", "for", "to", "of", "in", "on", "the", "a", "an", "my", "our", "using", "by");
+            "and", "or", "with", "for", "to", "of", "in", "on", "the", "a", "an", "my", "our", "using", "by",
+            "that", "which", "where", "who", "can", "is", "are");
 
     private ProjectNameHeuristic() {
     }
 
+    /** The suggested name cut to two words, or one made from the description when nothing usable was suggested. */
+    public static String nameFrom(String suggested, String prompt) {
+        String name = finish(wordsOf(oneLine(suggested)), MAX_NAME_WORDS, MAX_NAME_LENGTH);
+        return name.isBlank() ? nameFor(prompt) : name;
+    }
+
+    /** The suggested line cut to eight words, or one made from the description when nothing usable was suggested. */
+    public static String summaryFrom(String suggested, String prompt) {
+        String summary = finish(wordsOf(oneLine(suggested)), MAX_SUMMARY_WORDS, MAX_SUMMARY_LENGTH);
+        return summary.isBlank() ? summaryFor(prompt) : summary;
+    }
+
     public static String nameFor(String prompt) {
-        String subject = LEADING_FILLER.matcher(prompt.strip()).replaceFirst("");
+        String subject = LEADING_FILLER.matcher(briefSubject(prompt)).replaceFirst("");
         subject = DESCRIPTION_BOUNDARY.split(subject, 2)[0];
-        List<String> words = Arrays.stream(subject.split("\\s+")).filter(word -> !word.isBlank()).toList();
-        String name = finish(words);
+        String name = finish(wordsOf(subject), MAX_NAME_WORDS, MAX_NAME_LENGTH);
         return name.isBlank() ? FALLBACK_NAME : name;
     }
 
-    private static String finish(List<String> words) {
-        List<String> kept = new ArrayList<>(words.subList(0, Math.min(words.size(), MAX_WORDS)));
-        while (!kept.isEmpty() && TRAILING_STOPWORDS.contains(kept.getLast().toLowerCase())) {
+    public static String summaryFor(String prompt) {
+        String subject = briefSubject(prompt);
+        String[] sentences = SENTENCE_END.split(subject, 2);
+        String summary = finish(wordsOf(sentences.length == 0 ? "" : sentences[0]), MAX_SUMMARY_WORDS, MAX_SUMMARY_LENGTH);
+        return summary.isBlank() ? null : summary;
+    }
+
+    private static String briefSubject(String prompt) {
+        String text = prompt == null ? "" : prompt.strip();
+        return text.replaceFirst("^\\*\\*Build:\\*\\*\\s*", "");
+    }
+
+    private static String oneLine(String text) {
+        if (text == null) {
+            return "";
+        }
+        String first = text.lines().map(String::strip).filter(line -> !line.isEmpty()).findFirst().orElse("");
+        return first.replaceAll("\\p{Cntrl}", " ").replaceAll("[*_`#\"]", "").strip();
+    }
+
+    private static List<String> wordsOf(String text) {
+        return Arrays.stream(text.split("\\s+")).filter(word -> !word.isBlank()).toList();
+    }
+
+    private static String finish(List<String> words, int maxWords, int maxLength) {
+        List<String> kept = new ArrayList<>(words.subList(0, Math.min(words.size(), maxWords)));
+        while (!kept.isEmpty() && words.size() > kept.size() && TRAILING_STOPWORDS.contains(kept.getLast().toLowerCase())) {
             kept.removeLast();
         }
         if (kept.isEmpty()) {
             return "";
         }
-        String name = String.join(" ", kept);
-        name = Character.toUpperCase(name.charAt(0)) + name.substring(1);
-        return name.length() <= MAX_NAME_LENGTH ? name : name.substring(0, MAX_NAME_LENGTH).strip();
+        String text = String.join(" ", kept).replaceAll("[,.;:!?]+$", "");
+        if (text.isEmpty()) {
+            return "";
+        }
+        text = Character.toUpperCase(text.charAt(0)) + text.substring(1);
+        return text.length() <= maxLength ? text : text.substring(0, maxLength).strip();
     }
 }

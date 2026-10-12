@@ -1,5 +1,6 @@
 package com.singularity.workspace.repository;
 
+import java.time.Instant;
 import com.singularity.workspace.entity.Project;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -57,6 +58,18 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
      * Switches whether a project's code is shared on its public page. A plain update that leaves the persistence
      * context alone and the project's updated-at untouched: sharing is not an edit of the project.
      */
+    /**
+     * Records that the project's picture was stored. A query and not a save, so the project's updated-at is left
+     * alone: a new picture is not an edit of the project, and its card must not jump to the front of the list.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = "UPDATE projects SET thumbnail_at = :at WHERE id = :projectId AND deleted_at IS NULL", nativeQuery = true)
+    int markThumbnail(@Param("projectId") Long projectId, @Param("at") Instant at);
+
+    @Query(value = "SELECT thumbnail_at FROM projects WHERE id = :projectId AND deleted_at IS NULL", nativeQuery = true)
+    Optional<Instant> findThumbnailAt(@Param("projectId") Long projectId);
+
     @Modifying
     @Transactional
     @Query("UPDATE Project p SET p.isPublic = :shared WHERE p.id = :projectId")

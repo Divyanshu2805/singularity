@@ -169,6 +169,88 @@ class CodeCheckServiceImplTest {
         assertThat(scripts.getLast()).startsWith("rm -rf /tmp/check");
     }
 
+    private void theServerAnswers(ExecResult started) {
+        when(runnerPool.exec(eq(POD), eq(PreviewRunnerPool.RUNNER_CONTAINER), any(Duration.class), anyString()))
+                .thenAnswer(call -> {
+                    String script = call.getArgument(3);
+                    scripts.add(script);
+                    return script.equals(CodeCheckServiceImpl.SERVER_START_SCRIPT) ? started : new ExecResult(0, "");
+                });
+    }
+
+    @Test
+    void aServerThatStopsAsItStartsIsReportedWithItsErrorAtTheLineItNames() {
+        aPreviewIsRunning();
+        theServerAnswers(new ExecResult(CodeCheckServiceImpl.SERVER_DID_NOT_START, """
+                node:internal/process/execution:1
+                file:///tmp/check/server/db.ts:13
+                db.exec(`
+                   ^
+                Error: near "ikey": syntax error
+                    at file:///tmp/check/server/db.ts:13:4
+                    at file:///tmp/check/server/index.ts:2:1
+                """));
+
+        CodeCheckResponse response = service.check(PROJECT_ID, turn(Map.of(
+                "server/db.ts", "export const db = 1;", "server/index.ts", "import './db';")));
+
+        assertThat(response.checked()).isTrue();
+        assertThat(response.problems()).singleElement().satisfies(problem -> {
+            assertThat(problem.path()).isEqualTo("server/db.ts");
+            assertThat(problem.line()).isEqualTo(13);
+            assertThat(problem.code()).isEqualTo("SERVER");
+            assertThat(problem.message()).startsWith("The project's server was started with these files and stopped at once")
+                    .contains("near \"ikey\": syntax error").doesNotContain("/tmp/check");
+        });
+    }
+
+    @Test
+    void aServerThatComesUpOrCannotBeStartedHereAddsNothing() {
+        aPreviewIsRunning();
+        theServerAnswers(new ExecResult(0, ""));
+
+        assertThat(service.check(PROJECT_ID, turn(Map.of("server/index.ts", "export {};"))).problems()).isEmpty();
+        assertThat(scripts).contains(CodeCheckServiceImpl.SERVER_START_SCRIPT);
+
+        theServerAnswers(new ExecResult(-1, ""));
+        assertThat(service.check(PROJECT_ID, turn(Map.of("server/index.ts", "export {};"))).problems()).isEmpty();
+    }
+
+    @Test
+    void theServerIsStartedOnlyWhenTheTurnWroteSomeOfItAndTheCompilerHadNothingToSay() {
+        aPreviewIsRunning();
+        theServerAnswers(new ExecResult(CodeCheckServiceImpl.SERVER_DID_NOT_START, "Error: boom"));
+
+        assertThat(service.check(PROJECT_ID, turn(Map.of(PAGE, "export default 1;"))).problems()).isEmpty();
+        assertThat(scripts).doesNotContain(CodeCheckServiceImpl.SERVER_START_SCRIPT);
+
+        scripts.clear();
+        thePodAnswers(new ExecResult(2, "server/index.ts(1,7): error TS2322: Type 'string' is not assignable to type 'number'.\n"));
+        CodeCheckResponse response = service.check(PROJECT_ID, turn(Map.of("server/index.ts", "const n: number = 'x';")));
+        assertThat(response.problems()).singleElement().satisfies(problem -> assertThat(problem.code()).isEqualTo("TS2322"));
+        assertThat(scripts).doesNotContain(CodeCheckServiceImpl.SERVER_START_SCRIPT);
+    }
+
+    @Test
+    void theServerIsStartedInTheScratchFolderOnAPortAndADatabaseOfItsOwn() {
+        assertThat(CodeCheckServiceImpl.SERVER_START_SCRIPT)
+                .startsWith("cd /tmp/check || exit 0\n")
+                .contains("rm -rf .data /tmp/check.server\n")
+                .contains("PORT=3999 NODE_NO_WARNINGS=1 node --import tsx server/index.ts > /tmp/check.server 2>&1 &")
+                .contains("grep -q EADDRINUSE /tmp/check.server && exit 0")
+                .endsWith("exit 96\n")
+                .doesNotContain("/app");
+    }
+
+    @Test
+    void anErrorWithNoFileInItIsPinnedToTheServersEntry() {
+        var problem = CodeCheckServiceImpl.serverProblem("Error: Cannot find module 'better-sqlite3'", java.util.Set.of("server/index.ts"));
+
+        assertThat(problem.path()).isEqualTo("server/index.ts");
+        assertThat(problem.line()).isZero();
+        assertThat(CodeCheckServiceImpl.serverProblem("", java.util.Set.of()).message()).endsWith("(it printed nothing)");
+    }
+
     @Test
     void withNoPreviewRunningNothingIsCheckedAndNothingTouchesTheCluster() {
         when(previewRepository.findFirstByProjectIdAndStatusInOrderByIdDesc(any(), any())).thenReturn(Optional.empty());
