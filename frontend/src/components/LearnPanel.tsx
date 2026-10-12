@@ -4,8 +4,8 @@
  * Handles: the tour tab - the map of the project as it stands, written once when the person asks for it, kept, read
  * back each time the panel opens, and written again only when they press to - and the glossary tab - the words they
  * have met, each with a plain meaning, an everyday comparison and an example from their own code, one field that
- * both finds a word they have and defines one they do not, and a way to ask ExplainLLM more about a word or to
- * remove it.
+ * both finds a word they have and defines one they do not (sent with the composer's round arrow), a delete button
+ * on each word's row that shows when the row is pointed at, and a way to ask ExplainLLM more about a word.
  *
  * Nothing is requested by opening the panel. The tour is written when "Write the tour" is pressed; a word is defined
  * when it is pressed in a lesson, in the tour, or looked up here. The server keeps both, so a word pressed a second
@@ -27,7 +27,7 @@
  */
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, CircleAlert, Compass, FilePen, GraduationCap, ListChecks, Map as MapIcon, MessagesSquare, Pencil, Search, Trash2 } from "lucide-react";
+import { ArrowUp, BookOpen, CircleAlert, Compass, FilePen, GraduationCap, ListChecks, Map as MapIcon, MessagesSquare, Pencil, Search, Trash2 } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { ChatMarkdown } from "@/components/ChatMarkdown";
 import { Prose, TaughtCard } from "@/components/ChatEventRenderer";
@@ -215,13 +215,14 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
     setTyped("");
   };
 
-  const remove = async () => {
-    if (!entry || !term) return;
+  const removeWord = async (word: string) => {
+    const target = findEntry(entries.data, word);
+    if (!target) return;
     setFailure(null);
     try {
-      await api.deleteGlossaryEntry(projectId, entry.id);
-      forget(termStateKey(projectId, term));
-      learnPanel.selectTerm(null);
+      await api.deleteGlossaryEntry(projectId, target.id);
+      forget(termStateKey(projectId, target.term));
+      if (term && termKey(term) === termKey(target.term)) learnPanel.selectTerm(null);
       await queryClient.invalidateQueries({ queryKey: ["glossary", projectId] });
     } catch (error) {
       setFailure(error instanceof Error ? error.message : "Couldn't remove this word.");
@@ -248,8 +249,14 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
           onChange={(event) => setTyped(event.target.value)}
           className="min-w-0 flex-1 bg-transparent py-1 pr-1 text-[13px] text-foreground caret-primary outline-none placeholder:text-muted-foreground"
         />
-        <button type="submit" disabled={!typedWord} className={cn(CHIP, "w-[4.75rem] justify-center")}>
-          {hasTyped ? "Open" : "Define"}
+        <button
+          type="submit"
+          disabled={!typedWord}
+          aria-label={hasTyped ? "Open this word" : "Define this word"}
+          title={hasTyped ? "Open this word" : "Define this word"}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[transform,opacity] duration-200 hover:scale-105 active:scale-95 disabled:pointer-events-none disabled:bg-white/[0.08] disabled:text-muted-foreground"
+        >
+          <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.4} />
         </button>
       </form>
 
@@ -267,12 +274,12 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
             <p className="py-1.5 text-xs leading-relaxed text-muted-foreground">
               {(entries.data?.length ?? 0) === 0 && !typedWord
                 ? "No words yet. Press a highlighted word in a lesson or the tour, or look one up."
-                : "Not one of your words yet. Press Define to add it."}
+                : "Not one of your words yet. Press the arrow to define it."}
             </p>
           ) : (
             <ul aria-label="Your words" className="flex gap-1 overflow-x-auto pb-1 sm:flex-col sm:overflow-visible sm:pb-0">
               {words.map((word) => (
-                <li key={word.key} className="shrink-0 sm:shrink">
+                <li key={word.key} className="group/word relative shrink-0 sm:shrink">
                   <button
                     type="button"
                     aria-current={word.key === openKey}
@@ -280,12 +287,24 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
                     onClick={() => learnPanel.selectTerm(word.term)}
                     className={cn(
                       "flex h-7 w-full max-w-[12rem] items-center gap-1.5 rounded-lg px-2.5 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-none",
+                      !word.pending && "pr-7",
                       word.key === openKey ? "row-active" : "hl-row text-foreground/85"
                     )}
                   >
                     <span className="min-w-0 flex-1 truncate">{word.term}</span>
                     {word.pending && <OrbitSpinner className="h-3 w-3 shrink-0" />}
                   </button>
+                  {!word.pending && (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${word.term} from your glossary`}
+                      title="Remove from your glossary"
+                      onClick={() => void removeWord(word.term)}
+                      className="absolute right-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity duration-150 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 group-hover/word:opacity-100"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -331,17 +350,6 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
                 ) : (
                   !isRefused && (
                     <>
-                      {entry && (
-                        <button
-                          type="button"
-                          onClick={() => void remove()}
-                          aria-label={`Remove ${entry.term} from your glossary`}
-                          title="Remove from your glossary"
-                          className="icon-btn h-7 w-7 shrink-0 rounded-lg"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
                       <button
                         type="button"
                         disabled={!text || isWriting}

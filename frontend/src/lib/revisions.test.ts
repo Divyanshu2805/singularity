@@ -67,6 +67,25 @@ describe("historyEntries", () => {
     expect(entries[0].byline).toBe("Asha");
   });
 
+  it("says whether a change by hand added, deleted or edited its file", () => {
+    const entries = historyEntries(
+      [
+        revision({ id: 3, source: "MANUAL_EDIT", changedPaths: ["src/Old.tsx"], addedPaths: [], deletedPaths: ["src/Old.tsx"] }),
+        revision({ id: 2, source: "MANUAL_EDIT", changedPaths: ["src/lib/notes.ts"], addedPaths: ["src/lib/notes.ts"], deletedPaths: [] }),
+        revision({ id: 1, source: "MANUAL_EDIT", changedPaths: ["src/App.tsx"], addedPaths: [], deletedPaths: [] }),
+      ],
+      [],
+      members,
+      7
+    );
+
+    expect(entries.map((entry) => entry.title)).toEqual([
+      "Deleted Old.tsx by hand",
+      "Added notes.ts by hand",
+      "Edited App.tsx by hand",
+    ]);
+  });
+
   it("says what a save by hand and a restore were", () => {
     const entries = historyEntries(
       [

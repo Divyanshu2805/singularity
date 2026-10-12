@@ -175,6 +175,31 @@ publishing:
   heartbeat-stale-after: 45s
   log-max-chars: 8000
 
+# Connecting a person's GitHub account and pushing a project to a repository there (GitHubServiceImpl). Off unless
+# GITHUB_ENABLED is true. The three values from the environment have no defaults on purpose: they are read only when
+# the feature is on (GitHubConfig), and then a missing one stops the service at start-up. The client id and secret are
+# those of an OAuth app registered on GitHub whose callback address is callback-url; the token key is 32 random bytes
+# in base64 (openssl rand -base64 32) and encrypts every stored token, so changing it disconnects everyone.
+github:
+  enabled: ${GITHUB_ENABLED:false}
+  client-id: ${GITHUB_CLIENT_ID}
+  client-secret: ${GITHUB_CLIENT_SECRET}
+  token-key: ${GITHUB_TOKEN_KEY}
+  api-url: https://api.github.com
+  web-url: https://github.com
+  # Where GitHub sends the browser back: a page of the app, which posts what it was given to /api/github/callback.
+  callback-url: ${GITHUB_CALLBACK_URL:${client.url}/github/callback}
+  # `repo` is what GitHub requires to make a private repository. It reaches every repository the person has; this
+  # service touches only the one it made for the project (docs/architecture/decisions/0010-push-a-project-to-github.md).
+  scope: repo
+  state-ttl: 10m
+  request-timeout: 20s
+  max-pushes-per-hour: 20
+  # A text file up to this size travels inside the one request that lists every file; a larger or binary one is
+  # uploaded by itself first.
+  max-inline-file-bytes: 200000
+  max-inline-total-bytes: 3000000
+
 client.url: http://localhost:5173
 
 server:

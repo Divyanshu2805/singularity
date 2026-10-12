@@ -1,5 +1,7 @@
 package com.singularity.workspace.service.impl;
 
+import com.singularity.common.dto.CodeCheckRequest;
+import com.singularity.common.dto.CodeCheckResponse;
 import com.singularity.common.dto.FileChangeDto;
 import com.singularity.common.dto.PlanDto;
 import com.singularity.common.dto.PublishRevisionRequest;
@@ -7,6 +9,7 @@ import com.singularity.common.dto.PublishRevisionResponse;
 import com.singularity.common.feign.AccountServiceClient;
 import com.singularity.common.security.AuthUtil;
 import com.singularity.common.util.WindowsTimezoneWorkaround;
+import com.singularity.workspace.config.CodeCheckProperties;
 import com.singularity.workspace.config.InstanceId;
 import com.singularity.workspace.config.KubernetesConfig;
 import com.singularity.workspace.config.PreviewProperties;
@@ -100,6 +103,11 @@ import static org.mockito.Mockito.when;
  * that has run out, was tampered with or is missing being refused; an edit published as a revision reaching the
  * runner without a restart and the preview saying it is up to date with it; code that does not compile being served
  * as an error by a preview that is still up; a new package being installed by the server itself, on the same pod; a
+ * server written into the project being started by itself with no restart, answering under {@code /api} through the
+ * same proxy, restarting on an edit and keeping its database through the copy that brought the edit, and starting
+ * that database again, empty, when the file that makes its tables changes; a turn's server being started in a
+ * scratch folder by the code check, one whose SQL is wrong being reported with its error and its line, one that starts
+ * being passed, and the preview's own server and data being left alone by all of it; a
  * runner that dies being noticed the moment its owner asks; a start with no runner free waiting in line and starting
  * by itself when one appears; Stop releasing the pod and the route; and a package that does not exist failing in one
  * plain sentence with its cause and the install's output.
@@ -183,6 +191,8 @@ class PreviewPipelineIT {
     private PreviewDeploymentServiceImpl service;
     @Autowired
     private PreviewRunnerPool runnerPool;
+    @Autowired
+    private PreviewBootstrapper bootstrapper;
     @Autowired
     private PreviewRepository previewRepository;
     @Autowired
@@ -442,6 +452,75 @@ class PreviewPipelineIT {
 
     @Test
     @Order(6)
+    void aServerWrittenIntoTheProjectStartsByItselfKeepsItsDataThroughAnEditAndStartsEmptyWhenItsTablesChange() throws Exception {
+        Preview before = runner();
+        String cookie = cookie(before.getHostname());
+
+        Preview after = levelWith(publish(List.of(
+                new FileChangeDto("server/db.ts", FileChangeDto.ChangeType.EDIT, serverDatabase("")),
+                new FileChangeDto("server/index.ts", FileChangeDto.ChangeType.EDIT, serverCounting("hits")))));
+        assertThat(after.getPodName()).isEqualTo(before.getPodName());
+        assertThat(after.getReadyAt()).as("no restart happened").isEqualTo(before.getReadyAt());
+
+        Response first = timed("a project's server answering after its first files arrive", () -> counted(before, cookie, "hits"));
+        assertThat(first.body()).as("the server's log:\n%s", bootstrapper.readLogs(before.getPodName())).contains("\"hits\":1");
+
+        levelWith(publish(new FileChangeDto("server/index.ts", FileChangeDto.ChangeType.EDIT, serverCounting("visits"))));
+
+        Response second = counted(before, cookie, "visits");
+        assertThat(second.body()).as("the row written before the edit is still there").doesNotContain("\"visits\":1}");
+        assertThat(runnerPool.exec(before.getPodName(), PreviewRunnerPool.RUNNER_CONTAINER, Duration.ofSeconds(20),
+                "test -f /app/.data/app.db").succeeded()).as("a copy of the project's files left the database alone").isTrue();
+
+        levelWith(publish(List.of(
+                new FileChangeDto("server/db.ts", FileChangeDto.ChangeType.EDIT, serverDatabase(", note TEXT NOT NULL DEFAULT 'new'")),
+                new FileChangeDto("server/index.ts", FileChangeDto.ChangeType.EDIT, serverCounting("calls")))));
+
+        Response third = counted(before, cookie, "calls");
+        assertThat(third.body()).as("a changed table starts the data again:\n%s", bootstrapper.readLogs(before.getPodName()))
+                .contains("\"calls\":1");
+        assertThat(bootstrapper.readLogs(before.getPodName())).contains("$ npm run server").contains(PreviewBootstrapper.DATA_CLEARED);
+        assertThat(get(before.getHostname(), "/", cookie, "text/html").status()).isEqualTo(200);
+        assertThat(runner().getReadyAt()).as("the dev server was never restarted").isEqualTo(before.getReadyAt());
+    }
+
+    @Test
+    @Order(7)
+    void aTurnsServerIsStartedInAScratchFolderBeforeItIsSavedAndOneThatCannotStartIsReported() throws Exception {
+        Preview running = runner();
+        String cookie = cookie(running.getHostname());
+        int before = count(counted(running, cookie, "calls").body());
+        CodeCheckServiceImpl checker = new CodeCheckServiceImpl(previewRepository, runnerPool,
+                mock(com.singularity.workspace.service.ProjectFileService.class), CodeCheckProperties.defaults());
+
+        CodeCheckResponse broken = timed("checking a turn whose server cannot start", () -> checker.check(projectId,
+                new CodeCheckRequest(Map.of("server/db.ts", serverDatabase(" ikey")), List.of())));
+        assertThat(broken.checked()).as("skipped because: %s", broken.skippedBecause()).isTrue();
+        assertThat(broken.problems()).singleElement().satisfies(problem -> {
+            assertThat(problem.code()).isEqualTo("SERVER");
+            assertThat(problem.path()).isEqualTo("server/db.ts");
+            assertThat(problem.line()).isPositive();
+            assertThat(problem.message()).contains("syntax error").doesNotContain("/tmp/check");
+        });
+
+        CodeCheckResponse sound = timed("checking a turn whose server starts", () -> checker.check(projectId,
+                new CodeCheckRequest(Map.of("server/db.ts", serverDatabase(", colour TEXT")), List.of())));
+        assertThat(sound.checked()).isTrue();
+        assertThat(sound.problems()).isEmpty();
+
+        CodeCheckResponse samePort = checker.check(projectId, new CodeCheckRequest(Map.of("server/index.ts",
+                serverCounting("calls").replace("Number(process.env.PORT) || 3001", "3001")), List.of()));
+        assertThat(samePort.checked()).isTrue();
+        assertThat(samePort.problems()).as("a port named in code collides with the preview's own server, which is not a fault").isEmpty();
+
+        assertThat(count(counted(running, cookie, "calls").body())).as("the preview's own server and data were not touched")
+                .isEqualTo(before + 1);
+        assertThat(runnerPool.exec(running.getPodName(), PreviewRunnerPool.RUNNER_CONTAINER, Duration.ofSeconds(20),
+                "test ! -e /tmp/check && test -f /app/.data/app.db").succeeded()).isTrue();
+    }
+
+    @Test
+    @Order(8)
     void aRunnerThatDiesIsNoticedTheMomentItsOwnerAsks() throws Exception {
         Preview running = runner();
         cluster.pods().inNamespace(NAMESPACE).withName(running.getPodName()).withGracePeriod(0).delete();
@@ -459,7 +538,7 @@ class PreviewPipelineIT {
     }
 
     @Test
-    @Order(7)
+    @Order(9)
     void aStartWithNoRunnerFreeWaitsInLineAndStartsByItselfWhenOneAppears() throws Exception {
         scaleRunnerPool(0);
         eventually(Duration.ofSeconds(60), this::idleRunners, idle -> idle == 0);
@@ -492,7 +571,7 @@ class PreviewPipelineIT {
     }
 
     @Test
-    @Order(8)
+    @Order(10)
     void stopReleasesThePodAndTheRoute() throws Exception {
         Preview running = runner();
 
@@ -510,7 +589,7 @@ class PreviewPipelineIT {
     }
 
     @Test
-    @Order(9)
+    @Order(11)
     void aPackageThatDoesNotExistFailsInOnePlainSentenceWithItsCauseAndTheOutput() throws Exception {
         String missing = "singularity-preview-it-no-such-package";
         publish(new FileChangeDto("package.json", FileChangeDto.ChangeType.EDIT, withDependency(missing, "1.0.0")));
@@ -572,11 +651,54 @@ class PreviewPipelineIT {
     }
 
     private Long publish(FileChangeDto change) {
+        return publish(List.of(change));
+    }
+
+    private Long publish(List<FileChangeDto> changes) {
         Long parent = projectRepository.findCurrentFileRevisionId(projectId).orElse(null);
         PublishRevisionResponse response = publisher.publish(projectId,
-                new PublishRevisionRequest(parent, USER_ID, "MANUAL_EDIT", List.of(change)));
+                new PublishRevisionRequest(parent, USER_ID, "MANUAL_EDIT", changes));
         assertThat(response.status()).isEqualTo(PublishRevisionResponse.Status.APPLIED);
         return response.revisionId();
+    }
+
+    private Response counted(Preview preview, String cookie, String key) {
+        try {
+            return eventually(Duration.ofSeconds(60), () -> get(preview.getHostname(), "/api/hits", cookie, "application/json"),
+                    response -> response.status() == 200 && response.body().contains("\"" + key + "\":"));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static int count(String body) {
+        return Integer.parseInt(body.replaceAll("\\D", ""));
+    }
+
+    private static String serverDatabase(String extraColumn) {
+        return """
+                import { mkdirSync } from "node:fs";
+                import { DatabaseSync } from "node:sqlite";
+
+                mkdirSync(".data", { recursive: true });
+                export const db = new DatabaseSync(".data/app.db");
+                db.exec("CREATE TABLE IF NOT EXISTS hits (id INTEGER PRIMARY KEY AUTOINCREMENT%s)");
+                """.formatted(extraColumn);
+    }
+
+    private static String serverCounting(String key) {
+        return """
+                import express from "express";
+                import { db } from "./db";
+
+                const app = express();
+                app.get("/api/hits", (_req, res) => {
+                  db.prepare("INSERT INTO hits DEFAULT VALUES").run();
+                  const row = db.prepare("SELECT COUNT(*) AS total FROM hits").get() as { total: number };
+                  res.json({ %s: Number(row.total) });
+                });
+                app.listen(Number(process.env.PORT) || 3001);
+                """.formatted(key);
     }
 
     private String withDependency(String name, String version) {

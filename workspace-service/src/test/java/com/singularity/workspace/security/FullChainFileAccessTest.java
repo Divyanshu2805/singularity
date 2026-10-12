@@ -46,6 +46,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -90,7 +91,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>The save by hand ({@code PUT .../files/content}) is the controller's one write, so it is driven through the
  * same chain for each kind of caller: an editor is let through to the service, a viewer and a non-member are refused
- * before it, and a request with no CSRF token never arrives.
+ * before it, and a request with no CSRF token never arrives. Adding and removing a file by hand are held to the
+ * same rule: an editor reaches the service, a viewer and a non-member do not.
  */
 @WebMvcTest(FileController.class)
 @Import({FullChainFileAccessTest.TestSecurityBeans.class, GlobalExceptionHandler.class})
@@ -133,6 +135,65 @@ class FullChainFileAccessTest {
                 .header("X-XSRF-TOKEN", xsrfCookie.getValue())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(SAVE_BODY));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions create(ProjectRole role) throws Exception {
+        when(projectMemberRepository.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID))
+                .thenReturn(Optional.ofNullable(role));
+        Cookie xsrfCookie = primedCsrfCookie();
+        return mockMvc.perform(post("/api/projects/{projectId}/files", PROJECT_ID)
+                .cookie(sessionCookie(), xsrfCookie)
+                .header("X-XSRF-TOKEN", xsrfCookie.getValue())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"src/notes.ts\"}"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions remove(ProjectRole role) throws Exception {
+        when(projectMemberRepository.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID))
+                .thenReturn(Optional.ofNullable(role));
+        Cookie xsrfCookie = primedCsrfCookie();
+        return mockMvc.perform(delete("/api/projects/{projectId}/files", PROJECT_ID)
+                .param("path", "src/App.tsx")
+                .cookie(sessionCookie(), xsrfCookie)
+                .header("X-XSRF-TOKEN", xsrfCookie.getValue()));
+    }
+
+    @Test
+    @DisplayName("an editor can add a file by hand, and a viewer and a non-member cannot")
+    void onlyAnEditorCanAddAFile() throws Exception {
+        when(fileEditService.createFile(anyLong(), any(), anyLong()))
+                .thenReturn(new SaveFileResponse("src/notes.ts", "def", 4L));
+
+        create(ProjectRole.EDITOR).andExpect(status().isOk());
+        verify(fileEditService).createFile(eq(PROJECT_ID), any(), eq(USER_ID));
+
+        create(ProjectRole.VIEWER).andExpect(status().isForbidden());
+        create(null).andExpect(status().isForbidden());
+        verify(fileEditService).createFile(anyLong(), any(), anyLong());
+    }
+
+    @Test
+    @DisplayName("an editor can remove a file by hand, and a viewer and a non-member cannot")
+    void onlyAnEditorCanRemoveAFile() throws Exception {
+        remove(ProjectRole.EDITOR).andExpect(status().isNoContent());
+        verify(fileEditService).deleteFile(PROJECT_ID, "src/App.tsx", USER_ID);
+
+        remove(ProjectRole.VIEWER).andExpect(status().isForbidden());
+        remove(null).andExpect(status().isForbidden());
+        verify(fileEditService).deleteFile(anyLong(), anyString(), anyLong());
+    }
+
+    @Test
+    @DisplayName("removing a file with no CSRF token is rejected")
+    void aRemovalWithNoCsrfTokenIsRejected() throws Exception {
+        when(projectMemberRepository.findRoleByProjectIdAndUserId(PROJECT_ID, USER_ID))
+                .thenReturn(Optional.of(ProjectRole.OWNER));
+
+        mockMvc.perform(delete("/api/projects/{projectId}/files", PROJECT_ID)
+                        .param("path", "src/App.tsx")
+                        .cookie(sessionCookie()))
+                .andExpect(status().isForbidden());
+        verify(fileEditService, never()).deleteFile(anyLong(), anyString(), anyLong());
     }
 
     @Test
@@ -270,15 +331,15 @@ class FullChainFileAccessTest {
         Cookie xsrfCookie = priming.getResponse().getCookie("__Host-XSRF-TOKEN");
         assertThat(xsrfCookie).as("ServiceSecurityConfig's csrf().spa() must issue a __Host-XSRF-TOKEN cookie").isNotNull();
 
-        // Not 403: the CSRF filter let this through. That path only has a @GetMapping (getFileTree), so POST
-        // still ends up a 405 from the DispatcherServlet - the point here is which filter answered, not the
-        // handler outcome.
+        // Not 403: the CSRF filter let this through. The body names no path, so the request ends as a 400 from
+        // validation, which runs before the permission check - the point here is which filter answered, not the
+        // handler outcome. (It was a 405 while that path had no POST; adding a file by hand gave it one.)
         mockMvc.perform(post("/api/projects/{projectId}/files", PROJECT_ID)
                         .cookie(sessionCookie(), xsrfCookie)
                         .header("X-XSRF-TOKEN", xsrfCookie.getValue())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isMethodNotAllowed());
+                .andExpect(status().isBadRequest());
     }
 
     private static Cookie sessionCookie() {

@@ -227,7 +227,8 @@ public class PublishServiceImpl implements PublishService {
             }
         }
         for (int attempt = 0; attempt < SLUG_ATTEMPTS; attempt++) {
-            String slug = PublishedSlug.suggest(project.getName());
+            String plain = attempt == 0 ? PublishedSlug.plain(project.getName()) : null;
+            String slug = plain != null ? plain : PublishedSlug.suggest(project.getName());
             if (appRepository.existsBySlug(slug)) continue;
             try {
                 return appRepository.save(newRow(project, slug));
@@ -240,14 +241,23 @@ public class PublishServiceImpl implements PublishService {
         throw new ConflictException("Couldn't find a free link name just now. Try again.");
     }
 
+    /**
+     * The name offered for a project's link before it has one: the project's own name when that is allowed and
+     * nobody has taken it, and otherwise the name with a few random characters on the end. It is only an offer - the
+     * same choice is made again, against the table, when the app is published with no name typed.
+     */
+    private String suggestedSlug(Project project) {
+        String plain = PublishedSlug.plain(project.getName());
+        return plain != null && !appRepository.existsBySlug(plain) ? plain : PublishedSlug.suggest(project.getName());
+    }
+
     private static PublishedApp newRow(Project project, String slug) {
         return PublishedApp.builder().project(project).slug(slug).status(PublishStatus.UNPUBLISHED).build();
     }
 
     private PublishResponse toResponse(Project project, PublishedApp app) {
         if (app == null) {
-            return new PublishResponse(false, null, null, PublishedSlug.suggest(project.getName()), null,
-                    false, false, null);
+            return new PublishResponse(false, null, null, suggestedSlug(project), null, false, false, null);
         }
         boolean live = app.getStatus() == PublishStatus.LIVE;
         boolean changed = live && !Objects.equals(project.getCurrentFileRevisionId(), app.getLiveRevisionId());

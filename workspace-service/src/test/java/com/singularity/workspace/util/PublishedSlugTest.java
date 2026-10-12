@@ -64,6 +64,17 @@ class PublishedSlugTest {
         assertThat(PublishedSlug.isValid("www")).isFalse();
     }
 
+    @Test
+    @DisplayName("a project's own name is its link name when the rules allow it, and nothing when they do not")
+    void theProjectsOwnNameIsUsedWhenItIsAllowed() {
+        assertThat(PublishedSlug.plain("Kanban board")).isEqualTo("kanban-board");
+        assertThat(PublishedSlug.plain("  My Fancy Todo App!! ")).isEqualTo("my-fancy-todo-app");
+        assertThat(PublishedSlug.plain("Go")).isNull();
+        assertThat(PublishedSlug.plain("Dashboard")).isNull();
+        assertThat(PublishedSlug.plain("p12 abcdefghij")).isNull();
+        assertThat(PublishedSlug.plain(null)).isNull();
+    }
+
     @RepeatedTest(25)
     @DisplayName("a suggested name is always one the rules accept")
     void suggestionsAreAlwaysValid() {

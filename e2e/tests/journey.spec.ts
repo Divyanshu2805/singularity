@@ -6,8 +6,9 @@
  * that was built actually working - a note typed into it is kept; a change asked for in Teach me mode reaching the
  * running preview without a reload; a step's lesson opening; a marked word opening in the glossary; the project's
  * tour being written, opening a file and being read back; the lesson's task being set and checked; a reload
- * bringing the conversation back from the server; the usage meter having moved; a second person being refused the project; and signing out ending the
- * session on the server, not just in the page.
+ * bringing the conversation back from the server; the usage meter having moved; the app being published, a visitor
+ * with no account opening it at its link, and the link saying so once it is unpublished; a second person being
+ * refused the project; and signing out ending the session on the server, not just in the page.
  *
  * Everything between the browser and the runner pod is real (see e2e/stack.sh for what is and is not). The model is
  * the scripted one, which always builds the same small notes app and then adds a note count to it, so each step can
@@ -16,11 +17,14 @@
  * The chat draws a build as it streams, before the server has saved it, so "the build is there" is never read off
  * the chat alone: the step waits until the server hands back the file the build wrote.
  *
- * One known gap is allowed for and reported rather than hidden. The scripted model finishes a build in two seconds,
- * so its files arrive while the preview's dev server is still starting, and about one run in ten the frame then
- * shows the template's placeholder or a blank page until it is reloaded (docs/known-gaps). When the built app has
- * not appeared after a minute the step presses the panel's own Reload, as a person would, records that it had to in
- * the timings and as an annotation, and still fails if the app does not appear then.
+ * The scripted model finishes a build in two seconds, so its files arrive while the preview's dev server is still
+ * starting. That used to leave the frame on the template's placeholder or a blank page about one run in ten, and
+ * this test pressed the panel's Reload when it met it. The start is ordered on the server now
+ * (PreviewBootstrapper), so the step simply expects the built app and fails without it.
+ *
+ * A write is waited for by its accepted answer, not its first one. Now and then the server refuses a write's CSRF
+ * token, and the app's fetch wrapper fetches a fresh token and sends the write again (lib/api.ts); a step that read
+ * the first answer failed one run in about fifty on something no person would have seen.
  *
  * It is one test on purpose: each step stands on the one before, and the order is the product's own. How long the
  * steps that are real work took is written to test-results/journey-timings.json; the times of the two builds are
@@ -30,18 +34,10 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stack } from "../playwright.config";
-import { aNewPerson, stopwatch, type Person } from "./support";
+import { IDEA, signIn } from "./project";
+import { aNewPerson, stopwatch } from "./support";
 
-const IDEA = "A notes app where I can write, search and delete notes";
 const NOTE = "Buy oat milk on the way home";
-
-async function signIn(page: Page, person: Person) {
-  await page.goto("/login");
-  await page.getByRole("textbox", { name: "Email" }).fill(person.email);
-  await page.getByRole("textbox", { name: "Password" }).fill(person.password);
-  await page.locator("form").getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL("**/projects");
-}
 
 async function asAnotherPerson<T>(browser: Browser, action: (page: Page) => Promise<T>): Promise<T> {
   const context = await browser.newContext();
@@ -114,16 +110,7 @@ test("a person signs in, builds an app, runs it, learns from it and signs out", 
   await test.step("the preview comes up and the app that was built works", async () => {
     const elapsed = stopwatch();
     await page.getByRole("tab", { name: "Preview" }).click();
-    const builtApp = app.getByRole("heading", { name: "Quick Notes" });
-    const shown = await builtApp.waitFor({ state: "visible", timeout: 60_000 }).then(() => true, () => false);
-    if (!shown) {
-      timings.previewNeededReload = 1;
-      testInfo.annotations.push({ type: "known gap", description: "The preview needed its Reload button: the first build landed while the dev server was starting." });
-      await page.getByRole("button", { name: "Reload", exact: true }).click();
-      await expect(builtApp).toBeVisible({ timeout: 120_000 });
-      const dismiss = page.getByRole("button", { name: "Dismiss" });
-      if (await dismiss.isVisible()) await dismiss.click();
-    }
+    await expect(app.getByRole("heading", { name: "Quick Notes" })).toBeVisible({ timeout: 60_000 });
     timings.previewVisibleMs = elapsed();
     await expect(page.getByRole("status").filter({ hasText: "Up to date" })).toBeVisible({ timeout: 60_000 });
 
@@ -156,9 +143,9 @@ test("a person signs in, builds an app, runs it, learns from it and signs out", 
   await test.step("a step's lesson opens on the lines that step changed", async () => {
     const bigPicture = page.getByRole("button", { name: /^The big picture/ }).last();
     if (await bigPicture.isVisible()) {
-      const overview = page.waitForResponse((response) => response.url().includes("/code/overview/stream"));
+      const overview = page.waitForResponse((response) => response.url().includes("/code/overview/stream") && response.status() === 200);
       await bigPicture.click();
-      expect((await overview).status()).toBe(200);
+      await overview;
     }
     const steps = page.getByRole("button", { name: /^Build steps/ }).last();
     if (await steps.isVisible()) await steps.click();
@@ -171,13 +158,13 @@ test("a person signs in, builds an app, runs it, learns from it and signs out", 
   });
 
   await test.step("a marked word opens in the glossary, which keeps it", async () => {
-    const defined = page.waitForResponse((response) => response.url().includes("/code/glossary/stream"));
+    const defined = page.waitForResponse((response) => response.url().includes("/code/glossary/stream") && response.status() === 200);
     await page.getByRole("button", { name: "State", exact: true }).first().click();
-    expect((await defined).status()).toBe(200);
+    await defined;
 
     const panel = page.getByRole("dialog", { name: "Learn your project" });
     await expect(panel.getByText("Something a page remembers between clicks")).toBeVisible({ timeout: 60_000 });
-    await expect(panel.getByRole("list", { name: "Your words" }).getByRole("button", { name: "State" })).toBeVisible();
+    await expect(panel.getByRole("list", { name: "Your words" }).getByRole("button", { name: "State", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(panel).toBeHidden();
   });
@@ -217,6 +204,34 @@ test("a person signs in, builds an app, runs it, learns from it and signs out", 
     const used = Number(((await meter.getAttribute("aria-label")) ?? (await meter.innerText())).replace(/,/g, "").match(/\d+/)![0]);
     expect(used).toBeGreaterThan(0);
     expect(used).toBeLessThan(100_000);
+  });
+
+  await test.step("the app is published, a visitor opens it at its link, and the link says so once it is unpublished", async () => {
+    const elapsed = stopwatch();
+    await page.getByRole("button", { name: /^Publish\./ }).click();
+    await page.getByRole("textbox", { name: "Link name" }).fill(`journey-${Date.now().toString(36)}`);
+    await page.getByRole("button", { name: "Publish", exact: true }).click();
+    const link = page.getByRole("link", { name: "Open the app in a new tab" });
+    await expect(link).toBeVisible({ timeout: 300_000 });
+    timings.publishMs = elapsed();
+    const address = (await link.getAttribute("href"))!;
+
+    const visitor = await browser.newContext();
+    try {
+      const visit = await visitor.newPage();
+      await visit.goto(address);
+      await expect(visit.getByRole("heading", { name: "Quick Notes" })).toBeVisible();
+      expect((await visit.goto(new URL("/a/page/of/the/app", address).href))?.status()).toBe(200);
+      await expect(visit.locator("#root")).not.toBeEmpty();
+
+      await page.getByRole("button", { name: "Unpublish", exact: true }).click();
+      await page.getByRole("alertdialog").getByRole("button", { name: "Unpublish", exact: true }).click();
+      await expect(link).toHaveCount(0, { timeout: 60_000 });
+      await expect.poll(async () => (await visit.goto(address))?.status(), { timeout: 60_000 }).toBe(404);
+    } finally {
+      await visitor.close();
+    }
+    await page.keyboard.press("Escape");
   });
 
   await test.step("a second person is refused the project and its files", async () => {

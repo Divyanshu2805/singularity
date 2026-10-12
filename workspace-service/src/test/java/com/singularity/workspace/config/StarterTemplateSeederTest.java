@@ -36,7 +36,7 @@ class StarterTemplateSeederTest {
 
     private static final String TEMPLATE_BUCKET = "starter-projects";
     private static final String TEMPLATE_NAME = "react-vite-tailwind-shadcn-starter";
-    private static final int TEMPLATE_FILE_COUNT = 30;
+    private static final int TEMPLATE_FILE_COUNT = 31;
 
     private final MinioClient minio = mock(MinioClient.class);
     private final StarterTemplateSeeder seeder = new StarterTemplateSeeder(minio, TEMPLATE_BUCKET, TEMPLATE_NAME);

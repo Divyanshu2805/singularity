@@ -18,6 +18,7 @@
 import { Nebula } from "@/components/app/Nebula";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { PageHeading } from "@/components/app/PageHeading";
+import { AccountTabs } from "@/components/app/AccountTabs";
 import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
@@ -401,7 +402,7 @@ export default function SecuritySettings() {
                 <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
                     <div className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-16 pt-4 sm:px-6">
                         <div className="mb-6">
-                            <PageHeading eyebrow="Account" title="Sign-in &" accent="security">
+                            <PageHeading eyebrow="Account" title="Sign-in &" accent="security" actions={<AccountTabs />}>
                                 How you sign in, and where you're signed in.
                             </PageHeading>
                         </div>

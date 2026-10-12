@@ -13,6 +13,9 @@
  * against a real editor state - the dispatch here is scheduled inside an animation frame, which never runs in a
  * hidden tab.
  *
+ * The size of its text and whether long lines wrap are the person's own choices from the Settings page
+ * (lib/editor-preferences); the size is laid over the reading theme, so medium is exactly what the editor always was.
+ *
  * The selection's menu is the app's matte menu - Explain as a small primary button, Ask beside it - and the empty
  * and loading states use the app's quiet tile and comet.
  */
@@ -27,6 +30,7 @@ import { StateEffect } from '@codemirror/state';
 import { FileCode, MessagesSquare, Sparkles } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { singularityTheme, diffViewTheme, editorReadabilityTheme, referencedLineTheme } from '@/lib/editor-theme';
+import { editorTextPx, useEditorPreferences } from '@/lib/editor-preferences';
 import { findCodeLine, type CodeTarget } from '@/lib/lesson';
 import { referencedLineField, setReferencedLines } from '@/lib/referenced-lines';
 import type { CodeSelection } from '@/lib/types';
@@ -92,8 +96,14 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
   const revealedIdRef = useRef<number | null>(null);
   const clearHighlightRef = useRef<number | undefined>(undefined);
 
+  const [preferences] = useEditorPreferences();
   const extensions = useMemo(() => {
     if (!filePath) return [];
+    const look = [
+      editorReadabilityTheme,
+      EditorView.theme({ "&": { fontSize: `${editorTextPx(preferences.textSize)}px` } }),
+      ...(preferences.wrapLines ? [EditorView.lineWrapping] : []),
+    ];
     const diffExtensions = typeof diffOriginal === "string"
       ? [
           unifiedMergeView({
@@ -105,8 +115,8 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
           diffViewTheme,
         ]
       : [];
-    return [EditorView.lineWrapping, editorReadabilityTheme, referencedLineField, referencedLineTheme, ...languageExtensionsFor(filePath), ...diffExtensions];
-  }, [filePath, diffOriginal]);
+    return [...look, referencedLineField, referencedLineTheme, ...languageExtensionsFor(filePath), ...diffExtensions];
+  }, [filePath, diffOriginal, preferences.textSize, preferences.wrapLines]);
 
   const selectionHandlerRef = useRef(onSelectionAction);
   selectionHandlerRef.current = onSelectionAction;

@@ -89,6 +89,53 @@ class ProjectFileServiceImplTest {
         assertThat(result.missingPaths()).containsExactly("gone.tsx");
     }
 
+    private static java.util.Map<String, String> entriesOf(byte[] zipBytes) throws Exception {
+        java.util.Map<String, String> entries = new java.util.LinkedHashMap<>();
+        try (java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zipBytes))) {
+            for (java.util.zip.ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
+                entries.put(entry.getName(), new String(zip.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+            }
+        }
+        return entries;
+    }
+
+    @Test
+    void aZipCarriesAReadmeForTheProjectInItAndAGitignoreWhenTheProjectHasNeither() throws Exception {
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(Project.builder().id(PROJECT_ID).name("Noughts").build()));
+        when(projectFileRepository.findByProjectId(PROJECT_ID)).thenReturn(List.of(
+                projectFile("package.json"), projectFile("start.mjs"), projectFile("server/index.ts"), projectFile("src/App.tsx")));
+        GetObjectResponse packageJson = streamOf("{\"scripts\":{\"dev\":\"vite\",\"dev:all\":\"x\",\"start\":\"tsx server/index.ts\"}}");
+        GetObjectResponse server = streamOf("export {};");
+        GetObjectResponse page = streamOf("export default 1;");
+        when(minioClient.getObject(argThatMatchesObject("package.json"))).thenReturn(packageJson);
+        GetObjectResponse launcher = streamOf("export {};");
+        when(minioClient.getObject(argThatMatchesObject("start.mjs"))).thenReturn(launcher);
+        when(minioClient.getObject(argThatMatchesObject("server/index.ts"))).thenReturn(server);
+        when(minioClient.getObject(argThatMatchesObject("src/App.tsx"))).thenReturn(page);
+
+        java.util.Map<String, String> entries = entriesOf(service.buildProjectZip(PROJECT_ID).bytes());
+
+        assertThat(entries.keySet()).containsExactly("package.json", "start.mjs", "server/index.ts", "src/App.tsx", "README.md", ".gitignore");
+        assertThat(entries.get("package.json")).contains("\"dev:all\"");
+        assertThat(entries.get("README.md")).startsWith("# Noughts\n").contains("npm run dev:all").contains("Start command: `npm start`");
+        assertThat(entries.get(".gitignore")).contains("node_modules").contains(".data").contains(".env");
+    }
+
+    @Test
+    void aProjectsOwnReadmeAndGitignoreAreNeverReplaced() throws Exception {
+        when(projectFileRepository.findByProjectId(PROJECT_ID)).thenReturn(List.of(projectFile("README.md"), projectFile(".gitignore")));
+        GetObjectResponse readme = streamOf("mine");
+        GetObjectResponse ignore = streamOf("dist");
+        when(minioClient.getObject(argThatMatchesObject("README.md"))).thenReturn(readme);
+        when(minioClient.getObject(argThatMatchesObject(".gitignore"))).thenReturn(ignore);
+
+        java.util.Map<String, String> entries = entriesOf(service.buildProjectZip(PROJECT_ID).bytes());
+
+        assertThat(entries.keySet()).containsExactlyInAnyOrder("README.md", ".gitignore");
+        assertThat(entries.get("README.md")).doesNotContain("Built with Singularity");
+        assertThat(entries.get(".gitignore")).doesNotContain("node_modules");
+    }
+
     @Test
     void searchDistinguishesAnUnreadableFileFromOneWithNoMatches() throws Exception {
         ProjectFile unreadable = projectFile("broken.tsx");

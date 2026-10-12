@@ -7,6 +7,7 @@ import com.singularity.workspace.entity.Project;
 import com.singularity.workspace.entity.ProjectFile;
 import com.singularity.workspace.entity.ProjectFileRevisionEntry;
 import com.singularity.workspace.entity.ProjectFileRevision;
+import com.singularity.workspace.enums.RevisionChangeType;
 import com.singularity.workspace.enums.RevisionStatus;
 import com.singularity.workspace.repository.ProjectFileRepository;
 import com.singularity.workspace.repository.ProjectFileRevisionEntryRepository;
@@ -262,5 +263,25 @@ class RevisionServiceImplTest {
 
         assertThat(revisions.get(0).changedPaths()).isEmpty();
         assertThat(revisions.get(1).changedPaths()).containsExactly("src/a.tsx", "src/b.tsx");
+    }
+
+    @Test
+    @DisplayName("the list says which of a revision's paths it made new and which it removed")
+    void listSaysWhichPathsWereAddedAndDeleted() {
+        when(revisionRepository.findByProjectIdOrderByIdDesc(PROJECT_ID)).thenReturn(List.of(
+                ProjectFileRevision.builder().id(14L).projectId(PROJECT_ID).status(RevisionStatus.APPLIED).build()));
+        when(entryRepository.findByRevisionIdIn(List.of(14L))).thenReturn(List.of(
+                ProjectFileRevisionEntry.builder().revisionId(14L).path("src/new.ts")
+                        .changeType(RevisionChangeType.EDIT).contentHash("n").build(),
+                ProjectFileRevisionEntry.builder().revisionId(14L).path("src/old.ts")
+                        .changeType(RevisionChangeType.DELETE).previousContentHash("o").build(),
+                ProjectFileRevisionEntry.builder().revisionId(14L).path("src/kept.ts")
+                        .changeType(RevisionChangeType.EDIT).contentHash("k2").previousContentHash("k1").build()));
+
+        var revision = service.listRevisions(PROJECT_ID).get(0);
+
+        assertThat(revision.changedPaths()).containsExactly("src/kept.ts", "src/new.ts", "src/old.ts");
+        assertThat(revision.addedPaths()).containsExactly("src/new.ts");
+        assertThat(revision.deletedPaths()).containsExactly("src/old.ts");
     }
 }

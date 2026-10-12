@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -18,6 +19,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
     unpublish: vi.fn(),
     setCodeShared: vi.fn(),
     getPublishLog: vi.fn(),
+    getFilePaths: vi.fn(),
   },
 }));
 
@@ -34,12 +36,15 @@ const live: PublishState = {
 
 function renderMenu(state: PublishState, role = "OWNER") {
   vi.mocked(api.getPublish).mockResolvedValue(state);
+  if (!vi.mocked(api.getFilePaths).getMockImplementation()) vi.mocked(api.getFilePaths).mockResolvedValue(["package.json", "src/App.tsx"]);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
+      <TooltipProvider>
       <MemoryRouter>
         <PublishMenu projectId="7" role={role} projectName="My app" />
       </MemoryRouter>
+      </TooltipProvider>
     </QueryClientProvider>
   );
   return client;
@@ -51,7 +56,26 @@ async function open() {
 }
 
 describe("PublishMenu", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => vi.resetAllMocks());
+
+  it("tells the owner of an app with a server that the published link shows its pages only, and says nothing otherwise", async () => {
+    vi.mocked(api.getFilePaths).mockResolvedValue(["package.json", "src/App.tsx", "server/index.ts"]);
+    renderMenu(never);
+    await open();
+
+    expect(await screen.findByText(/This app has a server\. A published link shows its pages only/)).toBeTruthy();
+    expect(api.getFilePaths).toHaveBeenCalledWith("7");
+  });
+
+  it("asks for the file list only once the panel is opened", async () => {
+    renderMenu(never);
+    await waitFor(() => expect(api.getPublish).toHaveBeenCalled());
+    expect(api.getFilePaths).not.toHaveBeenCalled();
+
+    await open();
+    await waitFor(() => expect(api.getFilePaths).toHaveBeenCalled());
+    expect(screen.queryByText(/This app has a server/)).toBeNull();
+  });
 
   it("offers the owner a Publish button with a link name, and says that anyone with the link can open what it publishes", async () => {
     renderMenu(never);

@@ -48,13 +48,22 @@ The tag is `<approach>`, not `<think>`. `think` is in the grammar and read the s
 
 ## The stack, and requests outside it
 
-Every project is a React + TypeScript app on Vite, created from one starter template (`workspace-service/src/main/resources/starter-templates/`), and the live preview can run nothing else. The prompt says what to do when a request does not fit:
+Every project is a React + TypeScript app on Vite, created from one starter template (`workspace-service/src/main/resources/starter-templates/`), with an optional small Node server beside it ([below](#a-projects-server)), and the live preview can run nothing else. The prompt says what to do when a request does not fit:
 
 | Request | What the model does |
 |---|---|
 | Another framework or language (Vue, Next.js, Python, a mobile app…) | Writes no files. Says the workspace builds React apps and asks, with `<ask>`, whether to build the same thing in React. |
-| Something that needs a server (accounts, a shared database, payments, email, a secret API key) | Builds the complete front end with its data in the browser — `localStorage` behind one module shaped like the API a backend would offer — and says in its final message what is simulated. Never a secret in code. |
+| Data that several people share, or a backend the person asks for | Builds the project's own server ([below](#a-projects-server)). |
+| Something that server cannot do (accounts with passwords, payments, email, a secret API key) | Builds everything else and simulates that part behind one module shaped like the real thing, and says in its final message what is simulated. Never a secret in code. |
 | Another npm package | Adds it to `package.json` in the same reply; the preview reinstalls. |
+
+### A project's server
+
+A project may hold a `server/` folder: an Express app in `server/index.ts` whose routes start with `/api/`, and a SQLite database opened through Node's `node:sqlite` and kept in `.data/app.db`. The prompt's section 6 says when to build one - data that people or devices share, or a backend, an API or a database asked for by name - and that an app one person uses on one device still keeps its data in `localStorage`. It names one of everything and carries a short server to copy, because a model given a free hand picks an ORM, a hosted database or WebSockets, none of which the runner has.
+
+The preview starts the server by itself once `server/index.ts` exists and restarts it on every change; the page reaches it with a relative `fetch("/api/...")` through the dev server's proxy. Its data lasts as long as the preview's runner, and a change to `server/db.ts` - where every table is made - starts it again empty, so the model changes a table by changing its `CREATE TABLE` and never writes a migration. A published app does not run it. See [ADR 0009](../decisions/0009-a-server-in-the-preview.md).
+
+The idea interview and the brief follow the same line: shared data may be promised, in the words "kept on the app's own server", and accounts, payments and notifications may not (`IdeaServiceImpl`).
 
 Supporting a second stack is a change to the preview runner, not to this pipeline — see [constraints](../../known-gaps/constraints-and-trade-offs.md#previews-are-single-stack).
 
@@ -153,6 +162,8 @@ Before a turn is handed over to be saved, a backslash the model left at the end 
 The import check is static and deliberately modest: relative and `@/` imports are resolved against the project's paths plus the files the turn wrote, and bare imports against `package.json`. Neither it nor the syntax check type-checks.
 
 **The compiler.** Files that pass those static checks are handed to workspace-service (`service/CodeChecker`, `POST /internal/v1/projects/{id}/code-check`), which type-checks them where the project's packages are installed: in the project's running preview pod. `CodeCheckServiceImpl` copies the pod's own project into a scratch folder, writes the turn's files over the copy, links `node_modules`, and runs `tsc --noEmit`; the preview the person is looking at is not touched. A package the turn adds to `package.json` is looked up in the npm registry from the same pod. What comes back - a prop a component does not take, a name that does not exist, a package that cannot be installed - goes into the same repair request, with the numbered lines around each error, and the repaired files are checked again. Measured in a local kind pod it takes four to five seconds.
+
+**The server, started.** When the turn wrote anything under `server/` and the compiler had nothing to say, the same service starts the project's server from that scratch folder - on a port of its own, with an empty database of its own - and waits up to eight seconds. One that is listening, or still running, is fine. One that exited with an error is reported with the error and the line its stack names, and goes into the same repair request. This is the only check that runs a turn's code rather than reading it, and it runs in the runner pod, where that is allowed. It is there because a server keeps SQL in strings, which a parser and a compiler pass unread: a real turn wrote `PRIMARY ikey` in its `CREATE TABLE`, and was right by every other check. A server that names its port in code collides with the preview's own and is taken as started. On kind the check of a server that cannot start took 8 s and of one that can, 6 s, the compile included.
 
 Only errors in the files the turn wrote are reported, so a project's older faults are not sent back on every turn, and "cannot find module" is dropped for a package the turn has only just added, since nothing has installed it yet. The check fails open at every step: with no preview running, a pod that is slow or gone, or no `tsconfig.json`, the turn is saved on the static checks alone.
 

@@ -2,7 +2,10 @@
  * The project's files as a tree.
  *
  * Handles: folders that open and close, the expand-all and collapse-all commands from the Files header, per-file
- * icons and colours, and selecting a file to open.
+ * icons and colours, selecting a file to open, and - for someone who may edit - a delete button on each file's row.
+ *
+ * The delete button only asks: it hands the path up, and the panel that owns the tree confirms and deletes. It shows
+ * when the row is pointed at or focused and sits beside the row's own button, never inside it.
  *
  * Each expand-or-collapse command carries a fresh id, so pressing the same one twice - after opening a few folders by
  * hand in between - applies it again rather than being ignored as unchanged.
@@ -14,7 +17,7 @@
 import { useGlideHighlight } from "@/hooks/use-glide-highlight";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, Folder, FolderOpen } from "lucide-react";
+import { ChevronRight, Folder, FolderOpen, Trash2 } from "lucide-react";
 import { FileNode } from "@/lib/types";
 import { getFileColor, getFileIcon } from "@/lib/file-icons";
 import { cn } from "@/lib/utils";
@@ -31,6 +34,7 @@ interface FileTreeProps {
   onSelectFile: (path: string) => void;
   isLoading?: boolean;
   changedPaths?: ReadonlySet<string>;
+  onDeleteFile?: (path: string) => void;
 }
 
 interface FileTreeItemProps {
@@ -40,9 +44,10 @@ interface FileTreeItemProps {
   selectedPath: string | null;
   onSelectFile: (path: string) => void;
   changedPaths?: ReadonlySet<string>;
+  onDeleteFile?: (path: string) => void;
 }
 
-function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, expansion }: FileTreeItemProps) {
+function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, expansion, onDeleteFile }: FileTreeItemProps) {
   const [isExpanded, setIsExpanded] = useState(() => (expansion ? expansion.mode === "expand" : depth < 2));
 
   useEffect(() => {
@@ -67,6 +72,7 @@ function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, e
 
   return (
     <div>
+      <div className="group/row relative">
       <button
         type="button"
         data-glide
@@ -96,6 +102,18 @@ function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, e
           <span aria-label="Changed in this chat" className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
         )}
       </button>
+      {!isDirectory && onDeleteFile && (
+        <button
+          type="button"
+          aria-label={`Delete ${node.name}`}
+          title={`Delete ${node.name}`}
+          onClick={() => onDeleteFile(node.path)}
+          className="absolute right-1 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-md bg-[hsl(var(--ws-card-head))] text-muted-foreground opacity-0 transition-opacity duration-150 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 group-hover/row:opacity-100"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      )}
+      </div>
 
       {overflowBox && createPortal(
         <span
@@ -122,13 +140,14 @@ function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, e
           onSelectFile={onSelectFile}
           changedPaths={changedPaths}
           expansion={expansion}
+          onDeleteFile={onDeleteFile}
         />
       ))}
     </div>
   );
 }
 
-export function FileTree({ files, selectedPath, onSelectFile, isLoading, changedPaths, expansion }: FileTreeProps) {
+export function FileTree({ files, selectedPath, onSelectFile, isLoading, changedPaths, expansion, onDeleteFile }: FileTreeProps) {
   const treeRef = useRef<HTMLDivElement>(null);
   const glideRef = useGlideHighlight(treeRef);
 
@@ -161,6 +180,7 @@ export function FileTree({ files, selectedPath, onSelectFile, isLoading, changed
           onSelectFile={onSelectFile}
           changedPaths={changedPaths}
           expansion={expansion}
+          onDeleteFile={onDeleteFile}
         />
       ))}
     </div>

@@ -8,6 +8,7 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import reactor.test.StepVerifier;
 
 import java.time.Duration;
 import java.util.List;
@@ -21,7 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * prompt reworded there would quietly turn every build into "this is the stub model's answer" - which is what the
  * first cases guard, by asking with the real prompts. The rest cover the two things a stand-in for a provider must
  * get right for the code around it to run as it does in production: a streamed reply that adds up to the whole
- * reply, and a usage report on its last piece.
+ * reply, and a usage report on its last piece. The last covers the one request that is answered late, so that a turn
+ * can be found still running.
  */
 class StubChatModelTest {
 
@@ -107,5 +109,18 @@ class StubChatModelTest {
         assertThat(last.getResult().getMetadata().getFinishReason()).isEqualTo("stop");
         assertThat(last.getMetadata().getUsage().getPromptTokens()).isPositive();
         assertThat(last.getMetadata().getUsage().getCompletionTokens()).isPositive();
+    }
+
+    @Test
+    void aRequestThatSaysToTakeItsTimeIsAnsweredLateAndInFull() {
+        Prompt slow = prompt(PromptUtils.getSystemPrompt(), "Take your time and add nothing" + PromptUtils.replyShape());
+
+        StepVerifier.withVirtualTime(() -> model.stream(slow))
+                .expectSubscription()
+                .expectNoEvent(StubChatModel.SLOW_START.minusSeconds(1))
+                .thenAwait(Duration.ofSeconds(2))
+                .expectNextCount(1)
+                .thenConsumeWhile(piece -> true)
+                .verifyComplete();
     }
 }

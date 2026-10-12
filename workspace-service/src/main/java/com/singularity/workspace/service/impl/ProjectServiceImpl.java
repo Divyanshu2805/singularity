@@ -100,13 +100,14 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     public ProjectResponse createProject(ProjectRequest request) {
         projectQuota.assertCanCreateProject();
-        return createOwnedProject(request.name());
+        return createOwnedProject(request.name(), null);
     }
 
     @Override
     public ProjectResponse createProjectFromPrompt(CreateProjectFromPromptRequest request) {
         projectQuota.assertCanCreateProject();
-        return createOwnedProject(ProjectNameHeuristic.nameFor(request.prompt()));
+        return createOwnedProject(ProjectNameHeuristic.nameFrom(request.name(), request.prompt()),
+                ProjectNameHeuristic.summaryFrom(request.summary(), request.prompt()));
     }
 
     @Override
@@ -123,7 +124,7 @@ public class ProjectServiceImpl implements ProjectService {
         String name = requested.isEmpty() ? source.getName() + " (fork)" : requested;
         if (name.length() > MAX_NAME_LENGTH) name = name.substring(0, MAX_NAME_LENGTH).strip();
 
-        Project fork = saveProjectWithOwner(name, userId, source.getId());
+        Project fork = saveProjectWithOwner(name, source.getSummary(), userId, source.getId());
         int failed = projectFileService.copyAllFiles(source.getId(), fork.getId());
         if (failed > 0) {
             fork.setDeletedAt(Instant.now());
@@ -135,9 +136,10 @@ public class ProjectServiceImpl implements ProjectService {
         return projectMapper.toProjectResponse(fork, ProjectRole.OWNER);
     }
 
-    private Project saveProjectWithOwner(String name, Long userId, Long forkedFromProjectId) {
+    private Project saveProjectWithOwner(String name, String summary, Long userId, Long forkedFromProjectId) {
         Project project = projectRepository.save(Project.builder()
                 .name(name)
+                .summary(summary)
                 .isPublic(false)
                 .forkedFromProjectId(forkedFromProjectId)
                 .build());
@@ -153,9 +155,9 @@ public class ProjectServiceImpl implements ProjectService {
         return project;
     }
 
-    private ProjectResponse createOwnedProject(String name) {
+    private ProjectResponse createOwnedProject(String name, String summary) {
         Long userId = authUtil.getCurrentUserId();
-        Project project = saveProjectWithOwner(name, userId, null);
+        Project project = saveProjectWithOwner(name, summary, userId, null);
 
         TemplateInitResult templateResult;
         try {

@@ -96,6 +96,8 @@ import {
   frameReducer,
   navigateCommand,
   readFrameMessage,
+  snapshotBlob,
+  wantsSnapshot,
   statusPageAction,
   statusPageCaption,
   type ConsoleLine,
@@ -150,6 +152,7 @@ interface PreviewPanelProps {
 type OutputTab = "server" | "console";
 
 const LOG_POLL_MS = 3_000;
+const SNAPSHOT_SETTLE_MS = 2_500;
 const STATUS_PAGE_THROTTLE_MS = 3_000;
 const MAX_LINK_REFRESHES = 3;
 const ROOT_PLACE: FramePlace = { path: "/", canGoBack: false, canGoForward: false };
@@ -326,6 +329,23 @@ export function PreviewPanel({
       });
   }, [refresh]);
 
+  const queryClient = useQueryClient();
+  const snapshotKey = preview?.status === "RUNNING" ? `${preview.id}:${preview.syncedRevisionId ?? "start"}` : null;
+  const snapshotAskedRef = useRef<string | null>(null);
+  const snapshotKeptRef = useRef<string | null>(null);
+  const keepSnapshotRef = useRef<(dataUrl: string) => void>(() => {});
+  keepSnapshotRef.current = (dataUrl: string) => {
+    const key = snapshotAskedRef.current;
+    if (!key || key !== snapshotKey || snapshotKeptRef.current === key) return;
+    const picture = snapshotBlob(dataUrl);
+    if (!picture) return;
+    snapshotKeptRef.current = key;
+    api.saveProjectThumbnail(projectId, picture)
+      .then(() => queryClient.invalidateQueries({ queryKey: ["projects"] }))
+      .catch(() => {
+      });
+  };
+
   const origin = previewOrigin(preview?.previewUrl);
   useEffect(() => {
     if (!origin) return;
@@ -360,6 +380,9 @@ export function PreviewPanel({
         case "console":
           setConsoleLines((lines) => appendConsole(lines, message.lines));
           break;
+        case "snapshot":
+          keepSnapshotRef.current(message.dataUrl);
+          break;
         case "status-page":
           dispatchFrame({ type: "status-page", status: message.status });
           handleStatusPage(message.status);
@@ -373,6 +396,24 @@ export function PreviewPanel({
   const sendToFrame = useCallback((command: FrameCommand) => {
     if (origin) iframeRef.current?.contentWindow?.postMessage(command, origin);
   }, [origin]);
+
+  const shouldSnapshot = wantsSnapshot({
+    canEdit: canRestart,
+    isRunning: preview?.status === "RUNNING",
+    isShowingApp: frame.view === "app",
+    isLevel: previewSync(preview)?.isUpdating === false,
+    isBuilding: isBuilding || holdsErrors,
+    hasError: !!runtimeError,
+    path: place.path,
+  });
+  useEffect(() => {
+    if (!shouldSnapshot || !snapshotKey || snapshotAskedRef.current === snapshotKey) return;
+    const timer = window.setTimeout(() => {
+      snapshotAskedRef.current = snapshotKey;
+      sendToFrame(frameCommand("snapshot"));
+    }, SNAPSHOT_SETTLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [shouldSnapshot, snapshotKey, sendToFrame]);
 
   const status = preview?.status;
   const isRunning = status === "RUNNING";

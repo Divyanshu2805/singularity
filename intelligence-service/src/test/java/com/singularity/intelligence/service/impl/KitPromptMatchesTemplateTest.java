@@ -36,7 +36,7 @@ class KitPromptMatchesTemplateTest {
     @Test
     void everyComponentTheTemplateShipsIsNamedInThePromptAndTheOtherWayRound() {
         String kit = PromptUtils.getSystemPrompt(UiKit.SHADCN);
-        kit = kit.substring(kit.indexOf("## 7. The UI kit"), kit.indexOf("## 8. Code"));
+        kit = kit.substring(kit.indexOf("## 8. The UI kit"), kit.indexOf("## 9. Code"));
 
         Matcher named = Pattern.compile("(?m)(?:^- |\\.  )([a-z][a-z-]*): [A-Z]").matcher(kit);
         List<String> inThePrompt = new java.util.ArrayList<>();
@@ -58,6 +58,24 @@ class KitPromptMatchesTemplateTest {
         assertThat(template.content("src/index.css")).contains("--font-display").contains(".dark {")
                 .contains("--color-success").contains("--color-chart-5");
         assertThat(template.content("package.json")).contains("\"sonner\"").contains("\"lucide-react\"");
+    }
+
+    @Test
+    void whatThePromptSaysAServerNeedsIsAlreadyInTheTemplateAndShownToTheModel() {
+        assertThat(template.content("package.json")).contains("\"express\"").contains("\"tsx\"")
+                .contains("\"@types/express\"").contains("\"server\": \"tsx watch server/index.ts\"")
+                .contains("\"start\": \"node start.mjs\"").contains("\"dev:all\"").contains("\"node\": \">=22.13\"");
+        assertThat(template.content("package.json").indexOf("\"tsx\"")).as("tsx is needed to run the hosted app, so it is not a dev dependency")
+                .isLessThan(template.content("package.json").indexOf("\"devDependencies\""));
+        assertThat(template.content("vite.config.js")).contains("\"/api\": \"http://127.0.0.1:3001\"");
+        assertThat(template.content("tsconfig.json")).contains("\"include\": [\"src\", \"server\"]");
+
+        assertThat(template.content("start.mjs")).contains("\"--import\", \"tsx\", \"server/index.ts\"")
+                .contains("const apiPort = port === 3001 ? 3002 : 3001;");
+
+        ProjectBrief brief = ProjectBrief.of(template.getFileTree(1L).entries(), template::content, null);
+        assertThat(brief.shownPaths()).contains("package.json", "vite.config.js", "tsconfig.json").doesNotContain("start.mjs");
+        assertThat(brief.text()).contains("start.mjs runs the built app on a host");
     }
 
     @Test

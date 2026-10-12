@@ -19,6 +19,7 @@ cp .env.example .env
 | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` | Yes | Object storage for project files. The template's defaults match `services.docker-compose.yml`. |
 | `INTERNAL_SERVICE_SHARED_SECRET` | Yes | The only credential the `/internal/v1` API accepts. Any long random string, identical for every service. |
 | `PREVIEW_ACCESS_TOKEN_SECRET` | For previews | Signs preview access tokens. Must equal the preview proxy's secret exactly, or every preview link returns `401`. |
+| `GITHUB_ENABLED`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_TOKEN_KEY` | For GitHub | Connecting GitHub and pushing a project there. Off unless `GITHUB_ENABLED=true`; with it on, the other three must be set or workspace-service does not start. The id and secret are an OAuth app's, the key is `openssl rand -base64 32`. See the [GitHub checklist](github-checklist.md). |
 | `STRIPE_SECRET` | For billing | Stripe test-mode secret key. |
 | `STRIPE_WEBHOOK_SECRET` | For billing | From `stripe listen --forward-to localhost:8000/webhooks/payment`, or a configured endpoint. |
 | `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS` | For billing | Recurring price ids for the two paid plans. `PlanSeeder` upserts the plan catalogue against them on every start. |

@@ -10,7 +10,9 @@ import java.util.List;
  * One entry in a project's revision history, as the workspace's History panel lists it.
  *
  * <p>Handles: what made the revision, who, when, whether it landed, the revision it was made on top of - which is
- * what undoing it restores - and the paths it changed, so an entry can say "3 files" and name them.
+ * what undoing it restores - and the paths it changed, so an entry can say "3 files" and name them. Of those
+ * paths, the ones the revision made new and the ones it removed are named again, so a file added or deleted by hand
+ * is not called "edited".
  */
 public record RevisionSummaryResponse(
         Long id,
@@ -21,6 +23,8 @@ public record RevisionSummaryResponse(
         Instant createdAt,
         Instant appliedAt,
         List<String> changedPaths,
+        List<String> addedPaths,
+        List<String> deletedPaths,
         Long restoredRevisionId,
         Boolean restoredBefore
 ) {

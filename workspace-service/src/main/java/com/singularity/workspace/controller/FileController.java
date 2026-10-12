@@ -1,6 +1,7 @@
 package com.singularity.workspace.controller;
 
 import com.singularity.workspace.dto.code.CodeSearchResponse;
+import com.singularity.workspace.dto.project.CreateFileRequest;
 import com.singularity.workspace.dto.project.FileContentResponse;
 import com.singularity.workspace.dto.project.FileTreeResponse;
 import com.singularity.workspace.dto.project.ProjectZipResult;
@@ -21,9 +22,9 @@ import org.springframework.web.bind.annotation.*;
 /**
  * A project's files, for the browser.
  *
- * <p>Handles: the file tree, one file's content, saving one file's content changed by hand, plain-text search across
- * the project, and a ZIP of the whole thing. A save needs the edit permission and is published as a revision; it is
- * the only way a browser writes a file.
+ * <p>Handles: the file tree, one file's content, saving one file's content changed by hand, adding an empty file and
+ * removing a file by hand, plain-text search across the project, and a ZIP of the whole thing. The three writes need
+ * the edit permission and are each published as a revision; they are the only ways a browser writes a file.
  *
  * <p>The tree and content reads are guarded here rather than on the service, unlike search and download: the internal
  * API reads file content through the same service as a machine caller with no user id, so a caller-based check on the
@@ -59,6 +60,23 @@ public class FileController {
             @PathVariable Long projectId,
             @RequestBody @Valid SaveFileRequest request) {
         return ResponseEntity.ok(fileEditService.saveFile(projectId, request, authUtil.getCurrentUserId()));
+    }
+
+    @PostMapping
+    @PreAuthorize("@security.canEditProject(#projectId)")
+    public ResponseEntity<SaveFileResponse> createFile(
+            @PathVariable Long projectId,
+            @RequestBody @Valid CreateFileRequest request) {
+        return ResponseEntity.ok(fileEditService.createFile(projectId, request, authUtil.getCurrentUserId()));
+    }
+
+    @DeleteMapping
+    @PreAuthorize("@security.canEditProject(#projectId)")
+    public ResponseEntity<Void> deleteFile(
+            @PathVariable Long projectId,
+            @RequestParam String path) {
+        fileEditService.deleteFile(projectId, path, authUtil.getCurrentUserId());
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/search")

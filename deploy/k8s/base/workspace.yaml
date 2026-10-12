@@ -90,6 +90,35 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: client-url
+            # Connecting GitHub and pushing a project there. All four come from one Secret, `github-oauth`, and every
+            # reference is optional: a cluster with no such Secret, or one whose `enabled` is "false", runs with the
+            # feature off (GITHUB_ENABLED defaults to false). deploy/scripts/apply-secrets.sh writes the Secret with
+            # enabled "true" only when all three values exist in the production environment; with it on and a value
+            # missing, the service refuses to start (GitHubProperties).
+            - name: GITHUB_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: github-oauth
+                  key: enabled
+                  optional: true
+            - name: GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-oauth
+                  key: client-id
+                  optional: true
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: github-oauth
+                  key: client-secret
+                  optional: true
+            - name: GITHUB_TOKEN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: github-oauth
+                  key: token-key
+                  optional: true
             - name: PREVIEW_PUBLIC_SCHEME
               valueFrom:
                 configMapKeyRef:

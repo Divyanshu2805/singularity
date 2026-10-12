@@ -21,6 +21,8 @@ import {
   statusPageAction,
   statusPageCaption,
   type ConsoleLine,
+  snapshotBlob,
+  wantsSnapshot,
 } from "./preview-frame";
 
 const ORIGIN = "http://p1-abc.localhost:8090";
@@ -121,11 +123,54 @@ describe("the console's lines", () => {
   });
 });
 
+describe("a picture of the page", () => {
+  const picture = "data:image/webp;base64,UklGRg==";
+
+  it("is taken only as a WebP or JPEG data URL of a believable length", () => {
+    expect(readFrameMessage({ type: "PreviewSnapshot", payload: { dataUrl: picture } })).toEqual({ kind: "snapshot", dataUrl: picture });
+    expect(readFrameMessage({ type: "PreviewSnapshot", payload: { dataUrl: "data:image/jpeg;base64,/9j/4A==" } })?.kind).toBe("snapshot");
+    for (const refused of [
+      "data:image/svg+xml;base64,PHN2Zz4=",
+      "data:image/png;base64,iVBORw==",
+      "data:text/html;base64,PGI+",
+      "https://example.com/a.webp",
+      "data:image/webp;base64,not base64!",
+      `data:image/webp;base64,${"A".repeat(400_001)}`,
+      "",
+    ]) {
+      expect(readFrameMessage({ type: "PreviewSnapshot", payload: { dataUrl: refused } })).toBeNull();
+    }
+    expect(readFrameMessage({ type: "PreviewSnapshot", payload: { failed: "timed out" } })).toBeNull();
+    expect(readFrameMessage({ type: "PreviewSnapshot", payload: { dataUrl: 7 } })).toBeNull();
+  });
+
+  it("becomes the bytes to upload, typed as what it is", async () => {
+    const blob = snapshotBlob(picture);
+    expect(blob?.type).toBe("image/webp");
+    expect(blob?.size).toBe(4);
+    expect(snapshotBlob("data:image/jpeg;base64,/9j/4A==")?.type).toBe("image/jpeg");
+    expect(snapshotBlob("data:image/png;base64,iVBORw==")).toBeNull();
+  });
+
+  it("is asked for only when it would be worth keeping", () => {
+    const good = { canEdit: true, isRunning: true, isShowingApp: true, isLevel: true, isBuilding: false, hasError: false, path: "/" };
+    expect(wantsSnapshot(good)).toBe(true);
+    expect(wantsSnapshot({ ...good, canEdit: false })).toBe(false);
+    expect(wantsSnapshot({ ...good, isRunning: false })).toBe(false);
+    expect(wantsSnapshot({ ...good, isShowingApp: false })).toBe(false);
+    expect(wantsSnapshot({ ...good, isLevel: false })).toBe(false);
+    expect(wantsSnapshot({ ...good, isBuilding: true })).toBe(false);
+    expect(wantsSnapshot({ ...good, hasError: true })).toBe(false);
+    expect(wantsSnapshot({ ...good, path: "/settings" })).toBe(false);
+  });
+});
+
 describe("commands for the page", () => {
   it("are named the way the page expects", () => {
     expect(frameCommand("back")).toEqual({ type: "PreviewCommand", command: "back" });
     expect(frameCommand("forward")).toEqual({ type: "PreviewCommand", command: "forward" });
     expect(navigateCommand("/about")).toEqual({ type: "PreviewCommand", command: "navigate", path: "/about" });
+    expect(frameCommand("snapshot")).toEqual({ type: "PreviewCommand", command: "snapshot" });
   });
 });
 

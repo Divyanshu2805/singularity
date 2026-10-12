@@ -88,7 +88,7 @@ class ProjectServiceImplQuotaTest {
     void fromPromptRefusedAtTheLimit() {
         plan("Free", 1, 1);
 
-        assertThatThrownBy(() -> service.createProjectFromPrompt(new CreateProjectFromPromptRequest("a habit tracker")))
+        assertThatThrownBy(() -> service.createProjectFromPrompt(new CreateProjectFromPromptRequest("a habit tracker", null, null)))
                 .isInstanceOf(QuotaExceededException.class);
 
         verify(projectRepository, never()).save(org.mockito.ArgumentMatchers.any());

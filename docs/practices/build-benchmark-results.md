@@ -1,6 +1,6 @@
 # Build Benchmark Results
 
-What the [build benchmark](testing.md#the-build-benchmark) measured, run by run. Each run is the same twenty requests: eight first builds, eight changes to the apps those builds left, two questions and two requests for another stack.
+What the [build benchmark](testing.md#the-build-benchmark) measured, run by run. Each run up to 2026-10-08 is the same twenty requests: eight first builds, eight changes to the apps those builds left, two questions and two requests for another stack. From 2026-10-10 there are twenty-three: a first build and two changes that need a server of the project's own were added.
 
 All of it was measured on Google's models through the OpenAI-compatible endpoint, on one developer machine, with each project held in memory. **None of it says what production does**: production is configured for a different model on a different provider, which has not been measured.
 
@@ -77,3 +77,39 @@ A kanban board built in the app came out as three fixed columns wider than the p
 | kanban-clear-done | SAVED | yes | 2.1 s | 9.6 s | 1 | 1,323 |
 
 The board now lays its columns out as `grid grid-cols-1 md:grid-cols-3` with no fixed widths. The prompt grew by about 190 tokens. It was not compiled with `scripts/bench-verify.sh`, and it was not looked at in a preview at phone width.
+
+## 2026-10-10: a server of the project's own
+
+The preview learned to run a small server out of a project's `server/` folder, and the build prompt gained a section saying when to build one and what it is made of ([ADR 0009](../architecture/decisions/0009-a-server-in-the-preview.md)). Three requests were added to the benchmark for it: a tic-tac-toe game "two friends play from their own screens", a rematch counter for that game, and a leaderboard "everyone who uses the app shares" for the flashcards app. `gemini-3.8-flash`, low reasoning, as before. The medians are over twenty-three requests, so they are not the same sum as the rows above.
+
+| Run | Right | First word, first build | First build | Slowest build | First word, change | Change | Tokens out, first build | A server where one was needed | Compile, and servers start |
+|---|---|---|---|---|---|---|---|---|---|
+| The section alone | 23 / 23 | 3.0 s | 55.9 s | 87.2 s | 2.2 s | 16.8 s | 8,713 | 1 of 3, and that one kept its scores in memory | not run |
+| The rule where the model reads last | 23 / 23 | 2.4 s | 48.4 s | 97.7 s | 2.1 s | 21.2 s | 8,864 | 3 of 3, each with its tables in SQLite | 17 / 19 |
+| With the launcher, and a project's server files shown to the model | 23 / 23 | 2.5 s | 36.1 s | 61.0 s | 2.5 s | 17.0 s | 7,857 | 3 of 3 | 19 / 19, and 3 of 3 servers run as one program on a host's port |
+
+None of the twenty older requests was given a server in either run.
+
+### What the first run showed
+
+"Right" was twenty-three of twenty-three, and two of the three new requests were wrong in a way no check sees. The game had no server: rooms in `localStorage` and moves over a `BroadcastChannel`, which reaches the maker's two tabs and no second person. The leaderboard had a server whose scores were an array in memory, with four invented players on the board and a `localStorage` copy for when the server did not answer. The section was read and the prompt's older habit won ([pitfalls](gotchas/ai-generation.md)). The skeleton under the request now asks first where the data lives and states the rule in one paragraph; the second row is that change.
+
+### What the second run showed
+
+- **A table that changes.** The rematch turn added two columns to a `CREATE TABLE IF NOT EXISTS`, which does nothing to a database that already holds the table. The benchmark starts every project from nothing, so it saw no fault; a running preview would have. The preview now starts a project's database again when `server/db.ts` changes, and the prompt says that is how a table is changed.
+- **SQL nobody reads.** One of the two projects that did not pass `bench-verify.sh` is the game's first build: its `CREATE TABLE` says `PRIMARY ikey`, and the server stops on its first line. The parser and the compiler pass it, since it is a string. The turn's server is now started in the preview pod before the turn is saved, and one that cannot start goes back to the model; the benchmark runs with no preview, so it does not exercise that, and `bench-verify.sh` now starts every server it finds.
+- **The other project that did not pass** is `todo-due-dates`, an ordinary change with a name used where it does not exist (`task` for `tasks`). It is the kind of fault the type-check in a running preview exists for; the two earlier runs that were compiled were sixteen of sixteen.
+
+### What the third run was for
+
+A project is meant to be hosted by its owner, and a host runs one program on a port it picks. The prompt was first given two more things to ask of the model's server: read the port from `PORT`, and serve the built pages with four lines shown in the skeleton. A run of the five server-related requests came back with three servers, all three with `const port = 3001` and none with the four lines; `bench-verify.sh`, which by then started each server the way a host would, failed all three.
+
+So the model is not asked. The starter template carries a launcher, `start.mjs`, that serves the pages, starts the project's server on 3001 and passes `/api` on to it; the two instructions came out of the prompt again. The same three projects, with nothing changed but that file beside them, passed. The third row is the whole benchmark with it: nineteen of nineteen projects compile, and each of the three with a server answers a request for its page and a request under `/api` on the port it was given.
+
+Two other things moved in that row. A project's `server/` files are now shown to the model like its pages - they had been left out by a rule that said `src/`, and the rematch turn had been rewriting both server files whole for want of seeing them. And the one ordinary project that did not type-check in the second run did in this one; that is one run each, not a finding.
+
+### Not measured
+
+- Whether the two-player game is playable by two people. Its server starts and its routes exist; nobody has played it. That is a row of the [preview checklist](../local-development/preview-checklist.md).
+- The in-turn server check on a real model's turn. It is proven on kind with a server written for the test (`PreviewPipelineIT`), not with the turn above that would have needed it.
+- Cost, as before: no prices were entered.

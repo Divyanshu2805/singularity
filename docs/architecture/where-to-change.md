@@ -57,12 +57,29 @@ A task-oriented index into the code. Paths are relative to each service's `src/m
 | Change the public page of a shared app, or fork | workspace `PublicAppServiceImpl`, `PublicAppController`; frontend `pages/SharedApp.tsx`; the anonymous path list is `app.security.public-get-paths` |
 | Change the real-cluster publish test | workspace `PublishPipelineIT`, `k8s/preview-test-cluster.sh` |
 
+## Leaving: downloads, GitHub and hosting
+
+| To... | Change... |
+|---|---|
+| Change the README or `.gitignore` a project is given as it leaves | workspace `util/ProjectHandout.java` (used by the ZIP in `ProjectFileServiceImpl.buildProjectZip` and by a push) |
+| Change how a project runs as one program on a host | the starter template's `start.mjs` and `package.json` (`start`, `dev:all`, `engines`); `scripts/starter-launcher.test.mjs` tests the launcher, and `scripts/bench-verify.sh` starts every benchmark project that has a server through it |
+| Change what a push sends, or what it leaves out | workspace `service/impl/GitHubServiceImpl.send` |
+| Change a call to GitHub | workspace `service/impl/GitHubClient.java`; `GitHubClientTest` pins each request, `GitHubPushFlowTest` the order |
+| Change who may push | `@PreAuthorize` on `GitHubServiceImpl`; `GitHubAuthorizationTest` |
+| Change the scope asked for, the limits, or GitHub's addresses | `github.*` in workspace `application.yaml` (`GitHubProperties`) |
+| Change how a token is kept or a sign-in's state is signed | workspace `util/GitHubTokenCipher.java` |
+| Change the GitHub panel | `frontend/src/components/GitHubMenu.tsx`, its words and checks in `lib/github.ts`; the page GitHub returns to is `pages/GitHubCallback.tsx` |
+| Change what a new project is called, or the line beside its name | workspace `util/ProjectNameHeuristic.java` (cuts a suggestion to two and eight words, or makes one from the description); the suggestions come from the idea interview in intelligence-service |
+| Change the account screens | `frontend/src/pages/Account.tsx` (Profile, Plans & billing and Security as three tabs, `components/app/AccountTabs.tsx`, `lib/account-pages.ts`) and `pages/Settings.tsx` (preferences only: who explanations are written for, the editor's text size and wrapping in `lib/editor-preferences.ts`, the GitHub connection, how to have the account deleted); the invitations list is `components/InvitationsDialog.tsx` |
+| Switch GitHub on in production | three secrets in the GitHub `production` environment; `deploy/scripts/apply-secrets.sh` and `deploy/k8s/base/workspace.yaml` |
+
 ## Live previews
 
 | I want to… | Look at |
 |---|---|
 | Change how previews are provisioned | workspace `service/impl/PreviewRunnerPool.java`, `PreviewBootstrapper.java`; the pod spec in `k8s/runner-pods.yml` (local) and `deploy/k8s/base/runner-pods.yaml` (deployed) |
 | Change preview routing or proxying | workspace `service/impl/PreviewRouter.java`, `proxy/index.js`, `proxy/routing.js` |
+| Change how a project's own server is started, its port, or what the file copy leaves alone | workspace `PreviewBootstrapper.bootScript` (`SERVER_ENTRY`, `SERVER_PORT`, `MIRROR_FLAGS`); the starter template's `vite.config.js` proxy and `package.json`; what the model is told is `PromptUtils` section 6; the Publish panel's note is `appHasServer` in `frontend/src/lib/publish.ts` |
 | Change the line for a runner when every one is busy | workspace `PreviewBootstrapper.waitForRunner`, `PreviewRepository.countWaitingAhead` / `assignPod`; `preview.queue-timeout` |
 | Change how a running preview keeps up with saved changes, or when it reinstalls | workspace `service/impl/PreviewSynchronizer.java`; the copy itself is `PreviewBootstrapper.mirrorOnce` |
 | Change the sentence or the cause given for a failed start | workspace `util/PreviewFailureExplainer.java` (`PreviewFailureKind`); the title per kind is `previewFailureTitle` in `frontend/src/lib/preview.ts` |

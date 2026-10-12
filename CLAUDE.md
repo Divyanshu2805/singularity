@@ -53,10 +53,12 @@ k8s/                    LOCAL DEV ONLY — the preview pipeline on kind while th
                         preview-test-cluster.sh stands a second one up in its own namespace for PreviewPipelineIT
 deploy/k8s/             the production topology (Kustomize: base/ + overlays/kind, overlays/oracle; namespaces/;
                         network-policies/ - applied by hand, not by CI)
-deploy/scripts/         apply-secrets.sh, deploy-revisions.sh, smoke-test.sh, restore-backup.sh, check-backup-freshness.sh
+deploy/scripts/         apply-secrets.sh, deploy-revisions.sh, smoke-test.sh, restore-backup.sh, check-backup-freshness.sh,
+                        check-network-policies.sh (proves deploy/k8s/network-policies on a throwaway kind cluster)
 docker/                 the shared Java service Dockerfile (MODULE build-arg) and the preview-runner image
 .github/workflows/      ci.yml (test, incl. a real preview and the browser journey on kind → build 8 images → deploy → smoke test → rollback), uptime.yml
-scripts/                bench-verify.sh - compiles a build benchmark's projects in a throwaway container;
+scripts/                bench-verify.sh - compiles a build benchmark's projects in a throwaway container and starts the
+                        ones that have a server; starter-launcher.test.mjs - tests the template's start.mjs;
                         coverage-summary.sh - the backend's coverage per module, after `./mvnw verify`
 docs/                   documentation — start at docs/README.md
 ```
@@ -67,7 +69,7 @@ docs/                   documentation — start at docs/README.md
 ./mvnw -pl common-lib,<service> test -Dtest=ClassName#method   # one test, building common-lib from source
 ./mvnw -pl gateway-service test -Dtest=RoutingTableTest        # rerun after any controller or route change
 ./mvnw -pl <service> spring-boot:run                           # prove a change boots (see local setup for ports)
-./mvnw test                                                    # all backend tests (1,308; one needs Docker)
+./mvnw test                                                    # all backend tests (1,515; one needs Docker)
 ./mvnw verify                                                  # the same, and each module held to its coverage floor (what CI runs)
 ./mvnw clean package                                           # build every module
 cd frontend && npx tsc --noEmit -p tsconfig.app.json && npm run lint && npm run coverage && npm run build
