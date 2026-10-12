@@ -81,7 +81,7 @@ spec:
               ephemeral-storage: "128Mi"
       containers:
         - name: runner
-          image: node:20.20.2-alpine
+          image: node:22.22.0-alpine
           workingDir: /app
           command: ["/bin/sh", "-c", "sleep infinity"]
           env:

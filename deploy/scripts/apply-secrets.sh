@@ -50,6 +50,27 @@ apply minio-published-credentials -n singularity-ai --from-literal=password="$MI
 
 apply internal-service-secret -n singularity --from-literal=shared-secret="$INTERNAL_SERVICE_SHARED_SECRET"
 
+# Connecting GitHub (workspace-service's GitHubServiceImpl) is optional, and is on only when the production
+# environment holds all three of its secrets. They are named GH_OAUTH_* there because GitHub does not allow a secret
+# whose name starts with GITHUB_. Some but not all is a mistake and stops the deploy; none writes the Secret with the
+# feature off, so a cluster that had it on does not keep a stale one.
+github_set=0
+for var in GH_OAUTH_CLIENT_ID GH_OAUTH_CLIENT_SECRET GH_OAUTH_TOKEN_KEY; do
+  if [ -n "${!var:-}" ]; then github_set=$((github_set + 1)); fi
+done
+if [ "$github_set" -eq 3 ]; then
+  apply github-oauth -n singularity \
+    --from-literal=enabled=true \
+    --from-literal=client-id="$GH_OAUTH_CLIENT_ID" \
+    --from-literal=client-secret="$GH_OAUTH_CLIENT_SECRET" \
+    --from-literal=token-key="$GH_OAUTH_TOKEN_KEY"
+elif [ "$github_set" -eq 0 ]; then
+  apply github-oauth -n singularity --from-literal=enabled=false
+else
+  echo "Set all of GH_OAUTH_CLIENT_ID, GH_OAUTH_CLIENT_SECRET and GH_OAUTH_TOKEN_KEY, or none of them." >&2
+  exit 1
+fi
+
 apply preview-access-token -n singularity --from-literal=secret="$PREVIEW_ACCESS_TOKEN_SECRET"
 apply preview-access-token -n singularity-ai --from-literal=secret="$PREVIEW_ACCESS_TOKEN_SECRET"
 

@@ -46,7 +46,7 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000 # the `node` user baked into the node:20.20.2-alpine image
+        runAsUser: 1000 # the `node` user baked into the node:22.22.0-alpine image
         runAsGroup: 1000
         fsGroup: 1000 # so both containers can write the shared /app volume as that group
         seccompProfile:
@@ -65,8 +65,9 @@ spec:
         # 1. THE RUNNER - npm install + the Vite dev server, started by the backend over exec.
         - name: runner
           # CODE_REVIEW.md OPS-01: pinned to the version actually running when this was checked, not the floating
-          # `20-alpine` major-version tag.
-          image: node:20.20.2-alpine
+          # major-version tag. Node 22, because a project's own server opens its database through `node:sqlite`
+          # (docs/architecture/decisions/0009-a-server-in-the-preview.md).
+          image: node:22.22.0-alpine
           workingDir: /app
           command: ["/bin/sh", "-c", "sleep infinity"]
           env:
@@ -100,7 +101,7 @@ spec:
           image: ghcr.io/divyanshu2805/mc:RELEASE.2025-08-13T08-35-41Z
           command: ["/bin/sh", "-c", "sleep infinity"]
           env:
-            # the `mc` image has no home directory for uid 1000 the way node:20-alpine's `node` user does, so
+            # the `mc` image has no home directory for uid 1000 the way the node image's `node` user does, so
             # HOME defaults to / under runAsUser: 1000 below - every mc command, even one whose alias comes entirely
             # from MC_HOST_myminio, still tries to write its own state under $HOME/.mc and fails outright
             # ("mkdir /.mc: permission denied"). This is what made every preview start fail after SEC-08 added

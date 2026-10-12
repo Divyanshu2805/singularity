@@ -147,6 +147,11 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: The starter template's launcher (start.mjs), which runs a built project as one program on a host
+        # Here because it is the other piece of plain Node in the repository; it needs no packages.
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/starter-launcher.test.mjs
+
   preview-pipeline:
     name: Live preview on a kind cluster (start, fetch, stop)
     # The preview pipeline - Kubernetes, MinIO, Redis, the proxy - is mocked everywhere in the ordinary suite, so
@@ -214,15 +219,15 @@ jobs:
           kubectl --context kind-singularity -n singularity-it logs -l app=runner -c syncer --tail=40 || true
 
   journey:
-    name: Browser journey (sign in, build, preview, lesson, sign out)
+    name: Browser journey (sign in, build, preview, lesson, publish, share, sign out)
     # One person's whole path through the product in a real browser, against every real service: the Gateway, the
     # session cookie and CSRF token, the migrations, object storage, a runner pod with a real npm install and dev
-    # server, the preview proxy, and the frontend as it is built for production (e2e/tests/journey.spec.ts). Three
+    # server, the preview proxy, and the frontend as it is built for production (e2e/tests/journey.spec.ts) - and
+    # then two people sharing one project in two browsers (e2e/tests/sharing.spec.ts). Three
     # things are stand-ins - the AI provider (the scripted `stub-ai` model), Firebase (its Auth emulator) and Stripe
     # (never called) - so the job needs no secret and spends nothing, and a pull request can run it.
     #
-    # It does not gate the deploy yet. `preview-pipeline` does, and this job is new: let it show a few green runs on
-    # GitHub before adding it to `approve`'s needs.
+    # It gates the deploy, as `preview-pipeline` does: `approve` needs it.
     runs-on: ubuntu-latest
     if: github.event_name != 'workflow_dispatch'
     timeout-minutes: 40
@@ -496,10 +501,10 @@ jobs:
 
   approve:
     name: Approve the production deploy
-    needs: [build-java-images, build-frontend-image, build-proxy-image, build-preview-runner-image, preview-pipeline]
+    needs: [build-java-images, build-frontend-image, build-proxy-image, build-preview-runner-image, preview-pipeline, journey]
     # Runs on a normal push AND on a manual redeploy (workflow_dispatch). On a push every build job must have
-    # succeeded, and so must the live-preview test, which no build job depends on and would otherwise not hold a
-    # deploy back. On a manual redeploy every build job is skipped by design (they're gated to push-only - a redeploy
+    # succeeded, and so must the live-preview test and the browser journey, which no build job depends on and would
+    # otherwise not hold a deploy back. On a manual redeploy every build job is skipped by design (they're gated to push-only - a redeploy
     # reuses images already pushed for that SHA), so there "skipped" is the expected result. The two cases are kept
     # apart on purpose: a push whose test job failed also leaves its build job "skipped" (a job whose `needs` failed
     # is skipped, not failed), and accepting "skipped" on a push once deployed image tags that were never built.
@@ -511,13 +516,15 @@ jobs:
           needs.build-frontend-image.result == 'success' &&
           needs.build-proxy-image.result == 'success' &&
           needs.build-preview-runner-image.result == 'success' &&
-          needs.preview-pipeline.result == 'success') ||
+          needs.preview-pipeline.result == 'success' &&
+          needs.journey.result == 'success') ||
         (github.event_name == 'workflow_dispatch' &&
           needs.build-java-images.result == 'skipped' &&
           needs.build-frontend-image.result == 'skipped' &&
           needs.build-proxy-image.result == 'skipped' &&
           needs.build-preview-runner-image.result == 'skipped' &&
-          needs.preview-pipeline.result == 'skipped')
+          needs.preview-pipeline.result == 'skipped' &&
+          needs.journey.result == 'skipped')
       )
     runs-on: ubuntu-latest
     # The release gate: the `release` environment has the owner as a required reviewer, so this job - and the deploy
@@ -672,6 +679,9 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          GH_OAUTH_CLIENT_ID: ${{ secrets.GH_OAUTH_CLIENT_ID }}
+          GH_OAUTH_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
+          GH_OAUTH_TOKEN_KEY: ${{ secrets.GH_OAUTH_TOKEN_KEY }}
         run: bash deploy/scripts/apply-secrets.sh
 
       - name: Note which revision of each service is running
