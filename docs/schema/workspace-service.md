@@ -10,10 +10,12 @@ A workspace being built.
 
 | Field | Meaning |
 |---|---|
-| `name` | Not null. |
+| `name` | Not null. What the app is called, in one or two words ("Guestbook"): it heads the project's page and is what the published link and a pushed repository are named after. Made by `ProjectNameHeuristic` from the idea interview's suggestion, or from the description when there is none. |
+| `summary` | Nullable, at most 120 characters (`V11__project_summary.sql`). One line saying what the app is, in at most eight words ("A guestbook every visitor can sign"); the sidebar shows it beside the name. Null on every project made before the column and on a fork, where the sidebar falls back to the name. |
 | `isPublic` | Whether the project is visible to non-members. Defaults `false`. Not currently enforced by any read endpoint — every project read still goes through `@security.canViewProject`. |
 | `templateInitIssue` | Nullable. `null` = the starter template copied cleanly (or wasn't needed); otherwise a short description of what's still missing. Cleared by `POST /api/projects/{id}/retry-template-init`. |
 | `forkedFromProjectId` | Nullable, a plain `Long` (not a relation) — set by `POST /api/projects/{id}/fork`. Plain so a fork keeps working after its source is deleted. |
+| `thumbnailAt` | Nullable. When the picture the project's card shows was last stored (`V10__project_thumbnail.sql`); null while the card keeps its colours. The picture itself is one object in the blob bucket, not a column. Written by a query that leaves `updatedAt` alone, and never by saving the entity. |
 | `deletedAt` | Soft-delete marker. An owner's delete sets this; anyone else's delete instead removes only their own `PROJECT_MEMBER` row and leaves the project untouched — see [Projects API](../api/projects.md). |
 | `currentFileRevisionId` | Nullable, a plain `Long` (not a relation on purpose — see [File revisions](../architecture/file-revisions.md)) — the project's currently-published revision. `null` until the project's first revision. Only ever advanced by `ProjectRepository.casAdvanceCurrentRevision`'s single-statement compare-and-swap, never a plain entity save. |
 
@@ -129,5 +131,30 @@ A project's published app (see the [publishing flow](../architecture/flows/publi
 | `buildHeartbeatAt` / `buildOwner` | Refreshed every few seconds while the build runs. `PublishSweeper` fails a `BUILDING` row whose heartbeat is older than `publishing.heartbeat-stale-after`. `buildOwner` is a diagnostic label. |
 | `failureKind` / `failureDetail` / `failureLog` | `PublishFailureKind`, one plain sentence, and the tail of the output of a failed build. |
 | `retiredPrefix` / `retiredAt` | A build that no longer serves and is waiting to be deleted. The sweeper deletes every build the app has in storage except the live one and the one under way, since the row can remember only one. |
+
+## GITHUB_CONNECTION
+
+One person's connection to their GitHub account ([ADR 0010](../architecture/decisions/0010-push-a-project-to-github.md)). **One row per user who has connected**, keyed by the user's id; connecting again replaces it, disconnecting deletes it. Table `github_connections`, migration `V9__github.sql`.
+
+| Field | Meaning |
+|---|---|
+| `userId` | The primary key. A plain id with no foreign key, like every user reference here. |
+| `githubUserId` / `login` | Which GitHub account it is. |
+| `accessTokenCipher` | The token GitHub issued, encrypted with AES-256-GCM under the `GITHUB_TOKEN_KEY` secret (`GitHubTokenCipher`): base64 of a 12-byte nonce followed by the sealed token. Never returned by any endpoint. |
+| `scopes` | The scopes GitHub says the token carries. |
+| `connectedAt` | When it was made. |
+
+## PROJECT_GITHUB_REPO
+
+The repository a project has been pushed to. **One row per project that has one**, keyed by the project's id. Table `project_github_repos`. Deleting the row forgets the link and nothing more; nothing here deletes a repository.
+
+| Field | Meaning |
+|---|---|
+| `projectId` | The primary key, and a foreign key to the project. |
+| `pushedBy` | Who made the link. |
+| `repoId` | The repository's id on GitHub, which survives a rename there. Every push finds the repository by it. |
+| `fullName` / `htmlUrl` / `defaultBranch` / `privateRepo` (`is_private`) | As GitHub last reported them; refreshed on every push. |
+| `lastCommitSha` / `lastPushedRevisionId` / `lastPushedAt` | The last commit made, the project revision it holds (compared with `PROJECT.currentFileRevisionId` to say "changes not pushed") and when. All null for a repository that was made and never pushed to. |
+| `createdAt` | When the link was made. |
 
 The storage layout is not in the database: `published-apps/<slug>/current.json` is the pointer, `<slug>/b<N>/site/` the build and `<slug>/b<N>/src/` the sources it was made from.

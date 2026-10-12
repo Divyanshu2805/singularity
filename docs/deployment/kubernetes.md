@@ -59,7 +59,13 @@ Java services run with `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75 -XX:+UseSerial
   kubectl --context <cluster> delete -k deploy/k8s/network-policies
   ```
 
-  Then sign in, open a project, send one build and start one preview. A new workload that must reach Postgres, MinIO, Redis or a service needs a line there.
+  Then sign in, open a project, send one build, start one preview and open one published app. A new workload that must reach Postgres, MinIO, Redis or a service needs a line there and in the table of `deploy/scripts/check-network-policies.sh`, which proves the rules on a kind cluster of its own: it stands a pod in for each workload, tries every pod against every port, and fails on a connection the application needs being refused or one nobody needs being let in. Run it after changing a rule:
+
+  ```bash
+  kind create cluster --name netpol-check        # switches kubectl's current context - switch it back
+  deploy/scripts/check-network-policies.sh --context kind-netpol-check
+  kind delete cluster --name netpol-check
+  ```
 
 ## Deploy order
 
