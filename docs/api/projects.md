@@ -8,10 +8,10 @@ Projects and their members. **Service:** workspace-service
 
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
-| `GET` | `/api/projects` | — | `List<ProjectSummaryResponse>` | The caller's projects (any role), with their `role`, `pinnedAt` and `starredAt`. |
+| `GET` | `/api/projects` | — | `List<ProjectSummaryResponse>` | The caller's projects (any role), with their `role`, `summary` (the one line saying what the app is, null on older projects), `pinnedAt` and `starredAt`, the link of a live published app, and `thumbnailAt` - when the picture of the app was last taken, null while the card should keep its colours. |
 | `GET` | `/api/projects/{id}` | — | `ProjectResponse` | Any role. `403` for a non-member — including for an id that doesn't exist; `404` for a deleted project the caller was a member of. See [403 vs 404](../known-gaps/api-behavior.md). |
 | `POST` | `/api/projects` | `{ name }` | `ProjectResponse` (`201`) | `402` (`PROJECT_LIMIT`) at the plan's project limit. Creates the caller's `OWNER` membership in the same transaction. |
-| `POST` | `/api/projects/from-prompt` | `{ prompt }` | `ProjectResponse` (`201`) | As above, with the name derived from the prompt by a keyword heuristic — **no AI call**, so nothing is billed. |
+| `POST` | `/api/projects/from-prompt` | `{ prompt, name?, summary? }` | `ProjectResponse` (`201`) | As above. `name` and `summary` are the idea interview's suggestions, written by intelligence-service and passed on by the browser: the name is cut to two words and the summary to eight, both stripped of markup and control characters. With none, or an unusable one, `ProjectNameHeuristic` makes them from the prompt (a prompt of only filler words is named "Untitled project") — **no AI call** in this service, so nothing is billed. |
 | `PATCH` | `/api/projects/{id}` | `{ name }` | `ProjectResponse` | `EDITOR` or `OWNER`. |
 | `DELETE` | `/api/projects/{id}` | — | `204` | Any role, and **role-aware**: the owner deletes the project for everyone; anyone else's delete only removes their own membership - which is how an editor or a viewer leaves a project. |
 | `GET` | `/api/projects/invitations` | — | `List<InvitationResponse>` | The invitations addressed to the caller's own email, across every project that still exists: `{ projectId, projectName, role, invitedByName, invitedAt }`. Needs no membership - the caller is not a member of any of them yet. |
@@ -19,6 +19,8 @@ Projects and their members. **Service:** workspace-service
 | `POST` | `/api/projects/{id}/retry-template-init` | — | `ProjectResponse` | `EDITOR` or `OWNER`. Re-runs starter-template copying; only fills in what's missing. |
 | `PUT` / `DELETE` | `/api/projects/{id}/pin` | — | `204` | Any role — a personal preference, not an edit. |
 | `PUT` / `DELETE` | `/api/projects/{id}/star` | — | `204` | Any role. Independent of pin. |
+| `PUT` | `/api/projects/{id}/thumbnail` | The picture's raw bytes (WebP or JPEG, at most 300 KB) | `204` | `EDITOR` or `OWNER`. Stores the picture the project's card shows, replacing the last one. The request's content type is ignored: the type is read from the bytes, and anything that is not a WebP or JPEG is a `400`. At most 40 an hour per project (`429`). It does not change the project's `updatedAt`. |
+| `GET` | `/api/projects/{id}/thumbnail` | — | `image/webp` or `image/jpeg` | Any role. `404` while the project has no picture. Cacheable privately for 30 days; the app adds `?v=<thumbnailAt>` so a newer picture has a new address. |
 
 ## Members
 

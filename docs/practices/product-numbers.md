@@ -40,7 +40,7 @@ Tokens are the provider's own counts, from the usage the app meters for each cal
 | Suggested next steps | `gemini-3.5-flash-lite` | 572 | 31 | under 0.1 cents |
 | **A whole pass**: interview, build, change, lesson, suggestions | | 21,074 tokens in all | | **about 2.9 cents** |
 
-**The cost column rests on prices this project did not verify.** They are $0.75 in and $3.75 out per million tokens for `gemini-3.8-flash` and $0.30 and $2.50 for `gemini-3.5-flash-lite`, as third-party pricing guides reported them in October 2026; one aggregator listed half that for 3.8 Flash, and the guides call the rate introductory until the end of 2026. Check Google's own pricing page before quoting a cost, and multiply the token columns by whatever it says. The token counts are measured and do not depend on it.
+The cost column uses the prices on [Google's own pricing page](https://ai.google.dev/gemini-api/docs/pricing), read on 2026-10-10, standard paid tier, per million tokens: `gemini-3.8-flash` $0.75 in and $3.75 out, `gemini-3.5-flash-lite` $0.30 in and $2.50 out. **The 3.8 Flash rate is dated:** the page gives it "through December 31, 2026" and $1.50 in and $7.50 out from 2027-01-01, so from then a build costs twice what the table says - about 3.6 cents for the one-sentence first build and about 5.5 cents for a whole pass. The token counts are measured and do not depend on any of it.
 
 On the Free plan's 100,000 tokens a day, a whole pass is about a fifth of the allowance.
 
@@ -95,7 +95,7 @@ Then 200 loads of a running preview's page through the proxy, four at a time: 26
 
 ## What the browser journey found
 
-The [journey test](testing.md#the-browser-journey) runs the product the way a person does, and about one run in ten the Preview tab came up on the starter template's placeholder, or blank, while the runner pod held the built app. The build's files had arrived while the preview's dev server was still starting. One form of it is fixed - the panel now reloads a frame that loaded just before the files changed - and the other is a [known gap](../known-gaps/constraints-and-trade-offs.md#a-build-saved-while-its-preview-is-starting) with its cause written down; the test presses Reload when it meets it and says so in its report.
+The [journey test](testing.md#the-browser-journey) runs the product the way a person does, and about one run in ten the Preview tab came up on the starter template's placeholder, or blank, while the runner pod held the built app. The build's files had arrived while the preview's dev server was still starting. It had two causes on the server and a third in the local port-forward, each read from a log rather than guessed, and all three are fixed and written up in [pitfalls](gotchas/kubernetes.md#a-build-that-lands-while-the-dev-server-is-starting): after the last of them the preview step passed in thirty journey runs out of thirty (2026-10-10), where the same thirty had failed twice with each partial fix. The order costs something when a build does land mid-start: the dev server is started twice, and the app is on screen a median 9.2 s after the Preview tab is pressed in the journey, against about 6.5 s before. A start with nothing landing in it is unchanged within a few tenths of a second ([capacity](../deployment/capacity.md#measured-start-times)).
 
 ## The public pages
 
@@ -134,16 +134,16 @@ The whole-app figure for the frontend is low because most of the rest is the lan
 
 | Suite | Size |
 |---|---|
-| Backend | 1,308 tests |
-| Frontend | 845 tests |
-| Preview proxy | 30 tests |
-| A real preview on a cluster | 9 steps on one project |
-| The browser journey | 12 steps, about 35 s |
+| Backend | 1,515 tests |
+| Frontend | 915 tests |
+| Preview proxy | 82 tests |
+| A real preview on a cluster | 11 steps on one project |
+| The browser journey | 16 steps in about a minute, and 7 steps with two people in about half a minute |
 
 ## Not measured
 
 - **Production.** Every time on this page is a laptop's. Production also runs behind a tunnel and on a slower node.
-- **Time to publish an app.** Publishing is on its own branch and was not part of this build.
+- **Time to publish an app with a real model's build.** The journey publishes the scripted notes app: a median of 8.5 s over 29 runs (8.0 to 16.3 s) from the press to the live link, on this laptop. A larger app's production build will take longer, and production has not been timed.
 - **More than eight people at once**, or a run long enough to show a leak. The rate limits cap what one address can send, so a larger test needs many addresses or the limits raised for the run.
 - **The model's own variation.** Two browser passes and one benchmark run per configuration.
 

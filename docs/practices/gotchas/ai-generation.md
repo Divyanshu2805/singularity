@@ -110,6 +110,24 @@ Traps in the build pipeline. A unit test rarely catches these, because the thing
 - **Cause:** the prompt said to build what was asked and nothing more, and a brief's "keep it simple" list gave that something to hold on to. A one-sentence request has no list, so the model filled the page with what such apps usually have.
 - **Fix:** the scope section says what a one-sentence request gets - the smallest complete version, one screen, three to six files - and to name one neighbouring feature as a next step instead of building it. Vague requests are where a build's time goes; the benchmark has two for that reason.
 
+## Told it may build a server, the model shares through the browser anyway
+
+- **Symptom:** a game "two friends play from their own screens" is saved as a success with no server in it: rooms in `localStorage`, moves over a `BroadcastChannel`. It works in the maker's two tabs and for no second person. A shared leaderboard gets a server whose scores are an array in memory, four invented players already on the board, and a `localStorage` copy "in case the server is unreachable".
+- **Cause:** the prompt had a whole section on the project's server, and everything else it says - and the example it shows - teaches keeping data in the browser. The section was read and the habit won. Nothing fails: the files parse, the imports resolve, the turn is right by every check the pipeline has.
+- **Fix:** the decision is asked for where the model reads last. The skeleton under the request says the first line of the working-out is where the data lives and gives the rule in one paragraph (`PromptUtils.replyShape`), and the section opens with the rule and names the three shortcuts as things not to do. The benchmark has three requests that need a server, and `scripts/bench-verify.sh` starts each one. Read what such a turn wrote: "saved" does not mean "shared".
+
+## A rule and four lines to copy, and the model did neither
+
+- **Symptom:** a project's server works in the preview and cannot be hosted: it listens on `3001` whatever port the host gives it, and nothing serves the built pages. The prompt says to read `PORT`, "never a bare number", and shows the four lines that serve `dist` in the server it gives to copy.
+- **Cause:** of three servers a real run wrote, three had `const port = 3001` and none had the four lines. Both are things the preview never needs, so nothing the model can see is improved by them, and it writes the server it would write anywhere.
+- **Fix:** stop asking. The starter template carries a launcher (`start.mjs`) that serves the pages, starts the project's server on 3001 and passes `/api` on, so the model's server is correct as the model writes it. The prompt says only not to touch the launcher, and the brief does not show it. When a requirement can be met by a file the platform owns, that beats any wording: the same three projects were hostable the moment the file was beside them.
+
+## `CREATE TABLE IF NOT EXISTS` does nothing to a table that exists
+
+- **Symptom:** a change that adds a field to something a project's server stores works in a fresh preview and fails in the one that was already running: every query that names the new column is an error, because the table there still has its old shape. Seen in what a real second turn wrote (two columns added to a game's table), before it reached a running preview.
+- **Cause:** the model changes the `CREATE TABLE IF NOT EXISTS` statement, which is the right edit and has no effect on the database file the running preview already holds. A check that starts from an empty database - the benchmark's, a test's - cannot see it.
+- **Fix:** the preview clears a project's database when `server/db.ts` changes (`PreviewBootstrapper.serverLoop`), and the prompt tells the model that this is how a table changes, to keep every table in that file, and to say the data was cleared. `PreviewPipelineIT` changes a table on a running preview and reads an empty one back.
+
 ## The prompt must describe the project in front of it
 
 - **Symptom:** a turn on an older project imports `@/components/ui/button`, the import check sends it to a repair, and the repair writes the component by hand.

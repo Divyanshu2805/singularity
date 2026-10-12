@@ -19,7 +19,7 @@ The service logs a warning at start-up saying the profile is on. Nothing that de
 | A step lesson, a turn's big picture, an explanation, suggestions | Fixed text in the shape each parser reads |
 | A project tour, a glossary entry, a lesson's task, the check of a task | Fixed text in the shape each reader expects; the check always says `Done`, since the stub reads no file |
 
-The reply is streamed in small pieces (`ai.stub.chunk-delay`, 12 ms each by default), so the chat fills in the way a real one does. Token usage is reported as characters over four, so the meter and the daily allowance move.
+The reply is streamed in small pieces (`ai.stub.chunk-delay`, 12 ms each by default), so the chat fills in the way a real one does. Token usage is reported as characters over four, so the meter and the daily allowance move. One request is answered late on purpose: a message that says "take your time" has its reply held back for a minute, which leaves a response running long enough to try Stop, or a second person being told one is in progress.
 
 The scripted replies live in `llm/stub/StubReplies` and are written against the project the call was shown, not from a fixed script: an edit is only written when the lines it searches for are there. `StubBuildTurnTest` runs them through whole turns on the real starter template.
 

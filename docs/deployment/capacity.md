@@ -42,9 +42,13 @@ Measured by `PreviewPipelineIT` on the starter template ([how to run it](../prac
 | Start that had to wait in line for a pod to be created and warm | 37.9 s | 14.2 s |
 | Start that fails at install (a package that does not exist) | 19.2 s | 3.6 s |
 
+Measured again on 2026-10-10, after the starter template gained the packages a project's server uses and the runner moved to Node 22 (same laptop, one run each): with the seed, 5.1 s, 6.3 s, 14.5 s and 3.7 s down that column (a first start was between 4.5 and 6.7 s over four runs that day), so nothing moved; without it a first start took 47.4 s, about 17 s more than before, which is the extra packages being downloaded. A project's own server was answering through the proxy 2.7 s after its files were saved, with no restart of the dev server, and checking a turn's server before saving it took 6 to 8 s.
+
+And once more on 2026-10-10, after a start was changed to finish its dependency scan before the preview opens and to scan afresh every time (same laptop, one run): with the seed, 5.4 s, 7.1 s, 15.2 s and 4.1 s down that column. A start in which a build is saved midway also starts the dev server a second time, about two seconds more.
+
 The seed is what makes a start a matter of seconds: it removes about 26 of the 30. A restart on a pod that already has its packages costs the same either way. The third row includes the pool creating a pod from nothing, which is about 10 seconds of it.
 
-**Production has not been measured since these changes.** The 2-core arm64 node is slower than the laptop these came from; time one first start and one restart there with a stopwatch, from pressing Start to the app appearing (the starting screen shows no clock) and add a column. The seed is confirmed working if a fresh project's first start there is well under 15 seconds.
+**Production, timed by hand on 2026-10-10** (stopwatch, from the press to the app appearing; the release before the runner moved to Node 22): a first start 44 s, a restart on the same pod 8 s, a first publish 48 s, an update of a published app 12 s. The restart and the update are in line with the laptop. The first start and the first publish are not: 44 s is slower than a laptop start with no seed at all, where a seeded start is about 5 s. The deployed manifests do carry the seed (the rendered `oracle` overlay has the `seed-node-modules` init container, and the image it names is in the registry), so the cause is not known yet. What would tell: the `$ npm install` lines in the output panel of a first start there - `added N packages` means the seed was not in the pod, `up to date` after many seconds means a slow first read of it, and a quick install means the time went on waiting for the pool's one pod to be made.
 
 ## Publishing
 

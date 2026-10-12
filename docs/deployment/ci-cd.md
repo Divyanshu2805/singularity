@@ -10,7 +10,7 @@ Everything is one workflow, `.github/workflows/ci.yml`.
 | `frontend` | push, pull request | Type-check, lint, production build, and the tests with coverage held to its floors |
 | `proxy` | push, pull request | The preview proxy's `node --test` suite |
 | `preview-pipeline` | push, pull request | Creates a kind cluster, stands the preview pipeline up in its own namespace (`k8s/preview-test-cluster.sh`) and runs `PreviewPipelineIT`: a real preview started, fetched through the proxy, edited, given a new package, killed, queued for and stopped. Its start timings go to the job summary |
-| `journey` | push, pull request | Packages the services, creates a kind cluster, starts the whole application on the runner (`e2e/stack.sh`) and walks one person's path through it in a real browser, with the scripted model and the Firebase Auth emulator. Needs no secret. **Does not gate the deploy yet** - add it to `approve` after a few green runs |
+| `journey` | push, pull request | Packages the services, creates a kind cluster, starts the whole application on the runner (`e2e/stack.sh`) and walks one person's path through it in a real browser, then two people sharing a project in two, with the scripted model and the Firebase Auth emulator. Needs no secret. Gates the deploy, as `preview-pipeline` does |
 | `lighthouse` | push, pull request | Builds the frontend, serves it from the nginx image a deploy uses, and audits the landing and sign-in pages; fails under the accessibility, best-practices or SEO floor |
 | `build-java-images` | push, after `backend` | Five images from the tested jars (a matrix over the services) |
 | `build-frontend-image` | push, after `frontend` | The frontend image, with the public `VITE_*` values as build arguments |

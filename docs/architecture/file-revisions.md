@@ -27,6 +27,8 @@ The restore endpoints are in the [revisions API](../api/revisions.md). They answ
 
 `FileEditServiceImpl` publishes one file's new text as a `MANUAL_EDIT` revision through the same pipeline (`PUT /api/projects/{id}/files/content`, [files API](../api/files.md)). It only saves a file that already exists, and only when the caller's `baseHash` is the hash of what the file holds now - a per-file check, so a build that changed other files does not refuse the save. Because it is a revision, a save by hand is in the history, can be undone, and brings a running preview level with it.
 
+Adding and removing a file by hand go the same way (`POST` and `DELETE /api/projects/{id}/files`): a new file is published empty and refused where a file or a folder already has the path, a removal is published as a deletion, and each is one `MANUAL_EDIT` revision that History lists and can undo. In History a hand revision that touched one file reads "Edited <file> by hand" whichever of the three it was.
+
 ## Files created before revisions existed
 
 A `ProjectFile` with `contentHash IS NULL` predates this pipeline. It is adopted lazily the first time it is next touched: its current bytes are read once, hashed, and staged as-is, becoming that write's `previousContentHash`. There is no bulk backfill — a Flyway migration cannot hash MinIO objects, and a file that is never touched again never needs history.
