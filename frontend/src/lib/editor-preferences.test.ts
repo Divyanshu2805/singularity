@@ -2,6 +2,7 @@
  * Tests for lib/editor-preferences: what stored preferences are read as, that a change is kept and announced, and
  * the pixel size each choice stands for.
  */
+import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_EDITOR_PREFERENCES,
@@ -9,6 +10,7 @@ import {
   getEditorPreferences,
   parseEditorPreferences,
   setEditorPreferences,
+  useEditorPreferences,
 } from "./editor-preferences";
 
 describe("parseEditorPreferences", () => {
@@ -53,5 +55,19 @@ describe("editorTextPx", () => {
     expect(editorTextPx("SMALL")).toBe(12.5);
     expect(editorTextPx("MEDIUM")).toBe(13.5);
     expect(editorTextPx("LARGE")).toBe(15);
+  });
+});
+
+describe("useEditorPreferences", () => {
+  it("follows a change made elsewhere, and stops listening when its component goes", () => {
+    setEditorPreferences(DEFAULT_EDITOR_PREFERENCES);
+    const { result, unmount } = renderHook(() => useEditorPreferences());
+    expect(result.current[0].textSize).toBe("MEDIUM");
+
+    act(() => setEditorPreferences({ textSize: "LARGE" }));
+    expect(result.current[0].textSize).toBe("LARGE");
+
+    unmount();
+    expect(() => setEditorPreferences(DEFAULT_EDITOR_PREFERENCES)).not.toThrow();
   });
 });
