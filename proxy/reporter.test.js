@@ -7,8 +7,9 @@
  * same error can be reported again; console lines relayed in batches, shortened, capped, and still reaching the real
  * console; a blank page noticed, and the notice taken back when the app renders late; back, forward, reload and
  * go-to-address carried out only for the parent window, only when there is somewhere to go, and never to another
- * origin; a picture of the page asked for by the parent and answered, with a reason when there is none to give; and
- * a status page escaping what it is given and telling the tab its status.
+ * origin; a picture of the page asked for by the parent and answered, with a reason when there is none to give;
+ * "Edit text" turned on and answered only by the parent; and a status page escaping what it is given and telling the
+ * tab its status.
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -293,4 +294,23 @@ test('a status page escapes what it is given and tells the tab its status', () =
 test('a status page that will be retried says when', () => {
     assert.match(statusPageHtml(502, 'The preview is restarting', 'One moment', { refreshSeconds: 3 }),
         /<meta http-equiv="refresh" content="3">/);
+});
+
+test('"Edit text" is turned on and answered only by the parent window, and a stray answer does not throw', () => {
+    const p = page();
+    const send = (source, data) => p.fire('message', { source, data: { type: 'PreviewCommand', ...data } });
+
+    send({}, { command: 'edit-text', on: true });
+    p.fire('click', { type: 'click', stopPropagation() { this.stopped = true; }, preventDefault() {} });
+    send(p.parent, { command: 'edit-text-saved', id: 7, saved: false });
+    send(p.parent, { command: 'edit-text-saved', id: 'x', saved: false });
+
+    const click = { type: 'click', clientX: 1, clientY: 1, stopPropagation() { this.stopped = true; }, preventDefault() {} };
+    p.fire('click', click);
+    assert.equal(click.stopped, undefined);
+
+    send(p.parent, { command: 'edit-text', on: true });
+    const blocked = { type: 'mouseup', stopPropagation() { this.stopped = true; }, preventDefault() {} };
+    p.fire('mouseup', blocked);
+    assert.equal(blocked.stopped, true);
 });

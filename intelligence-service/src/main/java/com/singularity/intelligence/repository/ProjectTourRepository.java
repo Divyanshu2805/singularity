@@ -12,7 +12,7 @@ import java.util.Optional;
 /**
  * Reads and writes the tours of projects.
  *
- * <p>Handles: one person's tour of one project, and keeping a newly written one in place of the last.
+ * <p>Handles: one person's tour of one project, and keeping a newly written one in place of the last; and deleting every row of an account that is being deleted.
  *
  * <p>Every method takes the user as well as the project: a tour is written for one reader and there is deliberately no
  * find-by-project query. Keeping is a native upsert, because two requests for the same tour at the same moment must
@@ -30,4 +30,8 @@ public interface ProjectTourRepository extends JpaRepository<ProjectTour, Long> 
             ON CONFLICT (project_id, user_id) DO UPDATE SET content = EXCLUDED.content, updated_at = now()
             """, nativeQuery = true)
     int keep(@Param("projectId") Long projectId, @Param("userId") Long userId, @Param("content") String content);
+
+    @Modifying
+    @Query(value = "DELETE FROM project_tours WHERE user_id = :userId", nativeQuery = true)
+    int deleteAllOfUser(@Param("userId") Long userId);
 }

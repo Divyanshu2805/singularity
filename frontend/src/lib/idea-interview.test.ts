@@ -5,7 +5,8 @@
  * In particular: a request that finishes while no page is subscribed is still there to read afterwards, starting again
  * for the same idea resumes rather than refetching, the AI deciding an idea needs no questions or a spent allowance
  * arrives as an outcome for whichever page next asks, a failed AI is reported as not tailored, answers and position
- * survive, a late result for a discarded interview is ignored, and signing out clears it.
+ * survive, the name and title written with the questions are kept, a late result for a discarded interview is
+ * ignored, and signing out clears it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,6 +51,15 @@ beforeEach(() => {
 afterEach(() => clearInterview());
 
 describe("starting and resuming", () => {
+  it("keeps the name and the title the model wrote with the questions, for the project to be created with", async () => {
+    clarifyIdea.mockResolvedValue({ ...tailored("audience"), name: "Jotter", summary: "Quick notes you can jot down" });
+
+    startInterview("a notes app");
+    await settle();
+
+    expect(getInterview()).toMatchObject({ suggestedName: "Jotter", suggestedTitle: "Quick notes you can jot down" });
+  });
+
   it("is loading until the questions arrive, then holds them", async () => {
     clarifyIdea.mockResolvedValue(tailored("audience", "style"));
 

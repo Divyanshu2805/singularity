@@ -22,6 +22,7 @@ One turn of a chat session. Its `(project_id, user_id)` is a real composite fore
 | `teaching` | Not null, default `false`. `true` on an `ASSISTANT` row whose turn was asked for in teaching mode; only such a turn's file edits can have a lesson written. Always `false` on a `USER` row. |
 | `overview` | Nullable text, `ASSISTANT` rows only: the big picture teaching mode wrote about the turn, stored the first time it is shown (`POST /code/overview/stream`) and returned unchanged afterwards. Plain headed text. Added in `V3__turn_overview.sql`. |
 | `revisionId` | Nullable. On an `ASSISTANT` row whose files were saved, the workspace-service revision they were published as - a plain id, no foreign key, since the revision lives in another database. It is what the chat's Undo restores to just before. `null` on a turn that wrote nothing and on every turn saved before `V4__turn_revision.sql`. |
+| `title` | Nullable, at most 120 characters, `USER` rows only: what the message asked for in at most eight words, written by a model for the chat's scroll rail (`POST /api/chat/projects/{projectId}/message-titles`) and stored only while it is null. Added in `V6__message_title.sql`. |
 | `events` | `@OneToMany(cascade = ALL)`, ordered by `sequenceOrder` — the actual structured content of an assistant reply. |
 
 ## CHAT_EVENT

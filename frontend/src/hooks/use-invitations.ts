@@ -4,9 +4,9 @@
  * Handles: reading the list, accepting an invitation (which adds the project to the person's list and opens it),
  * declining one, saying which one is being answered so its buttons can wait, and a toast when an answer fails.
  *
- * It is shared by the two places an invitation can be answered - the dashboard's list and the panel opened from the
- * account menu - so both read one cached list and an answer in either is seen by the other. The list is asked for
- * when one of them mounts and again after an answer, never on a timer.
+ * It is shared by the panel invitations are answered in (opened from the account menu or the dashboard notice's View
+ * button; the notice also answers a single invitation itself), the sidebar's count and the dashboard's toast (InvitationNotice), so all read one cached list. The list is
+ * asked for when one of them mounts and again after an answer, never on a timer.
  */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";

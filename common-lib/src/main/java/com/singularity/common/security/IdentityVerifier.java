@@ -5,9 +5,9 @@ import java.time.Duration;
 /**
  * The only door to Firebase Authentication.
  *
- * <p>Handles: the five operations session handling needs - verify an ID token fresh from the browser, verify one of
+ * <p>Handles: the six operations session handling needs - verify an ID token fresh from the browser, verify one of
  * this app's session cookies, decode a cookie offline without a revocation check or a network call, mint a session
- * cookie, and revoke every session of a user.
+ * cookie, revoke every session of a user, and delete a user when their account is deleted.
  *
  * <p>An interface so the session logic can be tested without Google's servers. Every method throws
  * BadCredentialsException for a credential that is invalid, expired, revoked or belongs to a disabled user, and
@@ -25,4 +25,6 @@ public interface IdentityVerifier {
     String createSessionCookie(String idToken, Duration maxAge);
 
     void revokeAllSessions(String uid);
+
+    void deleteUser(String uid);
 }

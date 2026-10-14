@@ -103,6 +103,94 @@ class CodeCheckServiceImplTest {
                 new Problem(PAGE, 2, 9, "TS2322", "Type 'string' is not assignable to type 'number'."));
     }
 
+    private void thePodAnswers(ExecResult compiler, ExecResult before, RuntimeException beforeFails) {
+        when(runnerPool.exec(eq(POD), eq(PreviewRunnerPool.RUNNER_CONTAINER), any(Duration.class), anyString()))
+                .thenAnswer(call -> {
+                    String script = call.getArgument(3);
+                    scripts.add(script);
+                    if (script.equals(CodeCheckServiceImpl.TYPE_CHECK_SCRIPT)) return compiler;
+                    if (script.equals(CodeCheckServiceImpl.BASELINE_SCRIPT)) {
+                        if (beforeFails != null) throw beforeFails;
+                        return before;
+                    }
+                    return new ExecResult(0, "");
+                });
+    }
+
+    private static final String OLD_ERROR = PAGE + "(7,3): error TS2304: Cannot find name 'oldHelper'.\n";
+    private static final String NEW_ERROR = PAGE + "(2,9): error TS2322: Type 'string' is not assignable to type 'number'.\n";
+
+    @Test
+    void anErrorTheProjectAlreadyHadBeforeTheTurnIsLeftOutAndOnlyTheTurnsOwnIsReported() {
+        aPreviewIsRunning();
+        thePodAnswers(new ExecResult(2, NEW_ERROR + PAGE + "(9,3): error TS2304: Cannot find name 'oldHelper'.\n"),
+                new ExecResult(2, OLD_ERROR), null);
+
+        CodeCheckResponse response = service.check(PROJECT_ID, turn(Map.of(PAGE, "export default 1;")));
+
+        assertThat(response.checked()).isTrue();
+        assertThat(response.problems()).containsExactly(
+                new Problem(PAGE, 2, 9, "TS2322", "Type 'string' is not assignable to type 'number'."));
+        assertThat(scripts).contains(CodeCheckServiceImpl.BASELINE_SCRIPT);
+    }
+
+    @Test
+    void aTurnWhoseOnlyErrorsWereThereBeforeIsClean() {
+        aPreviewIsRunning();
+        thePodAnswers(new ExecResult(2, OLD_ERROR), new ExecResult(2, OLD_ERROR), null);
+
+        CodeCheckResponse response = service.check(PROJECT_ID, turn(Map.of(PAGE, "export default 1;")));
+
+        assertThat(response.checked()).isTrue();
+        assertThat(response.problems()).isEmpty();
+    }
+
+    @Test
+    void anErrorTheTurnRepeatsIsLeftOutOnlyAsManyTimesAsItWasThereBefore() {
+        Problem old = new Problem(PAGE, 7, 3, "TS2304", "Cannot find name 'oldHelper'.");
+        Problem again = new Problem(PAGE, 12, 3, "TS2304", "Cannot find name 'oldHelper'.");
+
+        assertThat(CodeCheckServiceImpl.without(List.of(old, again), List.of(old))).containsExactly(again);
+        assertThat(CodeCheckServiceImpl.without(List.of(old), List.of(
+                new Problem("src/Other.tsx", 7, 3, "TS2304", "Cannot find name 'oldHelper'.")))).containsExactly(old);
+    }
+
+    @Test
+    void theProjectIsNotCompiledASecondTimeWhenTheTurnIsClean() {
+        aPreviewIsRunning();
+        thePodAnswers(new ExecResult(0, ""), new ExecResult(2, OLD_ERROR), null);
+
+        service.check(PROJECT_ID, turn(Map.of(PAGE, "export default 1;")));
+
+        assertThat(scripts).doesNotContain(CodeCheckServiceImpl.BASELINE_SCRIPT);
+    }
+
+    @Test
+    void whenTheProjectAsItWasCannotBeCompiledEveryErrorIsReported() {
+        aPreviewIsRunning();
+        thePodAnswers(new ExecResult(2, OLD_ERROR), null, new ExternalServiceException("the pod went away", null));
+
+        CodeCheckResponse response = service.check(PROJECT_ID, turn(Map.of(PAGE, "export default 1;")));
+
+        assertThat(response.checked()).isTrue();
+        assertThat(response.problems()).extracting(Problem::code).containsExactly("TS2304");
+    }
+
+    @Test
+    void theCopyOfTheProjectAsItWasIsMadeBesideTheScratchFolderAndRemovedAfterwards() {
+        assertThat(CodeCheckServiceImpl.BASELINE_SCRIPT)
+                .contains("mkdir -p /tmp/check-base")
+                .contains("ln -s /app/node_modules /tmp/check-base/node_modules")
+                .contains("cd /tmp/check-base ||")
+                .doesNotContain("> /app/");
+        aPreviewIsRunning();
+        thePodAnswers(new ExecResult(2, NEW_ERROR), new ExecResult(0, ""), null);
+
+        service.check(PROJECT_ID, turn(Map.of(PAGE, "export default 1;")));
+
+        assertThat(scripts.getLast()).startsWith("rm -rf /tmp/check /tmp/check-base");
+    }
+
     @Test
     void aTurnTheCompilerAcceptsIsCheckedAndClean() {
         aPreviewIsRunning();

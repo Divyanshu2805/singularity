@@ -2,7 +2,10 @@
  * The app's toast queue.
  *
  * Handles: adding, updating and dismissing toasts, and the subscription components read them through. One toast is
- * shown at a time, so a burst of results does not stack up over the page.
+ * shown at a time, so a burst of results does not stack up over the page. Every toast dismisses itself when its
+ * duration is up (three seconds unless it asks for longer) on a timer of its own: Radix's timer holds every toast while
+ * the window does not have focus, and keeps holding a toast shown after that, so one raised while the person typed in
+ * the preview frame used to stay until they clicked back into the workspace.
  */
 import * as React from "react";
 
@@ -10,6 +13,7 @@ import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 
 const TOAST_LIMIT = 1;
 const TOAST_REMOVE_DELAY = 1000000;
+export const TOAST_DURATION_MS = 3000;
 
 type ToasterToast = ToastProps & {
   id: string;
@@ -159,6 +163,9 @@ function toast({ ...props }: Toast) {
       },
     },
   });
+
+  const stays = props.duration ?? TOAST_DURATION_MS;
+  if (Number.isFinite(stays)) setTimeout(dismiss, stays);
 
   return {
     id: id,

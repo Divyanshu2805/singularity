@@ -3,7 +3,8 @@
  *
  * Handles: signing in with a password or Google, completing a second factor, signing up and sending verification, the
  * password-reset round trip, re-authenticating before a sensitive change, enrolling and removing an authenticator
- * app, changing a password, and releasing the Firebase user once our own session cookie exists.
+ * app, changing a password, deleting the account with a token fresh from re-authenticating, and releasing the
+ * Firebase user once our own session cookie exists.
  *
  * Each sign-in ends by exchanging the resulting token for this app's session cookie, which is what the rest of the
  * app actually authenticates with.
@@ -202,6 +203,11 @@ export async function removeFactor(user: User, factor: MultiFactorInfo): Promise
 export async function changePassword(user: User, newPassword: string): Promise<void> {
   await updatePassword(user, newPassword);
   await refreshSessionAfter(user, "PASSWORD_CHANGED");
+}
+
+export async function deleteAccount(user: User): Promise<void> {
+  await api.deleteAccount(await user.getIdToken(true));
+  await releaseFirebaseUser();
 }
 
 export const releaseFirebaseUser = () => firebaseSignOut(getFirebaseAuth()).catch(() => undefined);

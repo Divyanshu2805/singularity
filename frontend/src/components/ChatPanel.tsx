@@ -2,10 +2,10 @@
  * The project build chat: the transcript, the composer and everything around them.
  *
  * Handles: rendering saved and streaming turns, revealing a streamed answer at a readable pace, the scroll rail down
- * the side, the composer with its teaching-mode toggle and example prompts, the usage meter above it, retrying an
+ * the side, the composer with its teaching-mode toggle (an empty chat's box carries an example as its placeholder), the usage meter above it, retrying an
  * unfinished turn, exporting the conversation, and the quota banner that replaces the composer once the allowance
  * is spent. Three suggested next steps used to be offered as cards under every finished build; the owner had them
- * taken out, and nothing is asked of the model for them any more.
+ * taken out, and nothing is asked of the model for them any more. There is no Clear chat either.
  *
  * The chat follows a reply to its last line while one is being written, by keeping itself at the bottom whenever its
  * content grows. Opening something in a finished turn grows the content too - a lesson, the thought process, the
@@ -40,10 +40,9 @@
  * wait reads as the app working rather than as a frozen box. The text box is a bare textarea rather than the app's
  * Textarea: that one is a field well with its own gradient fill, which painted a darker block inside the prompt. An
  * empty conversation opens on the horizon mark building itself over a soft light (index.css, .empty-glow) and the
- * dashboard's Fraunces headline (near-white, with a pale gold sweep on "build?"), with the suggestions rising in
- * turn as one column of equal-width cards (.prompt-card - an icon tile, the prompt, an arrow; well-rounded, and lit on hover by the gold light
- * that follows the pointer, as the buttons are - lib/button-light.ts) - centred pills of
- * ragged widths looked uneven, and the explanatory line under the headline was removed, both at the owner's request.
+ * dashboard's Fraunces headline (near-white, with a pale gold sweep on "build?"); the explanatory line under the
+ * headline was removed at the owner's request, and so were the suggestion cards that stood under it (and the starter
+ * buttons on a shared project's welcome) - the owner wants example prompts only inside the input box, never as buttons.
  * Teaching mode is a property of each turn, not of the panel: the menu beside the send button only decides how the
  * next message is sent, and a reply offers its lessons when it was asked for with the mode on, whatever the menu
  * says now. It used to be one switch for the whole transcript, so turning it on put a lesson under every step of
@@ -54,7 +53,7 @@
  * folded after a few lines (lib/brief.ts): the brief used to fill the window before the answer had started.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, ChevronDown, CodeXml, Eye, ListChecks, Lock, Moon, PenLine, Rocket, RotateCcw, Sparkles, Square, Zap, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, ChevronDown, CodeXml, Eye, Lock, PenLine, RotateCcw, Sparkles, Square, Zap } from "lucide-react";
 import { HorizonMark } from "@/components/HorizonMark";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { Button } from "@/components/ui/button";
@@ -77,21 +76,7 @@ import type { CodeTarget } from "@/lib/lesson";
 import { isLongMessage, splitBrief } from "@/lib/brief";
 import { cn, formatWorkedFor, generateGradient } from "@/lib/utils";
 
-const EMPTY_STATE_SUGGESTIONS: { text: string; Icon: LucideIcon }[] = [
-  { text: "Build a landing page for a SaaS product", Icon: Rocket },
-  { text: "Create a todo app with drag and drop", Icon: ListChecks },
-  { text: "Add a dark mode toggle to the navbar", Icon: Moon },
-];
-const SHARED_PROJECT_STARTERS = [
-  {
-    label: "Explain how this project is built",
-    prompt: "Give me a quick tour of this project: what it does, how the code is organised, and which files matter most.",
-  },
-  {
-    label: "Suggest what to improve next",
-    prompt: "Look through this project and suggest the three most valuable improvements I could make next.",
-  },
-];
+const EMPTY_CHAT_PLACEHOLDER = "Try: Create a todo app with drag and drop…";
 const STREAM_OPTIONS = { visibleRanges: findVisibleRanges, safeEnd: findSafeEnd };
 const MAX_INPUT_HEIGHT = 200;
 const JUMP_HIGHLIGHT_MS = 1400;
@@ -183,9 +168,10 @@ export function ChatPanel({
   const jumpScrollTimerRef = useRef<number | undefined>(undefined);
 
   const currentChatMessageId = [...messages].reverse().find((message) => message.role === "assistant")?.id ?? null;
+  const firstAssistantId = messages.find((message) => message.role === "assistant")?.id ?? null;
   const userMessageIds = useMemo(() => messages.filter((message) => message.role === "user").map((message) => message.id), [messages]);
   const railItems = useMemo(
-    () => messages.filter((message) => message.role === "user").map((message) => ({ id: message.id, label: messageLabel(message.content) })),
+    () => messages.filter((message) => message.role === "user").map((message) => ({ id: message.id, label: message.title || messageLabel(message.content) })),
     [messages]
   );
   const hasRail = !isLoading && railItems.length > 1;
@@ -388,9 +374,9 @@ export function ChatPanel({
             </div>
           ) : messages.length === 0 ? (
             sharedWith ? (
-              <SharedProjectWelcome info={sharedWith} readOnly={readOnly} onPick={applySuggestion} onBrowseCode={onBrowseCode} />
+              <SharedProjectWelcome info={sharedWith} readOnly={readOnly} onBrowseCode={onBrowseCode} />
             ) : (
-              <EmptyState readOnly={readOnly} onPick={applySuggestion} />
+              <EmptyState readOnly={readOnly} />
             )
           ) : (
             <div ref={contentRef} className={cn("flex flex-col gap-6 py-5 pr-4", hasRail ? "pl-9" : "pl-4")}>
@@ -421,6 +407,7 @@ export function ChatPanel({
                     onExplainStep={onExplainStep}
                     onAskAbout={onAskAbout}
                     teaching={!!message.teaching}
+                    opensProject={message.id === firstAssistantId}
                     projectId={projectId}
                   />
                 )
@@ -481,7 +468,11 @@ export function ChatPanel({
                 maxLength={16000}
                 aria-label="Message Singularity"
                 placeholder={
-                  isStreaming ? "Draft your next message while Singularity works…" : "Ask Singularity to build or change something…"
+                  isStreaming
+                    ? "Draft your next message while Singularity works…"
+                    : messages.length === 0
+                      ? EMPTY_CHAT_PLACEHOLDER
+                      : "Ask Singularity to build or change something…"
                 }
                 className="app-prompt-input min-h-[56px] w-full flex-1 resize-none bg-transparent px-2.5 py-1.5 text-[14px] leading-6 text-white caret-white outline-none placeholder:text-white/55"
               />
@@ -526,7 +517,7 @@ export function ChatPanel({
   );
 }
 
-function EmptyState({ readOnly, onPick }: { readOnly?: boolean; onPick: (text: string) => void }) {
+function EmptyState({ readOnly }: { readOnly?: boolean }) {
   return (
     <div className="flex h-full flex-col items-center justify-center px-6 py-8">
       <div className="flex w-full max-w-[23rem] flex-col items-center text-center">
@@ -543,21 +534,6 @@ function EmptyState({ readOnly, onPick }: { readOnly?: boolean; onPick: (text: s
             </>
           )}
         </h3>
-        {!readOnly && (
-          <ul aria-label="Suggestions" className="mt-8 flex w-full max-w-[20.5rem] flex-col gap-2">
-            {EMPTY_STATE_SUGGESTIONS.map(({ text, Icon }, index) => (
-              <li key={text} className="app-rise" style={{ "--i": index, "--rise-delay": "380ms" } as CSSProperties}>
-                <button type="button" onClick={() => onPick(text)} className="prompt-card">
-                  <span aria-hidden="true" className="prompt-card-icon">
-                    <Icon className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{text}</span>
-                  <ArrowUpRight aria-hidden="true" className="prompt-card-arrow h-3.5 w-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
     </div>
   );
@@ -566,10 +542,9 @@ function EmptyState({ readOnly, onPick }: { readOnly?: boolean; onPick: (text: s
 const STARTER_ROW =
   "app-chip group flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-xs text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-function SharedProjectWelcome({ info, readOnly, onPick, onBrowseCode }: {
+function SharedProjectWelcome({ info, readOnly, onBrowseCode }: {
   info: SharedProjectInfo;
   readOnly?: boolean;
-  onPick: (text: string) => void;
   onBrowseCode?: () => void;
 }) {
   const projectInitial = info.projectName.charAt(0).toUpperCase() || "P";
@@ -623,14 +598,6 @@ function SharedProjectWelcome({ info, readOnly, onPick, onBrowseCode }: {
             <ArrowRight className="ml-auto h-3.5 w-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-300 group-hover:translate-x-0 group-hover:opacity-100" />
           </button>
         )}
-        {!readOnly &&
-          SHARED_PROJECT_STARTERS.map((starter) => (
-            <button key={starter.label} type="button" onClick={() => onPick(starter.prompt)} className={STARTER_ROW}>
-              <Sparkles className="icon-pop h-3.5 w-3.5 shrink-0 text-primary" style={{ "--icon-hover": "rotate(18deg) scale(1.2)" } as CSSProperties} />
-              {starter.label}
-              <ArrowRight className="ml-auto h-3.5 w-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-300 group-hover:translate-x-0 group-hover:opacity-100" />
-            </button>
-          ))}
       </div>
     </div>
   );
@@ -705,6 +672,7 @@ function AssistantMessage({
   onExplainStep,
   onAskAbout,
   teaching,
+  opensProject,
   projectId,
 }: {
   message: ChatMessage;
@@ -717,6 +685,7 @@ function AssistantMessage({
   onExplainStep?: (step: StepToExplain) => void;
   onAskAbout?: (ask: LessonQuestion) => void;
   teaching?: boolean;
+  opensProject?: boolean;
   projectId?: string;
 }) {
   const content = message.content || "";
@@ -751,6 +720,7 @@ function AssistantMessage({
         projectId={projectId}
         turnId={message.turnId}
         overview={message.overview}
+        bigPicture={opensProject}
       />
       {message.error && <AssistantError message={message.error} />}
       {isEmptyAnswer && <AssistantError message="The model returned no answer, so nothing was changed" />}

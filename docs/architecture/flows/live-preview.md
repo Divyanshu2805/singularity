@@ -71,9 +71,20 @@ The preview is another origin in a sandboxed frame, so messages are the only cha
 | `PreviewBlank` / `PreviewRendered` — the page loaded and drew nothing; it drew something after all | Shows "The page is blank" with the same actions; takes it down |
 | `PreviewConsole` — what the app wrote to its console, batched and capped | Adds the lines to the Console tab of the output panel |
 | `PreviewSnapshot` (a WebP or JPEG data URL, or a reason there is none) - the page's picture of itself, sent only when asked | Uploads it as the project's card picture (`PUT /api/projects/{id}/thumbnail`) and refreshes the project list |
+| `PreviewTextEdit` (id, the old words, the new words, React's source hints) - the person changed some of the page's words by hand | Finds the old words in the source and saves the file by hand, then answers `edit-text-saved` - see below |
 | `PreviewStatusPage` (status) — this is one of the proxy's own pages | `401`: fetches a fresh link and reloads the frame. `404`: asks the server what happened. `502`/`503`: waits, and asks the server too |
 
-The tab sends `PreviewCommand` back: `back`, `forward`, `reload`, `navigate` with a path, and `snapshot`. The script acts only on messages from its parent window and only opens a path on its own origin.
+The tab sends `PreviewCommand` back: `back`, `forward`, `reload`, `navigate` with a path, `snapshot`, `edit-text` with on or off, and `edit-text-saved` with an edit's id and whether it was kept. The script acts only on messages from its parent window and only opens a path on its own origin.
+
+### Editing the app's words by hand
+
+**Edit text** in the Preview toolbar - for someone who may edit, while the preview runs and nothing is being built - lets a person click any words in the running app and type over them, with no model involved:
+
+1. In the page (`proxy/text-edit.js`, embedded by the reporter), the text node under the pointer is outlined; a click lends that one node to a span of the script's own, made editable, so the browser never edits the app's elements, and every press, click and key is kept from the app meanwhile. Enter or leaving it finishes; Escape gives up. The node is put back where it was with its new words, and the page posts `PreviewTextEdit` with the file and line of the JSX that made each element above it (React's development-only `_debugSource`).
+2. In the tab (`frontend/src/lib/text-edit.ts`), the candidate files are the hinted ones and those the project search finds a piece of the old words in. Each is parsed (`@codemirror/lang-javascript`'s TSX, JSX and TypeScript parsers) and the words are looked for only inside JSX text, a JSX attribute's string, a string literal or a template's literal part - decoded as the browser shows them, so a JSX line break, an entity or a string escape still matches. Strings that name a module, a selector, a storage key or an address, object keys, and attributes such as `className` or `href` are never candidates. Several places are told apart by the hinted line; if that does not settle it, or the words are worked out by the app, the person is told to use the Code tab.
+3. The new words are escaped for the node they land in, and the file is saved through `PUT /files/content` with the hash it was read at - a `MANUAL_EDIT` revision like any save by hand, so History can undo it - once more against the newer file on a `409`. The tab answers `edit-text-saved`, and a page told "not saved" puts the old words back. The running preview picks the file up like any other save.
+
+Edits are saved one at a time, in the order they were made, and taken only while the mode is on (and for three seconds after it is turned off, since turning it off finishes the one that was open). A build turns the mode off.
 
 ### The picture on a project's card
 

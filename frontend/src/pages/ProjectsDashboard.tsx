@@ -50,9 +50,9 @@ import { Nebula } from "@/components/app/Nebula";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ArrowUpRight, ArrowUp, Camera, Check, FolderOpen, Layers, ListChecks, Sparkles } from "lucide-react";
+import { ArrowRight, ArrowUp, Check, FolderOpen, Sparkles } from "lucide-react";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
-import { InvitationsList } from "@/components/InvitationsList";
+import { InvitationNotice } from "@/components/InvitationNotice";
 import { ProjectCard } from "@/components/ProjectCard";
 import { ProjectFilterTabs } from "@/components/ProjectFilterTabs";
 import { Button } from "@/components/ui/button";
@@ -76,14 +76,9 @@ import { api, getUserInfo, isAuthenticated, loginRedirectPath, isQuotaError } fr
 import { byLastEdited, countByFilter, matchesProjectFilter, type ProjectFilter } from "@/lib/project-filters";
 import { cn } from "@/lib/utils";
 import { IDEA_SUGGESTIONS } from "@/lib/idea-suggestions";
-import { clearInterview, startInterview, useInterview } from "@/lib/idea-interview";
+import { clearInterview, getInterview, startInterview, useInterview } from "@/lib/idea-interview";
+import { projectTitle } from "@/lib/project-title";
 import { takePendingIdea } from "@/lib/pending-idea";
-
-const QUICK_STARTS = [
-    { idea: "A todo app with drag and drop", Icon: ListChecks },
-    { idea: "A portfolio site for a photographer", Icon: Camera },
-    { idea: "A pricing page with three tiers", Icon: Layers },
-];
 
 const CREATION_STEPS = [
     { label: "Reading your idea", startsAtMs: 0 },
@@ -337,14 +332,16 @@ export function ProjectsDashboard() {
     };
 
     const createProject = async (description: string, firstMessage: string) => {
+        const interview = getInterview();
+        const suggested = { name: interview?.suggestedName, summary: interview?.suggestedTitle };
         clearInterview();
         const startedAt = Date.now();
         setNow(startedAt);
         setCreation({ description, startedAt });
         try {
-            const project = await api.createProjectFromPrompt(description);
+            const project = await api.createProjectFromPrompt(description, suggested);
             queryClient.invalidateQueries({ queryKey: ["projects"] });
-            setCreation((prev) => (prev ? { ...prev, projectName: project.name } : prev));
+            setCreation((prev) => (prev ? { ...prev, projectName: projectTitle(project) } : prev));
             window.setTimeout(() => {
                 navigate(`/projects/${project.id}`, { state: { initialPrompt: firstMessage } });
             }, OPEN_DELAY_MS);
@@ -361,17 +358,6 @@ export function ProjectsDashboard() {
                 variant: "destructive",
             });
         }
-    };
-
-    const applyIdea = (idea: string) => {
-        setPrompt(idea);
-        const el = promptRef.current;
-        if (!el) return;
-        el.focus();
-        requestAnimationFrame(() => {
-            resizePrompt(el);
-            el.setSelectionRange(idea.length, idea.length);
-        });
     };
 
     const counts = useMemo(() => countByFilter(projects), [projects]);
@@ -501,27 +487,12 @@ export function ProjectsDashboard() {
                                             </div>
                                         </form>
 
-                                        <div className="mt-5 flex flex-wrap justify-center gap-2">
-                                            {QUICK_STARTS.map(({ idea, Icon }, index) => (
-                                                <button
-                                                    key={idea}
-                                                    type="button"
-                                                    onClick={() => applyIdea(idea)}
-                                                    className="idea-chip app-rise group/idea"
-                                                    style={stagger(index, 460)}
-                                                >
-                                                    <Icon className="h-3.5 w-3.5 shrink-0 text-white/55 transition-all duration-300 group-hover/idea:text-[hsl(46_100%_85%)]" />
-                                                    {idea}
-                                                    <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-white/45 transition-all duration-300 group-hover/idea:translate-x-0.5 group-hover/idea:text-[hsl(46_100%_85%)]" />
-                                                </button>
-                                            ))}
-                                        </div>
                                     </>
                                 )}
                             </div>
                         </section>
 
-                        <InvitationsList />
+                        <InvitationNotice />
 
                         <section
                             aria-hidden={isFocused || undefined}

@@ -51,7 +51,8 @@ import java.util.UUID;
  *
  * <p>Handles: creating a checkout session for a user with no subscription, opening the billing portal, changing plan
  * in place (upgrade with an immediate prorated invoice, downgrade with ordinary prorations, cancel to free, or resume
- * a cancellation), confirming a checkout the browser returned with, and consuming the five webhook events that matter
+ * a cancellation), ending a subscription at once when its account is deleted - with no refund, and a subscription
+ * Stripe no longer has counting as ended - confirming a checkout the browser returned with, and consuming the five webhook events that matter
  * - checkout completed, subscription updated and deleted, invoice paid and invoice payment failed.
  *
  * <p>Confirming a checkout re-fetches the session from Stripe and checks both that it was paid and that its user_id
@@ -288,6 +289,27 @@ public class StripePaymentProcessor implements PaymentProcessor {
 
         syncFromStripe(subscriptionId, clock.instant());
         return subscriptionService.getCurrentSubscription();
+    }
+
+    @Override
+    public void cancelImmediately(Long userId) {
+        com.singularity.account.entity.Subscription current = subscriptionService.getActiveSubscription(userId).orElse(null);
+        if (current == null || current.getStripeSubscriptionId() == null) {
+            return;
+        }
+        String subscriptionId = current.getStripeSubscriptionId();
+        try {
+            Subscription stripeSubscription = Subscription.retrieve(subscriptionId);
+            if (!"canceled".equals(stripeSubscription.getStatus())) {
+                stripeSubscription.cancel();
+            }
+        } catch (StripeException e) {
+            if (!"resource_missing".equals(e.getCode())) {
+                throw new ExternalServiceException("Couldn't cancel subscription " + subscriptionId + " of user " + userId, e);
+            }
+        }
+        subscriptionService.cancelSubscription(subscriptionId, clock.instant());
+        log.info("Cancelled subscription {} of user {}, whose account is being deleted", subscriptionId, userId);
     }
 
     /**

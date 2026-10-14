@@ -1,21 +1,17 @@
 /**
- * The invitations addressed to the signed-in person: the rows, and the dashboard's panel of them.
+ * The invitation rows the Project invites panel draws.
  *
- * Handles: one row per project someone has invited them to - the project's letter, who sent it and what it lets them
- * do, a quiet Decline chip and a primary Accept (InvitationRows); and the dashboard's own panel around those rows (InvitationsList), which renders nothing
- * at all when there are none, so the dashboard looks the same as before for everyone who has no invitation waiting.
+ * Handles: one row per project someone has invited the signed-in person to - the project's letter, who sent it and what
+ * it lets them do, a quiet Decline chip and a primary Accept (InvitationRows).
  *
  * An invitation gives no access until it is accepted: the project is not in the person's list and cannot be opened.
- * Reading and answering are hooks/use-invitations, shared with the panel the account menu opens
- * (InvitationsDialog), which draws the same rows. The dashboard's panel is the dashboard's glass panel with the
- * app's own buttons, and takes the place the projects panel has under the prompt: it rises into the hero by the same
- * amount and leaves that much room beneath itself, so the projects panel below overlaps empty space instead of this
- * one.
+ * Reading and answering are hooks/use-invitations; the panel that shows these rows is InvitationsDialog, opened from the
+ * account menu or from the View button of the dashboard's toast (InvitationNotice).
  */
 import { Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
-import { useInvitations, type Invitations } from "@/hooks/use-invitations";
+import type { Invitations } from "@/hooks/use-invitations";
 import { roleOffer } from "@/lib/members";
 
 export function InvitationRows({ invitations, busyProjectId, answer }: Pick<Invitations, "invitations" | "busyProjectId" | "answer">) {
@@ -60,20 +56,5 @@ export function InvitationRows({ invitations, busyProjectId, answer }: Pick<Invi
                 );
             })}
         </ul>
-    );
-}
-
-export function InvitationsList() {
-    const { invitations, busyProjectId, answer } = useInvitations();
-
-    if (invitations.length === 0) return null;
-
-    return (
-        <section aria-label="Invitations" className="relative z-10 mx-auto -mt-12 w-full max-w-6xl shrink-0 px-4 pb-16 sm:px-6">
-            <div className="app-glass app-rise rounded-[22px] p-4 sm:p-5">
-                <p className="sidebar-label mb-2">Invitations</p>
-                <InvitationRows invitations={invitations} busyProjectId={busyProjectId} answer={answer} />
-            </div>
-        </section>
     );
 }

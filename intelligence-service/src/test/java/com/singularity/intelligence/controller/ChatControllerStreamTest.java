@@ -27,7 +27,9 @@ class ChatControllerStreamTest {
 
     private final AiGenerationService aiGenerationService = mock(AiGenerationService.class);
     private final ChatController controller = new ChatController(aiGenerationService, mock(ChatService.class),
-            mock(com.singularity.intelligence.service.SuggestionService.class));
+            mock(com.singularity.intelligence.service.SuggestionService.class),
+            mock(com.singularity.intelligence.service.ProjectTitleService.class),
+            mock(com.singularity.intelligence.service.MessageTitleService.class));
 
     private List<ServerSentEvent<StreamResponse>> events(Flux<GenerationSignal> signals) {
         when(aiGenerationService.streamResponse("build it", 1L, false)).thenReturn(signals);

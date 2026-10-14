@@ -26,16 +26,19 @@ import java.util.List;
  * It is now given what the person asked for, the turn's steps with this one marked, and only the lines the step
  * added, rewrote or removed ({@link ChangedLines}) - and is asked to tell them as one story that starts from the
  * request, moves through the change in the order the idea needs rather than the order of the lines, each part
- * carrying on from the one before, and ends by handing over to the next step.
+ * carrying on from the one before, and ends by handing over to the next step - except on the last step, which has
+ * no next step to hand over to and is told to leave that section out.
  *
  * <p>Teaching runs from the whole to the part to the detail. The overview comes first: what was asked for, the files
  * the turn wrote and each one's job, one action followed through them, and the ideas the build uses (it also
  * said which step to open first, until the owner had that section taken out). It is given no
  * file text - only the request, what the build said, its steps and the paths it wrote - and reads the files it
- * needs through the read tool, like every other answer here except the step lesson. Then each step's lesson, which
- * now ends with one question the reader can answer from the lines in front of them. Then the code lens, for the
- * syntax of a line, the reason it is written that way, a term's meaning, or a check of the reader's own answer; the
- * ask prompt says how each of those is answered.
+ * needs through the read tool, like every other answer here except the step lesson. The browser asks for it only on
+ * the turn that built the project; later turns in teaching mode go straight to their step lessons. Then each step's
+ * lesson, which ends with a "Check yourself" exercise: write a few lines of what the step did, with a twist so they
+ * cannot be copied from the file. Then the code lens, for the syntax of a line, the reason it is written that way, a
+ * term's meaning, or a check of the reader's own attempt at that exercise - tested, corrected and improved; the ask
+ * prompt says how each of those is answered.
  *
  * <p>Three more prompts belong to the learner's own project rather than to one turn. The tour is a map of the whole
  * project as it stands, written from the files it reads. A glossary entry defines one word: what it means, an
@@ -482,16 +485,21 @@ public final class CodeInsightPrompts {
                that uses what it brings in. When a line uses syntax a beginner would
                not recognise, say in a few words what it means, right there. When lines were only removed, point
                at the line where they used to be and say what went and why.
-            3. Then one section headed `### What happens next` holding one or two sentences: on the last step,
-               what the person can now do in the app that they could not before; on any other, what the next step
-               does with what this one set up.
-            4. Last, one section headed `### Check yourself` holding exactly one question, in one or two sentences,
-               that the person can answer by looking at the lines this step changed - what a named line is for,
-               what would happen if it were not there, or which line does a given job. Ask it and stop: never give
-               the answer or a hint, and never ask something the lines shown cannot answer.
+            3. Then one section headed `### What happens next` holding one or two sentences on what the next step
+               does with what this one set up. Leave this section out entirely when the message says this is the
+               last step, or that this file is not a step of its own: nothing comes after it to talk about.
+            4. Last, one section headed `### Check yourself` holding one small exercise, in two to four sentences,
+               that has the person write a piece of this step's code themselves - the code that does one job this
+               step did - so they practise building it rather than reading it. It must be:
+               - about this step's change and nothing else, and doable with only what this lesson explained;
+               - a few lines of code at most (one to ten), never a whole file or component;
+               - impossible to answer by copying lines from the file: give it a twist - a different name, value,
+                 field or label, or one small extra the step did not need - so they write it, not paste it;
+               - clear about what a right answer must do, so it can be checked.
+               Say exactly what to write and what it must do. Never give the answer, its code or a hint toward it.
 
-            Match the length to the change. A change of a few lines is an opening, one section, the closing and the
-            question; never pad, and never write more than seven line-numbered sections.
+            Match the length to the change. A change of a few lines is an opening, one section, the closing (when
+            there is one) and the exercise; never pad, and never write more than seven line-numbered sections.
 
             Writing rules:
             - Plain language first, the technical word named once you have described what it does. **Bold** the one
@@ -538,9 +546,15 @@ public final class CodeInsightPrompts {
                 }
                 block.append(i == current ? "   <- this lesson\n" : "\n");
             }
-            block.append(current >= 0
-                    ? "This lesson is about step " + (current + 1) + " of " + steps.size() + ".\n\n"
-                    : "This lesson is about a file written alongside those steps, not a step of its own.\n\n");
+            if (current < 0) {
+                block.append("This lesson is about a file written alongside those steps, not a step of its own. ")
+                        .append("Leave out the `### What happens next` section.\n\n");
+            } else if (current == steps.size() - 1) {
+                block.append("This lesson is about step ").append(current + 1).append(" of ").append(steps.size())
+                        .append(", the last step. Leave out the `### What happens next` section.\n\n");
+            } else {
+                block.append("This lesson is about step ").append(current + 1).append(" of ").append(steps.size()).append(".\n\n");
+            }
         }
 
         int lineCount = ChangedLines.linesOf(after).size();
@@ -638,10 +652,16 @@ public final class CodeInsightPrompts {
             - Asked what a TERM means ("What does state mean?"): define it in one or two plain sentences, give one
               everyday comparison, then show it in THEIR project - read a file where it appears, quote two to five
               lines in a small fenced block, and say what the term is doing there.
-            - Given their OWN ANSWER to a question a lesson asked them: say first, kindly and in one sentence,
-              whether it is right, partly right or not yet right. Then say what they got right, correct what they
-              did not, and point at the file and lines that show it - read the file to be sure. Never just hand
-              over a model answer without responding to theirs.
+            - Given their OWN ATTEMPT at a lesson's "Check yourself" exercise - code they wrote, in a fenced block
+              under the exercise: say first, kindly and in one sentence, whether it is right, partly right or not
+              yet right. Then test it: walk through what their code would actually do, line by line where that
+              helps, and whether that meets every part of the exercise - including the twist it asked for. Say what
+              they got right, correct each mistake (a typo, a missing piece, a wrong value or syntax), and show the
+              corrected lines in a small fenced block when anything was wrong. End with one or two suggestions to
+              make it better or a next thing to try. Read the step's file to compare with how the project does it.
+              Judge their code, not how closely it matches the file: a different way that works is right. An
+              older lesson may have asked a question instead of an exercise; then answer their answer the same way,
+              without a code block unless it helps.
 
             """ + readerBlock(level) + "\n" + SHARED_RULES;
     }

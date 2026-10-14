@@ -9,7 +9,7 @@ import com.singularity.workspace.dto.github.ProjectGitHubResponse;
  * A person's connection to GitHub, and pushing a project to a repository there.
  *
  * <p>Handles: saying whether the caller has connected GitHub, starting and finishing the sign-in that connects it,
- * disconnecting, saying where a project stands with its repository, pushing the project's files as a commit - making
+ * disconnecting - the caller, or by id an account that is being deleted - saying where a project stands with its repository, pushing the project's files as a commit - making
  * the repository the first time - and forgetting the link between a project and its repository.
  */
 public interface GitHubService {
@@ -21,6 +21,8 @@ public interface GitHubService {
     GitHubStatusResponse completeConnect(String code, String state);
 
     void disconnect();
+
+    void forgetConnection(Long userId);
 
     ProjectGitHubResponse projectStatus(Long projectId);
 

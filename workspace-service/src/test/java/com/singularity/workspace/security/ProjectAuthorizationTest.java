@@ -152,6 +152,15 @@ class ProjectAuthorizationTest {
                 .isFalse();
     }
 
+    @Test
+    @DisplayName("giving a project its title carries no user guard - only the internal API calls it, as a machine")
+    void titlingIsForTheInternalApiOnly() {
+        assertThat(AnnotatedElementUtils.hasAnnotation(methodNamed("titleIfUntitled"), PreAuthorize.class))
+                .as("ProjectServiceImpl.titleIfUntitled is called by InternalWorkspaceController, which has no user "
+                        + "to check; the user's guard is on intelligence-service's browser-facing call")
+                .isFalse();
+    }
+
     private boolean allowed(String method, long projectId) {
         Method endpoint = methodNamed(method);
         Object[] args = Arrays.copyOf(new Object[]{projectId}, endpoint.getParameterCount());

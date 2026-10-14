@@ -18,9 +18,11 @@ import java.util.Optional;
  *
  * <p>Handles: saving a turn, and fetching a session's whole history with each turn's events already joined, in order
  * - so rendering a chat is one query rather than one per turn - and finding the request a reply answered: the
- * user's message saved just before it in the same session, which a lesson on that reply's steps starts from - and,
+ * user's message saved just before it in the same session, which a lesson on that reply's steps starts from - the
+ * first thing the caller ever asked for on a project, which its title is written from - the caller's messages that
+ * have no title yet, and giving one a title only while it has none - and,
  * for teaching mode's big picture of a turn, finding one reply in the caller's own conversation and keeping the
- * overview written about it.
+ * overview written about it; and deleting every row of an account that is being deleted.
  *
  * <p>The reply is looked up by its id together with the project and the user, never by id alone, for the reason a
  * file edit is: an id is only a number, and finding another member's reply would hand out their conversation.
@@ -53,6 +55,30 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
                                     @Param("replyId") Long replyId, Pageable pageable);
 
     @Query("""
+            SELECT m.content FROM ChatMessage m
+            WHERE m.chatSession.id.projectId = :projectId
+            AND m.chatSession.id.userId = :userId
+            AND m.role = com.singularity.intelligence.enums.MessageRole.USER
+            ORDER BY m.id ASC
+            """)
+    List<String> findFirstRequests(@Param("projectId") Long projectId, @Param("userId") Long userId, Pageable pageable);
+
+    @Query("""
+            SELECT m FROM ChatMessage m
+            WHERE m.chatSession.id.projectId = :projectId
+            AND m.chatSession.id.userId = :userId
+            AND m.role = com.singularity.intelligence.enums.MessageRole.USER
+            AND m.title IS NULL
+            ORDER BY m.id DESC
+            """)
+    List<ChatMessage> findUntitledRequests(@Param("projectId") Long projectId, @Param("userId") Long userId, Pageable pageable);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE ChatMessage m SET m.title = :title WHERE m.id = :messageId AND m.title IS NULL")
+    int setTitleIfUntitled(@Param("messageId") Long messageId, @Param("title") String title);
+
+    @Query("""
             SELECT m FROM ChatMessage m
             WHERE m.id = :messageId
             AND m.role = com.singularity.intelligence.enums.MessageRole.ASSISTANT
@@ -70,4 +96,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     @Modifying
     @Query(value = "DELETE FROM chat_messages WHERE project_id = :projectId AND user_id = :userId", nativeQuery = true)
     int deleteOfSession(@Param("projectId") Long projectId, @Param("userId") Long userId);
+
+    @Modifying
+    @Query(value = "DELETE FROM chat_messages WHERE user_id = :userId", nativeQuery = true)
+    int deleteAllOfUser(@Param("userId") Long userId);
 }

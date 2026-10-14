@@ -15,7 +15,7 @@ import java.util.Optional;
  *
  * <p>Handles: finding a user's row for a given day, reading just the figure on it, and adding a finished call's
  * tokens to it as a single atomic UPDATE rather than a read-modify-write, so concurrent AI calls for the same user
- * cannot lose one another's increment.
+ * cannot lose one another's increment; and deleting every row of an account that is being deleted.
  *
  * <p>The write first calls {@code ensureRowExists}, an idempotent insert-if-missing: two concurrent first-calls-of-
  * the-day both attempting it is safe (the unique constraint on user_id+date lets exactly one insert win and the other
@@ -49,4 +49,8 @@ public interface UsageLogRepository extends JpaRepository<UsageLog, Long> {
     @Query(value = "UPDATE usage_logs SET tokens_used = tokens_used + :amount "
             + "WHERE user_id = :userId AND date = :date", nativeQuery = true)
     void addTokens(@Param("userId") Long userId, @Param("date") LocalDate date, @Param("amount") int amount);
+
+    @Modifying
+    @Query(value = "DELETE FROM usage_logs WHERE user_id = :userId", nativeQuery = true)
+    int deleteAllOfUser(@Param("userId") Long userId);
 }

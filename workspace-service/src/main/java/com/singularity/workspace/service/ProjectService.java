@@ -12,7 +12,8 @@ import java.util.List;
  * Projects: creating them, reading them, and everything that changes one.
  *
  * <p>Handles: the caller's project list and one project by id, creating by name or from a typed description,
- * renaming, deleting, forking, retrying starter-template initialisation, and the per-member pin and star flags.
+ * renaming, deleting, removing every project of an account that is being deleted, forking, retrying starter-template initialisation, the per-member pin and star flags, and
+ * giving a project that has no title the one a model wrote for it.
  *
  * <p>Deleting means different things to different people: the owner deletes the project for everyone, while an editor
  * only removes their own membership and the project carries on unchanged for everybody else. Forking copies every
@@ -32,6 +33,8 @@ public interface ProjectService {
 
     void softDelete(Long id);
 
+    void removeAllForUser(Long userId);
+
     ProjectResponse forkProject(Long id, ForkProjectRequest request);
 
     ProjectResponse retryTemplateInitialization(Long id);
@@ -39,4 +42,6 @@ public interface ProjectService {
     void setPinned(Long id, boolean pinned);
 
     void setStarred(Long id, boolean starred);
+
+    String titleIfUntitled(Long id, String title);
 }

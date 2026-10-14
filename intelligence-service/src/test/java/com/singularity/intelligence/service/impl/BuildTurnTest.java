@@ -498,7 +498,7 @@ class BuildTurnTest {
 
         run();
 
-        verify(buildModel, times(1 + GenerationProperties.defaults().maxRepairs())).stream(any(), any(), any(), any());
+        verify(buildModel, times(2)).stream(any(), any(), any(), any());
         assertThat(recorded.get().outcome()).isNull();
         assertThat(recorded.get().notices()).singleElement().asString()
                 .contains("imports \"framer-motion\"").contains("ask me to fix it");
@@ -537,17 +537,60 @@ class BuildTurnTest {
     }
 
     @Test
-    void aCompilerErrorThatSurvivesEveryRepairIsSavedWithANoteNamingIt() {
+    void aCompilerErrorARepairLeavesAsItWasIsNotAskedAboutAgainAndIsSavedWithANoteNamingIt() {
         when(codeChecker.check(any(), any(), any())).thenReturn(typeError());
         modelReturns(answer(TYPED_PAGE + "<message>Done.</message>"), answer("<message>It should be fine.</message>"));
 
         run();
 
-        verify(buildModel, times(1 + GenerationProperties.defaults().maxRepairs())).stream(any(), any(), any(), any());
+        verify(buildModel, times(2)).stream(any(), any(), any(), any());
         assertThat(recorded.get().outcome()).isNull();
         assertThat(recorded.get().notices()).singleElement().asString()
                 .contains("src/pages/Index.tsx, line 2").contains("ask me to fix it");
         assertThat(recorded.get().events()).filteredOn(ParsedEvent::isFileChange).hasSize(1);
+    }
+
+    @Test
+    void aRepairThatMendsOneOfTwoProblemsIsFollowedByAnotherForTheOneLeft() {
+        CodeCheckResponse.Problem second = new CodeCheckResponse.Problem("src/pages/Index.tsx", 3, 13, "TS2304",
+                "Cannot find name 'total'.");
+        when(codeChecker.check(any(), any(), any())).thenReturn(
+                CodeCheckResponse.of(List.of(typeError().problems().getFirst(), second)),
+                CodeCheckResponse.of(List.of(second)),
+                CodeCheckResponse.of(List.of()));
+        modelReturns(
+                answer(TYPED_PAGE + "<message>Done.</message>"),
+                answer(edit("src/pages/Index.tsx", "  const count: number = \"three\";\n", "  const count: number = 3;\n")
+                        + "<message>Fixed the count.</message>"),
+                answer("<message>Fixed the rest.</message>"));
+
+        run();
+
+        verify(buildModel, times(3)).stream(any(), any(), any(), any());
+        assertThat(recorded.get().notices()).isEmpty();
+    }
+
+    @Test
+    void aFailedEditToAFileTheModelIsAlreadyShownUnchangedIsNotPrintedAgainInTheRepair() {
+        indexPageIsStored();
+        when(buildModel.describe(eq(PROJECT_ID), any())).thenReturn(ProjectBrief.of(
+                List.of(new FileTreeDto.Entry("src/pages/Index.tsx", INDEX_PAGE.length(), "text/plain")),
+                path -> INDEX_PAGE, null));
+        modelReturns(
+                answer(edit("src/pages/Index.tsx", "  const heading = \"Hello\";\n", "  const heading = \"Hi\";\n")
+                        + "<message>Done.</message>"),
+                answer(edit("src/pages/Index.tsx", "  const title = \"Hello\";\n", "  const title = \"Hi\";\n")
+                        + "<message>Now it is.</message>"));
+
+        run();
+
+        String repair = conversations(2).get(1).getLast().getText();
+        assertThat(repair)
+                .contains("src/pages/Index.tsx: the SEARCH text is not in the file")
+                .doesNotContain("exactly as it is now")
+                .contains("A file not printed here is exactly as shown to you above");
+        assertThat(recorded.get().events()).filteredOn(ParsedEvent::isFileChange).singleElement()
+                .extracting(ParsedEvent::content).isEqualTo(INDEX_PAGE.replace("\"Hello\"", "\"Hi\""));
     }
 
     @Test

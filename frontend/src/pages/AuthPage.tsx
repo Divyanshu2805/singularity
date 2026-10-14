@@ -173,7 +173,7 @@ export default function AuthPage() {
                 title: "Protect your account",
                 description: "Add two-step verification with an authenticator app.",
                 action: (
-                    <ToastAction altText="Set up two-step verification" onClick={() => navigate("/settings/security")}>
+                    <ToastAction altText="Set up two-step verification" onClick={() => navigate("/settings#security")}>
                         Set up
                     </ToastAction>
                 ),

@@ -486,7 +486,7 @@ class PreviewPipelineIT {
 
     @Test
     @Order(7)
-    void aTurnsServerIsStartedInAScratchFolderBeforeItIsSavedAndOneThatCannotStartIsReported() throws Exception {
+    void aTurnIsCheckedInAScratchFolderForTheErrorsItAddsAndAServerOfItsOwnThatCannotStart() throws Exception {
         Preview running = runner();
         String cookie = cookie(running.getHostname());
         int before = count(counted(running, cookie, "calls").body());
@@ -513,11 +513,27 @@ class PreviewPipelineIT {
         assertThat(samePort.checked()).isTrue();
         assertThat(samePort.problems()).as("a port named in code collides with the preview's own server, which is not a fault").isEmpty();
 
+        levelWith(publish(new FileChangeDto(LEGACY, FileChangeDto.ChangeType.EDIT,
+                "export const total: number = \"none\";\n")));
+        CodeCheckResponse typed = timed("checking a turn with a type error of its own beside one it found", () ->
+                checker.check(projectId, new CodeCheckRequest(Map.of(LEGACY,
+                        "export const total: number = \"none\";\nexport const label: string = 42;\n"), List.of())));
+        assertThat(typed.checked()).as("skipped because: %s", typed.skippedBecause()).isTrue();
+        assertThat(typed.problems()).as("only the error the turn added, not the one the file already had")
+                .singleElement().satisfies(problem -> {
+                    assertThat(problem.path()).isEqualTo(LEGACY);
+                    assertThat(problem.line()).isEqualTo(2);
+                    assertThat(problem.message()).contains("'number' is not assignable to type 'string'");
+                });
+        levelWith(publish(new FileChangeDto(LEGACY, FileChangeDto.ChangeType.DELETE, null)));
+
         assertThat(count(counted(running, cookie, "calls").body())).as("the preview's own server and data were not touched")
                 .isEqualTo(before + 1);
         assertThat(runnerPool.exec(running.getPodName(), PreviewRunnerPool.RUNNER_CONTAINER, Duration.ofSeconds(20),
-                "test ! -e /tmp/check && test -f /app/.data/app.db").succeeded()).isTrue();
+                "test ! -e /tmp/check && test ! -e /tmp/check-base && test -f /app/.data/app.db").succeeded()).isTrue();
     }
+
+    private static final String LEGACY = "src/lib/legacy.ts";
 
     @Test
     @Order(8)

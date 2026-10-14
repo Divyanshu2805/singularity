@@ -2,11 +2,11 @@
  * Today's AI allowance, always in view right above the composer as a small orbit, with the figures a click away.
  *
  * Handles: the orbit that shows the allowance (UsageOrbit), which is the whole of what the row shows and is itself the
- * button, and the panel that opens from it with everything in words - used and limit, what is left, a countdown to
- * the refill that re-reads the clock every so often, this project's share, the last request, the project count, and
- * the ways on to the usage page and the plans - so you know how much building is left before starting a long request
- * rather than after. Under the figures it says the same thing as builds ("About 6 more builds today"), since a count
- * of tokens tells a beginner nothing. The owner asked for the figures and the countdown, which stood beside the orbit, to be shown only
+ * button, and the panel that opens from it with everything in words - used and limit, a countdown to
+ * the refill that re-reads the clock every so often, this project's share, the last request's total (not split into
+ * in and out), the project count, and the ways on to the usage page and the plans - so you know how much building is
+ * left before starting a long request rather than after. The panel is kept to those: it once also said how many tokens
+ * were left and what that came to in builds, and the owner asked for both, and the in/out split, to go. The owner asked for the figures and the countdown, which stood beside the orbit, to be shown only
  * on a click, and for the hover to touch the orbit alone (it swells a little) where the whole row lit up before.
  *
  * The orbit is a small sun with one planet going round it. Where the planet stands is how much of the allowance is
@@ -31,7 +31,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useBilling, USAGE_QUERY_KEY } from "@/hooks/use-billing";
 import { api, isAuthenticated } from "@/lib/api";
-import { buildsLeftLabel, formatResetIn, formatTokens, toQuota } from "@/lib/billing";
+import { formatResetIn, formatTokens, toQuota } from "@/lib/billing";
 import { featureLabel } from "@/lib/usage-insights";
 import { USAGE_TRAIL, usageTone } from "@/lib/usage-tone";
 import { cn } from "@/lib/utils";
@@ -126,15 +126,14 @@ export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; 
           </div>
           <p className="mt-1.5 text-[11px] text-muted-foreground">
             {isStreaming ? (
-              <>{formatTokens(quota.remaining)} left · counting this reply as it&rsquo;s written</>
+              <>Counting this reply as it&rsquo;s written</>
             ) : (
               <>
-                {formatTokens(quota.remaining)} left · resets in {formatResetIn(resetsAt, now)}
+                Resets in {formatResetIn(resetsAt, now)}
                 {resetsAt && ` (${resetsAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })})`}
               </>
             )}
           </p>
-          {!isStreaming && <p className="mt-0.5 text-[11px] text-muted-foreground">{buildsLeftLabel(quota.remaining)}</p>}
         </div>
 
         <dl className="space-y-1.5 px-4 py-2.5 text-xs">
@@ -144,12 +143,9 @@ export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; 
           </div>
           {last && (
             <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">{lastIsThisChat ? "Last reply" : `Last request · ${featureLabel(last.feature)}`}</dt>
+              <dt className="text-muted-foreground">{lastIsThisChat ? "Last message" : `Last request · ${featureLabel(last.feature)}`}</dt>
               <dd className="text-right font-medium tabular-nums text-foreground">
                 {formatTokens(last.totalTokens)}
-                <span className="block text-[10px] text-muted-foreground">
-                  {formatTokens(last.inputTokens)} in · {formatTokens(last.outputTokens)} out
-                </span>
               </dd>
             </div>
           )}

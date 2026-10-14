@@ -2,7 +2,9 @@
  * The way through a long chat: a short tick for every message you sent, pinned to the side.
  *
  * Handles: drawing the ticks with the current one longer and brighter, opening the list of those messages on hover or
- * focus, and scrolling to the one picked.
+ * focus, and scrolling to the one picked. Each row reads the message's title - a few words a model wrote for what it
+ * asked, the same way the project is titled - or its first line until that title arrives; a label too long for the
+ * row fades out at the edge and glides to show its end while hovered.
  *
  * Crossing the small gap between the ticks and the list must not close it, hence the short close delay.
  *

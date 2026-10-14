@@ -61,7 +61,7 @@ describe("ChatUsageMeter", () => {
       fireEvent.click(screen.getByRole("button", { name: /AI tokens used today/ }));
     });
     expect(screen.getByText("50,000")).toBeTruthy();
-    expect(screen.getByText(/resets in 6h 12m/)).toBeTruthy();
+    expect(screen.getByText(/resets in 6h 12m/i)).toBeTruthy();
     expect(api.getUsageToday).toHaveBeenCalledWith("7");
   });
 
@@ -88,7 +88,7 @@ describe("ChatUsageMeter", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /AI tokens used today/ }));
     });
-    expect(screen.getByText(/left · counting this reply as it.s written/)).toBeTruthy();
+    expect(screen.getByText(/Counting this reply as it.s written/)).toBeTruthy();
     expect(screen.queryByText("Updates after this reply")).toBeNull();
     expect(screen.queryByText(/resets in/i)).toBeNull();
   });
@@ -115,8 +115,9 @@ describe("ChatUsageMeter", () => {
 
     expect(screen.getByText("This project today")).toBeTruthy();
     expect(screen.getByText("12,345")).toBeTruthy();
-    expect(screen.getByText("Last reply")).toBeTruthy();
-    expect(screen.getByText(/2,000 in · 1,210 out/)).toBeTruthy();
+    expect(screen.getByText("Last message")).toBeTruthy();
+    expect(screen.queryByText(/ in · /)).toBeNull();
+    expect(screen.queryByText(/more builds/)).toBeNull();
     expect(screen.getByText("2 / 3")).toBeTruthy();
     expect(screen.getByText(/View detailed usage/)).toBeTruthy();
   });

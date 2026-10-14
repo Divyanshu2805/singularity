@@ -19,6 +19,9 @@
  * /p/:slug is the one public page: the read-only view of a shared app's code, open to anyone with the link and
  * without signing in (pages/SharedApp).
  *
+ * /account and /settings/security are old addresses: both now lead to the one Settings page, the second scrolled to its
+ * security boxes.
+ *
  * Route order matters: the catch-all must stay last, or it would swallow everything after it.
  */
 import { lazy, Suspense } from "react";
@@ -26,7 +29,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLoading } from "@/components/app/AppLoading";
 import { slideOnHistoryMoves } from "@/lib/page-slide";
@@ -37,9 +40,7 @@ slideOnHistoryMoves();
 const AuthPage = lazy(() => import("./pages/AuthPage"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const AuthAction = lazy(() => import("./pages/AuthAction"));
-const SecuritySettings = lazy(() => import("./pages/SecuritySettings"));
 const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
-const Account = lazy(() => import("./pages/Account").then((m) => ({ default: m.Account })));
 const ProjectView = lazy(() => import("./pages/ProjectView").then((m) => ({ default: m.ProjectView })));
 const ProjectsDashboard = lazy(() => import("./pages/ProjectsDashboard").then((m) => ({ default: m.ProjectsDashboard })));
 const AllProjects = lazy(() => import("./pages/AllProjects").then((m) => ({ default: m.AllProjects })));
@@ -75,10 +76,10 @@ const App = () => (
               <Route path="/projects/:projectId" element={<ProjectView />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/settings" element={<Settings />} />
-              <Route path="/account" element={<Account />} />
+              <Route path="/account" element={<Navigate to="/settings" replace />} />
               <Route path="/settings/billing" element={<BillingSettings />} />
               <Route path="/usage" element={<UsageInsights />} />
-              <Route path="/settings/security" element={<SecuritySettings />} />
+              <Route path="/settings/security" element={<Navigate to="/settings#security" replace />} />
               <Route path="/privacy" element={<Legal />} />
               <Route path="/terms" element={<Legal />} />
               <Route path="/p/:slug" element={<SharedApp />} />
