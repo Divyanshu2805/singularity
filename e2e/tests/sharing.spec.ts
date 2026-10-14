@@ -78,8 +78,8 @@ test("an owner shares a project with someone who accepts, works beside them and 
   await test.step("the invited person is told on their dashboard, accepts from the notice and can open the project", async () => {
     await friendPage.goto("/projects");
     const notice = friendPage.getByRole("status").filter({ hasText: "Project invitation" });
-    await expect(notice.getByText(projectName)).toBeVisible();
-    await expect(notice.getByText(/invited you to edit/)).toBeVisible();
+    await expect(notice.getByText(projectName).first()).toBeVisible();
+    await expect(notice.getByText(/invited you to edit/).first()).toBeVisible();
     await notice.getByRole("button", { name: "Accept" }).click();
     await expect(notice).toHaveCount(0);
 
