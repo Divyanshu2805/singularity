@@ -12,7 +12,7 @@ import java.util.List;
  * happened, whether an assistant turn was asked for in teaching mode, and the big picture teaching mode wrote about
  * it once it has been shown. An assistant turn carries no text of its own - its events are the record. An assistant
  * turn whose files were saved carries the revision they were published as, which the browser hands back to undo that
- * turn.
+ * turn. A user's message carries its title for the chat's scroll rail once a model has written one.
  */
 public record ChatResponse(
         Long id,
@@ -23,7 +23,7 @@ public record ChatResponse(
         Instant createdAt,
         boolean teaching,
         String overview,
-        Long revisionId
-
+        Long revisionId,
+        String title
 ) {
 }

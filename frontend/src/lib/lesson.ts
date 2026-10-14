@@ -21,8 +21,9 @@
  * order of the lines, so nothing here assumes ascending ranges. It is plain headed text rather than tags, so a
  * half-arrived answer reads sensibly at every point: only a heading line still being written is held back, and the
  * last section is reported as not complete until the next heading or the end of the stream shows it is. A lesson
- * may close with a second unnumbered section, `### Check yourself`: one question the reader answers from the lines
- * in front of them, kept apart from the closing so it can be shown as something to answer.
+ * may close with a second unnumbered section, `### Check yourself`: a small exercise in writing some of the step's
+ * code themselves - with a twist, so it cannot be copied from the file - kept apart from the closing so it can be
+ * shown as something to do. On the last step there is no closing: nothing comes after it.
  *
  * The big picture is the third kind: what teaching mode says about a whole turn before any step is opened - an
  * opening, then headed sections of bullets and numbered steps (the pieces, how it works, the ideas). Big pictures written while there was a fourth section, on which step to
@@ -32,7 +33,8 @@
  *
  * The questions a lesson hands to ExplainLLM are worded here too, so the chat and the code lens ask them in the same
  * words: the three on a piece of code (its syntax, why it is written that way, what removing it would do), what a
- * term means, and a check of the reader's own answer. Each is an ordinary question to the read-only model.
+ * term means, and a check of the reader's own attempt at the exercise - their code in a fenced block, kept under the
+ * code lens's limit by giving the attempt whatever room the instruction leaves. Each is an ordinary question to the read-only model.
  */
 export interface CodeTarget {
   line?: number;
@@ -326,8 +328,9 @@ export const DEEPER_QUESTIONS: { id: string; label: string; question: string }[]
 ];
 
 const MAX_TERM_CHARS = 80;
-const MAX_CHECK_QUESTION_CHARS = 500;
-const MAX_CHECK_ANSWER_CHARS = 1000;
+const MAX_CHECK_TASK_CHARS = 420;
+export const MAX_CHECK_ANSWER_CHARS = 1200;
+const MAX_ASK_QUESTION_CHARS = 2000;
 
 const oneLine = (text: string, max: number) => text.replace(/\s+/g, " ").trim().slice(0, max);
 
@@ -336,10 +339,16 @@ export const termQuestion = (term: string) =>
   + "Then show it in this project: read the files, quote the real lines where it is used with the file each is in, and say what each of those lines does. "
   + "End with one mistake people often make with it.";
 
-export function checkAnswerQuestion(path: string, asked: string, answer: string) {
-  return `The lesson on \`${path}\` asked me: "${oneLine(asked, MAX_CHECK_QUESTION_CHARS)}"\n\n`
-    + `My answer: ${answer.trim().slice(0, MAX_CHECK_ANSWER_CHARS)}\n\n`
-    + "Is my answer right? Tell me what I got right, correct what I got wrong, and point me at the lines that show it.";
+const FENCE = "```";
+
+export function checkAnswerQuestion(path: string, task: string, attempt: string) {
+  const head = `The lesson on \`${oneLine(path, 200)}\` set me this exercise: "${oneLine(task, MAX_CHECK_TASK_CHARS)}"\n\n`
+    + "Check my attempt below. Say whether it is right, partly right or not yet right; walk through what it would do "
+    + "and whether that meets the exercise; correct what is wrong; and suggest how to make it better.\n\n"
+    + `My attempt:\n${FENCE}\n`;
+  const tail = `\n${FENCE}`;
+  const room = Math.max(0, Math.min(MAX_CHECK_ANSWER_CHARS, MAX_ASK_QUESTION_CHARS - head.length - tail.length));
+  return head + attempt.trim().split(FENCE).join("`` `").slice(0, room) + tail;
 }
 
 export function linesOf(fileContent: string | undefined, startLine: number, endLine: number): string[] {

@@ -7,6 +7,8 @@ import com.singularity.common.security.UserPrincipal;
 import com.singularity.intelligence.feign.WorkspaceServiceClient;
 import com.singularity.intelligence.service.impl.AiGenerationServiceImpl;
 import com.singularity.intelligence.service.impl.ChatServiceImpl;
+import com.singularity.intelligence.service.impl.MessageTitleServiceImpl;
+import com.singularity.intelligence.service.impl.ProjectTitleServiceImpl;
 import com.singularity.intelligence.service.impl.SuggestionServiceImpl;
 import feign.FeignException;
 import feign.Request;
@@ -63,6 +65,10 @@ class ChatAuthorizationTest {
             null, null, null, null, null, null, null, null);
     private static final SuggestionServiceImpl SUGGESTION_SERVICE = new SuggestionServiceImpl(
             null, null, null, null, null, null, null, null);
+    private static final MessageTitleServiceImpl MESSAGE_TITLE_SERVICE = new MessageTitleServiceImpl(
+            null, null, null, null, null, null);
+    private static final ProjectTitleServiceImpl TITLE_SERVICE = new ProjectTitleServiceImpl(
+            null, null, null, null, null, null, null);
 
     private final WorkspaceServiceClient workspaceServiceClient = mock(WorkspaceServiceClient.class);
     private final GenericApplicationContext context = new GenericApplicationContext();
@@ -94,12 +100,14 @@ class ChatAuthorizationTest {
                 arguments(CHAT_SERVICE, "getLastTurnChanges"),
                 arguments(CHAT_SERVICE, "clearChat"),
                 arguments(GENERATION_SERVICE, "findActiveGeneration"),
-                arguments(GENERATION_SERVICE, "watchActiveGeneration"));
+                arguments(GENERATION_SERVICE, "watchActiveGeneration"),
+                arguments(MESSAGE_TITLE_SERVICE, "titleMessages"));
     }
 
     static Stream<Arguments> editGated() {
         return Stream.of(arguments(GENERATION_SERVICE, "stopActiveGeneration"),
-                arguments(SUGGESTION_SERVICE, "nextSteps"));
+                arguments(SUGGESTION_SERVICE, "nextSteps"),
+                arguments(TITLE_SERVICE, "title"));
     }
 
     @ParameterizedTest(name = "{1}")
@@ -150,6 +158,15 @@ class ChatAuthorizationTest {
 
         assertThat(allowed(GENERATION_SERVICE, "stopActiveGeneration", PROJECT_ID)).isFalse();
         assertThat(allowedStreamResponse(ProjectRole.VIEWER, PROJECT_ID)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a viewer cannot have a title written - it is stored for everyone on the project")
+    void viewerCannotTitle() {
+        when(workspaceServiceClient.getMembership(PROJECT_ID, USER_ID))
+                .thenReturn(new ProjectMembershipDto(PROJECT_ID, USER_ID, ProjectRole.VIEWER));
+
+        assertThat(allowed(TITLE_SERVICE, "title", PROJECT_ID)).isFalse();
     }
 
     @Test

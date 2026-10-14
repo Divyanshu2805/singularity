@@ -6,6 +6,9 @@
  *
  * Both meters are drawn by the same component, so tokens and projects read as the same kind of thing.
  *
+ * It is a page of its own, reached from the account menu's Plans & billing entry; it was once a tab of an Account
+ * place with the profile and security, which are now boxes on the Settings page.
+ *
  * It stands on the app's night - a page a step lighter than the surround, a wash of rose, amber and gold breathing at the foot of the
  * screen with stars above it (Nebula - the wash took the gas nebula's place) and one faint gold glow at its head; the first starfield was taken out when the
  * owner found the app too dark to read its panels on, and stars came back when the nebula was redrawn as gas -
@@ -16,7 +19,6 @@
 import { Nebula } from "@/components/app/Nebula";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { PageHeading } from "@/components/app/PageHeading";
-import { AccountTabs } from "@/components/app/AccountTabs";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowUpRight, CreditCard } from "lucide-react";
@@ -152,7 +154,7 @@ export function BillingSettings() {
                 <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
                     <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-4 sm:px-6">
                         <div className="mb-6">
-                            <PageHeading eyebrow="Account" title="Plans &" accent="billing" actions={<AccountTabs />}>
+                            <PageHeading eyebrow="Billing" title="Plans &" accent="billing">
                                 What you're on, what you've used, and how to change it.
                             </PageHeading>
                             <PaymentsTestModeNotice className="mt-4" />

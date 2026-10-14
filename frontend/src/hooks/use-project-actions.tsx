@@ -1,7 +1,8 @@
 /**
  * The actions a project row offers, with the dialogs they need.
  *
- * Handles: pinning and starring, forking, and deleting - including the confirmation whose wording depends on whether
+ * Handles: pinning and starring, renaming - which sets the title every list shows along with the name - forking, and
+ * deleting - including the confirmation whose wording depends on whether
  * the caller owns the project, since for anyone else it only removes their own access. Once a delete has gone
  * through, the project is marked as leaving for a moment (isLeaving, from lib/project-leaving's shared store, so a
  * delete made in the sidebar reaches the card on the page) and its card fades away before the list is refetched
@@ -25,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import type { ProjectSummaryResponse } from "@/lib/types";
 import { deleteCopy } from "@/lib/project-delete";
+import { projectTitle, withTitle } from "@/lib/project-title";
 import { clearProjectLeaving, markProjectLeaving, useLeavingProjectId } from "@/lib/project-leaving";
 import { ForkProjectDialog } from "@/components/ForkProjectDialog";
 
@@ -68,7 +70,7 @@ export function useProjectActions({ onDeleted }: { onDeleted?: (project: Project
 
     const deleteProject = async () => {
         if (!projectToDelete) return;
-        const copy = deleteCopy(projectToDelete.role, projectToDelete.name);
+        const copy = deleteCopy(projectToDelete.role, projectTitle(projectToDelete));
         try {
             await api.deleteProject(String(projectToDelete.id));
             toast({ title: copy.doneTitle });
@@ -91,7 +93,7 @@ export function useProjectActions({ onDeleted }: { onDeleted?: (project: Project
     const renameProject = async (project: ProjectSummaryResponse, name: string) => {
         const previous = queryClient.getQueryData<ProjectSummaryResponse[]>(["projects"]);
         queryClient.setQueryData<ProjectSummaryResponse[]>(["projects"], (projects) =>
-            projects?.map((p) => (p.id === project.id ? { ...p, name } : p))
+            withTitle(projects, String(project.id), name, name)
         );
         try {
             await api.updateProject(String(project.id), name);
@@ -120,15 +122,15 @@ export function useProjectActions({ onDeleted }: { onDeleted?: (project: Project
         <AlertDialog open={projectToDelete !== null} onOpenChange={(open) => !open && setProjectToDelete(null)}>
             <AlertDialogContent className="sm:max-w-md">
                 <AlertDialogHeader>
-                    <AlertDialogTitle>{deleteCopy(projectToDelete?.role, projectToDelete?.name).title}</AlertDialogTitle>
+                    <AlertDialogTitle>{deleteCopy(projectToDelete?.role, projectToDelete ? projectTitle(projectToDelete) : undefined).title}</AlertDialogTitle>
                     <AlertDialogDescription>
-                        {deleteCopy(projectToDelete?.role, projectToDelete?.name).description}
+                        {deleteCopy(projectToDelete?.role, projectToDelete ? projectTitle(projectToDelete) : undefined).description}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={deleteProject} className={buttonVariants({ variant: "destructive" })}>
-                        {deleteCopy(projectToDelete?.role, projectToDelete?.name).confirmLabel}
+                        {deleteCopy(projectToDelete?.role, projectToDelete ? projectTitle(projectToDelete) : undefined).confirmLabel}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

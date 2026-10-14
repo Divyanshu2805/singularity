@@ -188,7 +188,7 @@ export function PublishMenu({ projectId, role, projectName }: { projectId: strin
                 {state?.live && !building && (
                   <span
                     aria-hidden="true"
-                    className={cn("absolute right-1 top-1 h-1.5 w-1.5 rounded-full", state.hasChanges ? "bg-primary" : "bg-syntax-string")}
+                    className={cn("absolute bottom-[7px] left-[7px] h-1.5 w-1.5 rounded-full ring-1 ring-black/60", state.hasChanges ? "bg-primary" : "bg-syntax-string")}
                   />
                 )}
               </button>

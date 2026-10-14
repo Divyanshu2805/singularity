@@ -46,7 +46,6 @@ import {
   EditorWindow,
   FileTreeWindow,
   Grow,
-  IdeaChips,
   Kbd,
   LensWindow,
   PreviewWindow,
@@ -178,10 +177,7 @@ export function InterviewDemo() {
           {sent ? (
             <Clarifier idea={IDEA} questions={QUIZ} index={index} picked={picked} phase={t < 2950 ? "loading" : t >= 8600 ? "compiling" : t >= 6700 ? "review" : "asking"} answers={QUIZ_ANSWERS} />
           ) : (
-            <>
-              <DashPrompt text={typed(IDEA, t, 500, 32)} focus={t >= 350} press={between(t, 2050, 2270)} />
-              <IdeaChips />
-            </>
+            <DashPrompt text={typed(IDEA, t, 500, 32)} focus={t >= 350} press={between(t, 2050, 2270)} />
           )}
         </div>
       </div>

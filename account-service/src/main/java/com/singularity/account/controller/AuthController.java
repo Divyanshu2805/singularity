@@ -2,9 +2,11 @@ package com.singularity.account.controller;
 
 import com.singularity.account.dto.auth.AuthAuditEventResponse;
 import com.singularity.account.dto.auth.CreateSessionRequest;
+import com.singularity.account.dto.auth.DeleteAccountRequest;
 import com.singularity.account.dto.auth.ReportSecurityEventRequest;
 import com.singularity.account.dto.auth.SessionResponse;
 import com.singularity.account.dto.auth.UserProfileResponse;
+import com.singularity.account.service.AccountDeletionService;
 import com.singularity.account.service.SessionService;
 import com.singularity.account.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,7 +27,7 @@ import java.util.List;
  * <p>Handles: handing the browser its CSRF token before its first write, exchanging a Firebase ID token for this
  * app's session cookie, ending this device's session and every session of the user, the signed-in profile read, and
  * the account security trail - both listing it and accepting a client's report of a change it made directly with
- * Firebase.
+ * Firebase - and deleting the account, which needs a sign-in made moments before (AccountDeletionServiceImpl).
  *
  * <p>Signing in, signing up, Google, second factors and password resets all happen between the browser and Firebase;
  * this controller only turns the result into a session and ends it again.
@@ -38,6 +40,7 @@ public class AuthController {
 
     SessionService sessionService;
     UserService userService;
+    AccountDeletionService accountDeletionService;
 
     @GetMapping("/csrf")
     public ResponseEntity<Void> csrf(CsrfToken csrfToken) {
@@ -60,6 +63,12 @@ public class AuthController {
     @PostMapping("/logout-all")
     public ResponseEntity<Void> logoutEverywhere(HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
         sessionService.signOutEverywhere(httpRequest, httpResponse);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/account/delete")
+    public ResponseEntity<Void> deleteAccount(@RequestBody @Valid DeleteAccountRequest request, HttpServletResponse httpResponse) {
+        accountDeletionService.deleteAccount(request, httpResponse);
         return ResponseEntity.noContent().build();
     }
 

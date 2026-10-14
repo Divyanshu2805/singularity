@@ -75,13 +75,13 @@ test("an owner shares a project with someone who accepts, works beside them and 
     await page.keyboard.press("Escape");
   });
 
-  await test.step("the invited person accepts from their dashboard and can open the project", async () => {
+  await test.step("the invited person is told on their dashboard, accepts from the notice and can open the project", async () => {
     await friendPage.goto("/projects");
-    const invitations = friendPage.getByRole("region", { name: "Invitations" });
-    await expect(invitations.getByText(projectName)).toBeVisible();
-    await expect(invitations.getByText(/· to edit$/)).toBeVisible();
-    await invitations.getByRole("button", { name: "Accept" }).click();
-    await expect(invitations).toHaveCount(0);
+    const notice = friendPage.getByRole("status").filter({ hasText: "Project invitation" });
+    await expect(notice.getByText(projectName)).toBeVisible();
+    await expect(notice.getByText(/invited you to edit/)).toBeVisible();
+    await notice.getByRole("button", { name: "Accept" }).click();
+    await expect(notice).toHaveCount(0);
 
     expect(await asFriend(`/api/projects/${projectId}`)).toBe(200);
     expect(await asFriend(savedFile(projectId, "src/pages/Index.tsx"))).toBe(200);
@@ -157,8 +157,10 @@ test("an owner shares a project with someone who accepts, works beside them and 
   });
 
   await test.step("the invited person removes the project from their list, and only their access ends", async () => {
+    const project = (await (await page.request.get(`/api/projects/${projectId}`)).json()) as { name: string; summary?: string | null };
+    const title = project.summary?.trim() || project.name;
     await friendPage.goto("/projects");
-    await friendPage.getByRole("button", { name: `Actions for ${projectName}` }).first().click();
+    await friendPage.getByRole("button", { name: `Actions for ${title}` }).first().click();
     await friendPage.getByRole("menuitem", { name: "Remove project" }).click();
     await friendPage.getByRole("alertdialog").getByRole("button", { name: "Remove project" }).click();
     await expect(friendPage.getByText("Removed from your projects").first()).toBeVisible();

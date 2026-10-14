@@ -14,7 +14,8 @@ import java.time.Instant;
  * Reads and writes each user's outstanding checkout intent.
  *
  * <p>Handles: atomically claiming or refreshing the one intent row a user can have (claimOrRefresh) and recording
- * the Stripe session it minted (recordSession), and swapping a spent idempotency key for a fresh one (replaceKey).
+ * the Stripe session it minted (recordSession), swapping a spent idempotency key for a fresh one (replaceKey), and
+ * deleting a user's intent when their account is deleted (deleteOfUser).
  * The first two go through native upserts rather than JpaRepository.save():
  * this entity's id is manually assigned (userId), so Spring Data's default new-entity check treats it as "not new"
  * and routes save() through entityManager.merge() - an upsert that can silently overwrite a concurrent request's
@@ -64,4 +65,9 @@ public interface CheckoutIntentRepository extends JpaRepository<CheckoutIntent, 
     @Query("update CheckoutIntent c set c.idempotencyKey = :freshKey, c.stripeSessionId = null where c.userId = :userId and c.idempotencyKey = :currentKey")
     int replaceKey(@Param("userId") Long userId, @Param("currentKey") String currentKey,
                    @Param("freshKey") String freshKey);
+
+    @Modifying
+    @Transactional
+    @Query("delete from CheckoutIntent c where c.userId = :userId")
+    int deleteOfUser(@Param("userId") Long userId);
 }

@@ -109,7 +109,7 @@ class FullChainPublishAccessTest {
     @DisplayName("a signed-in caller with the CSRF token can fork a shared app")
     void aSignedInCallerCanFork() throws Exception {
         when(publicAppService.fork(anyString(), any())).thenReturn(
-                new ProjectResponse(9L, "Demo (fork)", ProjectRole.OWNER, Instant.now(), Instant.now(), null, 1L));
+                new ProjectResponse(9L, "Demo (fork)", null, ProjectRole.OWNER, Instant.now(), Instant.now(), null, 1L));
         Cookie xsrf = primeCsrf();
 
         mockMvc.perform(post("/api/public/apps/{slug}/fork", "demo-ab12")

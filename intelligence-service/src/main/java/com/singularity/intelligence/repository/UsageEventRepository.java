@@ -1,5 +1,6 @@
 package com.singularity.intelligence.repository;
 
+import org.springframework.data.jpa.repository.Modifying;
 import com.singularity.intelligence.entity.UsageEvent;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,7 +15,7 @@ import java.util.Optional;
  * Reads and writes the usage ledger.
  *
  * <p>Handles: appending an event, listing a user's events in a window or most-recent-first for the activity table,
- * summing a project's usage for a window, and the grouped aggregation the insights page is built from.
+ * summing a project's usage for a window, and the grouped aggregation the insights page is built from; and deleting every row of an account that is being deleted.
  *
  * <p>Every read takes the user: insights are only ever about the caller's own spending, so there is deliberately no
  * query across users.
@@ -52,4 +53,8 @@ public interface UsageEventRepository extends JpaRepository<UsageEvent, Long> {
             + "where e.userId = :userId and e.projectId = :projectId and e.createdAt >= :from and e.createdAt < :to")
     long sumForProjectBetween(@Param("userId") Long userId, @Param("projectId") Long projectId,
                               @Param("from") Instant from, @Param("to") Instant to);
+
+    @Modifying
+    @Query(value = "DELETE FROM usage_events WHERE user_id = :userId", nativeQuery = true)
+    int deleteAllOfUser(@Param("userId") Long userId);
 }

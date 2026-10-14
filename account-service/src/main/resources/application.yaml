@@ -31,6 +31,15 @@ spring:
 internal-service:
   shared-secret: ${INTERNAL_SERVICE_SHARED_SECRET}
 
+# Account deletion is the only thing account-service calls another service for. Deleting an account's projects stops
+# each preview and takes each published app down, so workspace-service is given two minutes; every call is bounded.
+spring.cloud.openfeign.client.config:
+  default:
+    connectTimeout: 2000
+    readTimeout: 10000
+  workspace-service:
+    readTimeout: 120000
+
 firebase:
   project-id: ${FIREBASE_PROJECT_ID}
   credentials-path: ${FIREBASE_CREDENTIALS_PATH}

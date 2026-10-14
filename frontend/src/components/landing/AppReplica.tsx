@@ -78,8 +78,6 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
-  ArrowUpRight,
-  Camera,
   Check,
   ChevronDown,
   ChevronRight,
@@ -102,7 +100,6 @@ import {
   GitFork,
   GraduationCap,
   Hammer,
-  Layers,
   LayoutDashboard,
   LayoutGrid,
   Link2,
@@ -1286,26 +1283,6 @@ export function DashPrompt({ text = "", focus = false, press = false, teaching =
           <SendButton ready={text.trim().length > 0} press={press} />
         </div>
       </div>
-    </div>
-  );
-}
-
-const IDEAS: [LucideIcon, string][] = [
-  [ListChecks, "A todo app with drag and drop"],
-  [Camera, "A portfolio site for a photographer"],
-  [Layers, "A pricing page with three tiers"],
-];
-
-export function IdeaChips() {
-  return (
-    <div className="mt-5 flex flex-wrap justify-center gap-2">
-      {IDEAS.map(([Icon, idea]) => (
-        <span key={idea} className="idea-chip">
-          <Icon className="h-3.5 w-3.5 shrink-0 text-white/55" />
-          {idea}
-          <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-white/45" />
-        </span>
-      ))}
     </div>
   );
 }

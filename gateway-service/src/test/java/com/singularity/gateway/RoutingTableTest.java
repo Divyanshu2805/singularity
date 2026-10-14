@@ -106,6 +106,8 @@ class RoutingTableTest {
                         "/api/chat/projects/7/active/stream",
                         "/api/chat/projects/7/active/stop",
                         "/api/chat/projects/7/suggestions",
+                        "/api/chat/projects/7/title",
+                        "/api/chat/projects/7/message-titles",
                         "/api/ideas/clarify",
                         "/api/ideas/compile",
                         "/api/usage/today",

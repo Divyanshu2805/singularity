@@ -7,7 +7,8 @@
  * rejections and the dev server's compile-error overlay - and that the overlay has gone again, relaying what the app
  * writes to its console, noticing a page that loaded and drew nothing, and carrying out the tab's back, forward,
  * reload and go-to-address requests - and its request for a small picture of the page, which the page draws of
- * itself (snapshot.js) and posts back; and building the status pages, which say what they are to the tab too.
+ * itself (snapshot.js) and posts back; turning "Edit text" on and off, and telling the page whether a change it
+ * posted was saved (text-edit.js); and building the status pages, which say what they are to the tab too.
  *
  * Pulled out of index.js so it can be tested without a server: reporter.test.js runs the script against a stand-in
  * window. The script is written for whatever browser opens the preview, with no build step, so it stays ES5.
@@ -16,7 +17,8 @@
  * Outbound ones go to the parent whatever its origin - the script cannot know which app is showing it - and carry
  * nothing the page could not already read about itself. Inbound ones are taken only from the parent window and can
  * only do what a person at the page's own address bar could: go back, go forward, reload, or open a path on this
- * same origin. A path that resolves to any other origin is ignored. A picture is taken only when the parent asks,
+ * same origin - or let the person click the page's words to change them, which writes nothing from here. A path that
+ * resolves to any other origin is ignored. A picture is taken only when the parent asks,
  * is of what the page is already showing that parent, and is not taken at all while the compile-error overlay is up
  * or the page is blank - the answer then says so, as it does when the browser cannot draw one.
  *
@@ -39,10 +41,12 @@
  * app that renders late takes the notice back.
  */
 const { takeSnapshot } = require('./snapshot');
+const { textEditor } = require('./text-edit');
 
 const REPORTER_SOURCE = `(function () {
   if (window.parent === window) return;
   ${takeSnapshot.toString()}
+  ${textEditor.toString()}
   var parentWindow = window.parent;
   var sent = {};
   function post(type, subType, payload) {
@@ -151,7 +155,10 @@ const REPORTER_SOURCE = `(function () {
         post('PreviewSnapshot', null, dataUrl ? { dataUrl: dataUrl } : { failed: reason || 'could not' });
       });
     }
+    else if (command === 'edit-text') { editor.setOn(e.data.on === true); }
+    else if (command === 'edit-text-saved' && typeof e.data.id === 'number') { editor.answered(e.data.id, e.data.saved === true); }
   });
+  var editor = textEditor(window, post);
 
   var MAX_ARG = 2000;
   var MAX_LINES_PER_FLUSH = 40;

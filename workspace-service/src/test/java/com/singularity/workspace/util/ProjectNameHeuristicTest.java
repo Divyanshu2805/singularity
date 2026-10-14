@@ -8,9 +8,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Covers {@link ProjectNameHeuristic}: what a project made from a description is called and how it is summed up.
  *
- * <p>Handles: a suggested name being kept but never past two words, and a suggested line never past eight; markup,
- * extra lines and control characters being dropped from a suggestion; and, with no suggestion, a name of at most two
- * words and a line of at most eight being made from the description - from a plain sentence and from a brief.
+ * <p>Handles: a suggested name being kept but never past two words, and a suggested title never past eight; markup,
+ * extra lines and control characters being dropped from a suggestion; with no suggestion, a name of at most two words
+ * being made from the description - from a plain sentence and from a brief - and no title being made at all, so a
+ * model writes one.
  */
 class ProjectNameHeuristicTest {
 
@@ -36,22 +37,22 @@ class ProjectNameHeuristicTest {
     }
 
     @Test
-    @DisplayName("a suggested line is kept, and is never more than eight words")
-    void aSuggestedLineIsKeptToEightWords() {
-        assertThat(ProjectNameHeuristic.summaryFrom("A guestbook every visitor can sign", "x"))
-                .isEqualTo("A guestbook every visitor can sign");
-        assertThat(ProjectNameHeuristic.summaryFrom("one two three four five six seven eight nine ten", "x"))
+    @DisplayName("a suggested title is kept, and is never more than eight words")
+    void aSuggestedTitleIsKeptToEightWords() {
+        assertThat(ProjectNameHeuristic.summaryFrom("Guestbook every visitor can sign"))
+                .isEqualTo("Guestbook every visitor can sign");
+        assertThat(ProjectNameHeuristic.summaryFrom("one two three four five six seven eight nine ten"))
                 .isEqualTo("One two three four five six seven eight");
-        assertThat(ProjectNameHeuristic.summaryFrom("A board for tasks and the things that follow them", "x").split(" "))
+        assertThat(ProjectNameHeuristic.summaryFrom("A board for tasks and the things that follow them").split(" "))
                 .hasSizeLessThanOrEqualTo(8);
+        assertThat(ProjectNameHeuristic.summaryFrom("**Notes app**\nignore the rest")).isEqualTo("Notes app");
     }
 
     @Test
-    @DisplayName("with no suggestion the line is the start of the description, and nothing when there is none")
-    void aLineIsMadeFromTheDescription() {
-        assertThat(ProjectNameHeuristic.summaryFrom(null, "A digital guestbook that lets anyone visiting the app leave their name and message."))
-                .isEqualTo("A digital guestbook that lets anyone visiting");
-        assertThat(ProjectNameHeuristic.summaryFrom(null, "**Build:** A kanban board. More here.")).isEqualTo("A kanban board");
-        assertThat(ProjectNameHeuristic.summaryFrom(null, "   ")).isNull();
+    @DisplayName("with no usable suggestion there is no title, so the app shows the name until a model writes one")
+    void noSuggestionMeansNoTitle() {
+        assertThat(ProjectNameHeuristic.summaryFrom(null)).isNull();
+        assertThat(ProjectNameHeuristic.summaryFrom("   ")).isNull();
+        assertThat(ProjectNameHeuristic.summaryFrom("\"\"")).isNull();
     }
 }

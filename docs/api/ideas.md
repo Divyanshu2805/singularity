@@ -6,7 +6,7 @@ Both endpoints are stateless — nothing is saved.
 
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
-| `POST` | `/api/ideas/clarify` | `{ idea }` | `{ questions: ClarifyingQuestion[], tailored }` | 0–5 questions. The model decides how many this idea needs and writes each one for it; an idea that already settles everything gets an empty list, and the client goes straight to building. `tailored` is `false` when the model could not be reached: `questions` is then a fixed general set, and the client must say so rather than present them as written for the idea. |
+| `POST` | `/api/ideas/clarify` | `{ idea }` | `{ questions: ClarifyingQuestion[], tailored, name, summary }` | 0–5 questions. The model decides how many this idea needs and writes each one for it; an idea that already settles everything gets an empty list, and the client goes straight to building. `tailored` is `false` when the model could not be reached: `questions` is then a fixed general set, and the client must say so rather than present them as written for the idea. `name` (one or two words) and `summary` (the project's title, three to eight words) are written in the same call, `null` when no model answered; the browser creates the project with them. |
 | `POST` | `/api/ideas/compile` | `{ idea, answers }` | `{ spec }` | Turns the idea and answers into a markdown brief of about 3,500 characters. If the AI call fails, falls back to a brief assembled from the raw answers — a model problem is never a `500`. |
 
 A failed AI call is never a `500` on either endpoint, but it is never silent either: it is logged as an error naming the cause (a rejected provider key and an account out of credit are called out by name), and `clarify` reports it through `tailored`.

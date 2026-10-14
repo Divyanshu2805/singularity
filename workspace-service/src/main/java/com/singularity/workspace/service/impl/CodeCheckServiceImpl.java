@@ -22,6 +22,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -39,8 +40,17 @@ import static com.singularity.workspace.service.impl.PreviewRunnerPool.RUNNER_CO
  * <p>Handles: finding the project's running preview; laying out, in a scratch folder of its runner container, the
  * project as the turn would leave it - a copy of the pod's own files with the turn's files written over them and its
  * deletes removed; running the TypeScript compiler there against the packages the pod already has installed; asking
- * the registry whether each package the turn adds exists; starting the project's own server there, when the turn
- * wrote any of it, to see that it comes up; and reporting what was found, or that no check was made.
+ * the registry whether each package the turn adds exists; leaving out a compiler error that was already in the
+ * project before the turn; starting the project's own server there, when the turn wrote any of it, to see that it
+ * comes up; and reporting what was found, or that no check was made.
+ *
+ * <p>An error is the turn's only if the project as it was did not already have it. Every problem reported goes back to
+ * the model as a repair, and each repair resends the whole prompt and project: a one-line change to a file that an
+ * earlier turn had saved with a type error was asked, up to three times, to mend something it had not touched and
+ * was not asked about. So when the compiler finds anything in the files the turn wrote, the project is copied again
+ * as it stands in the pod - which is what the turn is laid over - and compiled once more, and an error the copy also
+ * has (the same file, code and message, counted, since lines move) is left out. That second compile happens only when
+ * there is something to leave out, and like the rest it fails open: if it cannot run, every error is reported.
  *
  * <p>It runs in the preview pod because that is the one place the project's code and its {@code node_modules} are
  * together. The build pipeline can parse a file and resolve an import by name, but only a compiler with the packages
@@ -90,13 +100,9 @@ public class CodeCheckServiceImpl implements CodeCheckService {
     private static final Pattern CHECKED_FILE = Pattern.compile(".+\\.(ts|tsx|mts|cts)$");
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    static final String TYPE_CHECK_SCRIPT = "cd " + SCRATCH + " || exit " + NO_TSCONFIG + "\n"
-            + "[ -f tsconfig.json ] || exit " + NO_TSCONFIG + "\n"
-            + "[ -x node_modules/.bin/tsc ] || exit " + NO_TSCONFIG + "\n"
-            + "node_modules/.bin/tsc --noEmit --pretty false -p tsconfig.json > /tmp/check.out 2>&1\n"
-            + "code=$?\n"
-            + "head -c 24000 /tmp/check.out\n"
-            + "exit $code\n";
+    static final String BASELINE = "/tmp/check-base";
+    static final String TYPE_CHECK_SCRIPT = typeCheckScript(SCRATCH, "/tmp/check.out");
+    static final String BASELINE_SCRIPT = copyScript(BASELINE) + typeCheckScript(BASELINE, "/tmp/check-base.out");
 
     static final String SERVER_FOLDER = "server/";
     static final String SERVER_ENTRY = "server/index.ts";
@@ -185,8 +191,11 @@ public class CodeCheckServiceImpl implements CodeCheckService {
                 return problems.isEmpty() ? CodeCheckResponse.skipped(why) : CodeCheckResponse.of(problems);
             }
             if (!compiled.succeeded()) {
-                problems.addAll(TypeCheckOutput.problems(compiled.output(), files.keySet(), added,
-                        Math.max(1, properties.maxProblems() - problems.size())));
+                List<Problem> found = TypeCheckOutput.problems(compiled.output(), files.keySet(), added, Integer.MAX_VALUE);
+                List<Problem> introduced = found.isEmpty() ? found
+                        : introducedByTheTurn(projectId, pod, found, files.keySet(), added, deadline);
+                problems.addAll(introduced.subList(0, Math.min(introduced.size(),
+                        Math.max(1, properties.maxProblems() - problems.size()))));
             }
             if (problems.isEmpty() && files.keySet().stream().anyMatch(path -> path.startsWith(SERVER_FOLDER))
                     && remaining(deadline).compareTo(Duration.ofSeconds(SERVER_START_SECONDS).plus(SHORTEST_USEFUL_RUN)) > 0) {
@@ -206,9 +215,52 @@ public class CodeCheckServiceImpl implements CodeCheckService {
         }
     }
 
+    private List<Problem> introducedByTheTurn(Long projectId, String pod, List<Problem> found, Set<String> written,
+                                              Set<String> added, long deadline) {
+        if (remaining(deadline).compareTo(SHORTEST_USEFUL_RUN) < 0) {
+            return found;
+        }
+        try {
+            ExecResult before = runnerPool.exec(pod, RUNNER_CONTAINER, remaining(deadline), BASELINE_SCRIPT);
+            if (before.exitCode() == NO_TSCONFIG || before.exitCode() < 0) {
+                return found;
+            }
+            List<Problem> introduced = without(found, before.succeeded() ? List.of()
+                    : TypeCheckOutput.problems(before.output(), written, added, Integer.MAX_VALUE));
+            if (introduced.size() < found.size()) {
+                log.info("Left out {} type error(s) in projectId: {} that were there before the turn",
+                        found.size() - introduced.size(), projectId);
+            }
+            return introduced;
+        } catch (RuntimeException e) {
+            log.warn("Couldn't type-check projectId: {} as it was before the turn - reporting every error found", projectId, e);
+            return found;
+        }
+    }
+
+    static List<Problem> without(List<Problem> found, List<Problem> before) {
+        Map<String, Integer> already = new HashMap<>();
+        before.forEach(problem -> already.merge(sameError(problem), 1, Integer::sum));
+        List<Problem> introduced = new ArrayList<>();
+        for (Problem problem : found) {
+            String key = sameError(problem);
+            if (already.getOrDefault(key, 0) > 0) {
+                already.merge(key, -1, Integer::sum);
+            } else {
+                introduced.add(problem);
+            }
+        }
+        return introduced;
+    }
+
+    private static String sameError(Problem problem) {
+        return problem.path() + "\0" + problem.code() + "\0" + problem.message();
+    }
+
     private void cleanUp(String pod) {
         try {
-            runnerPool.exec(pod, RUNNER_CONTAINER, CLEAN_UP_TIMEOUT, "rm -rf " + SCRATCH + " /tmp/check.out /tmp/check.server; true");
+            runnerPool.exec(pod, RUNNER_CONTAINER, CLEAN_UP_TIMEOUT, "rm -rf " + SCRATCH + " " + BASELINE
+                    + " /tmp/check.out /tmp/check-base.out /tmp/check.server; true");
         } catch (RuntimeException e) {
             log.debug("Couldn't remove the type-check scratch folder from {}", pod, e);
         }
@@ -242,6 +294,25 @@ public class CodeCheckServiceImpl implements CodeCheckService {
         return nanos <= 0 ? Duration.ofMillis(1) : Duration.ofNanos(nanos);
     }
 
+    static String typeCheckScript(String folder, String out) {
+        return "cd " + folder + " || exit " + NO_TSCONFIG + "\n"
+                + "[ -f tsconfig.json ] || exit " + NO_TSCONFIG + "\n"
+                + "[ -x node_modules/.bin/tsc ] || exit " + NO_TSCONFIG + "\n"
+                + "node_modules/.bin/tsc --noEmit --pretty false -p tsconfig.json > " + out + " 2>&1\n"
+                + "code=$?\n"
+                + "head -c 24000 " + out + "\n"
+                + "exit $code\n";
+    }
+
+    static String copyScript(String folder) {
+        return "rm -rf " + folder + "\n"
+                + "mkdir -p " + folder + "\n"
+                + "cd /app\n"
+                + "find . -mindepth 1 -maxdepth 1 ! -name node_modules ! -name dist ! -name .git ! -name .data -exec cp -R {} "
+                + folder + "/ \\;\n"
+                + "if [ -d /app/node_modules ]; then ln -s /app/node_modules " + folder + "/node_modules; fi\n";
+    }
+
     static String prepareScript(Set<String> written, List<String> deleted) {
         Set<String> folders = new LinkedHashSet<>();
         for (String path : written) {
@@ -250,13 +321,7 @@ public class CodeCheckServiceImpl implements CodeCheckService {
                 folders.add(SCRATCH + "/" + path.substring(0, slash));
             }
         }
-        StringBuilder script = new StringBuilder("set -e\n")
-                .append("rm -rf ").append(SCRATCH).append("\n")
-                .append("mkdir -p ").append(SCRATCH).append("\n")
-                .append("cd /app\n")
-                .append("find . -mindepth 1 -maxdepth 1 ! -name node_modules ! -name dist ! -name .git ! -name .data -exec cp -R {} ")
-                .append(SCRATCH).append("/ \\;\n")
-                .append("if [ -d /app/node_modules ]; then ln -s /app/node_modules ").append(SCRATCH).append("/node_modules; fi\n");
+        StringBuilder script = new StringBuilder("set -e\n").append(copyScript(SCRATCH));
         if (!folders.isEmpty()) {
             script.append("mkdir -p");
             folders.forEach(folder -> script.append(' ').append(quoted(folder)));

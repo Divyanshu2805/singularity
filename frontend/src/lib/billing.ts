@@ -77,12 +77,6 @@ export function buildsFor(tokens: number): number {
   return builds >= 20 ? Math.floor(builds / 5) * 5 : builds;
 }
 
-export function buildsLeftLabel(remainingTokens: number): string {
-  const builds = buildsFor(remainingTokens);
-  if (builds === 0) return "Not enough left for a full build";
-  return `About ${builds} more ${builds === 1 ? "build" : "builds"} today`;
-}
-
 export function cardPrice(plan: Plan): string {
   if (!plan.isFree) return plan.price;
   try {
