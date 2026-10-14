@@ -1,5 +1,8 @@
 package com.singularity.intelligence.repository;
 
+import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import com.singularity.intelligence.entity.CodeNote;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -9,7 +12,7 @@ import java.util.Optional;
 /**
  * Reads and writes code notes.
  *
- * <p>Handles: a user's notes on a project, one note of theirs by id, and clearing their thread.
+ * <p>Handles: a user's notes on a project, one note of theirs by id, and clearing their thread; and deleting every row of an account that is being deleted.
  *
  * <p>Every method takes the user as well as the project. A note is private to whoever asked it, so there is
  * deliberately no find-by-project query - that one would hand one member another's notes.
@@ -21,4 +24,8 @@ public interface CodeNoteRepository extends JpaRepository<CodeNote, Long> {
     Optional<CodeNote> findByIdAndProjectIdAndUserId(Long id, Long projectId, Long userId);
 
     long deleteByProjectIdAndUserId(Long projectId, Long userId);
+
+    @Modifying
+    @Query(value = "DELETE FROM code_notes WHERE user_id = :userId", nativeQuery = true)
+    int deleteAllOfUser(@Param("userId") Long userId);
 }

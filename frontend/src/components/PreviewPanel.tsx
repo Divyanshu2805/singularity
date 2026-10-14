@@ -38,6 +38,12 @@
  * tries are used up. A failed start offers Try again and View code and nothing else: the "Ask AI to fix" button that
  * used to sit under every failure, including ones no edit could mend, was removed at the owner's request.
  *
+ * "Edit text" lets someone who may edit click the app's words and type over them, with no model involved. The page
+ * does the typing in place (proxy/text-edit.js) and posts the old and new words; the tab finds them in the source and
+ * saves the file by hand (lib/text-edit), one edit after another, and tells the page whether to keep them. Edits are
+ * taken only while the mode is on - and for a moment after it is turned off, since turning it off finishes the one
+ * that was open. A build turns it off, as a save by hand then would race the build.
+ *
  * Per person: it starts when you press Start, a collaborator running theirs does not start yours, and it comes back
  * by itself only if yours stopped for inactivity.
  *
@@ -51,7 +57,9 @@
  * Its toolbar is the window's lighter top band (index.css, .ws-bar) holding the app's icon buttons (.icon-btn - the
  * same round wash and switched-on look as every other toolbar; a one-off ghost button with its own fill was here
  * before), each icon with a motion of its own (reload turns, the new-tab arrow leaves up and right), and the address
- * sits in a sunken pill like a browser's. Each state - starting, stopped, failed - rises in as a centred card with a
+ * sits in a sunken pill like a browser's. Show output is not on it: it floats as a small pill centred at the foot of the
+ * preview, with the console's error count, and gives way to the output panel it opens - moved there at the owner's
+ * request. Edit text's icon is an arrow cursor, also at the owner's request. Each state - starting, stopped, failed - rises in as a centred card with a
  * Fraunces title, the app's comet marking whatever is under way. The idle ones are only a gold tile over a soft
  * light, the title and the action - the explanatory sentence under the title was removed at the owner's request, so
  * a stopped preview shows a line only when it has a real reason (an idle timeout, say).
@@ -78,6 +86,7 @@ import {
   Square,
   SquareTerminal,
   Tablet,
+  MousePointer2,
   Trash2,
   X,
 } from "lucide-react";
@@ -91,6 +100,8 @@ import {
   FRAME_SILENCE_MS,
   addressToPath,
   appendConsole,
+  editSavedCommand,
+  editTextCommand,
   errorConsoleLine,
   frameCommand,
   frameReducer,
@@ -105,6 +116,8 @@ import {
   type FramePlace,
 } from "@/lib/preview-frame";
 import { api, ApiRequestError, isQuotaError } from "@/lib/api";
+import { splitPath } from "@/lib/file-icons";
+import { saveTextEdit, textEditProblem, type TextEdit, type TextEditIo } from "@/lib/text-edit";
 import { MY_PREVIEWS_QUERY_KEY, type ProjectPreview } from "@/hooks/use-preview";
 import { useCopyFeedback } from "@/hooks/use-copy-feedback";
 import { useToast } from "@/hooks/use-toast";
@@ -147,14 +160,26 @@ interface PreviewPanelProps {
   onViewCode: () => void;
   onDownload: () => void;
   reloadSignal?: number;
+  onFileSaved?: (path: string) => void;
 }
 
 type OutputTab = "server" | "console";
+
+const textEditIo = (projectId: string): TextEditIo => ({
+  listPaths: () => api.getFilePaths(projectId),
+  search: async (fragment) => (await api.searchCode(projectId, fragment)).files.map((file) => file.path),
+  readFile: (path) => api.getFile(projectId, path),
+  saveFile: async (path, content, baseHash) => {
+    await api.saveFile(projectId, path, content, baseHash);
+  },
+  isConflict: (error) => error instanceof ApiRequestError && error.status === 409,
+});
 
 const LOG_POLL_MS = 3_000;
 const SNAPSHOT_SETTLE_MS = 2_500;
 const STATUS_PAGE_THROTTLE_MS = 3_000;
 const MAX_LINK_REFRESHES = 3;
+const TEXT_EDIT_GRACE_MS = 3_000;
 const ROOT_PLACE: FramePlace = { path: "/", canGoBack: false, canGoForward: false };
 const DEVICE_ICONS: Record<PreviewDevice, ReactNode> = {
   desktop: <Monitor />,
@@ -175,6 +200,7 @@ export function PreviewPanel({
   onViewCode,
   onDownload,
   reloadSignal = 0,
+  onFileSaved,
 }: PreviewPanelProps) {
   const { preview, isLoaded, refresh, start, restart, stop, isStarting, isStopping, startError, resetStartError } = controller;
   const { toast } = useToast();
@@ -189,6 +215,7 @@ export function PreviewPanel({
   const [frame, dispatchFrame] = useReducer(frameReducer, FRAME_LOADING);
   const [place, setPlace] = useState<FramePlace>(ROOT_PLACE);
   const [consoleLines, setConsoleLines] = useState<ConsoleLine[]>([]);
+  const [isEditingText, setIsEditingText] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastStatusPageAtRef = useRef(0);
   const linkRefreshesRef = useRef(0);
@@ -227,6 +254,7 @@ export function PreviewPanel({
     setIsLogsOpen(false);
     setOutputTab("server");
     setConsoleLines([]);
+    setIsEditingText(false);
   }, [projectId]);
 
   const syncedRevisionRef = useRef(preview?.syncedRevisionId ?? null);
@@ -359,6 +387,11 @@ export function PreviewPanel({
           linkRefreshesRef.current = 0;
           dispatchFrame({ type: "ready" });
           setPlace(message.place);
+          if (message.kind === "ready" && isEditingTextRef.current) sendToFrameRef.current(editTextCommand(true));
+          break;
+        case "text-edit":
+          if (isEditingTextRef.current || Date.now() < textEditsUntilRef.current) saveTextRef.current(message.edit);
+          else sendToFrameRef.current(editSavedCommand(message.edit.id, false));
           break;
         case "error":
           if (holdsErrorsRef.current) heldErrorRef.current = message.error;
@@ -396,6 +429,47 @@ export function PreviewPanel({
   const sendToFrame = useCallback((command: FrameCommand) => {
     if (origin) iframeRef.current?.contentWindow?.postMessage(command, origin);
   }, [origin]);
+  const sendToFrameRef = useRef(sendToFrame);
+  sendToFrameRef.current = sendToFrame;
+
+  const mayEditText = canRestart && preview?.status === "RUNNING" && !isBuilding;
+  useEffect(() => {
+    if (!mayEditText) setIsEditingText(false);
+  }, [mayEditText]);
+  const isEditingTextRef = useRef(isEditingText);
+  isEditingTextRef.current = isEditingText;
+  const textEditsUntilRef = useRef(0);
+  const wasEditingTextRef = useRef(false);
+  useEffect(() => {
+    if (wasEditingTextRef.current && !isEditingText) textEditsUntilRef.current = Date.now() + TEXT_EDIT_GRACE_MS;
+    wasEditingTextRef.current = isEditingText;
+    sendToFrame(editTextCommand(isEditingText));
+  }, [isEditingText, sendToFrame]);
+
+  const editQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const saveTextRef = useRef<(edit: TextEdit) => void>(() => {});
+  saveTextRef.current = (edit: TextEdit) => {
+    editQueueRef.current = editQueueRef.current.then(async () => {
+      let saved = false;
+      try {
+        const outcome = await saveTextEdit(edit, textEditIo(projectId));
+        saved = outcome.kind === "saved" || outcome.kind === "unchanged";
+        if (outcome.kind === "saved") {
+          onFileSaved?.(outcome.path);
+          toast({ title: `Saved in ${splitPath(outcome.path).base}` });
+        }
+        const problem = textEditProblem(outcome);
+        if (problem) toast({ ...problem, variant: "destructive" });
+      } catch (error) {
+        toast({
+          title: "Couldn't save this change",
+          description: error instanceof Error ? error.message : undefined,
+          variant: "destructive",
+        });
+      }
+      sendToFrameRef.current(editSavedCommand(edit.id, saved));
+    });
+  };
 
   const shouldSnapshot = wantsSnapshot({
     canEdit: canRestart,
@@ -420,6 +494,7 @@ export function PreviewPanel({
   const isCreating = status === "CREATING";
   const hasServerLogs = !!preview && (isRunning || isCreating || status === "FAILED");
   const hasLogs = hasServerLogs || consoleLines.length > 0;
+  const consoleErrorCount = consoleLines.filter((line) => line.level === "error").length;
 
   useEffect(() => {
     if (!isCreating) return;
@@ -547,17 +622,55 @@ export function PreviewPanel({
         onBack={() => sendToFrame(frameCommand("back"))}
         onForward={() => sendToFrame(frameCommand("forward"))}
         onNavigate={(path) => sendToFrame(navigateCommand(path))}
+        textEdit={canRestart ? {
+          isOn: isEditingText,
+          isAvailable: mayEditText && frame.view === "app",
+          onToggle: () => setIsEditingText((on) => !on),
+        } : null}
         onReload={handleReload}
         onRestart={canRestart ? handleRestart : null}
         onStop={() => void handleStop()}
-        onToggleLogs={() => setIsLogsOpen((open) => !open)}
-        isLogsOpen={isLogsOpen}
-        canShowLogs={hasLogs}
         isStopping={isStopping}
         isStarting={isStarting}
       />
 
+      {isEditingText && (
+        <div role="status" className="flex shrink-0 items-center gap-3 border-b border-primary/25 bg-primary/[0.08] px-3 py-2 text-xs text-foreground/90 animate-in fade-in-0 slide-in-from-top-1">
+          <MousePointer2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1 truncate">Click any text in your app to change it.</span>
+          <span className="hidden shrink-0 items-center gap-3 text-[11px] text-muted-foreground sm:flex">
+            <span className="flex items-center gap-1.5">
+              <kbd className="rounded-md border border-white/[0.14] bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] leading-none text-foreground/85">Enter</kbd>
+              Save
+            </span>
+            <span className="flex items-center gap-1.5">
+              <kbd className="rounded-md border border-white/[0.14] bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] leading-none text-foreground/85">Esc</kbd>
+              Cancel
+            </span>
+          </span>
+          <Button size="sm" onClick={() => setIsEditingText(false)} className="h-7 shrink-0 gap-1.5 rounded-full px-3.5 text-[11.5px] [&_svg]:size-3.5">
+            <Check />
+            Done
+          </Button>
+        </div>
+      )}
+
       {body}
+
+      {hasLogs && !isLogsOpen && (
+        <button
+          type="button"
+          onClick={() => setIsLogsOpen(true)}
+          style={{ "--icon-hover": "scale(1.08)" } as CSSProperties}
+          className="app-menu absolute bottom-4 left-1/2 z-40 flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full border px-3.5 text-[11.5px] font-medium text-foreground/85 shadow-[0_12px_30px_-12px_rgb(0_0_0/0.8)] transition-colors hover:text-foreground [&_svg]:size-3.5"
+        >
+          <SquareTerminal />
+          Show output
+          {consoleErrorCount > 0 && (
+            <span className="rounded-full bg-destructive/20 px-1.5 text-[10px] tabular-nums text-destructive">{consoleErrorCount}</span>
+          )}
+        </button>
+      )}
 
       {isLogsOpen && hasLogs && (
         <LogsDrawer
@@ -701,12 +814,10 @@ function PreviewToolbar({
   onBack,
   onForward,
   onNavigate,
+  textEdit,
   onReload,
   onRestart,
   onStop,
-  onToggleLogs,
-  isLogsOpen,
-  canShowLogs,
   isStopping,
   isStarting,
 }: {
@@ -719,12 +830,10 @@ function PreviewToolbar({
   onBack: () => void;
   onForward: () => void;
   onNavigate: (path: string) => void;
+  textEdit: { isOn: boolean; isAvailable: boolean; onToggle: () => void } | null;
   onReload: () => void;
   onRestart: (() => void) | null;
   onStop: () => void;
-  onToggleLogs: () => void;
-  isLogsOpen: boolean;
-  canShowLogs: boolean;
   isStopping: boolean;
   isStarting: boolean;
 }) {
@@ -765,6 +874,17 @@ function PreviewToolbar({
         {sync && <SyncChip sync={sync} />}
       </div>
 
+      {textEdit && (
+        <ToolbarButton
+          label={textEdit.isOn ? "Stop editing text" : "Edit text"}
+          motion="translateY(-1.5px)"
+          onClick={textEdit.onToggle}
+          disabled={!textEdit.isOn && !textEdit.isAvailable}
+          active={textEdit.isOn}
+        >
+          <MousePointer2 />
+        </ToolbarButton>
+      )}
       <ToolbarButton label={nextDeviceLabel} motion="scale(1.15)" onClick={() => onDeviceChange(nextDevice)} disabled={!isRunning} active={device !== "desktop"}>
         {DEVICE_ICONS[nextDevice]}
       </ToolbarButton>
@@ -773,9 +893,6 @@ function PreviewToolbar({
       </ToolbarButton>
       <ToolbarButton label="Open in new tab" motion="translateX(1.5px)" onClick={() => shareableLink && window.open(shareableLink, "_blank", "noopener,noreferrer")} disabled={!isRunning}>
         <ExternalLink />
-      </ToolbarButton>
-      <ToolbarButton label={isLogsOpen ? "Hide output" : "Show output"} motion="scale(1.08)" onClick={onToggleLogs} disabled={!canShowLogs} active={isLogsOpen && canShowLogs}>
-        <SquareTerminal />
       </ToolbarButton>
       {onRestart && (
         <ToolbarButton label="Reinstall and restart" motion="rotate(-180deg)" onClick={onRestart} disabled={!isRunning || isStarting}>

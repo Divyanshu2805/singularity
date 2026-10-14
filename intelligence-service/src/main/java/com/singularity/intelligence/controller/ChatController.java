@@ -1,14 +1,18 @@
 package com.singularity.intelligence.controller;
 
+import com.singularity.common.dto.ProjectTitleDto;
 import com.singularity.intelligence.dto.chat.ActiveGenerationResponse;
 import com.singularity.intelligence.dto.chat.ChatRequest;
 import com.singularity.intelligence.dto.chat.ChatResponse;
 import com.singularity.intelligence.dto.chat.GenerationSignal;
 import com.singularity.intelligence.dto.chat.LastTurnChangesResponse;
+import com.singularity.intelligence.dto.chat.MessageTitlesResponse;
 import com.singularity.intelligence.dto.chat.StreamResponse;
 import com.singularity.intelligence.service.AiGenerationService;
 import com.singularity.intelligence.dto.chat.SuggestionsResponse;
 import com.singularity.intelligence.service.ChatService;
+import com.singularity.intelligence.service.MessageTitleService;
+import com.singularity.intelligence.service.ProjectTitleService;
 import com.singularity.intelligence.service.SuggestionService;
 import com.singularity.intelligence.util.SseHeartbeat;
 import jakarta.validation.Valid;
@@ -26,7 +30,10 @@ import java.util.List;
  * The project build chat, for the browser.
  *
  * <p>Handles: starting a generation and streaming it, reading the saved history, clearing it, the last turn's changed files for
- * the editor's diffs, asking whether a generation is already running, reattaching to one, and stopping one.
+ * the editor's diffs, asking whether a generation is already running, reattaching to one, stopping one, the next steps
+ * suggested under a build, and the title of a project that has none - written from its first request, and answered
+ * with a null title rather than an error when none could be written - and short titles for the caller's own
+ * messages, which the chat's scroll rail lists them by.
  *
  * <p>Closing the response does not stop a generation - it only stops watching it; stopping is its own endpoint. A
  * stream carries four kinds of event. A piece of the answer's text is an unnamed event, as it always was. {@code
@@ -52,6 +59,8 @@ public class ChatController {
     private final AiGenerationService aiGenerationService;
     private final ChatService chatService;
     private final SuggestionService suggestionService;
+    private final ProjectTitleService projectTitleService;
+    private final MessageTitleService messageTitleService;
 
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<StreamResponse>> streamChat(
@@ -103,6 +112,16 @@ public class ChatController {
     @PostMapping("/projects/{projectId}/suggestions")
     public ResponseEntity<SuggestionsResponse> suggestNextSteps(@PathVariable Long projectId) {
         return ResponseEntity.ok(new SuggestionsResponse(suggestionService.nextSteps(projectId)));
+    }
+
+    @PostMapping("/projects/{projectId}/title")
+    public ResponseEntity<ProjectTitleDto> titleProject(@PathVariable Long projectId) {
+        return ResponseEntity.ok(new ProjectTitleDto(projectTitleService.title(projectId).orElse(null)));
+    }
+
+    @PostMapping("/projects/{projectId}/message-titles")
+    public ResponseEntity<MessageTitlesResponse> titleMessages(@PathVariable Long projectId) {
+        return ResponseEntity.ok(new MessageTitlesResponse(messageTitleService.titleMessages(projectId)));
     }
 
     private Flux<ServerSentEvent<StreamResponse>> toEvents(Flux<GenerationSignal> stream, Long projectId) {

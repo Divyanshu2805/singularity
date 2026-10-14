@@ -36,7 +36,7 @@ import { api } from "@/lib/api";
 import { cleanTerm, filterEntries, findEntry, isNotATerm, termKey } from "@/lib/learn";
 import { learnPanel, useLearnPanel, type LearnTab } from "@/lib/learn-panel-store";
 import { parseBigPicture, termQuestion, type LessonQuestion } from "@/lib/lesson";
-import { forget, requestTour, termStateKey, tourKey, useLesson } from "@/lib/lesson-store";
+import { forget, readTourBase, requestTour, termStateKey, tourKey, useLesson } from "@/lib/lesson-store";
 import { timeAgo } from "@/lib/revisions";
 import { cn } from "@/lib/utils";
 
@@ -73,7 +73,12 @@ function Status({ children, tone }: { children: ReactNode; tone?: "error" }) {
   );
 }
 
-function TourTab({ projectId, onOpenFile }: { projectId: string; onOpenFile: (path: string) => void }) {
+function TourTab({ projectId, changedAt, latestRevision, onOpenFile }: {
+  projectId: string;
+  changedAt?: string;
+  latestRevision?: number | null;
+  onOpenFile: (path: string) => void;
+}) {
   const queryClient = useQueryClient();
   const saved = useQuery({
     queryKey: ["project-tour", projectId],
@@ -101,6 +106,15 @@ function TourTab({ projectId, onOpenFile }: { projectId: string; onOpenFile: (pa
     learnPanel.close();
   };
   const isLoading = saved.isLoading && !live;
+  const writtenAt = Date.parse(saved.data?.writtenAt ?? "");
+  const changed = Date.parse(changedAt ?? "");
+  const base = readTourBase(projectId);
+  const isOutOfDate =
+    !isWriting &&
+    !!saved.data?.content &&
+    (latestRevision != null
+      ? base !== latestRevision
+      : !Number.isNaN(writtenAt) && !Number.isNaN(changed) && changed > writtenAt);
 
   return (
     <div role="tabpanel" aria-label="Project tour" className="flex min-h-0 flex-1 flex-col">
@@ -142,6 +156,11 @@ function TourTab({ projectId, onOpenFile }: { projectId: string; onOpenFile: (pa
             <OrbitSpinner className="h-3 w-3" />
             <span className="truncate">{picture ? "Still writing…" : "This takes a few seconds"}</span>
           </Status>
+        ) : isOutOfDate ? (
+          <Status tone="error">
+            <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate" title="Your project changed after this tour was written.">Out of date - your project changed since</span>
+          </Status>
         ) : (
           <Status>
             <span className="truncate">
@@ -153,15 +172,15 @@ function TourTab({ projectId, onOpenFile }: { projectId: string; onOpenFile: (pa
           <button
             type="button"
             disabled={isWriting}
-            onClick={() => requestTour(projectId, true)}
+            onClick={() => requestTour(projectId, true, latestRevision)}
             title="Reads your files again and replaces this tour. It uses some of your daily allowance."
-            className={CHIP}
+            className={cn(CHIP, isOutOfDate && "ring-1 ring-primary/50")}
           >
             <MapIcon className="h-3 w-3 text-primary/80" />
-            Write it again
+            {isOutOfDate ? "Update the tour" : "Write it again"}
           </button>
         ) : (
-          <button type="button" disabled={isWriting || isLoading} onClick={() => requestTour(projectId)} className={CHIP}>
+          <button type="button" disabled={isWriting || isLoading} onClick={() => requestTour(projectId, false, latestRevision)} className={CHIP}>
             <MapIcon className="h-3 w-3 text-primary/80" />
             {failure && live ? "Try again" : "Write the tour"}
           </button>
@@ -374,8 +393,10 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
   );
 }
 
-export function LearnPanel({ projectId, onOpenFile, onAsk }: {
+export function LearnPanel({ projectId, changedAt, latestRevision, onOpenFile, onAsk }: {
   projectId: string | undefined;
+  changedAt?: string;
+  latestRevision?: number | null;
   onOpenFile: (path: string) => void;
   onAsk: (ask: LessonQuestion) => void;
 }) {
@@ -399,7 +420,7 @@ export function LearnPanel({ projectId, onOpenFile, onAsk }: {
         </DialogHeader>
 
         {open && projectId && (panel.tab === "tour"
-          ? <TourTab projectId={projectId} onOpenFile={onOpenFile} />
+          ? <TourTab projectId={projectId} changedAt={changedAt} latestRevision={latestRevision} onOpenFile={onOpenFile} />
           : <GlossaryTab projectId={projectId} term={panel.term} onAsk={onAsk} />)}
       </DialogContent>
     </Dialog>

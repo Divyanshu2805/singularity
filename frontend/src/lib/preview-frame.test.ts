@@ -3,7 +3,7 @@
  *
  * Handles: reading each message the page can post, and dropping one whose shape is wrong rather than guessing at it;
  * cutting what the page sends to a length the panel can show; keeping the console to a bounded number of lines; the
- * commands sent back; an address typed by a person only ever becoming a path on the preview's own origin; what a
+ * commands sent back; words the person changed by hand read only when well formed; an address typed by a person only ever becoming a path on the preview's own origin; what a
  * status page calls for; and what the frame is taken to be showing - covered until the page speaks, a status page
  * when it says so, and "not the app" only when a frame that never spoke stays silent.
  */
@@ -13,6 +13,8 @@ import {
   MAX_CONSOLE_LINES,
   addressToPath,
   appendConsole,
+  editSavedCommand,
+  editTextCommand,
   errorConsoleLine,
   frameCommand,
   frameReducer,
@@ -171,6 +173,17 @@ describe("commands for the page", () => {
     expect(frameCommand("forward")).toEqual({ type: "PreviewCommand", command: "forward" });
     expect(navigateCommand("/about")).toEqual({ type: "PreviewCommand", command: "navigate", path: "/about" });
     expect(frameCommand("snapshot")).toEqual({ type: "PreviewCommand", command: "snapshot" });
+    expect(editTextCommand(true)).toEqual({ type: "PreviewCommand", command: "edit-text", on: true });
+    expect(editSavedCommand(4, false)).toEqual({ type: "PreviewCommand", command: "edit-text-saved", id: 4, saved: false });
+  });
+});
+
+describe("words changed by hand", () => {
+  it("are read as an edit when every field is the right type, and dropped otherwise", () => {
+    expect(readFrameMessage({ type: "PreviewTextEdit", payload: { id: 1, before: "Hi", after: "Hello", hints: [] } }))
+      .toEqual({ kind: "text-edit", edit: { id: 1, before: "Hi", after: "Hello", hints: [] } });
+    expect(readFrameMessage({ type: "PreviewTextEdit", payload: { id: 1, before: "Hi" } })).toBeNull();
+    expect(readFrameMessage({ type: "PreviewTextEdit" })).toBeNull();
   });
 });
 

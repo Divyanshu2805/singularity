@@ -1,6 +1,8 @@
 package com.singularity.intelligence.llm.stub;
 
 import com.singularity.intelligence.llm.CodeInsightPrompts;
+import com.singularity.intelligence.llm.MessageTitlePrompts;
+import com.singularity.intelligence.llm.ProjectTitlePrompts;
 
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -10,7 +12,7 @@ import java.util.regex.Pattern;
  *
  * <p>Handles: telling which of the service's calls a request is - a build turn, the idea interview, the compiled
  * brief, a step lesson, a turn's big picture, a project's tour, a glossary entry, a step's task or the check of one,
- * the suggestions under a build, or a question about code - from its system prompt, and writing
+ * the suggestions under a build, a project's title, the titles of a person's messages, or a question about code - from its system prompt, and writing
  * the reply that call's real parser expects: a small notes app in the build protocol on a first build, one further
  * component and an edit on the next request, a closing word on a repair or a continuation, a question for a request
  * outside the stack, and plain words for a question about the project.
@@ -42,6 +44,8 @@ public final class StubReplies {
         TASK,
         TASK_CHECK,
         SUGGEST,
+        TITLE,
+        MESSAGE_TITLES,
         ANSWER
     }
 
@@ -52,6 +56,8 @@ public final class StubReplies {
     static final String REPLY_SHAPE_MARKER = "\n\n---\n(Reply format, added by the system";
     static final String TEMPLATE_TITLE = "    <title>New project</title>";
     static final String NOTE_LIST_LINE = "        <NoteList notes={notes} onRemove={remove} />";
+
+    private static final Pattern NUMBERED_MESSAGE = Pattern.compile("^\\d+\\. ");
 
     private static final Pattern OTHER_STACK = Pattern.compile(
             "\\b(vue|angular|svelte|next\\.?js|python|django|flask|flutter|php|laravel)\\b", Pattern.CASE_INSENSITIVE);
@@ -65,6 +71,8 @@ public final class StubReplies {
         if (prompt.startsWith(INTERVIEW_PROMPT_OPENING)) return Call.INTERVIEW;
         if (prompt.startsWith(BRIEF_PROMPT_OPENING)) return Call.BRIEF;
         if (prompt.startsWith(SUGGEST_PROMPT_OPENING)) return Call.SUGGEST;
+        if (prompt.startsWith(ProjectTitlePrompts.TITLE_PROMPT_OPENING)) return Call.TITLE;
+        if (prompt.startsWith(MessageTitlePrompts.MESSAGE_TITLE_PROMPT_OPENING)) return Call.MESSAGE_TITLES;
         if (prompt.startsWith(CodeInsightPrompts.LESSON_PROMPT_OPENING)) return Call.LESSON;
         if (prompt.startsWith(CodeInsightPrompts.OVERVIEW_PROMPT_OPENING)) return Call.OVERVIEW;
         if (prompt.startsWith(CodeInsightPrompts.TOUR_PROMPT_OPENING)) return Call.TOUR;
@@ -86,8 +94,23 @@ public final class StubReplies {
             case TASK -> TASK;
             case TASK_CHECK -> TASK_CHECK;
             case SUGGEST -> SUGGESTIONS;
+            case TITLE -> TITLE;
+            case MESSAGE_TITLES -> messageTitles(request == null ? "" : request);
             case ANSWER -> ANSWER;
         };
+    }
+
+    private static String messageTitles(String request) {
+        StringBuilder titles = new StringBuilder();
+        int number = 0;
+        for (String line : request.split("\\R")) {
+            if (!NUMBERED_MESSAGE.matcher(line).find()) continue;
+            number++;
+            titles.append(number).append(". ")
+                    .append(number == 1 ? "Build a quick notes app" : "Change the notes app, part " + number)
+                    .append('\n');
+        }
+        return titles.toString().strip();
     }
 
     private static String build(String project, String sent) {
@@ -322,7 +345,8 @@ public final class StubReplies {
 
             ### Check yourself
 
-            Which line has to be there before anything else in the file can work?""";
+            Write the first line again yourself, but for a file named `notes.ts`, and say in one sentence what
+            it sets up.""";
 
     private static final String OVERVIEW = """
             You asked for an app, and this build made its first working version: one screen you can use straight away.
@@ -399,6 +423,8 @@ public final class StubReplies {
             Add a search box that filters the notes
             Let me pin a note to the top
             Add a dark theme switch""";
+
+    private static final String TITLE = "Quick notes you can jot and clear";
 
     private static final String ANSWER = "This is the stub model's answer. It reads no code and costs no tokens; "
             + "run the service without the `stub-ai` profile for a real explanation.";

@@ -92,6 +92,32 @@ describe("the tour", () => {
     expect(streams[0]).toMatchObject({ kind: "tour", body: { rewrite: true } });
   });
 
+  it("says the tour is out of date when the project has changed since it was written, and offers to update it", async () => {
+    vi.mocked(api.getProjectTour).mockResolvedValue({ content: TOUR, writtenAt: new Date().toISOString() });
+    renderPanel({ latestRevision: 7 });
+    act(() => learnPanel.open(id()));
+
+    expect(await screen.findByText(/out of date/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /update the tour/i }));
+    expect(streams[0]).toMatchObject({ kind: "tour", body: { rewrite: true } });
+    act(() => { streams[0].chunk(TOUR); streams[0].done(); });
+    await waitFor(() => expect(screen.queryByText(/out of date/i)).not.toBeInTheDocument());
+  });
+
+  it("does not call a tour out of date while no revision has been saved since it was written", async () => {
+    vi.mocked(api.getProjectTour).mockResolvedValue({ content: TOUR, writtenAt: new Date().toISOString() });
+    renderPanel({ latestRevision: 7 });
+    act(() => learnPanel.open(id()));
+    await screen.findByText("This app keeps notes.");
+    fireEvent.click(screen.getByRole("button", { name: /update the tour/i }));
+    act(() => { streams[0].chunk(TOUR); streams[0].done(); });
+    act(() => learnPanel.close());
+    act(() => learnPanel.open(id()));
+
+    expect(await screen.findByText("This app keeps notes.")).toBeInTheDocument();
+    expect(screen.queryByText(/out of date/i)).not.toBeInTheDocument();
+  });
+
   it("opens a file it names in the editor and closes, and opens a marked word in the glossary", async () => {
     vi.mocked(api.getProjectTour).mockResolvedValue({ content: TOUR });
     const onOpenFile = vi.fn();

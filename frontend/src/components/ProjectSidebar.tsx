@@ -10,13 +10,19 @@
  * cards and the project's header still use it); the owner asked for no colours here, and a column of them beside a
  * list that is otherwise two tones read as noise.
  *
+ * Each row reads the project's title (lib/project-title) - a few words a model wrote for what the app is, or the
+ * owner's own name for it after a rename - the same words the project's header shows, so the two never disagree. A
+ * title too long for the row fades out at the edge and, while the row is hovered or focused, glides to show its end
+ * and back (OverflowSlideText). Renaming edits the title.
+ *
  * Above the groups there are three rows only - search, the dashboard and all projects. A "Projects" section used to
  * add Owned by me and Shared with me under All projects; both are filters on the All projects page itself, and the
  * owner asked for the one way in. The dashboard's icon is a house and all projects' a stack of folders, since two
  * grids side by side could not be told apart.
  *
- * The account menu at its foot leads to Settings, to Account - one entry for the profile, Plans & billing and
- * Security, which are three tabs of one place (components/app/AccountTabs) - and to Usage, opens the panel of
+ * The account menu at its foot leads to Settings - one page of boxes for the profile, preferences, security and
+ * deleting the account - to Plans & billing, and to Usage (the entry for the page you are on carries the sidebar's
+ * selected-row wash, .account-menu in index.css), opens the panel of
  * project invitations (InvitationsDialog) with the number waiting beside it, opens the Privacy and Terms page, and
  * signs out. While an invitation is waiting the avatar itself
  * carries a small gold dot, so it is seen without opening the menu. The invitations are asked for when the sidebar
@@ -76,7 +82,7 @@ import {
   Star,
   StarOff,
   Trash2,
-  UserRound,
+  CreditCard,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -88,10 +94,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { OverflowSlideText } from "@/components/OverflowSlideText";
+import { projectTitle } from "@/lib/project-title";
 import { ProjectCommandPalette } from "@/components/ProjectCommandPalette";
 import { InvitationsDialog } from "@/components/InvitationsDialog";
-import { isAccountPath } from "@/lib/account-pages";
 import { useInvitations } from "@/hooks/use-invitations";
+import { OPEN_INVITES_EVENT } from "@/lib/invitations-event";
 import { OPEN_SEARCH_EVENT } from "@/lib/search-event";
 import { useBilling } from "@/hooks/use-billing";
 import { useProjectActions } from "@/hooks/use-project-actions";
@@ -110,7 +117,7 @@ const COLLAPSED_SECTIONS_KEY = "sidebar_collapsed_sections";
 
 type ProjectActions = ReturnType<typeof useProjectActions>;
 
-function ProjectLetter({ name, current }: { name: string; current?: boolean }) {
+export function ProjectLetter({ name, current }: { name: string; current?: boolean }) {
   return (
     <span
       aria-hidden="true"
@@ -292,7 +299,8 @@ function NewProjectItem({ onClick, rail }: { onClick: () => void; rail: boolean 
 }
 
 function RenameField({ project, onDone }: { project: ProjectSummaryResponse; onDone: (name: string | null) => void }) {
-  const [draft, setDraft] = useState(project.name);
+  const title = projectTitle(project);
+  const [draft, setDraft] = useState(title);
   const inputRef = useRef<HTMLInputElement>(null);
   const isDoneRef = useRef(false);
 
@@ -305,17 +313,17 @@ function RenameField({ project, onDone }: { project: ProjectSummaryResponse; onD
     if (isDoneRef.current) return;
     isDoneRef.current = true;
     const next = draft.trim();
-    onDone(save && next && next !== project.name ? next : null);
+    onDone(save && next && next !== title ? next : null);
   };
 
   return (
     <div className="flex h-8 items-center gap-3 rounded-lg bg-background px-3 ring-1 ring-inset ring-primary/60">
-      <ProjectLetter name={project.name} current />
+      <ProjectLetter name={title} current />
       <input
         ref={inputRef}
         value={draft}
         maxLength={255}
-        aria-label={`Rename ${project.name}`}
+        aria-label={`Rename ${title}`}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => finish(true)}
         onKeyDown={(e) => {
@@ -344,6 +352,7 @@ function ProjectItem({ project, isCurrent, isRenaming, onOpen, onStartRename, on
   actions: ProjectActions;
 }) {
   const canEdit = project.role === "OWNER" || project.role === "EDITOR";
+  const title = projectTitle(project);
   const pendingRenameRef = useRef(false);
   const beginPendingRename = () => {
     if (!pendingRenameRef.current) return;
@@ -368,15 +377,15 @@ function ProjectItem({ project, isCurrent, isRenaming, onOpen, onStartRename, on
             isCurrent ? "font-medium text-foreground" : "text-foreground/70 hover:text-foreground"
           )}
         >
-          <ProjectLetter name={project.name} current={isCurrent} />
-          <OverflowSlideText text={project.name} />
+          <ProjectLetter name={title} current={isCurrent} />
+          <OverflowSlideText text={title} />
         </button>
       )}
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label={`Actions for ${project.name}`}
+            aria-label={`Actions for ${title}`}
             className={cn(
               "absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,background-color,color] duration-300 hover:bg-primary/15 hover:text-primary focus-visible:opacity-100 group-hover/item:opacity-100 data-[state=open]:bg-primary/15 data-[state=open]:text-primary data-[state=open]:opacity-100",
               isRenaming && "hidden"
@@ -436,7 +445,7 @@ function ProjectItem({ project, isCurrent, isRenaming, onOpen, onStartRename, on
                 data-danger="delete"
               >
                 <Trash2 />
-                {deleteCopy(project.role, project.name).menuLabel}
+                {deleteCopy(project.role, title).menuLabel}
               </DropdownMenuItem>
             </>
           )}
@@ -595,11 +604,14 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
       }
     };
     const handleOpenSearch = () => setIsPaletteOpen(true);
+    const handleOpenInvites = () => setIsInvitesOpen(true);
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener(OPEN_SEARCH_EVENT, handleOpenSearch);
+    window.addEventListener(OPEN_INVITES_EVENT, handleOpenInvites);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener(OPEN_SEARCH_EVENT, handleOpenSearch);
+      window.removeEventListener(OPEN_INVITES_EVENT, handleOpenInvites);
     };
   }, []);
 
@@ -758,15 +770,15 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
           <DropdownMenuContent
             side={collapsed ? "right" : "top"}
             align={collapsed ? "end" : "start"}
-            className={cn("min-w-[220px]", !collapsed && "w-[var(--radix-dropdown-menu-trigger-width)]")}
+            className={cn("account-menu min-w-[220px]", !collapsed && "w-[var(--radix-dropdown-menu-trigger-width)]")}
           >
             <DropdownMenuItem onClick={() => go("/settings")} data-current={location.pathname === "/settings"}>
               <SettingsIcon />
               Settings
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => go("/account")} data-current={isAccountPath(location.pathname)}>
-              <UserRound />
-              Account
+            <DropdownMenuItem onClick={() => go("/settings/billing")} data-current={location.pathname === "/settings/billing"}>
+              <CreditCard />
+              Plans &amp; billing
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => go("/usage")} data-current={location.pathname === "/usage"}>
               <BarChart3 />

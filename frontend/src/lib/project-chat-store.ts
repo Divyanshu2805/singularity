@@ -46,6 +46,10 @@
  * saved reply also carries the revision its files were published as, which is what Undo on that turn sends back.
  * Clearing the chat deletes the caller's conversation on the server and empties it here; the files are not touched.
  *
+ * Each message keeps the id the server saved it under (serverId) - a message sent in this session is shown under a
+ * local id until its turn is saved - and a user message its title, the few words the scroll rail lists it by
+ * (lib/message-titles). Titles arrive with the history, or later through applyMessageTitles.
+ *
  * It registers its own reset with the session module: module state outlives a client-side route change, and not
  * clearing it once leaked one account's chat to the next person who signed in on the same browser.
  */
@@ -74,6 +78,8 @@ export interface ChatMessage {
   turnId?: number;
   overview?: string;
   revisionId?: number | null;
+  serverId?: number;
+  title?: string;
 }
 
 export interface ProjectChatState {
@@ -286,6 +292,8 @@ const toChatMessages = (history: Awaited<ReturnType<typeof api.getChatHistory>>)
         teaching: message.role === "ASSISTANT" && !!message.teaching,
         ...(message.role === "ASSISTANT" ? { turnId: message.id, overview: message.overview || undefined } : {}),
         revisionId: message.role === "ASSISTANT" ? message.revisionId ?? null : undefined,
+        serverId: message.id,
+        title: message.role === "USER" ? message.title?.trim() || undefined : undefined,
     }));
 
 function historyHasTurn(messages: ChatMessage[], active: ActiveGeneration) {
@@ -381,6 +389,7 @@ async function adoptSavedTurn(turn: TurnInProgress, attempt = 0): Promise<Adopti
                             overview: reply.overview,
                             revisionId: reply.revisionId ?? null,
                             createdAt: reply.createdAt ?? message.createdAt,
+                            serverId: reply.serverId,
                             isStreaming: false,
                             status: undefined,
                             error: undefined,
@@ -388,7 +397,12 @@ async function adoptSavedTurn(turn: TurnInProgress, attempt = 0): Promise<Adopti
                         };
                     }
                     if (message.id === userMessageId && question?.role === "user") {
-                        return { ...message, createdAt: question.createdAt ?? message.createdAt };
+                        return {
+                            ...message,
+                            createdAt: question.createdAt ?? message.createdAt,
+                            serverId: question.serverId,
+                            title: question.title ?? message.title,
+                        };
                     }
                     return message;
                 }),
@@ -661,6 +675,16 @@ async function restoreLastTurnDiffs(projectId: string) {
 }
 
 export const projectChat = {
+    applyMessageTitles(projectId: string, titles: readonly { messageId: number; title: string }[]) {
+        if (titles.length === 0) return;
+        const byId = new Map(titles.map((entry) => [entry.messageId, entry.title]));
+        update(projectId, (state) => ({
+            messages: state.messages.map((message) =>
+                message.serverId !== undefined && byId.has(message.serverId) ? { ...message, title: byId.get(message.serverId) } : message
+            ),
+        }));
+    },
+
     async loadHistory(projectId: string) {
         if (getState(projectId).isStreaming) {
             update(projectId, () => ({ isHistoryLoaded: true }));
@@ -816,22 +840,6 @@ export const projectChat = {
             });
             return { completedFiles, diffBaselines, lastTurnFiles: state.lastTurnFiles.filter((path) => !paths.includes(path)) };
         });
-    },
-
-    async clearChat(projectId: string) {
-        if (getState(projectId).isStreaming) throw new Error(STILL_WORKING_NOTICE);
-        await api.clearChat(projectId);
-        writeFailedPrompt(projectId, null);
-        update(projectId, () => ({
-            messages: [],
-            lastSentMessage: null,
-            hasUnsavedTurn: false,
-            historyError: null,
-            notice: null,
-            suggestions: [],
-            diffBaselines: EMPTY_FILES,
-            lastTurnFiles: [],
-        }));
     },
 
     dismissNotice(projectId: string) {

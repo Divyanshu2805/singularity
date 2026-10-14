@@ -108,10 +108,6 @@ export interface ChatEvent {
   isComplete?: boolean;
   /** The lesson teaching mode has already written about this file edit, when it has been opened before. */
   lesson?: string | null;
-  /** The "try changing this" task already set from this file edit, when one was asked for. */
-  task?: string | null;
-  /** True once the check of that task found the change made. */
-  taskDone?: boolean;
 }
 
 export interface ChatMessage {
@@ -126,6 +122,8 @@ export interface ChatMessage {
   overview?: string | null;
   /** The revision an assistant turn's files were published as; absent when it wrote none. Undo restores to before it. */
   revisionId?: number | null;
+  /** A user message's title for the chat's scroll rail, at most eight words; null until a model has written one. */
+  title?: string | null;
 }
 
 export type RevisionStatus = "STAGING" | "APPLIED" | "FAILED" | "CONFLICT";
@@ -177,6 +175,8 @@ export interface SavedFile {
 export interface ProjectSummaryResponse {
   id: number;
   name: string;
+  /** The title the app shows for it (lib/project-title); null until a model or a rename has written one. */
+  summary?: string | null;
   description?: string;
   thumbnailUrl?: string;
   role?: ProjectRole;
@@ -192,6 +192,8 @@ export interface ProjectSummaryResponse {
 export interface ProjectResponse {
   id: number;
   name: string;
+  /** The title its header shows; null until one is written, when the header shows the name. */
+  summary?: string | null;
   role?: ProjectRole;
   createdAt: string;
   updatedAt?: string;
@@ -213,6 +215,10 @@ export interface IdeaInterview {
   questions: ClarifyingQuestion[];
   /** False when the AI could not be reached and these are the fixed general questions, not ones written for the idea. */
   tailored: boolean;
+  /** What the interview's model would call the app, when it wrote the questions. */
+  name?: string | null;
+  /** The title it wrote for the app, which the project is created with. */
+  summary?: string | null;
 }
 
 export interface IdeaAnswer {

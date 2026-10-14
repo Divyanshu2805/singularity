@@ -60,6 +60,8 @@ Two kinds of row:
 | 22 | Tablet and phone width | Press the width button | It cycles full width → tablet (820 px) → phone (390 px) → full width | In the tab: |
 | 23 | Back, forward and the address | In an app with two pages, click to the second; press Back, then Forward; type `/` into the address and press Enter | Each moves the page inside the frame only. Back is grey on the first page | In the tab: |
 | 24 | The app's console | Add a `console.log` to the app; open the output panel's Console tab | The line is there; errors are red and counted on the tab | In the tab: |
+| 24a | Edit text | Press **Edit text** (editors and owners only); hover a heading, click a button's label, type, press Enter | A dashed outline follows the words under the pointer; the click opens only those words and the button does nothing; after Enter a toast says which file was saved, the History panel has a manual edit, and the Code tab shows the new words | In the page and the save: a real starter-template app, React's hints, Vite reloading, 2026-10-14. In the tab: |
+| 24b | Words Edit text cannot change | With Edit text on, change a number the app works out (a count) and press Enter; then open a link's words, type, and press Escape | "Couldn't find these words in the code", and the page puts the number back; the link neither navigates nor changes, with no toast. **Done**, or starting a build, turns the mode off and the app answers clicks again | In the page: a real starter-template app, 2026-10-14. In the tab: |
 
 ## A project's server
 

@@ -166,8 +166,10 @@ public class IdeaServiceImpl implements IdeaService {
             - name: what the app is called. ONE word where one fits, and never more than two: "Guestbook",
                   "Kanban", "Recipe Box", "Pomodoro". A name, in title case - not a description, no "App" or
                   "Tool" on the end unless the name is nothing without it, no quotation marks.
-            - summary: what the app is, in at most eight plain words, such as "A guestbook every visitor can
-                  sign" or "A kanban board for one person's tasks". No full stop.
+            - summary: the title the app's sidebar and header show, the way a chat app titles a conversation:
+                  what the app is, in three to eight plain words, such as "Guestbook every visitor can sign" or
+                  "Kanban board for one person's tasks". Start with the thing itself - no "A", "An" or "The" in
+                  front - and write no full stop and no quotation marks.
             """;
 
     static final String COMPILE_SYSTEM_PROMPT = """

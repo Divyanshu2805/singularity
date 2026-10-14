@@ -28,7 +28,8 @@
       "runtimeExecutable": ".\\mvnw.cmd",
       "runtimeArgs": [
         "-pl",
-        "account-service",
+        "common-lib,account-service",
+        "compile",
         "spring-boot:run",
         "-Dspring-boot.run.jvmArguments=-Dmanagement.server.port=9403"
       ],
@@ -39,7 +40,8 @@
       "runtimeExecutable": ".\\mvnw.cmd",
       "runtimeArgs": [
         "-pl",
-        "workspace-service",
+        "common-lib,workspace-service",
+        "compile",
         "spring-boot:run",
         "-Dspring-boot.run.jvmArguments=-Dmanagement.server.port=9405"
       ],
@@ -50,11 +52,23 @@
       "runtimeExecutable": ".\\mvnw.cmd",
       "runtimeArgs": [
         "-pl",
-        "intelligence-service",
+        "common-lib,intelligence-service",
+        "compile",
         "spring-boot:run",
         "-Dspring-boot.run.jvmArguments=-Dmanagement.server.port=9406"
       ],
       "port": 8083
+    },
+    {
+      "name": "frontend-project-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:\\Users\\divya\\Desktop\\singularity\\.claude\\worktrees\\all-together\\frontend",
+        "run",
+        "dev"
+      ],
+      "port": 5173
     },
     {
       "name": "singularity-frontend",

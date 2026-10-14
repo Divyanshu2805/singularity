@@ -1,5 +1,5 @@
 /**
- * The keyboard search: find a project by name, or jump straight to a page.
+ * The keyboard search: find a project by its title or name, or jump straight to a page.
  *
  * Handles: the list of projects (most recently edited first) and the pages to jump to, filtering both as the visitor
  * types, and going to whichever is chosen.
@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { byLastEdited } from "@/lib/project-filters";
 import type { ProjectSummaryResponse } from "@/lib/types";
 import { generateGradient } from "@/lib/utils";
+import { projectTitle } from "@/lib/project-title";
 
 const FRESH_MS = 700;
 const MAX_STAGGER = 9;
@@ -86,14 +87,14 @@ export function ProjectCommandPalette({ open, onOpenChange, projects, onNavigate
                                 {sortedProjects.map((project, index) => (
                                     <CommandItem
                                         key={project.id}
-                                        value={`${project.name} #${project.id}`}
+                                        value={`${projectTitle(project)} ${project.name} #${project.id}`}
                                         onSelect={() => select(`/projects/${project.id}`)}
                                         data-current={pathname === `/projects/${project.id}`}
                                         className={ITEM_CLASS}
                                         style={order(index)}
                                     >
                                         <span aria-hidden="true" className="cmd-swatch" style={generateGradient(project.name)} />
-                                        <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                                        <span className="min-w-0 flex-1 truncate">{projectTitle(project)}</span>
                                         {project.pinnedAt && <Pin aria-label="Pinned" className="pin-active h-3.5 w-3.5 shrink-0" />}
                                         {project.starredAt && <Star aria-label="Starred" className="h-3.5 w-3.5 shrink-0 fill-current text-muted-foreground" />}
                                         <span className="shrink-0 text-[11px] text-muted-foreground">

@@ -1,6 +1,7 @@
 package com.singularity.common.security;
 
 import com.google.firebase.ErrorCode;
+import com.google.firebase.auth.AuthErrorCode;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
@@ -21,7 +22,8 @@ import java.util.Set;
  * The Firebase-backed implementation of IdentityVerifier - the only code that talks to Firebase Authentication.
  *
  * <p>Handles: verifying an ID token or a session cookie including revocation, decoding a cookie offline for sign-out,
- * minting a session cookie, revoking every session of a user, and mapping a Firebase token's claims onto
+ * minting a session cookie, revoking every session of a user, deleting a user - a user already gone counts as
+ * deleted, so a deletion can be repeated - and mapping a Firebase token's claims onto
  * VerifiedIdentity.
  *
  * <p>It also decides which Firebase failures mean what. Firebase's own unavailable/internal/unknown/deadline codes
@@ -64,6 +66,18 @@ public class FirebaseIdentityVerifier implements IdentityVerifier {
     public void revokeAllSessions(String uid) {
         call("sign out everywhere", () -> {
             firebaseAuth.revokeRefreshTokens(uid);
+            return null;
+        });
+    }
+
+    @Override
+    public void deleteUser(String uid) {
+        call("delete the account", () -> {
+            try {
+                firebaseAuth.deleteUser(uid);
+            } catch (FirebaseAuthException ex) {
+                if (ex.getAuthErrorCode() != AuthErrorCode.USER_NOT_FOUND) throw ex;
+            }
             return null;
         });
     }

@@ -21,10 +21,9 @@
  * until pressed, so nothing here is requested without a press.
  *
  * The project-wide writings go through the same door and are asked for only by a press: the tour of the whole
- * project (and, when its reader asks, a new one over the kept one), a glossary term's definition, a step's "try
- * changing this" task, and the check of that task. The server keeps the first three and returns the kept text for
- * nothing when asked again, so a request is safe to repeat; a check is the one that is asked again on purpose, since
- * the file may have changed since it last said "Not yet".
+ * project (and, when its reader asks, a new one over the kept one) and a glossary term's definition. The server keeps
+ * both and returns the kept text for nothing when asked again, so a request is safe to repeat. (A step's "try changing
+ * this" task and its check were here too, until the owner had them taken out.)
  *
  * Each request carries the reader's level (lib/learner-level.ts) as it stands when it is made.
  *
@@ -58,8 +57,6 @@ export const overviewKey = (projectId: string, turnId: number) => `${projectId}:
 
 export const tourKey = (projectId: string) => `${projectId}:tour`;
 export const termStateKey = (projectId: string, term: string) => `${projectId}:term:${termKey(term)}`;
-export const taskKey = (projectId: string, eventId: number) => `${projectId}:task:${eventId}`;
-export const taskCheckKey = (projectId: string, eventId: number) => `${projectId}:task-check:${eventId}`;
 
 export function requestLesson(projectId: string, eventId: number) {
   return request(projectId, lessonKey(projectId, eventId), "lesson", { eventId });
@@ -69,20 +66,33 @@ export function requestOverview(projectId: string, turnId: number) {
   return request(projectId, overviewKey(projectId, turnId), "overview", { messageId: turnId });
 }
 
-export function requestTour(projectId: string, rewrite = false) {
-  return request(projectId, tourKey(projectId), "tour", { rewrite }, rewrite);
+const TOUR_BASE_PREFIX = "tour_base_revision:";
+
+export function readTourBase(projectId: string): number | null {
+  try {
+    const value = Number(localStorage.getItem(TOUR_BASE_PREFIX + projectId));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function requestTour(projectId: string, rewrite = false, baseRevision?: number | null) {
+  const key = tourKey(projectId);
+  const known = states.get(key);
+  const starts = known?.status !== "loading" && (!known || known.status === "error" || rewrite);
+  if (starts && baseRevision != null) {
+    try {
+      localStorage.setItem(TOUR_BASE_PREFIX + projectId, String(baseRevision));
+    } catch {
+      /* the tour still writes; it just cannot be marked out of date by revision */
+    }
+  }
+  return request(projectId, key, "tour", { rewrite }, rewrite);
 }
 
 export function requestTerm(projectId: string, term: string) {
   return request(projectId, termStateKey(projectId, term), "glossary", { term: cleanTerm(term) });
-}
-
-export function requestTask(projectId: string, eventId: number) {
-  return request(projectId, taskKey(projectId, eventId), "task", { eventId });
-}
-
-export function requestTaskCheck(projectId: string, eventId: number) {
-  return request(projectId, taskCheckKey(projectId, eventId), "task-check", { eventId }, true);
 }
 
 export function forget(key: string) {
@@ -139,6 +149,13 @@ export function useLessonsWritten(projectId: string, eventIds: string): number {
 }
 
 onSignOut(() => {
+  try {
+    Object.keys(localStorage)
+      .filter((name) => name.startsWith(TOUR_BASE_PREFIX))
+      .forEach((name) => localStorage.removeItem(name));
+  } catch {
+    /* nothing kept to clear */
+  }
   states.clear();
   emit();
 });

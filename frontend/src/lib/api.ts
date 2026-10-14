@@ -4,7 +4,7 @@
  * Handles: the one fetch wrapper all of them go through, the session cookie and CSRF token that ride along with it,
  * turning a failed response into a typed error the UI can react to, the SSE streams behind the build chat and the
  * code lens, and the typed methods for projects, files and saving one by hand, the revision history and restoring,
- * previews, publishing (and the public page of a shared app, which needs no session), chat, code notes, the kept
+ * previews, publishing (and the public page of a shared app, which needs no session), chat, a project's title, code notes, the kept
  * tour and glossary of a project (their writing is a code-insight stream like a lesson's), ideas,
  * billing, usage and auth.
  *
@@ -315,7 +315,7 @@ function consumeChatStream(request: Promise<Response>, handlers: ChatStreamHandl
     });
 }
 
-export type CodeInsightKind = "explain" | "ask" | "lesson" | "overview" | "tour" | "glossary" | "task" | "task-check";
+export type CodeInsightKind = "explain" | "ask" | "lesson" | "overview" | "tour" | "glossary";
 
 export const api = {
   async createSession(idToken: string): Promise<SessionResponse> {
@@ -331,6 +331,15 @@ export const api = {
   async signOutEverywhere(): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/auth/logout-all`, { method: "POST" });
     await ensureOk(response, "Couldn't sign out of your other devices");
+  },
+
+  async deleteAccount(idToken: string): Promise<void> {
+    const response = await apiFetch(`${BASE_URL}/api/auth/account/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken }),
+    });
+    await ensureOk(response, "Couldn't delete your account");
   },
 
   async getSecurityEvents(): Promise<AuthSecurityEvent[]> {
@@ -438,8 +447,9 @@ export const api = {
       body: JSON.stringify({ idea }),
     });
     await ensureOk(response, "Couldn't prepare questions for your idea");
-    const data: { questions?: ClarifyingQuestion[]; tailored?: boolean } = await response.json();
-    return { questions: data.questions ?? [], tailored: data.tailored !== false };
+    const data: { questions?: ClarifyingQuestion[]; tailored?: boolean; name?: string | null; summary?: string | null } =
+      await response.json();
+    return { questions: data.questions ?? [], tailored: data.tailored !== false, name: data.name ?? null, summary: data.summary ?? null };
   },
 
   async compileIdea(idea: string, answers: IdeaAnswer[]): Promise<string> {
@@ -453,11 +463,14 @@ export const api = {
     return data.spec;
   },
 
-  async createProjectFromPrompt(prompt: string): Promise<ProjectResponse> {
+  async createProjectFromPrompt(
+    prompt: string,
+    suggested: { name?: string | null; summary?: string | null } = {}
+  ): Promise<ProjectResponse> {
     const response = await apiFetch(`${BASE_URL}/api/projects/from-prompt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, name: suggested.name || undefined, summary: suggested.summary || undefined }),
     });
     await ensureOk(response, "Failed to create project");
     return response.json();
@@ -970,9 +983,18 @@ export const api = {
     return response.json();
   },
 
-  async clearChat(projectId: string): Promise<void> {
-    const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}`, { method: "DELETE" });
-    await ensureOk(response, "Couldn't clear the chat");
+  async titleProject(projectId: string): Promise<string | null> {
+    const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/title`, { method: "POST" });
+    await ensureOk(response, "Couldn't title the project");
+    const data: { title?: string | null } = await response.json();
+    return data.title?.trim() || null;
+  },
+
+  async titleMessages(projectId: string): Promise<{ messageId: number; title: string }[]> {
+    const response = await apiFetch(`${BASE_URL}/api/chat/projects/${projectId}/message-titles`, { method: "POST" });
+    await ensureOk(response, "Couldn't title the messages");
+    const data: { titles?: { messageId: number; title: string }[] } = await response.json();
+    return data.titles ?? [];
   },
 
   async getLastTurnChanges(projectId: string): Promise<{ files: { path: string; previousContent: string }[] }> {

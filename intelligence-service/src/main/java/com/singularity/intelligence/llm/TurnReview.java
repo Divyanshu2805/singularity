@@ -50,7 +50,9 @@ import java.util.Set;
  * for and says the change was not made, so the model does not carry on as if it had been. It also prints the file
  * the edit was for, as it stands: a repair is a new call, which has none of what the model read through its tool in
  * the call before, and a model told to copy lines from a file it can no longer see reads the file again - a second
- * round trip that resends the whole conversation - or copies from memory.
+ * round trip that resends the whole conversation - or copies from memory. A file the project description already
+ * shows, unchanged, is not printed a second time: it is in front of the model on every call, and printing it again
+ * paid for the same file twice in every repair of a change to it.
  */
 public final class TurnReview {
 
@@ -248,8 +250,8 @@ public final class TurnReview {
             filesAsTheyAre.forEach((path, content) -> text.append("\n--- ").append(path).append(", exactly as it is now ---\n")
                     .append(FileFence.guard(content)).append(content.endsWith("\n") ? "" : "\n").append("--- end of ").append(path).append(" ---\n"));
             if (edits.stream().anyMatch(problem -> !filesAsTheyAre.containsKey(problem.path()))) {
-                text.append("A file not printed here is as shown under FILES; if it is not shown there either, read it ")
-                        .append("with read_files first.\n");
+                text.append("A file not printed here is exactly as shown to you above, under FILES or with the files ")
+                        .append("you read earlier; if it is in neither, read it with read_files first.\n");
             }
         }
         if (!syntax.isEmpty()) {

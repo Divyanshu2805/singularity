@@ -1,7 +1,7 @@
 /**
  * One project, as a card on the dashboard or as a row in a list.
  *
- * Handles: the name with inline renaming, the thumbnail - a picture of the app itself once its preview has run, and
+ * Handles: the title (lib/project-title) with inline renaming, the thumbnail - a picture of the app itself once its preview has run, and
  * until then (or if the picture will not load) the gradient generated from its name - the last-edited time, the caller's role,
  * the actions menu - pin, star, fork, delete - and, for a project with a live published app, a "Published" mark that
  * links to the app and is shown to every member alike. Delete is offered to every member, a viewer included: for
@@ -39,6 +39,7 @@ import {
 import { projectThumbnailUrl } from "@/lib/api";
 import { ProjectRole, ProjectSummaryResponse } from "@/lib/types";
 import { cn, generateGradient } from "@/lib/utils";
+import { projectTitle } from "@/lib/project-title";
 
 export interface ProjectItemProps {
     project: ProjectSummaryResponse;
@@ -64,7 +65,8 @@ function RenameNameField({ project, onDone, className }: {
     onDone: (name: string | null) => void;
     className?: string;
 }) {
-    const [draft, setDraft] = useState(project.name);
+    const title = projectTitle(project);
+    const [draft, setDraft] = useState(title);
     const inputRef = useRef<HTMLInputElement>(null);
     const isDoneRef = useRef(false);
 
@@ -77,7 +79,7 @@ function RenameNameField({ project, onDone, className }: {
         if (isDoneRef.current) return;
         isDoneRef.current = true;
         const next = draft.trim();
-        onDone(save && next && next !== project.name ? next : null);
+        onDone(save && next && next !== title ? next : null);
     };
 
     return (
@@ -85,7 +87,7 @@ function RenameNameField({ project, onDone, className }: {
             ref={inputRef}
             value={draft}
             maxLength={255}
-            aria-label={`Rename ${project.name}`}
+            aria-label={`Rename ${title}`}
             onClick={(e) => e.stopPropagation()}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => finish(true)}
@@ -121,7 +123,7 @@ function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                 <button
                     type="button"
-                    aria-label={`Actions for ${project.name}`}
+                    aria-label={`Actions for ${projectTitle(project)}`}
                     className={cn(
                         "icon-btn h-7 w-7 opacity-60 transition-[opacity,background-color,color] focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:text-foreground data-[state=open]:opacity-100",
                         isRenaming && "hidden"
@@ -181,7 +183,7 @@ function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin
                             data-danger="delete"
                         >
                             <Trash2 />
-                            {deleteCopy(project.role, project.name).menuLabel}
+                            {deleteCopy(project.role, projectTitle(project)).menuLabel}
                         </DropdownMenuItem>
                     </>
                 )}
@@ -284,7 +286,7 @@ export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, isLeaving,
                     className="proj-tile flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold text-white ring-1 ring-inset ring-white/15 [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
                     style={generateGradient(project.name)}
                 >
-                    {project.name.charAt(0).toUpperCase()}
+                    {projectTitle(project).charAt(0).toUpperCase()}
                 </span>
                 <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5">
@@ -292,7 +294,7 @@ export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, isLeaving,
                             <RenameNameField project={project} onDone={onRenameDone!} />
                         ) : (
                             <>
-                                <p className="proj-name truncate text-sm font-medium">{project.name}</p>
+                                <p className="proj-name truncate text-sm font-medium" title={projectTitle(project)}>{projectTitle(project)}</p>
                                 <PreferenceMarks project={project} />
                             </>
                         )}
@@ -325,14 +327,14 @@ export function ProjectRow({ onOpen, isRenaming, isLeaving, onRenameDone, ...pro
                 className="proj-tile flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-sm font-semibold text-white ring-1 ring-inset ring-white/15 [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
                 style={generateGradient(project.name)}
             >
-                {project.name.charAt(0).toUpperCase()}
+                {projectTitle(project).charAt(0).toUpperCase()}
             </span>
             <div className="flex min-w-0 flex-1 items-center gap-2">
                 {isRenaming ? (
                     <RenameNameField project={project} onDone={onRenameDone!} />
                 ) : (
                     <>
-                        <p className="proj-name truncate text-sm font-medium">{project.name}</p>
+                        <p className="proj-name truncate text-sm font-medium" title={projectTitle(project)}>{projectTitle(project)}</p>
                         <PreferenceMarks project={project} />
                         <PublishedMark project={project} />
                         <ArrowUpRight aria-hidden="true" className="proj-arrow no-icon-anim h-3.5 w-3.5 shrink-0" />
