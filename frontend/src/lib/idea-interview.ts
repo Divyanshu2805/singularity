@@ -15,6 +15,10 @@
  *
  * The general questions are only ever a fallback for an AI that could not be reached, and the interview reports that
  * they are not tailored (isTailored) so the page can say so.
+ *
+ * The model that writes the questions also names the app and writes its title, in the same call. Both are kept here
+ * (suggestedName, suggestedTitle) for the page to create the project with, so a new project's sidebar row and header
+ * read a model's title from the start; without them it is titled after its first build (lib/project-title).
  */
 import { useSyncExternalStore } from "react";
 import { api, isQuotaError } from "./api";
@@ -37,6 +41,8 @@ export interface Interview {
   isLoading: boolean;
   questions: ClarifyingQuestion[];
   isTailored: boolean;
+  suggestedName: string | null;
+  suggestedTitle: string | null;
   phase: InterviewPhase;
   index: number;
   returnToReview: boolean;
@@ -126,6 +132,8 @@ export function startInterview(idea: string, now = Date.now()) {
     isLoading: true,
     questions: [],
     isTailored: true,
+    suggestedName: null,
+    suggestedTitle: null,
     phase: "asking",
     index: 0,
     returnToReview: false,
@@ -139,12 +147,14 @@ export function startInterview(idea: string, now = Date.now()) {
 async function loadQuestions(idea: string, id: number) {
   try {
     const interview = await api.clarifyIdea(idea);
+    const suggested = { suggestedName: interview.name ?? null, suggestedTitle: interview.summary ?? null };
     if (interview.tailored && interview.questions.length === 0) {
-      update(id, { isLoading: false, outcome: { kind: "build", firstMessage: idea } });
+      update(id, { ...suggested, isLoading: false, outcome: { kind: "build", firstMessage: idea } });
       return;
     }
     const isTailored = interview.tailored && interview.questions.length > 0;
     update(id, {
+      ...suggested,
       isLoading: false,
       isTailored,
       questions: interview.questions.length > 0 ? interview.questions : GENERAL_QUESTIONS,

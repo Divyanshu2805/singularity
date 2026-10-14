@@ -2,10 +2,12 @@
  * One person's whole path through the product, in a real browser, against the real services.
  *
  * Handles, in order: a visitor who is not signed in being sent to sign in; signing in; describing an idea and
- * answering the interview; the first build arriving and its files being there; the preview coming up and the app
+ * answering the interview; the first build arriving and its files being there; the project being given a title that its
+ * header and its sidebar row both read; the preview coming up and the app
  * that was built actually working - a note typed into it is kept; a change asked for in Teach me mode reaching the
  * running preview without a reload; a step's lesson opening; a marked word opening in the glossary; the project's
- * tour being written, opening a file and being read back; the lesson's task being set and checked; a reload
+ * tour being written, opening a file and being read back; the lesson's exercise being answered with code and sent to
+ * be checked; a reload
  * bringing the conversation back from the server; the usage meter having moved; the app being published, a visitor
  * with no account opening it at its link, and the link saying so once it is unpublished; a second person being
  * refused the project; and signing out ending the session on the server, not just in the page.
@@ -37,6 +39,7 @@ import { stack } from "../playwright.config";
 import { IDEA, signIn } from "./project";
 import { aNewPerson, stopwatch } from "./support";
 
+const STUB_TITLE = "Quick notes you can jot and clear";
 const NOTE = "Buy oat milk on the way home";
 
 async function asAnotherPerson<T>(browser: Browser, action: (page: Page) => Promise<T>): Promise<T> {
@@ -103,6 +106,13 @@ test("a person signs in, builds an app, runs it, learns from it and signs out", 
       (await page.request.get(`/api/projects/${projectId}/files/content?path=${encodeURIComponent("src/pages/Index.tsx")}`)).text();
     await expect.poll(savedPage, { timeout: 120_000 }).toContain("Quick Notes");
     timings.firstBuildStubMs = elapsed();
+  });
+
+  await test.step("the project is given a title, and the header and its sidebar row read the same one", async () => {
+    await expect(page.locator("header").getByText(STUB_TITLE, { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("button", { name: `Actions for ${STUB_TITLE}` }).first()).toBeAttached();
+    const project = (await (await page.request.get(`/api/projects/${projectId}`)).json()) as { summary?: string };
+    expect(project.summary).toBe(STUB_TITLE);
   });
 
   const app = page.frameLocator('iframe[title="Live preview"]');
@@ -184,11 +194,14 @@ test("a person signs in, builds an app, runs it, learns from it and signs out", 
     await page.keyboard.press("Escape");
   });
 
-  await test.step("a step's lesson sets a task and checks it", async () => {
-    await page.getByRole("button", { name: "Give me a task" }).click();
-    await expect(page.getByText("Change the heading the page shows to your own name.")).toBeVisible({ timeout: 60_000 });
-    await page.getByRole("button", { name: "Check my change" }).click();
-    await expect(page.getByText("Done.", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await test.step("a step's lesson ends with an exercise, and the code written for it is sent to be checked", async () => {
+    await expect(page.getByText("Try changing this")).toHaveCount(0);
+    const exercise = page.getByLabel(/Write the first line again yourself/);
+    await exercise.fill('import { useState } from "react";\nexport const file = "notes.ts";');
+    const asked = page.waitForResponse((response) => response.url().includes("/code/ask") && response.status() === 200);
+    await exercise.press("Control+Enter");
+    await asked;
+    await expect(page.getByText(/This is the stub model's answer/).first()).toBeVisible({ timeout: 60_000 });
   });
 
   await test.step("a reload brings the conversation and the lesson back from the server", async () => {

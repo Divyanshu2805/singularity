@@ -28,6 +28,9 @@ import java.util.List;
  * <p>A reply whose files were saved records the revision they were published as. The revision belongs to
  * workspace-service, so it is a plain id and no foreign key; it is what lets the chat undo exactly this turn. It is
  * null on a turn that wrote nothing and on turns saved before it was recorded.
+ *
+ * <p>A user's message can carry a title: what it asked for, in at most eight words, written by a model for the chat's
+ * scroll rail (MessageTitleServiceImpl). Null until one is written, and always null on a reply.
  */
 @Entity
 @Table(name = "chat_messages")
@@ -66,6 +69,9 @@ public class ChatMessage {
     String overview;
 
     Long revisionId;
+
+    @Column(length = 120)
+    String title;
 
     @CreationTimestamp
     Instant createdAt;

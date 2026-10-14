@@ -91,6 +91,9 @@ class FullChainAccountAccessTest {
     private UserService userService;
 
     @MockitoBean
+    private com.singularity.account.service.AccountDeletionService accountDeletionService;
+
+    @MockitoBean
     private UserRepository userRepository;
 
     @MockitoBean
@@ -137,6 +140,42 @@ class FullChainAccountAccessTest {
         mockMvc.perform(post("/api/auth/logout")
                         .cookie(xsrfCookie)
                         .header("X-XSRF-TOKEN", xsrfCookie.getValue()))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("deleting an account needs a session, not only a CSRF token")
+    void deletingAnAccountNeedsASession() throws Exception {
+        Cookie xsrfCookie = mockMvc.perform(get("/api/auth/csrf")).andReturn().getResponse().getCookie("__Host-XSRF-TOKEN");
+
+        mockMvc.perform(post("/api/auth/account/delete")
+                        .cookie(xsrfCookie)
+                        .header("X-XSRF-TOKEN", xsrfCookie.getValue())
+                        .contentType("application/json")
+                        .content("{\"idToken\":\"token\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("deleting an account needs a CSRF token, not only a session")
+    void deletingAnAccountNeedsCsrf() throws Exception {
+        mockMvc.perform(post("/api/auth/account/delete")
+                        .cookie(sessionCookie())
+                        .contentType("application/json")
+                        .content("{\"idToken\":\"token\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("a signed-in caller with a CSRF token reaches the (mocked) deletion")
+    void deletingAnAccountWithSessionAndCsrfReachesHandler() throws Exception {
+        Cookie xsrfCookie = mockMvc.perform(get("/api/auth/csrf")).andReturn().getResponse().getCookie("__Host-XSRF-TOKEN");
+
+        mockMvc.perform(post("/api/auth/account/delete")
+                        .cookie(sessionCookie(), xsrfCookie)
+                        .header("X-XSRF-TOKEN", xsrfCookie.getValue())
+                        .contentType("application/json")
+                        .content("{\"idToken\":\"token\"}"))
                 .andExpect(status().isNoContent());
     }
 

@@ -15,8 +15,8 @@ import java.util.Map;
  * Everything this platform does with a payment provider, behind one interface.
  *
  * <p>Handles: starting a checkout session, opening the billing portal, settling a subscription straight from the
- * session the browser returned with, changing an existing subscriber's plan in place, and consuming the provider's
- * webhook events.
+ * session the browser returned with, changing an existing subscriber's plan in place, ending a subscription at once
+ * when its account is deleted, and consuming the provider's webhook events.
  *
  * <p>eventId and eventCreatedAt back the webhook idempotency/ordering guarantees documented on the implementation -
  * pass the provider's own event id and its creation timestamp, not anything derived locally.
@@ -33,4 +33,6 @@ public interface PaymentProcessor {
     SubscriptionResponse confirmCheckoutSession(ConfirmCheckoutRequest request);
 
     SubscriptionResponse changePlan(ChangePlanRequest request);
+
+    void cancelImmediately(Long userId);
 }

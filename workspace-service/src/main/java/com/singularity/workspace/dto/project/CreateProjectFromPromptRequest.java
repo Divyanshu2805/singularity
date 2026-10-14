@@ -7,9 +7,9 @@ import jakarta.validation.constraints.Size;
  * Create a project from a typed description of what to build.
  *
  * <p>Handles: that description, bounded in length, and - when the idea interview's model supplied them - what to call
- * the app and a line saying what it is. Both are suggestions: the service cuts the name to two words and the line to
- * eight, and makes its own from the description when either is missing, so a project can always be created with no
- * AI call at all.
+ * the app and the title the app shows for it. Both are suggestions: the service cuts the name to two words and the
+ * title to eight, makes a name from the description when none is given, and leaves the title empty when none is, for
+ * a model to write later - so a project can always be created with no AI call at all.
  */
 public record CreateProjectFromPromptRequest(
 

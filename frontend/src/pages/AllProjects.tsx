@@ -45,6 +45,7 @@ import {
 import { ProjectSummaryResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { OPEN_SEARCH_EVENT } from "@/lib/search-event";
+import { projectTitle } from "@/lib/project-title";
 
 const SORT_LABELS = { edited: "Last edited", created: "Date created", name: "Name (A–Z)" } as const;
 type SortKey = keyof typeof SORT_LABELS;
@@ -59,7 +60,7 @@ const VIEW_MODE_KEY = "projects_view_mode";
 const compareProjects: Record<SortKey, (a: ProjectSummaryResponse, b: ProjectSummaryResponse) => number> = {
     edited: byLastEdited,
     created: (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    name: (a, b) => a.name.localeCompare(b.name),
+    name: (a, b) => projectTitle(a).localeCompare(projectTitle(b)),
 };
 
 const PAGE_GLOW: CSSProperties = {
@@ -152,7 +153,7 @@ export function AllProjects() {
     const visibleProjects = useMemo(
         () =>
             projects
-                .filter((project) => matchesProjectFilter(project, ownershipFilter) && project.name.toLowerCase().includes(term))
+                .filter((project) => matchesProjectFilter(project, ownershipFilter) && `${projectTitle(project)} ${project.name}`.toLowerCase().includes(term))
                 .sort(compareProjects[sort]),
         [projects, ownershipFilter, term, sort]
     );

@@ -38,7 +38,6 @@ import {
   EditsTile,
   FileTreeWindow,
   Grow,
-  IdeaChips,
   LensWindow,
   PreviewWindow,
   Prose,
@@ -106,7 +105,6 @@ function DescribeStage({ t }: { t: number }) {
             <DashPrompt text={typed(IDEA, t, 700, 34)} focus={t >= 500} press={between(t, 3700, 3920)} />
           )}
         </div>
-        {!sent && <IdeaChips />}
       </Dashboard>
     </Film>
   );

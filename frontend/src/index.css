@@ -5489,7 +5489,7 @@ html.page-slide-back::view-transition-new(root) {
       & :is(.lucide-rotate-cw, .lucide-refresh-cw) { animation: ic-spin 1.1s cubic-bezier(0.45, 0, 0.2, 1); }
       & :is(.lucide-rotate-ccw, .lucide-history) { animation: ic-spin-back 1.1s cubic-bezier(0.45, 0, 0.2, 1); }
       & .lucide-key-round { animation: ic-wiggle 0.96s ease-in-out; }
-      & :is(.lucide-mail, .lucide-folder, .lucide-folder-open, .lucide-file, .lucide-file-text, .lucide-file-code, .lucide-file-code-2, .lucide-file-json, .lucide-package-open, .lucide-cloud, .lucide-graduation-cap, .lucide-info) { scale: 1.18; }
+      & :is(.lucide-mail, .lucide-folder, .lucide-folder-open, .lucide-file, .lucide-file-text, .lucide-file-code, .lucide-file-code-2, .lucide-file-json, .lucide-package-open, .lucide-cloud, .lucide-graduation-cap, .lucide-hammer, .lucide-info) { scale: 1.18; }
       & .lucide-mail-check path:last-child { animation: icon-construct 0.96s ease both; }
       & .lucide-shield-check path:last-child { animation: icon-construct 0.96s ease both; }
       & .lucide-check:not(.no-icon-anim) { animation: icon-construct 0.8s ease both; }
@@ -5506,7 +5506,6 @@ html.page-slide-back::view-transition-new(root) {
       & :is(.lucide-arrow-up, .lucide-chevron-up, .lucide-arrow-up-right, .lucide-rocket) { scale: 1.18; }
       & :is(.lucide-arrow-down, .lucide-chevron-down) { translate: 0 3px; }
       & :is(.lucide-circle-alert, .lucide-triangle-alert, .lucide-wrench, .lucide-moon) { animation: ic-wiggle 0.96s ease-in-out; }
-      & .lucide-hammer { animation: ic-hammer 0.96s ease-in-out; transform-origin: 20% 80%; }
       & :is(.lucide-camera, .lucide-messages-square, .lucide-message-square-text) { animation: ic-pop 0.8s ease; }
       & .lucide-chevrons-up-down { scale: 1 1.2; }
     }
@@ -5529,7 +5528,6 @@ html.page-slide-back::view-transition-new(root) {
     @keyframes ic-beat { 20% { scale: 1.3; } 40% { scale: 1.1; } 60% { scale: 1.3; } }
     @keyframes ic-scribble { 25% { translate: -1.5px 0; } 50% { translate: 1.5px 0; } 75% { translate: -1px 0; } }
     @keyframes ic-search { 25% { translate: -2px -1px; } 50% { translate: 1.5px -2px; } 75% { translate: 2px 1px; } }
-    @keyframes ic-hammer { 30% { rotate: -30deg; } 60% { rotate: 12deg; } }
   }
 }
 
@@ -5918,14 +5916,13 @@ html.page-slide-back::view-transition-new(root) {
     height: 2px;
     background: hsl(var(--primary));
     transform-origin: left;
-    animation: toast-drain 5s linear forwards;
+    animation: toast-drain var(--toast-ms, 3s) linear forwards;
   }
 
   .app-toast.destructive::after {
     background: hsl(0 0% 100% / 0.55);
   }
 
-  :hover > .app-toast::after,
   :focus-within > .app-toast::after {
     animation-play-state: paused;
   }
@@ -5985,6 +5982,11 @@ html.page-slide-back::view-transition-new(root) {
 
   .app-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"]):is([data-current="true"], [data-state="checked"]) svg {
     color: hsl(42 100% 68%);
+  }
+
+  .account-menu [role="menuitem"][data-current="true"] {
+    background: var(--hl-active-bg);
+    box-shadow: var(--hl-active-shadow);
   }
 
   .app-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"])[data-danger] svg,

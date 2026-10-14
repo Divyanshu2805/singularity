@@ -19,7 +19,7 @@ Every read requires project `VIEW` (any member) and answers `403` to anyone else
 Files change only by publishing a revision - nothing writes to storage any other way:
 
 - an AI turn publishes one through the [internal API](internal.md) when its stream completes;
-- a user saves one file by hand with `PUT /files/content`, adds an empty one with `POST /files` or removes one with `DELETE /files`, above;
+- a user saves one file by hand with `PUT /files/content` - from the Code tab's editor, or by changing the app's words with **Edit text** in the preview ([how](../architecture/flows/live-preview.md#editing-the-apps-words-by-hand)) - adds an empty one with `POST /files` or removes one with `DELETE /files`, above;
 - a user can restore an earlier revision, or undo one, through the [Revisions](revisions.md) endpoints.
 
 A save by hand is checked per file, by hash, and not against the project's revision: a build that changed other files while this one was open does not refuse it. A file is added empty and then saved; renaming by hand is not built - it is a new file and a removal.

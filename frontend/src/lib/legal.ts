@@ -29,7 +29,7 @@ export interface LegalDocument {
 
 export const PRIVACY: LegalDocument = {
   title: "Privacy",
-  updated: "8 October 2026",
+  updated: "14 October 2026",
   summary: "Singularity is a personal project that shows what an AI-assisted project builder can be. This page says, plainly, what it keeps about you and where that goes.",
   sections: [
     {
@@ -66,7 +66,7 @@ export const PRIVACY: LegalDocument = {
     {
       heading: "Removing your data",
       paragraphs: [
-        "You can delete a project at any time, and clear your chat in a project from its header. Deleting a whole account from inside the app is not built yet; to have your account and everything in it removed, open an issue on the project's source page or write to its maker, and it will be done by hand.",
+        "You can delete a project at any time, and clear your chat in a project from its header. You can delete your whole account from Settings: the projects you own, your place in projects others shared with you, your chats, notes and usage history, and your sign-in are removed at once, and a paid plan is cancelled. Records of payments stay with Stripe, the payment provider, and the nightly backups that still hold your data are deleted after seven days.",
         "This is a showcase run by one person on a small server. It has backups, but please keep your own copy of anything you care about - every project can be downloaded as a ZIP.",
       ],
     },

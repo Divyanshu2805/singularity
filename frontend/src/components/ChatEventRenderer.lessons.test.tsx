@@ -290,7 +290,7 @@ describe("teaching mode's lesson on a step", () => {
     expect(screen.queryByRole("button", { name: /what this step changed/i })).not.toBeInTheDocument();
   });
 
-  it("asks for the saved step by its id when pressed, and shows the answer under the step as it streams in", () => {
+  it("asks for the saved step by its id when pressed, and shows the answer under the step as it streams in - with no closing on the build's last step", () => {
     renderBuilt();
 
     fireEvent.click(hat());
@@ -308,7 +308,7 @@ describe("teaching mode's lesson on a step", () => {
 
     act(() => { streams[0].chunk(" for the button.\n\n### What happens next\nThe page shows it.\n"); streams[0].done(); });
     expect(screen.getByText("state")).toBeInTheDocument();
-    expect(screen.getByText("What happens next")).toBeInTheDocument();
+    expect(screen.queryByText("What happens next")).not.toBeInTheDocument();
     expect(screen.queryByText(/still writing/i)).not.toBeInTheDocument();
   });
 
@@ -419,7 +419,8 @@ describe("teaching mode from the whole to the part to the detail", () => {
     { id: 12, type: ChatEventType.FILE_EDIT, filePath: "src/App.tsx", content: "export default App;" },
   ];
   const PICTURE = "You asked for a like button.\n\n### The pieces\n- `src/LikeButton.tsx` - The button itself.\n\n### Ideas in this build\n- **State** - what the button remembers.\n";
-  const LESSON = "You asked for a button.\n\n### L2-3 · Keeping the count\nThe **state** lives here.\n\n### What happens next\nThe page shows it.\n\n### Check yourself\nWhich line keeps the count?\n";
+  const EXERCISE = "Write a state that holds whether a dark mode is on, starting off.";
+  const LESSON = `You asked for a button.\n\n### L2-3 · Keeping the count\nThe **state** lives here.\n\n### What happens next\nThe page shows it.\n\n### Check yourself\n${EXERCISE}\n`;
   const streams: { kind: string; body: Record<string, unknown>; chunk: (text: string) => void; done: () => void; fail: (error: Error) => void }[] = [];
   let project = 100;
 
@@ -436,7 +437,7 @@ describe("teaching mode from the whole to the part to the detail", () => {
   });
 
   const renderTaught = (props: Partial<Parameters<typeof AssistantEvents>[0]> = {}) =>
-    opened(render(<AssistantEvents events={TWO_STEPS} isStreaming={false} isIdle={false} teaching projectId={`p${project}`} turnId={5} {...props} />));
+    opened(render(<AssistantEvents events={TWO_STEPS} isStreaming={false} isIdle={false} teaching bigPicture projectId={`p${project}`} turnId={5} {...props} />));
 
   const bigPicture = () => screen.getByRole("button", { name: /the big picture/i });
   const hatFor = (file: RegExp) => screen.getByRole("button", { name: file });
@@ -459,7 +460,7 @@ describe("teaching mode from the whole to the part to the detail", () => {
   });
 
   it("is a card of its own above the build card, with no button into the lessons", () => {
-    render(<AssistantEvents events={TWO_STEPS} isStreaming={false} isIdle={false} teaching projectId={`p${project}`} turnId={5} overview={PICTURE} />);
+    render(<AssistantEvents events={TWO_STEPS} isStreaming={false} isIdle={false} teaching bigPicture projectId={`p${project}`} turnId={5} overview={PICTURE} />);
     const built = screen.getByRole("button", { name: /^build steps/i });
 
     expect(built).toHaveAttribute("aria-expanded", "false");
@@ -471,6 +472,26 @@ describe("teaching mode from the whole to the part to the detail", () => {
     expect(screen.getByText("You asked for a like button.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /start with step/i })).not.toBeInTheDocument();
     expect(built).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("is drawn only on the turn that built the project: a later turn in teaching mode has its lessons and no big picture", () => {
+    renderTaught({ bigPicture: false, overview: PICTURE });
+
+    expect(screen.queryByRole("button", { name: /the big picture/i })).not.toBeInTheDocument();
+    expect(hatFor(/what this step changed in likebutton\.tsx/i)).toBeInTheDocument();
+    expect(api.streamCodeInsight).not.toHaveBeenCalled();
+  });
+
+  it("closes every step's lesson but the last with what happens next", () => {
+    renderTaught();
+    fireEvent.click(hatFor(/what this step changed in likebutton\.tsx/i));
+    act(() => { streams[0].chunk(LESSON); streams[0].done(); });
+    expect(screen.getByText("What happens next")).toBeInTheDocument();
+
+    fireEvent.click(hatFor(/what this step changed in app\.tsx/i));
+    act(() => { streams[1].chunk(LESSON); streams[1].done(); });
+    expect(screen.queryByText("What happens next")).not.toBeInTheDocument();
+    expect(screen.getByText(EXERCISE)).toBeInTheDocument();
   });
 
   it("shows one step's lesson at a time, and lights the step that is open", () => {
@@ -541,81 +562,14 @@ describe("teaching mode from the whole to the part to the detail", () => {
     expect(learnPanel.state()).toMatchObject({ tab: "glossary", term: "state" });
   });
 
-  describe("try changing this", () => {
-    const TASK = "Change the count's starting number to 5.\n\n### L2 · Where to look\nThe line that sets the first count.\n\n### Done when\nThe starting number is no longer 0.\n";
-    const lessonDone = (props: Partial<Parameters<typeof AssistantEvents>[0]> = {}) => {
-      const onOpenFile = vi.fn();
-      renderTaught({ onOpenFile, ...props });
-      fireEvent.click(hatFor(/what this step changed in likebutton\.tsx/i));
-      act(() => { streams[0].chunk(LESSON); streams[0].done(); });
-      return onOpenFile;
-    };
+  it("offers no \"try changing this\" task after a lesson", () => {
+    renderTaught({ onOpenFile: vi.fn() });
+    fireEvent.click(hatFor(/what this step changed in likebutton\.tsx/i));
+    act(() => { streams[0].chunk(LESSON); streams[0].done(); });
 
-    it("is a card after the lesson that asks for nothing until a task is asked for", () => {
-      lessonDone();
-
-      expect(screen.getByText("Try changing this")).toBeInTheDocument();
-      expect(streams).toHaveLength(1);
-
-      fireEvent.click(screen.getByRole("button", { name: /give me a task/i }));
-      expect(streams[1]).toMatchObject({ kind: "task", body: { eventId: 11, level: "NEW" } });
-      expect(screen.getByText(/thinking of a small task/i)).toBeInTheDocument();
-
-      act(() => { streams[1].chunk(TASK); streams[1].done(); });
-      expect(screen.getByText("Change the count's starting number to 5.")).toBeInTheDocument();
-      expect(screen.getByText("The line that sets the first count.")).toBeInTheDocument();
-      expect(screen.getByText(/the starting number is no longer 0/i)).toBeInTheDocument();
-    });
-
-    it("opens the file at the line it points at, and is not offered where there is nowhere to open it", () => {
-      const onOpenFile = lessonDone();
-      fireEvent.click(screen.getByRole("button", { name: /give me a task/i }));
-      act(() => { streams[1].chunk(TASK); streams[1].done(); });
-
-      fireEvent.click(screen.getByRole("button", { name: "L2" }));
-      expect(onOpenFile).toHaveBeenCalledWith("src/LikeButton.tsx", { line: 2, endLine: 2 });
-    });
-
-    it("checks the saved file when asked, says Not yet with a hint, and checks again on request", () => {
-      lessonDone();
-      fireEvent.click(screen.getByRole("button", { name: /give me a task/i }));
-      act(() => { streams[1].chunk(TASK); streams[1].done(); });
-
-      fireEvent.click(screen.getByRole("button", { name: /check my change/i }));
-      expect(streams[2]).toMatchObject({ kind: "task-check", body: { eventId: 11, level: "NEW" } });
-      expect(screen.getByText(/reading likebutton\.tsx/i)).toBeInTheDocument();
-
-      act(() => { streams[2].chunk("Not yet\n\nLine 2 still says 0."); streams[2].done(); });
-      expect(screen.getByText("Not yet.")).toBeInTheDocument();
-      expect(screen.getByText(/line 2 still says 0/i)).toBeInTheDocument();
-
-      fireEvent.click(screen.getByRole("button", { name: /check my change/i }));
-      expect(streams).toHaveLength(4);
-      act(() => { streams[3].chunk("Done\n\nThe count now starts at 5."); streams[3].done(); });
-      expect(screen.getByText("Done.")).toBeInTheDocument();
-      expect(screen.getByText(/the count now starts at 5/i)).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /check my change/i })).not.toBeInTheDocument();
-    });
-
-    it("shows a task and its result the conversation already carries, without asking", () => {
-      const withTask = TWO_STEPS.map((event) => event.id === 11 ? { ...event, task: TASK, taskDone: true } : event);
-      renderTaught({ events: withTask, onOpenFile: vi.fn() });
-      fireEvent.click(hatFor(/what this step changed in likebutton\.tsx/i));
-      act(() => { streams[0].chunk(LESSON); streams[0].done(); });
-
-      expect(screen.getByText("Change the count's starting number to 5.")).toBeInTheDocument();
-      expect(screen.getByText("Done.")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /give me a task|check my change/i })).not.toBeInTheDocument();
-      expect(streams).toHaveLength(1);
-    });
-
-    it("is not drawn when nothing can open the file", () => {
-      renderTaught();
-      fireEvent.click(hatFor(/what this step changed in likebutton\.tsx/i));
-      act(() => { streams[0].chunk(LESSON); streams[0].done(); });
-
-      expect(screen.queryByText("Try changing this")).not.toBeInTheDocument();
-    });
+    expect(screen.queryByText("Try changing this")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /give me a task|check my change/i })).not.toBeInTheDocument();
+    expect(streams).toHaveLength(1);
   });
 
   it("offers ExplainLLM's three questions under a section, with that section's lines as the selection", () => {
@@ -643,25 +597,31 @@ describe("teaching mode from the whole to the part to the detail", () => {
     act(() => { streams[0].chunk(LESSON); streams[0].done(); });
 
     expect(screen.queryByRole("group", { name: /ask explainllm/i })).not.toBeInTheDocument();
-    expect(screen.getByText("Which line keeps the count?")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /check my answer/i })).not.toBeInTheDocument();
+    expect(screen.getByText(EXERCISE)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /check my code/i })).not.toBeInTheDocument();
   });
 
-  it("ends a lesson with a question, and sends the reader's answer to be checked", () => {
+  it("ends a lesson with an exercise to write in a code box, and sends the reader's code to be checked", () => {
     const onAskAbout = vi.fn();
     renderTaught({ onAskAbout });
     fireEvent.click(hatFor(/what this step changed in likebutton\.tsx/i));
     act(() => { streams[0].chunk(LESSON); streams[0].done(); });
 
-    const send = screen.getByRole("button", { name: /check my answer/i });
+    const send = screen.getByRole("button", { name: /check my code/i });
     expect(send).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Which line keeps the count?"), { target: { value: "Line 2" } });
-    fireEvent.click(send);
+    const box = screen.getByLabelText(EXERCISE);
+    const code = "const [dark, setDark] = useState(false);\nsetDark(true);";
+    fireEvent.change(box, { target: { value: code } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(onAskAbout).not.toHaveBeenCalled();
 
-    expect(onAskAbout).toHaveBeenCalledWith({
-      question: expect.stringMatching(/The lesson on `src\/LikeButton\.tsx` asked me: "Which line keeps the count\?"[\s\S]*My answer: Line 2/),
-    });
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true });
+    expect(onAskAbout).toHaveBeenCalledTimes(1);
+    const question: string = onAskAbout.mock.calls[0][0].question;
+    expect(question).toContain(`set me this exercise: "${EXERCISE}"`);
+    expect(question.endsWith("My attempt:\n```\n" + code + "\n```")).toBe(true);
+    expect(box).toHaveValue("");
   });
 
   it("counts the lessons opened, brings an opened step to the top, and offers no button to the next lesson", () => {

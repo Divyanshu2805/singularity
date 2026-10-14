@@ -14,7 +14,7 @@ import java.util.Optional;
  * Reads and writes glossary entries.
  *
  * <p>Handles: a person's glossary for a project, one of their terms by key or by id, how many they hold, keeping a
- * new term's definition, and removing one.
+ * new term's definition, and removing one; and deleting every row of an account that is being deleted.
  *
  * <p>Every method takes the user as well as the project: a glossary is the reader's own and there is deliberately no
  * find-by-project query. Keeping is a native insert that does nothing when the term is already there, so the
@@ -40,4 +40,8 @@ public interface GlossaryEntryRepository extends JpaRepository<GlossaryEntry, Lo
             """, nativeQuery = true)
     int keep(@Param("projectId") Long projectId, @Param("userId") Long userId, @Param("term") String term,
              @Param("termKey") String termKey, @Param("definition") String definition);
+
+    @Modifying
+    @Query(value = "DELETE FROM glossary_entries WHERE user_id = :userId", nativeQuery = true)
+    int deleteAllOfUser(@Param("userId") Long userId);
 }

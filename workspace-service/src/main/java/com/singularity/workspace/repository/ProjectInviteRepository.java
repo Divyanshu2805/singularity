@@ -15,7 +15,8 @@ import java.util.Optional;
  * Reads and writes invitations nobody has accepted yet.
  *
  * <p>Handles: a project's open invitations, the ones addressed to one email across every project that still exists,
- * one invitation by project and address, counting a project's open invitations for its cap, and writing one.
+ * one invitation by project and address, counting a project's open invitations for its cap, writing one, and
+ * deleting every invitation sent to or by an account that is being deleted.
  *
  * <p>Writing is a native upsert: inviting an address a second time changes the role on offer instead of failing, and
  * two requests for the same address cannot both insert. Both lookups by address exclude deleted projects, so an
@@ -62,4 +63,8 @@ public interface ProjectInviteRepository extends JpaRepository<ProjectInvite, Lo
     @Modifying
     @Query("DELETE FROM ProjectInvite pi WHERE pi.project.id = :projectId AND pi.email = :email")
     int deleteByProjectIdAndEmail(@Param("projectId") Long projectId, @Param("email") String email);
+
+    @Modifying
+    @Query("DELETE FROM ProjectInvite pi WHERE pi.email = :email OR pi.invitedBy = :userId")
+    int deleteSentToOrBy(@Param("email") String email, @Param("userId") Long userId);
 }

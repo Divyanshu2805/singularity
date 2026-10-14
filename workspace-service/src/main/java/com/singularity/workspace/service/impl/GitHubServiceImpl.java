@@ -179,7 +179,11 @@ public class GitHubServiceImpl implements GitHubService {
 
     @Override
     public void disconnect() {
-        Long userId = authUtil.getCurrentUserId();
+        forgetConnection(authUtil.getCurrentUserId());
+    }
+
+    @Override
+    public void forgetConnection(Long userId) {
         GitHubConnection connection = connections.findById(userId).orElse(null);
         if (connection == null) {
             return;

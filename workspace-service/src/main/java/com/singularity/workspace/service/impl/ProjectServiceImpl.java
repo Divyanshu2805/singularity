@@ -42,7 +42,15 @@ import java.util.stream.Collectors;
  * Projects: creating them, reading them, and everything that changes one.
  *
  * <p>Handles: the caller's project list, one project by id, creating by name or from a typed description, renaming,
- * soft-deleting, forking, retrying starter-template initialisation, and the per-member pin and star flags.
+ * soft-deleting, forking, retrying starter-template initialisation, the per-member pin and star flags, and giving a
+ * project with no title the one a model wrote.
+ *
+ * <p>A project's title (its summary) is what the app shows for it; its name is what links and repositories are named
+ * after. A rename sets both to what was typed, so the sidebar and the project's header - which both show the title -
+ * change together, and a title a model writes later never replaces it. A model's title is stored only while the
+ * project has none, by one conditional update; that operation is for the internal API and has no permission guard
+ * of its own, because its caller is intelligence-service acting on a request it has already authorized. A fork
+ * keeps the title of what it was forked from, marked as a fork, unless it was given a name of its own.
  *
  * <p>The plan's project allowance is checked before anything is created, including before naming, so a user at their
  * limit does not waste the call - and it is a 402 rather than a 400, because nothing is wrong with the request. The
@@ -66,6 +74,12 @@ import java.util.stream.Collectors;
  * preview runs updates that clear the persistence context afterwards, and a change that had only been queued there -
  * the membership row's delete, the project's deleted-at - was thrown away with it, so a project with a preview
  * running could not be deleted or left: the request answered 204 and nothing had changed.
+ *
+ * <p>Deleting an account (removeAllForUser) is each of its projects deleted or left exactly as the person would have
+ * done it by hand - owned ones deleted for everyone, the rest left - through the same code. It carries no guard: it
+ * is called only from the internal API, by account-service, for the account it is deleting. Each project is read
+ * afresh: stopping one project's preview clears the persistence context, which would leave the next membership's
+ * project detached and unloadable.
  */
 @Service
 @RequiredArgsConstructor
@@ -86,6 +100,7 @@ public class ProjectServiceImpl implements ProjectService {
     PublishService publishService;
 
     static final int MAX_NAME_LENGTH = 255;
+    private static final String FORK_MARK = " (fork)";
 
     @Override
     @PreAuthorize("@security.canViewProject(#id)")
@@ -107,7 +122,7 @@ public class ProjectServiceImpl implements ProjectService {
     public ProjectResponse createProjectFromPrompt(CreateProjectFromPromptRequest request) {
         projectQuota.assertCanCreateProject();
         return createOwnedProject(ProjectNameHeuristic.nameFrom(request.name(), request.prompt()),
-                ProjectNameHeuristic.summaryFrom(request.summary(), request.prompt()));
+                ProjectNameHeuristic.summaryFrom(request.summary()));
     }
 
     @Override
@@ -121,10 +136,11 @@ public class ProjectServiceImpl implements ProjectService {
         projectQuota.assertCanCreateProject();
 
         String requested = request == null || request.name() == null ? "" : request.name().strip();
-        String name = requested.isEmpty() ? source.getName() + " (fork)" : requested;
-        if (name.length() > MAX_NAME_LENGTH) name = name.substring(0, MAX_NAME_LENGTH).strip();
+        String name = fitName(requested.isEmpty() ? source.getName() + FORK_MARK : requested);
+        String title = !requested.isEmpty() ? name
+                : source.getSummary() == null ? null : fitName(source.getSummary() + FORK_MARK);
 
-        Project fork = saveProjectWithOwner(name, source.getSummary(), userId, source.getId());
+        Project fork = saveProjectWithOwner(name, title, userId, source.getId());
         int failed = projectFileService.copyAllFiles(source.getId(), fork.getId());
         if (failed > 0) {
             fork.setDeletedAt(Instant.now());
@@ -232,10 +248,24 @@ public class ProjectServiceImpl implements ProjectService {
         Project project = getAccessibleProjectById(id, userId);
 
         project.setName(request.name());
+        project.setSummary(request.name());
 
         project = projectRepository.save(project);
 
         return projectMapper.toProjectResponse(project, getRole(id, userId));
+    }
+
+    @Override
+    public String titleIfUntitled(Long id, String title) {
+        String cleaned = ProjectNameHeuristic.summaryFrom(title);
+        if (cleaned != null && projectRepository.setSummaryIfUntitled(id, cleaned) > 0) {
+            log.info("Project {} was given the title a model wrote for it", id);
+        }
+        return projectRepository.findSummary(id).orElse(null);
+    }
+
+    private static String fitName(String name) {
+        return name.length() > MAX_NAME_LENGTH ? name.substring(0, MAX_NAME_LENGTH).strip() : name;
     }
 
     @Override
@@ -244,8 +274,22 @@ public class ProjectServiceImpl implements ProjectService {
 
         Long userId = authUtil.getCurrentUserId();
         Project project = getAccessibleProjectById(id, userId);
+        removeFor(project, userId, getRole(id, userId));
+    }
 
-        if (getRole(id, userId) != ProjectRole.OWNER) {
+    @Override
+    public void removeAllForUser(Long userId) {
+        Map<Long, ProjectRole> roles = projectMemberRepository.findByIdUserId(userId).stream()
+                .collect(Collectors.toMap(member -> member.getId().getProjectId(), ProjectMember::getProjectRole));
+        roles.forEach((projectId, role) -> projectRepository.findById(projectId)
+                .filter(project -> project.getDeletedAt() == null)
+                .ifPresent(project -> removeFor(project, userId, role)));
+        log.info("Removed every project of user {}, whose account is being deleted", userId);
+    }
+
+    private void removeFor(Project project, Long userId, ProjectRole role) {
+        Long id = project.getId();
+        if (role != ProjectRole.OWNER) {
             projectMemberRepository.deleteById(new ProjectMemberId(id, userId));
             projectMemberRepository.flush();
             log.info("User {} removed project {} from their projects (left as a non-owner)", userId, id);

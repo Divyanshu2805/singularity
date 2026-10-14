@@ -134,9 +134,9 @@ The whole-app figure for the frontend is low because most of the rest is the lan
 
 | Suite | Size |
 |---|---|
-| Backend | 1,515 tests |
-| Frontend | 919 tests |
-| Preview proxy | 82 tests |
+| Backend | 1,593 tests |
+| Frontend | 947 tests |
+| Preview proxy | 92 tests |
 | A real preview on a cluster | 11 steps on one project |
 | The browser journey | 16 steps in about a minute, and 7 steps with two people in about half a minute |
 

@@ -16,8 +16,8 @@ import java.util.Optional;
  * Reads and writes projects.
  *
  * <p>Handles: the caller's accessible projects most-recently-updated first, one accessible project by id, the
- * revision a project's files currently stand at (empty for a project that has never had one), advancing it, and
- * switching whether its code is shared.
+ * revision a project's files currently stand at (empty for a project that has never had one), advancing it,
+ * switching whether its code is shared, and giving a project its title when it still has none.
  *
  * <p>The two access queries fold the membership check and the soft-delete check into the lookup itself, so a project the caller
  * cannot see is indistinguishable from one that does not exist.
@@ -74,6 +74,20 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @Transactional
     @Query("UPDATE Project p SET p.isPublic = :shared WHERE p.id = :projectId")
     int setPublic(@Param("projectId") Long projectId, @Param("shared") boolean shared);
+
+    /**
+     * Gives a project the title a model wrote, only while it has none. A query and not a save, so the project's
+     * updated-at is left alone - a title is not an edit - and a rename that landed while the title was being written
+     * is never overwritten: the row then already has one.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = "UPDATE projects SET summary = :title WHERE id = :projectId AND summary IS NULL AND deleted_at IS NULL",
+            nativeQuery = true)
+    int setSummaryIfUntitled(@Param("projectId") Long projectId, @Param("title") String title);
+
+    @Query(value = "SELECT summary FROM projects WHERE id = :projectId AND deleted_at IS NULL", nativeQuery = true)
+    Optional<String> findSummary(@Param("projectId") Long projectId);
 
     /**
      * The atomic "publish" claim (CODE_REVIEW.md AI-05): a single-statement compare-and-swap that only advances a

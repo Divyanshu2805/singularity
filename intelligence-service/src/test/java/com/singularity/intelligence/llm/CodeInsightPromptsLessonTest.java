@@ -41,6 +41,16 @@ class CodeInsightPromptsLessonTest {
     }
 
     @Test
+    @DisplayName("only the last step is told to leave out what happens next")
+    void onlyTheLastStepLeavesOutWhatHappensNext() {
+        String middle = CodeInsightPrompts.lessonBlock("add a theme toggle", STEPS, "src/Slideshow.tsx", null, AFTER);
+        String last = CodeInsightPrompts.lessonBlock("add a theme toggle", STEPS, "src/Index.tsx", null, AFTER);
+
+        assertThat(middle).contains("This lesson is about step 2 of 3.").doesNotContain("Leave out");
+        assertThat(last).contains("This lesson is about step 3 of 3, the last step. Leave out the `### What happens next` section.");
+    }
+
+    @Test
     @DisplayName("a file the step created is sent whole, every line numbered")
     void aNewFileIsSentWhole() {
         String created = CodeInsightPrompts.lessonBlock("add a theme toggle", STEPS, "src/Slideshow.tsx", null, AFTER);
@@ -57,7 +67,8 @@ class CodeInsightPromptsLessonTest {
         String alongside = CodeInsightPrompts.lessonBlock("add a theme toggle", STEPS, "src/theme.ts", null, "export {};");
         String noSteps = CodeInsightPrompts.lessonBlock(null, List.of(), "src/theme.ts", null, "export {};");
 
-        assertThat(alongside).contains("written alongside those steps").doesNotContain("<- this lesson");
+        assertThat(alongside).contains("written alongside those steps").contains("Leave out the `### What happens next` section.")
+                .doesNotContain("<- this lesson");
         assertThat(noSteps).startsWith("This step created src/theme.ts (1 line).");
     }
 
@@ -82,7 +93,11 @@ class CodeInsightPromptsLessonTest {
                 .contains("Explain the change, and only the change.").contains("as one story")
                 .contains("you need no tool").contains("READ-ONLY");
         assertThat(prompt).doesNotContain("<file").doesNotContain("<todo").doesNotContain("<learn").doesNotContain("read_files");
-        assertThat(prompt).contains("### Check yourself").contains("exactly one question");
+        assertThat(prompt).contains("### Check yourself").contains("one small exercise")
+                .contains("impossible to answer by copying lines from the file").contains("Never give the answer")
+                .doesNotContain("exactly one question");
+        assertThat(prompt).contains("Leave this section out entirely when the message says this is the")
+                .contains("last step, or that this file is not a step of its own");
     }
 
     @Test
@@ -127,9 +142,10 @@ class CodeInsightPromptsLessonTest {
     }
 
     @Test
-    @DisplayName("the ask prompt says how a syntax question, a term and the reader's own answer are each answered")
+    @DisplayName("the ask prompt says how a syntax question, a term and the reader's attempt at an exercise are each answered")
     void theAskPromptCoversTheLessonQuestions() {
-        assertThat(CodeInsightPrompts.askSystemPrompt()).contains("SYNTAX").contains("TERM").contains("OWN ANSWER")
+        assertThat(CodeInsightPrompts.askSystemPrompt()).contains("SYNTAX").contains("TERM").contains("OWN ATTEMPT")
+                .contains("walk through what their code would actually do").contains("corrected lines in a small fenced block")
                 .contains("READ-ONLY");
     }
 }

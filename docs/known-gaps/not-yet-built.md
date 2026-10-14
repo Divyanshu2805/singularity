@@ -29,7 +29,7 @@ Known missing features and open items, grouped by area.
 
 ## Collaboration and permissions
 
-- **An invitation is not sent anywhere.** There is no email. The invited person sees it on their dashboard the next time they sign in with that address; the owner has to tell them.
+- **An invitation is not sent anywhere.** There is no email. The invited person is told by a toast on their dashboard (and sees it under Project invites) the next time they sign in with that address; the owner has to tell them.
 - **Ownership cannot be handed over.** A project has exactly one owner, set when it is created or forked, and nothing transfers it.
 - **`isPublic` is only the share page's switch.** It means "the code of the live published app is on the public page"; it does not make a project readable to a non-member anywhere else.
 - **Denied project page looks empty.** A non-member who opens a project URL is denied its data but sees the normal empty build screen, instead of a clear "not available" message.

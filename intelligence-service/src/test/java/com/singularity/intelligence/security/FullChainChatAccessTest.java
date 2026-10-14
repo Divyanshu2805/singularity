@@ -94,6 +94,15 @@ class FullChainChatAccessTest {
     private com.singularity.intelligence.service.SuggestionService suggestionService;
 
     @MockitoBean
+    private com.singularity.intelligence.service.ProjectTitleService projectTitleService;
+
+    @MockitoBean
+    private com.singularity.intelligence.service.MessageTitleService messageTitleService;
+
+    @MockitoBean
+    private com.singularity.intelligence.service.UserDataService userDataService;
+
+    @MockitoBean
     private AiGenerationService aiGenerationService;
 
     @Test

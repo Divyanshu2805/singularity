@@ -46,7 +46,7 @@ class FileTreeContextAdvisorTest {
                 .thenReturn(new FileContentDto("package.json", "{ \"dependencies\": { \"react\": \"^18.3.1\" } }\n"));
         when(workspaceServiceClient.getFileContent(1L, "src/App.tsx"))
                 .thenReturn(new FileContentDto("src/App.tsx", "export default function App() { return null; }\n"));
-        when(workspaceServiceClient.getProjectSummary(1L)).thenReturn(new ProjectSummaryDto(1L, "Todo", false, false, null));
+        when(workspaceServiceClient.getProjectSummary(1L)).thenReturn(new ProjectSummaryDto(1L, "Todo", false, false, null, null));
 
         ProjectBrief brief = advisor.describe(1L);
 
@@ -67,7 +67,7 @@ class FileTreeContextAdvisorTest {
         when(workspaceServiceClient.getFileContent(1L, "src/App.tsx"))
                 .thenReturn(new FileContentDto("src/App.tsx", "export default 1;\n"));
         when(workspaceServiceClient.getProjectSummary(1L))
-                .thenReturn(new ProjectSummaryDto(1L, "Todo", false, false, "index.html was not copied."));
+                .thenReturn(new ProjectSummaryDto(1L, "Todo", false, false, "index.html was not copied.", null));
 
         ProjectBrief brief = advisor.describe(1L);
 

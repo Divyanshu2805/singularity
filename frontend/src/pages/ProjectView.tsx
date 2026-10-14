@@ -22,6 +22,13 @@
  * and a running preview is asked about so its "Updating" shows. After a restore the preview is also reloaded once it
  * has had a moment to catch up, since a restore can swap out a page the browser is still showing.
  *
+ * The header names the project by its title (lib/project-title), the same words its sidebar row reads, gliding to
+ * show the end of one too long to fit while it is hovered (OverflowSlideText); renaming it there renames it in the
+ * sidebar too. A project with no title yet - one made before titles, or whose interview could not reach a model - has
+ * one written once its first turn has finished, by someone who may edit it, and the header and sidebar take it up
+ * together. The messages a person sent are titled the same way, a few words each, for the chat's scroll rail
+ * (lib/message-titles): asked for once a turn has finished, for every untitled one at once.
+ *
  * There is no first-run guide and no help button: a card that pointed at the chat, the preview, the code and History
  * was built and then removed at the owner's word, with the header's "Export as markdown" (the chat's own copy and
  * export remain in the chat).
@@ -62,7 +69,7 @@
 import { useState, useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CodeXml, Download, Eraser, Eye, GitFork, GraduationCap, History, Pin, Star, Trash2, type LucideIcon } from "lucide-react";
+import { CodeXml, Download, Eye, GitFork, GraduationCap, History, PanelLeftClose, PanelLeftOpen, Pin, Star, Trash2, type LucideIcon } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { ForkProjectDialog } from "@/components/ForkProjectDialog";
 import { canForkProject } from "@/lib/project-fork";
@@ -102,7 +109,8 @@ import { codeLens, useCodeLens, type BuildStepQuestion } from "@/lib/code-lens-s
 import type { LessonQuestion } from "@/lib/lesson";
 import { useToast } from "@/hooks/use-toast";
 import type { RuntimeError } from "@/components/RuntimeErrorAlert";
-import { generateGradient, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { ProjectLetter } from "@/components/ProjectSidebar";
 import { ProjectResponse, type ProjectSummaryResponse } from "@/lib/types";
 import type { CodeTarget } from "@/lib/lesson";
 import { ShareDialog } from "@/components/ShareDialog";
@@ -110,6 +118,9 @@ import { GitHubMenu } from "@/components/GitHubMenu";
 import { gitHubQueryKey } from "@/hooks/use-github";
 import { PublishMenu } from "@/components/PublishMenu";
 import { deleteCopy } from "@/lib/project-delete";
+import { markTitleRequested, projectTitle, shouldRequestTitle, withTitle } from "@/lib/project-title";
+import { markMessagesTitled, messagesToTitle } from "@/lib/message-titles";
+import { OverflowSlideText } from "@/components/OverflowSlideText";
 import { ToastAction } from "@/components/ui/toast";
 import { useBilling } from "@/hooks/use-billing";
 import { ChatUsageMeter } from "@/components/ChatUsageMeter";
@@ -235,11 +246,11 @@ function EditableProjectName({ name, canRename, onRename }: {
         if (e.key === "Enter") startEditing();
       }}
       className={cn(
-        "min-w-0 truncate rounded-md px-1.5 py-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "group/row flex min-w-0 max-w-[22rem] rounded-md px-1.5 py-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         canRename && "cursor-text hover:bg-primary/10 hover:text-primary"
       )}
     >
-      {name}
+      <OverflowSlideText text={name} />
     </span>
   );
 }
@@ -276,7 +287,6 @@ function ProjectWorkspace() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null);
   const [filesVersion, setFilesVersion] = useState(0);
-  const [isClearChatOpen, setIsClearChatOpen] = useState(false);
 
   const initialPromptRef = useRef<string | null>(
     (location.state as { initialPrompt?: string } | null)?.initialPrompt ?? null
@@ -302,7 +312,13 @@ function ProjectWorkspace() {
     : sidebar.isExpanded
       ? CHAT_PANEL_PERCENT.sidebarPinned
       : CHAT_PANEL_PERCENT.sidebarCollapsed;
+  const [isChatCollapsed, setIsChatCollapsed] = useState(false);
+  const toggleChat = () => {
+    if (isChatCollapsed) chatPanelRef.current?.expand();
+    else chatPanelRef.current?.collapse();
+  };
   useEffect(() => {
+    if (chatPanelRef.current?.isCollapsed()) return;
     chatPanelRef.current?.resize(chatPanelPercent);
   }, [chatPanelPercent]);
 
@@ -513,27 +529,14 @@ function ProjectWorkspace() {
     setRestoreTarget(target);
   }, []);
 
-  const handleClearChat = async () => {
-    if (!projectId) return;
-    try {
-      await projectChat.clearChat(projectId);
-      toast({ title: "Chat cleared", description: "Your files and their history are untouched." });
-    } catch (error) {
-      toast({
-        title: "Couldn't clear the chat",
-        description: error instanceof Error ? error.message : undefined,
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleRename = async (name: string) => {
     if (!projectId) return false;
     try {
       const updated = await api.updateProject(projectId, name);
-      setProject((prev) => (prev ? { ...prev, name: updated.name } : prev));
+      const renamedTitle = updated.summary?.trim() || updated.name;
+      setProject((prev) => (prev ? { ...prev, name: updated.name, summary: renamedTitle } : prev));
       queryClient.setQueryData<ProjectSummaryResponse[]>(["projects"], (list) =>
-        list?.map((summary) => (String(summary.id) === projectId ? { ...summary, name: updated.name } : summary))
+        withTitle(list, projectId, renamedTitle, updated.name)
       );
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       return true;
@@ -547,7 +550,8 @@ function ProjectWorkspace() {
     }
   };
 
-  const deleteText = deleteCopy(role, projectSummary?.name ?? project?.name);
+  const title = projectTitle(projectSummary ?? project, "project");
+  const deleteText = deleteCopy(role, title);
 
   const handleDeleteProject = async () => {
     if (!projectId) return;
@@ -568,6 +572,48 @@ function ProjectWorkspace() {
 
   const projectName = projectSummary?.name ?? project?.name ?? "project";
 
+  const hasFinishedTurn = chat.messages.some((message) => message.role === "assistant");
+  const lastSavedChangeAt = chat.messages.reduce<string | undefined>(
+    (latest, message) =>
+      message.role === "assistant" && message.revisionId != null && message.createdAt && (!latest || Date.parse(message.createdAt) > Date.parse(latest))
+        ? message.createdAt
+        : latest,
+    undefined
+  );
+  const latestRevision = chat.messages.reduce<number | null>(
+    (latest, message) => (message.role === "assistant" && message.revisionId != null && (latest == null || message.revisionId > latest) ? message.revisionId : latest),
+    null
+  );
+  const learnLockedReason = chat.isStreaming
+    ? "Available once the response has finished"
+    : !lastSavedChangeAt
+      ? "Available once your project has been built"
+      : null;
+  useEffect(() => {
+    if (!projectId) return;
+    const state = { projectId, project: projectSummary ?? project, canEdit, hasFinishedTurn, isStreaming: chat.isStreaming };
+    if (!shouldRequestTitle(state)) return;
+    markTitleRequested(projectId);
+    void api
+      .titleProject(projectId)
+      .then((written) => {
+        if (!written) return;
+        setProject((prev) => (prev ? { ...prev, summary: written } : prev));
+        queryClient.setQueryData<ProjectSummaryResponse[]>(["projects"], (list) => withTitle(list, projectId, written));
+      })
+      .catch((error) => console.warn("Couldn't title the project", error));
+  }, [projectId, projectSummary, project, canEdit, hasFinishedTurn, chat.isStreaming, queryClient]);
+
+  useEffect(() => {
+    const untitled = messagesToTitle(projectId ?? "", chat.messages, chat.isStreaming);
+    if (!projectId || untitled.length === 0) return;
+    markMessagesTitled(projectId, untitled);
+    void api
+      .titleMessages(projectId)
+      .then((titles) => projectChat.applyMessageTitles(projectId, titles))
+      .catch((error) => console.warn("Couldn't title the messages", error));
+  }, [projectId, chat.messages, chat.isStreaming]);
+
 
   const { quota, refresh: refreshBilling } = useBilling();
   const stop = quota ? quotaStop(quota, formatResetIn(quota.resetsAt)) : null;
@@ -578,7 +624,6 @@ function ProjectWorkspace() {
     if (wasStreamingRef.current && !chat.isStreaming) void refreshBilling();
     wasStreamingRef.current = chat.isStreaming;
   }, [chat.isStreaming, refreshBilling]);
-  const hasChat = chat.isHistoryLoaded && chat.messages.length > 0;
 
   const wasNotesOpenRef = useRef(isNotesOpen);
   useEffect(() => {
@@ -684,6 +729,7 @@ function ProjectWorkspace() {
           runtimeError={runtimeError}
           onRuntimeError={handleRuntimeError}
           reloadSignal={previewReloadSignal}
+          onFileSaved={handleFileSaved}
           onDismiss={() => setRuntimeError(null)}
           errorFix={
             canEdit && runtimeError && !chat.isStreaming
@@ -704,8 +750,8 @@ function ProjectWorkspace() {
           <div className="flex min-w-0 items-center">
             {project ? (
               <div className="flex min-w-0 items-center gap-1 pl-1">
-                <span className="h-5 w-5 shrink-0 rounded ring-1 ring-inset ring-white/10" style={generateGradient(projectSummary?.name ?? project.name)} />
-                <EditableProjectName name={projectSummary?.name ?? project.name} canRename={canEdit} onRename={handleRename} />
+                <ProjectLetter name={title} current />
+                <EditableProjectName name={title} canRename={canEdit} onRename={handleRename} />
                 <div className="ml-1 flex shrink-0 items-center">
                   <HeaderIconButton
                     label={projectSummary?.pinnedAt ? "Unpin project" : "Pin project"}
@@ -725,15 +771,6 @@ function ProjectWorkspace() {
                   >
                     <Star className={cn(projectSummary?.starredAt && "fill-current")} />
                   </HeaderIconButton>
-
-                  <HeaderIconButton
-                    label="Learn your project"
-                    motion="translateY(-2px) scale(1.1)"
-                    onClick={() => projectId && learnPanel.open(projectId)}
-                    disabled={!project}
-                  >
-                    <GraduationCap />
-                  </HeaderIconButton>
                 </div>
               </div>
             ) : (
@@ -741,6 +778,7 @@ function ProjectWorkspace() {
             )}
           </div>
 
+          <div className="flex items-center justify-center gap-2">
           <div role="tablist" aria-label="View" className="app-track relative grid grid-cols-2 p-0.5">
             <span
               aria-hidden="true"
@@ -769,6 +807,16 @@ function ProjectWorkspace() {
               </button>
             ))}
           </div>
+              {!isViewer && (
+                <HeaderIconButton
+                  label={isChatCollapsed ? "Open chat" : "Close chat"}
+                  motion="none"
+                  onClick={toggleChat}
+                >
+                  {isChatCollapsed ? <PanelLeftOpen key="open" className="panel-anim" /> : <PanelLeftClose key="close" className="panel-anim" />}
+                </HeaderIconButton>
+              )}
+          </div>
 
           <div className="flex min-w-0 items-center justify-end gap-1">
             {isViewer && (
@@ -787,16 +835,14 @@ function ProjectWorkspace() {
               <History />
             </HeaderIconButton>
 
-            {!isViewer && (
-              <HeaderIconButton
-                label="Clear chat"
-                motion="rotate(-12deg) scale(1.08)"
-                onClick={() => setIsClearChatOpen(true)}
-                disabled={!hasChat || chat.isStreaming}
-              >
-                <Eraser />
-              </HeaderIconButton>
-            )}
+            <HeaderIconButton
+              label={learnLockedReason ? `Learn your project - ${learnLockedReason.toLowerCase()}` : "Learn your project"}
+              motion="translateY(-2px) scale(1.1)"
+              onClick={() => projectId && learnPanel.open(projectId)}
+              disabled={!project || !!learnLockedReason}
+            >
+              <GraduationCap />
+            </HeaderIconButton>
 
             <HeaderIconButton label="Download ZIP" motion="translateY(2px)" onClick={handleDownloadProject} disabled={!project || isDownloading}>
               {isDownloading ? <OrbitSpinner /> : <Download />}
@@ -829,7 +875,7 @@ function ProjectWorkspace() {
             workArea
           ) : (
             <ResizablePanelGroup direction="horizontal" className="h-full">
-              <ResizablePanel ref={chatPanelRef} defaultSize={chatPanelPercent} minSize={20} maxSize={65} className="ws-window">
+              <ResizablePanel ref={chatPanelRef} defaultSize={chatPanelPercent} minSize={20} maxSize={65} collapsible collapsedSize={0} onCollapse={() => setIsChatCollapsed(true)} onExpand={() => setIsChatCollapsed(false)} className={cn("ws-window", isChatCollapsed && "border-0")}>
                 <ChatPanel
                   messages={chat.messages}
                   quotaBlock={quotaBlock}
@@ -841,7 +887,7 @@ function ProjectWorkspace() {
                   onOpenFile={handleOpenFile}
                   sharedWith={
                     isSharedWithMe && role
-                      ? { projectName: projectSummary?.name ?? project?.name ?? "", ownerName: owner?.name || owner?.username, role }
+                      ? { projectName: projectTitle(projectSummary ?? project), ownerName: owner?.name || owner?.username, role }
                       : null
                   }
                   onBrowseCode={() => setViewMode("code")}
@@ -882,6 +928,8 @@ function ProjectWorkspace() {
 
         <LearnPanel
           projectId={projectId}
+          changedAt={lastSavedChangeAt}
+          latestRevision={latestRevision}
           onOpenFile={(path) => handleOpenFile(path, false)}
           onAsk={handleAskAbout}
         />
@@ -892,25 +940,6 @@ function ProjectWorkspace() {
           onClose={() => setRestoreTarget(null)}
           onRestored={handleRestored}
         />
-
-        <AlertDialog open={isClearChatOpen} onOpenChange={setIsClearChatOpen}>
-          <AlertDialogContent className="sm:max-w-md">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Clear this chat?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Your conversation in this project is deleted and the AI starts fresh, without what was said before.
-                Your files, their History and other people&rsquo;s chats are not touched. A cleared chat can&rsquo;t be
-                brought back - export it first if you want to keep it.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => void handleClearChat()} className={buttonVariants({ variant: "destructive" })}>
-                Clear chat
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
 
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
           <AlertDialogContent className="sm:max-w-md">

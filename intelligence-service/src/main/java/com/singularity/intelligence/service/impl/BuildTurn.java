@@ -153,6 +153,10 @@ import java.util.function.Function;
  * at most ({@code generation.max-repairs}). The parse is of the files as they will be saved, with the stray backslashes already out, so the model is
  * never asked to repair something the save would have mended anyway. A problem that survives the repairs is saved
  * with a note naming it: the person is better served by the rest of the turn and a plain warning than by nothing.
+ * A repair that leaves exactly the problems it was shown is not asked for again: each further call resends the whole
+ * prompt and project, and a model that answered "it should be fine" to an error once answers the same way three
+ * times - which made a one-line change cost four full calls. A repair that mends any of them, or tries a different
+ * edit, has made progress and may be followed by another.
  * When an edit is sent back, the reply's closing words go with it - a "that is done" written before the check would
  * otherwise sit above the repair - and the repair call's read tool ends its answers with a note written for a reply
  * being finished, not the one that restates a whole reply's order, which had a model start its reply over.
@@ -237,6 +241,17 @@ public class BuildTurn {
 
         int count() {
             return resolved.problems().size() + syntax.size() + imports.size() + types.size();
+        }
+
+        List<String> signature() {
+            List<String> keys = new ArrayList<>();
+            resolved.problems().forEach(problem -> keys.add("edit\0" + problem.path() + "\0" + problem.reason()
+                    + "\0" + problem.search()));
+            syntax.forEach(problem -> keys.add("syntax\0" + problem.path() + "\0" + problem.message()));
+            imports.forEach(problem -> keys.add("import\0" + problem.describe()));
+            types.forEach(problem -> keys.add("type\0" + problem.path() + "\0" + problem.message()));
+            keys.sort(null);
+            return keys;
         }
     }
 
@@ -666,14 +681,20 @@ public class BuildTurn {
 
             List<Message> conversation = carriedOn(opening, kept, settled, TurnReview.repairInstruction(
                     findings.resolved().problems(), findings.syntax(), findings.imports(), findings.types(),
-                    asTheyAre(findings.resolved(), stored)));
+                    asTheyAre(findings.resolved(), stored, brief.brief())));
             settle(request, generation, callModel(request, generation, conversation, deadline, brief,
                     PromptUtils.followUpReminder(), AiCallKind.REPAIR), tally);
             if (generation.stopRequested()) {
                 return turn;
             }
             turn = parser.parse(generation.text());
+            List<String> before = findings.signature();
             findings = inspect(request, generation, turn, stored);
+            if (!findings.isClean() && findings.signature().equals(before)) {
+                log.warn("Build turn for projectId: {} - the repair left the same {} problem(s) as before; not asking "
+                        + "again", request.projectId(), findings.count());
+                break;
+            }
         }
         if (!findings.types().isEmpty()) {
             notices.add(TurnReview.typeNotice(findings.types()));
@@ -687,18 +708,23 @@ public class BuildTurn {
         return turn;
     }
 
-    private static Map<String, String> asTheyAre(FileEdits.Resolved resolved, Function<String, Optional<String>> stored) {
+    private static Map<String, String> asTheyAre(FileEdits.Resolved resolved, Function<String, Optional<String>> stored,
+                                                 ProjectBrief brief) {
         Map<String, String> files = new LinkedHashMap<>();
         int characters = 0;
         for (FileEdits.Problem problem : resolved.problems()) {
             if (files.containsKey(problem.path())) {
                 continue;
             }
+            Optional<String> before = stored.apply(problem.path());
             String content = resolved.events().stream()
                     .filter(event -> event.type() == ChatEventType.FILE_EDIT && event.path().equals(problem.path()))
                     .map(ParsedEvent::content).findFirst()
-                    .orElseGet(() -> stored.apply(problem.path()).orElse(null));
+                    .orElse(before.orElse(null));
             if (content == null || characters + content.length() > MAX_REPRINTED_FILE_CHARS) {
+                continue;
+            }
+            if (brief.shownPaths().contains(problem.path()) && before.isPresent() && before.get().equals(content)) {
                 continue;
             }
             characters += content.length();

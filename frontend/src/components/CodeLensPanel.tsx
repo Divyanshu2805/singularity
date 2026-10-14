@@ -314,17 +314,17 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
 
       <div className="shrink-0 border-t border-white/[0.08] p-2.5">
         {selection && (
-          <div className="ws-card mb-1.5 flex items-center gap-0.5 rounded-lg text-[10.5px] text-muted-foreground">
+          <div className="ws-card hl-row group mb-2 flex items-center gap-0.5 rounded-2xl text-[11px] text-muted-foreground">
             <button
               type="button"
               onClick={() => onOpenSelection(selection.path, selection.startLine, selection.code, selection.endLine)}
-              className="hl-row group flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1 text-left focus-visible:outline-none"
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <span className="shrink-0 uppercase tracking-wider text-muted-foreground">Asking about</span>
-              <span className="truncate font-medium text-foreground/80 group-hover:text-primary">
+              <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Asking about</span>
+              <span className="truncate text-xs font-medium text-foreground/85 group-hover:text-primary">
                 {splitPath(selection.path).base}
               </span>
-              <span className="shrink-0">{rangeLabel(selection)}</span>
+              <span className="shrink-0 text-[11px]">{rangeLabel(selection)}</span>
             </button>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -332,7 +332,7 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
                   type="button"
                   aria-label="Stop asking about the selected code"
                   onClick={() => codeLens.clearSelection(projectId)}
-                  className="icon-btn mr-0.5 h-5 w-5 rounded-md"
+                  className="icon-btn mr-1.5 h-6 w-6 rounded-full"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -342,20 +342,13 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
           </div>
         )}
         {selection && !isBusy && (
-          <div className="mb-1.5 flex flex-wrap gap-1" role="group" aria-label="Questions about the selected code">
-            <button
-              type="button"
-              onClick={() => void codeLens.explain(projectId)}
-              className="app-chip inline-flex h-6 items-center rounded-md px-2 text-[11px] text-foreground/85"
-            >
-              Explain it
-            </button>
+          <div className="mb-2 flex flex-wrap gap-1.5" role="group" aria-label="Questions about the selected code">
             {DEEPER_QUESTIONS.map((deeper) => (
               <button
                 key={deeper.id}
                 type="button"
                 onClick={() => void codeLens.ask(projectId, deeper.question)}
-                className="app-chip inline-flex h-6 items-center rounded-md px-2 text-[11px] text-foreground/85"
+                className="app-chip inline-flex h-7 items-center rounded-full px-3 text-xs text-foreground/85"
               >
                 {deeper.label}
               </button>

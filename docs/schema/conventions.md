@@ -33,8 +33,8 @@ Each service's migrations live in `src/main/resources/db/migration/`:
 | Service | Migrations |
 |---|---|
 | account-service | `V1__init`, `V2__drop_user_password`, `V3__checkout_intents`, `V4__subscription_uniqueness`, `V5__webhook_events_and_event_ordering`, `V6__subscription_sync_and_grace_state` |
-| workspace-service | `V1__init`, `V2__unique_project_file_path`, `V3__preview_bootstrap_heartbeat`, `V4__revision_manifests`, `V5__preview_queue_sync_and_failure_kind`, `V7__project_invites` (6 is held by the publishing work) |
-| intelligence-service | `V1__init`, `V2__teaching_turns_and_step_lessons` |
+| workspace-service | `V1__init`, `V2__unique_project_file_path`, `V3__preview_bootstrap_heartbeat`, `V4__revision_manifests`, `V5__preview_queue_sync_and_failure_kind`, `V6__published_apps`, `V7__project_invites`, `V8__revision_restore_target`, `V9__github`, `V10__project_thumbnail`, `V11__project_summary`, `V12__project_title` |
+| intelligence-service | `V1__init`, `V2__teaching_turns_and_step_lessons`, `V3__turn_overview`, `V4__turn_revision`, `V5__tour_glossary_task`, `V6__message_title` |
 
 The rules:
 

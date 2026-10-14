@@ -3,8 +3,9 @@
  *
  * Handles: reading a message the page posted into one of the things it can mean - it is up, it moved, it threw, an
  * error went away, it drew nothing, it drew something after all, it wrote to its console, it has drawn a small
- * picture of itself, or it is not the app at all but one of the proxy's status pages; building the commands the tab
- * sends back (back, forward, reload, open an address, draw a picture); deciding when to ask for a picture and turning
+ * picture of itself, the person changed some of its words by hand, or it is not the app at all but one of the proxy's
+ * status pages; building the commands the tab sends back (back, forward, reload, open an address, draw a picture,
+ * turn "Edit text" on or off, say whether changed words were saved); deciding when to ask for a picture and turning
  * the one that comes back into bytes; turning what a person typed into the address bar into a path on the preview's own origin; keeping the
  * console's lines to a bounded number; deciding what a status page calls for; and deciding what the frame is
  * showing, so the tab knows whether to cover it.
@@ -30,6 +31,7 @@
  * left alone - an app may open a PDF or an image in its own frame, and that is not a failure.
  */
 import type { RuntimeError } from "./preview-fix";
+import { readTextEdit, type TextEdit } from "./text-edit";
 
 export interface FramePlace {
   path: string;
@@ -53,6 +55,7 @@ export type FrameMessage =
   | { kind: "rendered" }
   | { kind: "console"; lines: ConsoleLine[] }
   | { kind: "snapshot"; dataUrl: string }
+  | { kind: "text-edit"; edit: TextEdit }
   | { kind: "status-page"; status: number };
 
 const MAX_PATH_CHARS = 2_000;
@@ -127,6 +130,10 @@ export function readFrameMessage(data: unknown): FrameMessage | null {
         ? { kind: "snapshot", dataUrl }
         : null;
     }
+    case "PreviewTextEdit": {
+      const edit = readTextEdit(payload);
+      return edit ? { kind: "text-edit", edit } : null;
+    }
     case "PreviewStatusPage": {
       const status = count(payload?.status);
       return status !== undefined && status >= 400 && status <= 599 ? { kind: "status-page", status } : null;
@@ -152,7 +159,9 @@ export const errorConsoleLine = (error: RuntimeError): ConsoleLine => ({
 
 export type FrameCommand =
   | { type: "PreviewCommand"; command: "back" | "forward" | "reload" | "snapshot" }
-  | { type: "PreviewCommand"; command: "navigate"; path: string };
+  | { type: "PreviewCommand"; command: "navigate"; path: string }
+  | { type: "PreviewCommand"; command: "edit-text"; on: boolean }
+  | { type: "PreviewCommand"; command: "edit-text-saved"; id: number; saved: boolean };
 
 export const frameCommand = (command: "back" | "forward" | "reload" | "snapshot"): FrameCommand => ({ type: "PreviewCommand", command });
 
@@ -184,6 +193,11 @@ export function wantsSnapshot(now: {
 }
 
 export const navigateCommand = (path: string): FrameCommand => ({ type: "PreviewCommand", command: "navigate", path });
+
+export const editTextCommand = (on: boolean): FrameCommand => ({ type: "PreviewCommand", command: "edit-text", on });
+
+export const editSavedCommand = (id: number, saved: boolean): FrameCommand =>
+  ({ type: "PreviewCommand", command: "edit-text-saved", id, saved });
 
 /**
  * The path a person meant by what they typed into the address bar, or null when it would leave the preview. Accepts

@@ -18,7 +18,7 @@ import java.util.Optional;
  * diffs the editor shows - and, for teaching mode, finding one file edit in the caller's own conversation with the
  * turn it belongs to, listing that turn's checklist steps, listing what a turn wrote, deleted and said - which its
  * big picture is written from - keeping the lesson written about the edit, and deleting every event of one person's
- * conversation in a project, when they clear it.
+ * conversation in a project, when they clear it; and deleting every row of an account that is being deleted.
  *
  * <p>The file edit is looked up by its id together with the project and the user, never by id alone: an id is only a
  * number, and a lesson is written from the file's text, so finding another member's edit would hand out their
@@ -94,4 +94,9 @@ public interface ChatEventRepository extends JpaRepository<ChatEvent, Long> {
             )
             """, nativeQuery = true)
     int deleteOfSession(@Param("projectId") Long projectId, @Param("userId") Long userId);
+
+    @Modifying
+    @Query(value = "DELETE FROM chat_events WHERE chat_message_id IN (SELECT id FROM chat_messages WHERE user_id = :userId)",
+            nativeQuery = true)
+    int deleteAllOfUser(@Param("userId") Long userId);
 }
