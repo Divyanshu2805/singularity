@@ -337,7 +337,8 @@ public final class StubReplies {
 
             ### L1 · Where the file starts
 
-            The first line sets up what the rest of the file uses. Everything below it depends on it being there.
+            The first line sets up what the rest of the file uses, such as **State**, what a page remembers between
+            clicks. Everything below it depends on it being there.
 
             ### What happens next
 
