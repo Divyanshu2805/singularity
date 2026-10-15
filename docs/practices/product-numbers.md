@@ -133,7 +133,7 @@ Measured 2026-10-15 (`./mvnw verify && scripts/coverage-summary.sh`, `npm run co
 | Suite | Size |
 |---|---|
 | Backend | 1,602 tests |
-| Frontend | 921 tests |
+| Frontend | 926 tests |
 | Preview proxy | 92 tests |
 | A real preview on a cluster | 11 steps on one project |
 | The browser journey | 16 steps in about a minute, and 7 steps with two people in about half a minute |
