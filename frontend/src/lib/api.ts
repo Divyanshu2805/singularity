@@ -24,6 +24,12 @@
  * lib/server-reach, which turns the whole page into one "can't reach Singularity" screen while nobody answers;
  * probeServer is how that screen asks again.
  *
+ * Whether someone is signed in is first read from a hint in local storage, which outlives a session the server has
+ * ended. confirmSession asks the server once per page load (GET /api/auth/me) before a signed-in page draws: the page
+ * used to draw the dashboard from the hint, meet a 401 on its first request, and reload into the sign-in page, so a
+ * returning visitor saw their old dashboard flash past on the way to signing in. A 401 there forgets the session
+ * quietly instead of reloading; no answer at all counts as signed in and is left to the server-reach screen.
+ *
  * Requests are relative by default: in development Vite proxies them to the Gateway, so the browser only ever talks
  * to one origin and the SameSite cookie is always sent.
  */
@@ -139,6 +145,36 @@ export const getUserPhoto = (): string | null => localStorage.getItem(USER_PHOTO
 export const OPEN_TABS_KEY = "open_tabs";
 export const ACTIVE_TAB_KEY = "active_tab";
 
+let sessionConfirmed = false;
+let sessionCheck: Promise<boolean> | null = null;
+
+const forgetSession = () => {
+  localStorage.removeItem(SESSION_HINT_KEY);
+  removeUserInfo();
+  clearSignedInState();
+  sessionConfirmed = false;
+  sessionCheck = null;
+};
+
+export const isSessionConfirmed = () => sessionConfirmed && isAuthenticated();
+
+export const confirmSession = (): Promise<boolean> => {
+  if (!isAuthenticated()) return Promise.resolve(false);
+  if (isSessionConfirmed()) return Promise.resolve(true);
+  sessionCheck ??= rawFetch(`${BASE_URL}/api/auth/me`).then(
+    (response) => {
+      if (response.status === 401) {
+        forgetSession();
+        return false;
+      }
+      sessionConfirmed = true;
+      return true;
+    },
+    () => true,
+  );
+  return sessionCheck;
+};
+
 export const signOut = (to = "/login") => {
   const csrfToken = readCsrfToken();
   fetch(`${BASE_URL}/api/auth/logout`, {
@@ -148,9 +184,7 @@ export const signOut = (to = "/login") => {
     headers: csrfToken ? { [CSRF_HEADER]: csrfToken } : {},
   }).catch(() => undefined);
 
-  localStorage.removeItem(SESSION_HINT_KEY);
-  removeUserInfo();
-  clearSignedInState();
+  forgetSession();
   if (!window.location.pathname.startsWith("/login")) {
     if ((to.startsWith("/login") && !to.includes("expired")) || to === "/") slideOutThenGo(() => signOutRedirect(to));
     else signOutRedirect(to);

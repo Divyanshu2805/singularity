@@ -11,7 +11,7 @@ Sign-in itself happens in the browser against Firebase Authentication (password,
 | `POST` | `/api/auth/logout` | — | `204`, clears the cookie | Public — no valid session required. Also revokes the session server-side, so a copied cookie stops working in every service immediately. |
 | `POST` | `/api/auth/logout-all` | — | `204` | Revokes every session for the account. |
 | `POST` | `/api/auth/account/delete` | `{ idToken }` | `204` | Deletes the account. The ID token must be the caller's and from a sign-in in the last five minutes (`403` otherwise). Deletes or leaves every project, deletes chats, notes, tours, glossary and usage, cancels a paid plan at once, deletes the Firebase user, empties the user row (soft delete) and ends every session. `503` if another service could not delete its part; nothing in the account has changed then, and the call can be repeated. |
-| `GET` | `/api/auth/me` | — | `UserProfileResponse { id, username, name }` | |
+| `GET` | `/api/auth/me` | — | `UserProfileResponse { id, username, name }` | The frontend calls it once per page load, before a signed-in page draws, to check that the session it remembers is still live (`401` if not). |
 | `GET` | `/api/auth/security-events` | — | `List<AuthAuditEventResponse>` | The caller's own sign-in history. |
 | `POST` | `/api/auth/security-events` | `ReportSecurityEventRequest { type, idToken }` | `204` | Records a change the client made directly with Firebase — `MFA_ENROLLED`, `MFA_REMOVED` or `PASSWORD_CHANGED` — in the same audit trail. The ID token must be fresh from that change and belong to the signed-in user. |
 
