@@ -20,3 +20,11 @@ Data is split across **three PostgreSQL databases, one per service**, and each s
 | [Conventions](conventions.md) | Ownership, soft delete, composite keys, enum columns, and how to change the schema |
 
 Keep these pages in step with each service's `entity/`, `enums/` and `db/migration/` directories: update them in the same change as any schema edit.
+
+## Diagrams
+
+![account-service tables](../assets/diagrams/er-account.png)
+
+![workspace-service tables](../assets/diagrams/er-workspace.png)
+
+![intelligence-service tables](../assets/diagrams/er-intelligence.png)

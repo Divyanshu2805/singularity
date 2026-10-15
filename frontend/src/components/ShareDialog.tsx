@@ -24,7 +24,7 @@
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown, Link2, Lock, Mail, ShieldCheck, UserPlus, UserX } from "lucide-react";
+import { Check, ChevronDown, Link2, Mail, ShieldCheck, UserPlus, UserX } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -87,7 +87,7 @@ function RoleOption({ value, description }: { value: Exclude<ProjectRole, "OWNER
                                 ? { position: "fixed", top: anchor.top + anchor.height / 2, left: anchor.right + 12, transform: "translateY(-50%)", zIndex: 1000 }
                                 : { position: "fixed", top: anchor.top + anchor.height / 2, right: window.innerWidth - anchor.left + 12, transform: "translateY(-50%)", zIndex: 1000 }
                         }
-                        className="app-menu app-menu-raised pointer-events-none max-w-[220px] rounded-xl border px-3 py-2 text-xs leading-5 text-[hsl(40_30%_92%)] animate-in fade-in-0"
+                        className="app-menu app-menu-raised pointer-events-none max-w-[220px] rounded-xl border px-3 py-2 text-xs leading-5 [color:hsl(40_30%_92%)] animate-in fade-in-0"
                     >
                         {description}
                     </div>,
@@ -245,7 +245,7 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
                     type="button"
                     aria-label="Share and manage access"
                     style={{ "--icon-hover": "scale(1.08)" } as CSSProperties}
-                    className="btn flex h-8 items-center gap-2 btn-glass rounded-full pl-1.5 pr-3 text-xs font-medium active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35 data-[state=open]:border-primary/50"
+                    className="btn app-chip flex h-8 items-center gap-2 rounded-full pl-1.5 pr-3 text-xs font-medium active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35 data-[state=open]:border-primary/50"
                 >
                     {visibleAvatars.length > 0 ? (
                         <span className="flex -space-x-1.5">
@@ -253,14 +253,14 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
                                 <span
                                     key={member.userId}
                                     title={member.name || member.username}
-                                    className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-[hsl(30_11%_8%)] text-[9px] font-semibold text-white"
+                                    className="flex h-5 w-5 items-center justify-center rounded-full border-2 [border-color:hsl(30_11%_8%)] text-[9px] font-semibold text-[#fff]"
                                     style={generateGradient(member.username)}
                                 >
                                     {initialOf(member)}
                                 </span>
                             ))}
                             {members.length > visibleAvatars.length && (
-                                <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-[hsl(30_11%_8%)] bg-muted text-[9px] font-semibold text-muted-foreground">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 [border-color:hsl(30_11%_8%)] bg-muted text-[9px] font-semibold text-muted-foreground">
                                     +{members.length - visibleAvatars.length}
                                 </span>
                             )}
@@ -293,10 +293,11 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
                         size="sm"
                         onClick={copyLink}
                         style={{ "--icon-hover": "rotate(-25deg)" } as CSSProperties}
-                        className={cn("h-8 shrink-0 gap-1.5 px-2.5 text-xs [&_svg]:size-3.5", isLinkCopied && "text-primary")}
+                        aria-label={isLinkCopied ? "Copied" : "Copy link"}
+                        title={isLinkCopied ? "Copied" : "Copy link"}
+                        className={cn("h-8 w-8 shrink-0 px-0 [&_svg]:size-3.5", isLinkCopied && "text-primary")}
                     >
                         {isLinkCopied ? <Check /> : <Link2 />}
-                        {isLinkCopied ? "Copied" : "Copy link"}
                     </Button>
                 </div>
 
@@ -346,7 +347,7 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <Button type="submit" disabled={!inviteEmail.trim() || isInviting} className="h-9 px-4 text-xs">
+                            <Button variant="chip" type="submit" disabled={!inviteEmail.trim() || isInviting} className="h-9 px-4 text-xs">
                                 {isInviting ? <OrbitSpinner className="h-3.5 w-3.5" /> : "Invite"}
                             </Button>
                         </div>
@@ -387,7 +388,7 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
                                     >
                                         <span
                                             aria-hidden="true"
-                                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ring-1 ring-inset ring-white/15"
+                                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-[#fff] ring-1 ring-inset ring-[rgb(255_255_255/0.15)]"
                                             style={generateGradient(member.username)}
                                         >
                                             {initialOf(member)}
@@ -448,7 +449,7 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
                                                     {ROLE_OPTIONS.map((option) => (
                                                         <RoleOption key={option.value} {...option} />
                                                     ))}
-                                                    <SelectPrimitive.Separator className="mx-1 my-1 h-px bg-[hsl(40_30%_86%/0.12)]" />
+                                                    <SelectPrimitive.Separator className="mx-1 my-1 h-px [background-color:hsl(40_30%_86%/0.12)]" />
                                                     <SelectPrimitive.Item
                                                         value={REMOVE_VALUE}
                                                         data-danger="delete"
@@ -503,16 +504,6 @@ export function ShareDialog({ projectId, canManageMembers = true }: ShareDialogP
                         </div>
                     </div>
                 )}
-
-                <div className="flex items-center gap-2.5 border-t border-white/[0.06] bg-black/15 px-4 py-2.5">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05]">
-                        <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                    </span>
-                    <div className="min-w-0">
-                        <p className="text-xs font-medium">Private project</p>
-                        <p className="text-[11px] text-muted-foreground">Only people with access can open this link.</p>
-                    </div>
-                </div>
             </PopoverContent>
         </Popover>
     );

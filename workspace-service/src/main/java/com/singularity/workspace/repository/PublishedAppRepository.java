@@ -26,7 +26,7 @@ import java.util.Optional;
  * <p>Every state change is a conditional update that returns how many rows it changed, so the caller learns whether
  * it won: the claim of a build applies only when none is under way and the last one started long enough ago; every
  * later write names the build number it belongs to and applies only while that build is still the one under way.
- * That is what lets Unpublish, a project's deletion and the sweeper end a build from outside without the build
+ * That is what lets Unpublish, Cancel, a project's deletion and the sweeper end a build from outside without the build
  * writing its result over them afterwards.
  */
 @Repository
@@ -142,6 +142,15 @@ public interface PublishedAppRepository extends JpaRepository<PublishedApp, Long
             """)
     int markFailed(@Param("id") Long id, @Param("build") long build, @Param("kind") PublishFailureKind kind,
                    @Param("detail") String detail, @Param("failureLog") String failureLog);
+
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("""
+            UPDATE PublishedApp a SET a.buildStatus = null, a.buildDetail = null, a.buildPodName = null,
+                   a.failureKind = null, a.failureDetail = null, a.failureLog = null
+            WHERE a.id = :id AND a.buildStatus = com.singularity.workspace.enums.PublishBuildStatus.BUILDING
+            """)
+    int cancelBuild(@Param("id") Long id);
 
     @Modifying(clearAutomatically = true)
     @Transactional

@@ -1,8 +1,8 @@
 /**
  * Small helpers shared across the UI.
  *
- * Handles: merging Tailwind class names without conflicts, deriving a project's gradient deterministically from its
- * name, and formatting how long a turn took.
+ * Handles: merging Tailwind class names without conflicts, deriving a project's gradient and its folder icon's hue
+ * deterministically from its name, and formatting how long a turn took.
  *
  * The gradient takes its hue from anywhere on the colour wheel, with its two companions close on either side of it,
  * so every project has a colour of its own while a single thumbnail never turns into a rainbow. It was held to the
@@ -16,11 +16,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export const generateGradient = (name: string) => {
+const nameHash = (name: string) => {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
+  return hash;
+};
+
+/** A hue of the colour wheel for a project's folder icon: the same name always gets the same colour. */
+export const projectHue = (name: string) => Math.abs(nameHash(name)) % 360;
+
+export const generateGradient = (name: string) => {
+  const hash = nameHash(name);
 
   const h1 = Math.abs(hash) % 360;
   const h2 = (h1 + 26 + (Math.abs(hash >> 8) % 22)) % 360;

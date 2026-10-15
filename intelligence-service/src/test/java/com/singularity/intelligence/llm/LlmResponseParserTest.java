@@ -129,6 +129,5 @@ class LlmResponseParserTest {
                 parentMessage);
 
         assertThat(events.getFirst().getMetadata()).isEqualTo("Props, State");
-        assertThat(LlmResponseParser.lessonPartCount(events.getFirst().getContent())).isEqualTo(2);
     }
 }

@@ -5,10 +5,14 @@
  * icons and colours, selecting a file to open, and - for someone who may edit - a delete button on each file's row.
  *
  * The delete button only asks: it hands the path up, and the panel that owns the tree confirms and deletes. It shows
- * when the row is pointed at or focused and sits beside the row's own button, never inside it.
+ * when the row is pointed at or focused and sits beside the row's own button, never inside it - and the row makes room for it
+ * (a little more padding on the right while it shows), so the bin never lies over the end of a name.
  *
  * Each expand-or-collapse command carries a fresh id, so pressing the same one twice - after opening a few folders by
  * hand in between - applies it again rather than being ignored as unchanged.
+ *
+ * A name too long for its row fades at the edge and, while the row is pointed at or focused, slides to show its end
+ * and back - the sidebar's titles do the same (OverflowSlideText).
  *
  * It moves the way the sidebar does: one hover highlight glides from row to row (use-glide-highlight - every row is
  * marked data-glide and positioned so it paints over it), the open file takes the app's selected look (index.css,
@@ -16,11 +20,11 @@
  */
 import { useGlideHighlight } from "@/hooks/use-glide-highlight";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { ChevronRight, Folder, FolderOpen, Trash2 } from "lucide-react";
 import { FileNode } from "@/lib/types";
 import { getFileColor, getFileIcon } from "@/lib/file-icons";
 import { cn } from "@/lib/utils";
+import { OverflowSlideText } from "@/components/OverflowSlideText";
 
 export interface TreeExpansionCommand {
   mode: "expand" | "collapse";
@@ -53,16 +57,6 @@ function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, e
   useEffect(() => {
     if (expansion) setIsExpanded(expansion.mode === "expand");
   }, [expansion]);
-  const labelRef = useRef<HTMLSpanElement>(null);
-  const [overflowBox, setOverflowBox] = useState<{ top: number; left: number; height: number } | null>(null);
-
-  const showFullNameIfClipped = () => {
-    const label = labelRef.current;
-    if (!label) return;
-    if (label.scrollWidth <= label.clientWidth) return;
-    const box = label.getBoundingClientRect();
-    setOverflowBox({ top: box.top, left: box.left, height: box.height });
-  };
 
   const isDirectory = node.type === "directory";
   const isSelected = selectedPath === node.path;
@@ -79,12 +73,9 @@ function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, e
         title={node.path}
         aria-expanded={isDirectory ? isExpanded : undefined}
         onClick={() => (isDirectory ? setIsExpanded(!isExpanded) : onSelectFile(node.path))}
-        onMouseEnter={showFullNameIfClipped}
-        onMouseLeave={() => setOverflowBox(null)}
-        onFocus={showFullNameIfClipped}
-        onBlur={() => setOverflowBox(null)}
         className={cn(
           "relative flex h-7 w-full items-center gap-1.5 rounded-xl pr-2 text-left text-[13px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35",
+          !isDirectory && onDeleteFile && "group-focus-within/row:pr-8 group-hover/row:pr-8",
           isSelected ? "row-active font-medium" : "text-muted-foreground hover:text-foreground"
         )}
         style={{ paddingLeft: `${depth * 12 + 6}px` }}
@@ -97,7 +88,7 @@ function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, e
           <span className="w-3.5 shrink-0" />
         )}
         <Icon className={cn("h-4 w-4 shrink-0", iconColor)} />
-        <span ref={labelRef} className="truncate">{node.name}</span>
+        <OverflowSlideText text={node.name} />
         {hasChanges && (
           <span aria-label="Changed in this chat" className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
         )}
@@ -108,28 +99,12 @@ function FileTreeItem({ node, depth, selectedPath, onSelectFile, changedPaths, e
           aria-label={`Delete ${node.name}`}
           title={`Delete ${node.name}`}
           onClick={() => onDeleteFile(node.path)}
-          className="absolute right-1 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-md bg-[hsl(var(--ws-card-head))] text-muted-foreground opacity-0 transition-opacity duration-150 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 group-hover/row:opacity-100"
+          className="icon-btn icon-btn-danger absolute right-1 top-1/2 z-10 h-5 w-5 -translate-y-1/2 rounded-md opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover/row:opacity-100"
         >
           <Trash2 className="h-3 w-3" />
         </button>
       )}
       </div>
-
-      {overflowBox && createPortal(
-        <span
-          aria-hidden="true"
-          style={{ top: overflowBox.top, left: overflowBox.left, height: overflowBox.height }}
-          className={cn(
-            "pointer-events-none fixed z-[1000] -ml-1 flex items-center whitespace-nowrap rounded-md border py-0 pl-1 pr-2.5 text-[13px] shadow-lg shadow-black/50",
-            isSelected
-              ? "border-primary/30 bg-[hsl(30_11%_17%)] font-medium text-white"
-              : "border-white/[0.12] bg-[hsl(var(--ws-card-head))] text-foreground"
-          )}
-        >
-          {node.name}
-        </span>,
-        document.body
-      )}
 
       {isDirectory && isExpanded && node.children?.map((child) => (
         <FileTreeItem
@@ -151,38 +126,38 @@ export function FileTree({ files, selectedPath, onSelectFile, isLoading, changed
   const treeRef = useRef<HTMLDivElement>(null);
   const glideRef = useGlideHighlight(treeRef);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-2 p-3">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="flex items-center gap-2">
-            <div className="app-skeleton h-4 w-4 rounded" />
-            <div className="app-skeleton h-3.5 rounded" style={{ width: `${40 + i * 9}%` }} />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (files.length === 0) {
-    return <div className="p-4 text-center text-xs leading-relaxed text-muted-foreground">No files yet. Ask for something in the chat and they will appear here.</div>;
-  }
+  const empty = !isLoading && files.length === 0;
 
   return (
-    <div ref={treeRef} className="relative p-1.5">
+    <div ref={treeRef} className={cn("relative", !isLoading && !empty && "p-1.5")}>
       <span ref={glideRef} aria-hidden="true" className="glide-pill" />
-      {files.map((node) => (
-        <FileTreeItem
-          key={node.path}
-          node={node}
-          depth={0}
-          selectedPath={selectedPath}
-          onSelectFile={onSelectFile}
-          changedPaths={changedPaths}
-          expansion={expansion}
-          onDeleteFile={onDeleteFile}
-        />
-      ))}
+      {isLoading ? (
+        <div className="space-y-2 p-3">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className="app-skeleton h-4 w-4 rounded" />
+              <div className="app-skeleton h-3.5 rounded" style={{ width: `${40 + i * 9}%` }} />
+            </div>
+          ))}
+        </div>
+      ) : empty ? (
+        <div className="p-4 text-center text-xs leading-relaxed text-muted-foreground">No files yet. Ask for something in the chat and they will appear here.</div>
+      ) : (
+        <>
+          {files.map((node) => (
+            <FileTreeItem
+              key={node.path}
+              node={node}
+              depth={0}
+              selectedPath={selectedPath}
+              onSelectFile={onSelectFile}
+              changedPaths={changedPaths}
+              expansion={expansion}
+              onDeleteFile={onDeleteFile}
+            />
+          ))}
+        </>
+      )}
     </div>
   );
 }

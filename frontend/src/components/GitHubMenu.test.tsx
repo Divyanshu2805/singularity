@@ -122,12 +122,12 @@ describe("GitHubMenu", () => {
     expect(await screen.findByText("asha/noughts")).toBeTruthy();
   });
 
-  it("sends a public repository only when the box is unticked", async () => {
+  it("sends a public repository only when Public is chosen", async () => {
     vi.mocked(api.pushToGitHub).mockResolvedValue({ ...pushed, privateRepo: false });
     renderMenu(connected);
     await open();
 
-    fireEvent.click(await screen.findByLabelText("Private repository"));
+    fireEvent.click(await screen.findByRole("radio", { name: "Public" }));
     fireEvent.click(screen.getByRole("button", { name: "Create and push" }));
 
     await waitFor(() => expect(api.pushToGitHub).toHaveBeenCalledWith("7", "", false, undefined));

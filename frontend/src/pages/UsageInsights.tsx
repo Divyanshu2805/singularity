@@ -2,27 +2,33 @@
  * Where the caller's tokens went.
  *
  * Handles: the range picker, the stacked usage chart, the totals, the per-feature and per-project breakdowns, the
- * recent activity table and the CSV export.
+ * recent activity table and the CSV export. The table opens on the latest ten requests and a Load more button adds forty
+ * at a time from the hundred the page fetched.
  *
  * Ranked bars are scaled to the largest entry rather than to 100%, so a short list still reads. This page pulls in
  * the charting library, which is why it is loaded on demand.
+ *
+ * Every box is the Settings page's own kind (components/settings/SettingsCard - a gold icon tile, a mono label, a title
+ * and a recessed body), and the five totals across the top are small cards of the same surface with a small tile of
+ * their own, so Settings, Plans & billing and Usage read as one place.
  *
  * It stands on the app's night - a page a step lighter than the surround, a wash of rose, amber and gold breathing at the foot of the
  * screen with stars above it (Nebula - the wash took the gas nebula's place) and one faint gold glow at its head; the first starfield was taken out when the
  * owner found the app too dark to read its panels on, and stars came back when the nebula was redrawn as gas -
  * under the shared page heading (PageHeading - a mono eyebrow, a
  * Fraunces title with an italic gold close, its words dropping in), its panels are solid raised surfaces that rise in one
- * after another (index.css, .app-glass, .app-rise), and anything working shows the app's comet (OrbitSpinner).
+ * after another (index.css, .app-glass, .app-rise), and anything working shows the app's ripple (OrbitSpinner).
  */
 import { Nebula } from "@/components/app/Nebula";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { PageHeading } from "@/components/app/PageHeading";
+import { SettingsCard } from "@/components/settings/SettingsCard";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
 import { useSlidingPill } from "@/hooks/use-sliding-pill";
-import { Activity, ArrowUpRight, BarChart3, Download, Sparkles } from "lucide-react";
+import { Activity, ArrowLeftRight, ArrowUpRight, BarChart3, Download, FolderKanban, Gauge, Layers, Mountain, OctagonAlert, Sigma, Sparkles, TrendingUp, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
@@ -45,6 +51,7 @@ import {
   tokensPerRequest,
 } from "@/lib/usage-insights";
 import type { UsageEvent, UsageRange } from "@/lib/types";
+import { useGlideHighlight } from "@/hooks/use-glide-highlight";
 import { cn } from "@/lib/utils";
 
 const PAGE_GLOW: CSSProperties = {
@@ -55,31 +62,39 @@ const PAGE_GLOW: CSSProperties = {
 };
 
 const RANGE_KEY = "usage_insights_range";
-const PAGE_SIZE = 25;
+const RECENT_LIMIT = 100;
+const RECENT_FIRST = 10;
+const RECENT_MORE = 40;
 
-function Tile({ label, value, hint, children }: { label: string; value: ReactNode; hint?: ReactNode; children?: ReactNode }) {
+function Tile({ label, value, hint, Icon, index, children }: { label: string; value: ReactNode; hint?: ReactNode; Icon: LucideIcon; index: number; children?: ReactNode }) {
   return (
-    <div className="app-card app-rise rounded-2xl p-4">
-      <p className="app-label">{label}</p>
-      <p className="mt-1.5 font-display text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
+    <div className="app-glass settings-card app-rise rounded-[22px] p-4" style={{ "--i": index } as CSSProperties}>
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden="true" className="settings-tile !h-7 !w-7 !rounded-[0.6rem]">
+          <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
+        </span>
+        <p className="app-label min-w-0 truncate">{label}</p>
+      </div>
+      <p className="mt-3 font-display text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
       {children}
       {hint && <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>}
     </div>
   );
 }
 
-function Section({ title, description, action, children }: { title: string; description?: string; action?: ReactNode; children: ReactNode }) {
+function Section({ index, label, title, Icon, description, action, children }: {
+  index: number;
+  label: string;
+  title: string;
+  Icon: LucideIcon;
+  description?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <section className="app-glass app-rise rounded-[22px] p-5" style={{ "--i": 1 } as CSSProperties}>
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold">{title}</h2>
-          {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
-        </div>
-        {action}
-      </div>
+    <SettingsCard index={index} label={label} title={title} Icon={Icon} description={description} action={action}>
       {children}
-    </section>
+    </SettingsCard>
   );
 }
 
@@ -130,10 +145,9 @@ export function UsageInsights() {
     }
   });
   const rangeRef = useRef<HTMLDivElement>(null);
+  const rangeGlide = useGlideHighlight(rangeRef);
   const rangePill = useSlidingPill(rangeRef, Math.max(0, RANGES.findIndex((entry) => entry.value === range)), "[role=radio]");
   const [isExporting, setExporting] = useState(false);
-  const [page, setPage] = useState(0);
-  const [events, setEvents] = useState<UsageEvent[]>([]);
 
   useEffect(() => {
     if (!signedIn) navigate(loginRedirectPath());
@@ -152,16 +166,13 @@ export function UsageInsights() {
     enabled: signedIn,
   });
   const eventsQuery = useQuery({
-    queryKey: ["usage", "events", page],
-    queryFn: () => api.getUsageEvents(page, PAGE_SIZE),
+    queryKey: ["usage", "events", RECENT_LIMIT],
+    queryFn: () => api.getUsageEvents(0, RECENT_LIMIT),
     enabled: signedIn,
   });
-
-  useEffect(() => {
-    const data = eventsQuery.data;
-    if (!data) return;
-    setEvents((previous) => (data.page === 0 ? data.events : [...previous, ...data.events.filter((e) => !previous.some((p) => p.id === e.id))]));
-  }, [eventsQuery.data]);
+  const events: UsageEvent[] = eventsQuery.data?.events ?? [];
+  const [shown, setShown] = useState(RECENT_FIRST);
+  const hidden = Math.max(0, events.length - shown);
 
   useEffect(() => {
     if (insightsQuery.error) {
@@ -214,7 +225,7 @@ export function UsageInsights() {
 
   return (
     <div className="dash-night dash-sky relative flex h-screen overflow-hidden bg-background">
-      <Nebula />
+      <Nebula stars={false} strong />
       <SidebarSpacer sidebar={sidebar} />
 
       <div className="dash-frame relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
@@ -232,6 +243,7 @@ export function UsageInsights() {
 
               <div className="flex flex-wrap items-center gap-2">
                 <div ref={rangeRef} role="radiogroup" aria-label="Range" className="app-track relative flex p-1">
+                  <span ref={rangeGlide} aria-hidden="true" className="glide-pill rounded-full" />
                   <span aria-hidden="true" className="seg-pill seg-slide absolute inset-y-1" style={rangePill} />
                   {RANGES.map((entry) => (
                     <button
@@ -239,6 +251,7 @@ export function UsageInsights() {
                       type="button"
                       role="radio"
                       aria-checked={range === entry.value}
+                      data-glide=""
                       onClick={() => setRange(entry.value)}
                       className={cn(
                         "relative z-10 h-7 rounded-full px-3.5 text-xs transition-colors duration-300",
@@ -258,6 +271,8 @@ export function UsageInsights() {
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <Tile
+                index={1}
+                Icon={Gauge}
                 label="Today"
                 value={quota ? `${compactTokens(quota.used)} / ${compactTokens(quota.limit)}` : "—"}
                 hint={quota ? `Resets in ${formatResetIn(quota.resetsAt)}` : undefined}
@@ -272,17 +287,23 @@ export function UsageInsights() {
                 )}
               </Tile>
               <Tile
+                index={2}
+                Icon={Sigma}
                 label={range === "today" ? "Used today" : "This period"}
                 value={insights ? <CountUp value={insights.totals.totalTokens} format={formatTokens} /> : "—"}
                 hint={insights ? `${formatTokens(insights.totals.requests)} AI requests` : undefined}
               />
               <Tile
+                index={3}
+                Icon={TrendingUp}
                 label={range === "today" ? "Per request" : "Daily average"}
                 value={insights ? <CountUp value={range === "today" ? tokensPerRequest(insights.totals) : insights.averagePerDay} format={formatTokens} /> : "—"}
                 hint={insights && range !== "today" ? `${formatTokens(tokensPerRequest(insights.totals))} per request` : "tokens"}
               />
-              <Tile label={peak?.title ?? "Peak day"} value={peak?.value ?? "—"} hint={insights?.peakDay ? `${formatTokens(insights.peakDay.totalTokens)} tokens` : undefined} />
+              <Tile index={4} Icon={Mountain} label={peak?.title ?? "Peak day"} value={peak?.value ?? "—"} hint={insights?.peakDay ? `${formatTokens(insights.peakDay.totalTokens)} tokens` : undefined} />
               <Tile
+                index={5}
+                Icon={OctagonAlert}
                 label="Days at limit"
                 value={insights ? insights.daysAtLimit : "—"}
                 hint={insights ? `${insights.planName} · ${compactTokens(insights.dailyLimit)}/day` : undefined}
@@ -290,12 +311,12 @@ export function UsageInsights() {
             </div>
 
             {insightsQuery.isLoading ? (
-              <div className="app-glass flex items-center justify-center gap-2 rounded-[22px] py-24 text-sm text-muted-foreground">
+              <div className="app-glass settings-card flex items-center justify-center gap-2 rounded-[22px] py-24 text-sm text-muted-foreground">
                 <OrbitSpinner className="h-4 w-4" />
                 Loading your usage&hellip;
               </div>
             ) : isEmpty ? (
-              <div className="app-glass app-rise flex flex-col items-center gap-2 rounded-[22px] py-20 text-center">
+              <div className="app-glass settings-card app-rise flex flex-col items-center gap-2 rounded-[22px] py-20 text-center">
                 <BarChart3 className="h-7 w-7 text-muted-foreground/40" />
                 <p className="text-sm font-medium">No AI usage {range === "today" ? "today" : "in this period"}</p>
                 <p className="max-w-sm text-xs text-muted-foreground">
@@ -318,6 +339,9 @@ export function UsageInsights() {
                 )}
 
                 <Section
+                  index={6}
+                  label="Over time"
+                  Icon={BarChart3}
                   title={range === "today" ? "Tokens by hour" : "Tokens by day"}
                   description={
                     showLimitLine
@@ -393,7 +417,7 @@ export function UsageInsights() {
                 </Section>
 
                 <div className="grid gap-4 lg:grid-cols-3">
-                  <Section title="Input vs output" description="Output is what the AI writes - long builds and walkthroughs spend most of it.">
+                  <Section index={7} label="Split" Icon={ArrowLeftRight} title="Input vs output" description="Output is what the AI writes - long builds and walkthroughs spend most of it.">
                     <p className="font-display text-2xl font-semibold tabular-nums">{formatShare(split)} <span className="text-sm font-normal text-muted-foreground">output</span></p>
                     <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-white/[0.07]">
                       <div style={{ width: `${(1 - split) * 100}%`, background: "hsl(212 90% 70%)" }} />
@@ -405,7 +429,7 @@ export function UsageInsights() {
                     </dl>
                   </Section>
 
-                  <Section title="By feature">
+                  <Section index={8} label="Features" Icon={Layers} title="By feature">
                     <div className="space-y-1">
                       {insights.byFeature.map((entry) => (
                         <RankedBar
@@ -421,7 +445,7 @@ export function UsageInsights() {
                     </div>
                   </Section>
 
-                  <Section title="By project" description={insights.byProject.length === 0 ? undefined : "Click a project to open it."}>
+                  <Section index={9} label="Projects" Icon={FolderKanban} title="By project" description={insights.byProject.length === 0 ? undefined : "Click a project to open it."}>
                     {insights.byProject.length === 0 ? (
                       <p className="text-xs text-muted-foreground">No project usage in this period.</p>
                     ) : (
@@ -446,9 +470,11 @@ export function UsageInsights() {
             ) : null}
 
             <Section
+              index={10}
+              label="History"
+              Icon={Activity}
               title="Recent activity"
-              description="Every AI request, newest first."
-              action={<Activity className="h-4 w-4 text-muted-foreground" />}
+              description={`Your latest ${RECENT_LIMIT} AI requests, newest first.`}
             >
               {events.length === 0 && !eventsQuery.isLoading ? (
                 <p className="text-xs text-muted-foreground">Nothing yet.</p>
@@ -466,7 +492,7 @@ export function UsageInsights() {
                       </tr>
                     </thead>
                     <tbody>
-                      {events.map((event) => (
+                      {events.slice(0, shown).map((event) => (
                         <tr key={event.id} className="border-b border-border/30 last:border-0">
                           <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">
                             {new Date(event.createdAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
@@ -489,13 +515,17 @@ export function UsageInsights() {
                   </table>
                 </div>
               )}
-              {eventsQuery.data?.hasMore && (
+              {hidden > 0 && (
                 <div className="mt-3 flex justify-center">
-                  <Button variant="ghost" size="sm" disabled={eventsQuery.isFetching} onClick={() => setPage((current) => current + 1)}>
-                    {eventsQuery.isFetching && <OrbitSpinner className="h-3.5 w-3.5" />}
+                  <Button variant="outline" size="sm" className="h-8 px-3.5 text-xs" onClick={() => setShown((count) => count + RECENT_MORE)}>
                     Load more
                   </Button>
                 </div>
+              )}
+              {hidden === 0 && eventsQuery.data?.hasMore && (
+                <p className="mt-3 text-center text-xs text-muted-foreground">
+                  Showing the latest {RECENT_LIMIT} requests. Use Export CSV for the rest.
+                </p>
               )}
             </Section>
           </div>

@@ -16,12 +16,13 @@
  * reading text otherwise: these are pages someone reads once, on any screen, and nothing on them moves but the
  * switch.
  */
-import type { CSSProperties } from "react";
+import { useRef, type CSSProperties } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { LandingBackdrop } from "@/components/landing/LandingBackdrop";
+import { PageBackdrop } from "@/components/app/PageBackdrop";
 import { Button } from "@/components/ui/button";
 import { CONTACT_URL, PRIVACY, SOURCE_URL, TERMS, type LegalDocument } from "@/lib/legal";
+import { useGlideHighlight } from "@/hooks/use-glide-highlight";
 import { cn } from "@/lib/utils";
 
 const DOCUMENTS: { label: string; to: string; document: LegalDocument }[] = [
@@ -33,11 +34,13 @@ export function Legal() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const active = pathname.startsWith("/terms") ? 1 : 0;
+  const switchRef = useRef<HTMLDivElement>(null);
+  const glideRef = useGlideHighlight(switchRef);
   const { document } = DOCUMENTS[active];
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
-      <LandingBackdrop mode="quiet" />
+      <PageBackdrop mode="quiet" />
       <main className="relative mx-auto w-full max-w-2xl px-6 py-14 sm:py-20">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
           <Button
@@ -50,7 +53,8 @@ export function Legal() {
             Home
           </Button>
 
-          <div role="tablist" aria-label="Document" className="app-track relative grid w-52 grid-cols-2 p-0.5">
+          <div ref={switchRef} role="tablist" aria-label="Document" className="app-track relative grid w-52 grid-cols-2 p-0.5">
+            <span ref={glideRef} aria-hidden="true" className="glide-pill rounded-full" />
             <span
               aria-hidden="true"
               className={cn(
@@ -64,6 +68,7 @@ export function Legal() {
                 type="button"
                 role="tab"
                 aria-selected={index === active}
+                data-glide=""
                 onClick={() => index !== active && navigate(entry.to, { replace: true })}
                 className={cn(
                   "relative z-10 flex h-7 items-center justify-center rounded-full px-3.5 text-xs font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

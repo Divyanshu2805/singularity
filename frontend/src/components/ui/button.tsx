@@ -13,7 +13,8 @@
  * rim and spark drawn inside the pill were each turned down before it; the destructive is a red fill whose light is
  * red; the
  * outline is a matte warm charcoal surface a step lighter than the panel it sits on, with a hairline that turns gold;
- * secondary is a softer fill and ghost is bare until hovered. The primary used to be the landing button's deep-space
+ * chip is the prompt's Build button (.app-chip) - a charcoal pill whose gold light follows the pointer - for the
+ * actions in the preview window's resting states; secondary is a softer fill and ghost is bare until hovered. The primary used to be the landing button's deep-space
  * pill lit violet from its right end; the owner did not want that look inside the app, and the outline it sat beside
  * was too dark to read as a button and had no hover of its own. All press in slightly when clicked and take a calm
  * gold ring for keyboard focus. Their icons answer the pointer too (index.css, .btn svg): a small grow by default,
@@ -32,7 +33,8 @@ const buttonVariants = cva(
       variant: {
         default: "btn-primary",
         destructive: "btn-danger",
-        outline: "btn-glass",
+        outline: "app-chip",
+        chip: "app-chip",
         secondary: "btn-soft",
         ghost: "btn-ghost font-medium text-foreground/85 hover:text-foreground",
         link: "font-medium text-primary underline-offset-4 hover:underline active:scale-100",

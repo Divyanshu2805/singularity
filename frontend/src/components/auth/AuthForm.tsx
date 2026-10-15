@@ -4,8 +4,7 @@
  * "confirm it's you" dialog).
  *
  * Handles: they are made of the signed-in app's own materials, as the owner asked once the dashboard and the chat
- * were settled, so that signing in already looks like the place it leads to. They were the landing page's before -
- * its lit gold pill with a knob, its glass ghost button and an amber glass chip - set on the landing's plan card.
+ * were settled, so that signing in already looks like the place it leads to.
  *
  * - AuthCardHeading heads a view: the dashboard's arrangement of a mark over a Fraunces headline whose last word is
  *   the gold heat-text (accent). The mark is either the eclipse (eclipse - Eclipse.tsx's Eclipse, a slow solar eclipse
@@ -15,14 +14,13 @@
  *   eclipse smaller, easing between the two sizes: the sign-up form carries a name field more than the sign-in one,
  *   and the owner wanted it shorter still than the sign-in form, which was itself tightened (a smaller eclipse,
  *   44px fields and buttons, closer rows); AuthDivider's tight does the same for the space round the divider.
- * - AuthModeSwitch is the dashboard's segmented control: a sunken track with the gold selection chip (the .seg-pill
- *   recipe), which glides to the side being chosen with the same springy slide as the All projects and chat page
+ * - AuthModeSwitch is a segmented control in the demo card's materials (IdeaForge.tsx): a track like the demo's quiet
+ *   button and a selection chip like its lit send button - charcoal lit gold from below - which glides to the side being chosen with the same springy slide as the All projects and chat page
  *   switches - a transform, so the compositor runs it and it stays smooth while the form re-renders, the name field
  *   opens and the nebula draws. It used to stretch towards that side by animating its left and right edges, which
  *   relaid it out every frame on the main thread and stuttered at exactly that moment.
- * - AuthField is a sunken well, darker than the card, as the workspace's fields are: a mono capital label over it
- *   (the app's .app-label), the field's icon on a small round tile like the prompt's badge, which turns gold while
- *   the field has focus and stays lit once it holds something (data-filled). The well lifts a pixel and takes the
+ * - AuthField is a faint well like the demo card's prompt row: a mono capital label over it (the app's .app-label),
+ *   the field's icon on the same small round badge as the demo's, which turns gold while the field has focus and stays lit once it holds something (data-filled). The well lifts a pixel and takes the
  *   app's calm gold ring on focus; a tick draws itself at its end once what is typed would pass (valid) and undraws
  *   if it stops passing; the icon wags once if the field is refused. Typing releases gold dust off the caret
  *   (lib/stardust.ts): one mote per character, a small cluster for a paste, each rising a little and fading.
@@ -38,25 +36,27 @@
  *   is near-black here, darker than the app's primary (.btn-primary.auth-submit - the owner asked for it blacker),
  *   keeping the gold light under its lower edge; the outline button is a dark matte charcoal a step under it, so the
  *   submit stays the one that stands out. The submit swaps its wording by rising the new words in (only when it
- *   changes - not as the page opens, when the row it sits in rises anyway), shows the app's comet (OrbitSpinner)
+ *   changes - not as the page opens, when the row it sits in rises anyway), shows the app's ripple (OrbitSpinner)
  *   while it works and stays at full strength while it does, and once everything in the form would pass (ready) the
  *   light under it warms and grows, so the moment the form can be sent reads on the button.
- * - GoogleButton is also woven from a sheet of space-time (SpacetimeFabric.tsx, on a canvas under its label): a fine
+ * - GoogleButton is woven from a sheet of space-time (SpacetimeFabric.tsx, on a canvas under its label): a fine
  *   grid with a few stars lying on it, dipping round the Google mark and rippling slowly out from it, which sinks
  *   towards the pointer while it is on the button and sends stronger, quicker waves out while the button waits on
- *   Google. The mark sits in a fixed square (the G, or the comet while it waits) so the sheet knows where its mass is.
+ *   Google. The mark sits in a fixed square (the G, or the ripple while it waits) so the sheet knows where its mass is.
+ *   The submit is the prompt's Build button (the chip variant), and the card's mark is the horizon mark (HeadingMark), building itself as the page opens and every six seconds after, as the brand's does - the eclipse stood there before.
  * - AuthDialogCard is the dialog form's surface: the card's eclipse light at its head, on the dialog's own panel.
  *
  * Under reduced motion nothing drops, rises, draws, drifts or loops; every state is simply shown.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type InputHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowRight, CircleAlert, Info, type LucideIcon } from "lucide-react";
-import { Eclipse, EclipseEye } from "@/components/auth/Eclipse";
+import { EclipseEye } from "@/components/auth/Eclipse";
+import { HorizonMark } from "@/components/HorizonMark";
 import { SpacetimeFabric } from "@/components/auth/SpacetimeFabric";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
-import { HeadlineWords } from "@/components/landing/HeadlineWords";
-import { WORD_DROP } from "@/components/landing/intro";
-import { play } from "@/components/landing/motion";
+import { HeadlineWords } from "@/components/motion/HeadlineWords";
+import { WORD_DROP } from "@/components/motion/intro";
+import { play } from "@/components/motion/motion";
 import { buttonVariants } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MIN_PASSWORD_LENGTH, passwordStrength } from "@/lib/auth-form";
@@ -82,6 +82,7 @@ export function AuthModeSwitch({ mode, onChange, disabled }: { mode: "login" | "
                     aria-pressed={mode === option}
                     disabled={disabled}
                     onClick={() => mode !== option && onChange()}
+                    data-seg=""
                     className="auth-switch-option"
                 >
                     {option === "login" ? "Sign in" : "Create account"}
@@ -89,6 +90,30 @@ export function AuthModeSwitch({ mode, onChange, disabled }: { mode: "login" | "
             ))}
         </div>
     );
+}
+
+const MARK_BUILD_MS = 1950;
+const MARK_HIDE_MS = 360;
+const MARK_EVERY_MS = 6000;
+
+function HeadingMark({ className }: { className?: string }) {
+    const [drawn, setDrawn] = useState<boolean | undefined>(true);
+
+    useEffect(() => {
+        const timers: number[] = [];
+        timers.push(window.setTimeout(() => setDrawn(undefined), MARK_BUILD_MS));
+        const every = window.setInterval(() => {
+            setDrawn(false);
+            timers.push(window.setTimeout(() => setDrawn(true), MARK_HIDE_MS));
+            timers.push(window.setTimeout(() => setDrawn(undefined), MARK_HIDE_MS + MARK_BUILD_MS));
+        }, MARK_EVERY_MS);
+        return () => {
+            window.clearInterval(every);
+            timers.forEach(window.clearTimeout);
+        };
+    }, []);
+
+    return <HorizonMark className={className} drawn={drawn} />;
 }
 
 export function AuthCardHeading({ icon: Icon, eclipse, title, accent, compact = false, children }: {
@@ -113,8 +138,7 @@ export function AuthCardHeading({ icon: Icon, eclipse, title, accent, compact = 
     return (
         <div className="text-center">
             {eclipse ? (
-                <Eclipse
-                    {...eclipse}
+                <HeadingMark
                     className={cn(
                         "mx-auto transition-[width,height,margin] duration-300 ease-out motion-reduce:transition-none",
                         compact ? "mb-2.5 h-12 w-12" : "mb-3 h-[3.75rem] w-[3.75rem]"
@@ -431,7 +455,7 @@ function useSwapped(label: string) {
     return changed.current;
 }
 
-export function AuthSubmitButton({ isLoading, loadingText, ready, children }: { isLoading: boolean; loadingText: string; ready?: boolean; children: string }) {
+export function AuthSubmitButton({ isLoading, loadingText, ready, children }: { isLoading: boolean; loadingText: string; ready?: boolean; chip?: boolean; children: string }) {
     const label = isLoading ? loadingText : children;
     const swapped = useSwapped(label);
 
@@ -442,7 +466,7 @@ export function AuthSubmitButton({ isLoading, loadingText, ready, children }: { 
             aria-busy={isLoading}
             data-ready={ready || undefined}
             style={{ "--icon-hover": "translateX(3px)" } as CSSProperties}
-            className={cn(buttonVariants({ size: "lg" }), "auth-submit h-11 w-full text-[14.5px]")}
+            className={cn(buttonVariants({ variant: "chip", size: "lg" }), "h-11 w-full text-[14.5px] [--light-size:9rem]")}
         >
             {isLoading && <OrbitSpinner className="h-3.5 w-3.5" />}
             <span key={label} data-swap={swapped || undefined} className="auth-swap">
@@ -545,8 +569,7 @@ export function AuthTextLink({ onClick, children, disabled }: { onClick: () => v
             disabled={disabled}
             className="wipe-link group text-[12.5px] font-medium text-primary hover:text-white focus-visible:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
         >
-            <span className="stardust-text">{children}</span>
-            <StardustMotes />
+            {children}
         </button>
     );
 }

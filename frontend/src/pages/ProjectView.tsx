@@ -9,13 +9,18 @@
  * since the one in progress may be another member's and would otherwise hold the project until it ended - bringing
  * the preview up to date when a response has changed files,
  * the publish, share, fork and delete actions, the History panel and the question asked before going back to a version,
- * Undo on a chat reply, clearing the chat, and the page shown instead of all of it when the project cannot be
- * opened.
+ * Undo on a chat reply, clearing the chat, the workspace sketched while the project opens, and the page shown instead
+ * of all of it when the project cannot be opened.
  *
  * A project that is not this person's to open - deleted, never shared with them, a wrong address - used to leave an
  * empty workspace under an error toast. It is now a page of its own that says what the possibilities are and leads
  * back to their projects; a load that failed for another reason offers to try again (lib/project-access). The chat
- * is asked for only once the project has loaded, so a stranger's visit does not also raise a chat error.
+ * is asked for only once the project has loaded, so a stranger's visit does not also raise a chat error. Both states
+ * are components/app/ProjectLoadStates: until the project arrives the panes are a shimmering sketch of the workspace
+ * rather than real panels asking for files that may not be this person's, and the failure page keeps itself up
+ * while Try again runs - its button showing the working indicator - instead of dropping back to the sketch. The
+ * failure page fills the screen on its own, centred, with no sidebar: the owner wanted an error page, not a workspace
+ * with an error in it.
  *
  * When the files change from outside the chat - a version restored, a turn undone, a file saved by hand - the chat
  * store's copy of the files a build wrote is the stale one, so it is dropped, the code panel is told to read again,
@@ -51,18 +56,18 @@
  * with the shell.
  *
  * It is laid out the way the dashboard is, after Lovable: the docked sidebar (inset) stands on the plain surround
- * (index.css, .ws-shell), the header and every pane on a near-black stage beside it (.ws-stage), and each pane - the chat, the preview, and inside the code view the file
+ * (index.css, .ws-shell), the header and every pane on a stage beside it that is the sidebar's own grey (.ws-stage), and each pane - the chat, the preview, and inside the code view the file
  * tree, the editor and the code lens - is its own rounded window (.ws-window) parted from the next by a narrow gap
  * that is also its resize handle (ui/resizable's ResizableGutter). The root carries .dash-night, so the page reads in
  * the dashboard's Inter and brighter text with unblurred glass. There is no sky here any more: every pane is opaque,
  * so the starfield it used to draw once showed nowhere but behind the header, and the blurred glass header over it is
- * gone with it. The windows step up from the surround in tone (index.css, the workspace section): they were once
- * darker than the surround they stood on and all but vanished into it, so the owner asked for every area to be told
- * apart - the surround is now the darkest thing on screen, each window lifted off it, its top band lighter again.
+ * gone with it. The windows step up from that grey in tone (index.css, the workspace section), so each reads as a card set on the
+ * sidebar's material, its top band lighter again; the chat window alone stays black (.ws-window-black), as it was.
  *
  * Every button and row answers hover and selection with the app's one highlight (the Build/Teach menu's gold wash,
  * index.css's --hl-* variables): the header's icon buttons are .icon-btn (a round wash, red for delete), and the
- * Preview/Code switch is a sunken track whose chip (.seg-pill) is the selected wash, sliding between the two. Each
+ * Preview/Code switch (ViewSwitch) is a sunken track whose chip (.seg-pill) is the selected wash - one flat gold, no gradient -
+ * sliding between the two; a single gold wash glides to the option under the pointer, as in the sidebar (hooks/use-glide-highlight), under the selected chip. Each
  * header icon also answers the pointer with a motion that suits it (.icon-pop, through HeaderIconButton's motion): the
  * pin tilts, the star turns, the download arrow drops, the fork leans.
  */
@@ -71,6 +76,7 @@ import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CodeXml, Download, Eye, GitFork, GraduationCap, History, PanelLeftClose, PanelLeftOpen, Pin, Star, Trash2, type LucideIcon } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
+import { ProjectUnavailable, WorkspaceSkeleton } from "@/components/app/ProjectLoadStates";
 import { ForkProjectDialog } from "@/components/ForkProjectDialog";
 import { canForkProject } from "@/lib/project-fork";
 import type { ImperativePanelHandle } from "react-resizable-panels";
@@ -109,8 +115,8 @@ import { codeLens, useCodeLens, type BuildStepQuestion } from "@/lib/code-lens-s
 import type { LessonQuestion } from "@/lib/lesson";
 import { useToast } from "@/hooks/use-toast";
 import type { RuntimeError } from "@/components/RuntimeErrorAlert";
+import { useGlideHighlight } from "@/hooks/use-glide-highlight";
 import { cn } from "@/lib/utils";
-import { ProjectLetter } from "@/components/ProjectSidebar";
 import { ProjectResponse, type ProjectSummaryResponse } from "@/lib/types";
 import type { CodeTarget } from "@/lib/lesson";
 import { ShareDialog } from "@/components/ShareDialog";
@@ -163,6 +169,43 @@ function HeaderIconButton({ label, onClick, disabled, destructive, star, motion 
       </TooltipTrigger>
       <TooltipContent side="bottom" className="px-2 py-1 text-xs">{label}</TooltipContent>
     </Tooltip>
+  );
+}
+
+function ViewSwitch({ viewMode, onChange, previewRunning }: { viewMode: ViewMode; onChange: (mode: ViewMode) => void; previewRunning: boolean }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const glideRef = useGlideHighlight(trackRef);
+  return (
+    <div ref={trackRef} role="tablist" aria-label="View" className="app-track relative grid grid-cols-2 p-0.5">
+      <span ref={glideRef} aria-hidden="true" className="glide-pill rounded-full" />
+      <span
+        aria-hidden="true"
+        className={cn(
+          "seg-pill absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] transition-transform duration-[650ms] ease-[cubic-bezier(0.34,1.35,0.64,1)] motion-reduce:transition-none",
+          viewMode === "code" && "translate-x-full"
+        )}
+      />
+      {VIEW_OPTIONS.map(({ mode, label, Icon }) => (
+        <button
+          key={mode}
+          type="button"
+          role="tab"
+          aria-selected={viewMode === mode}
+          data-glide=""
+          onClick={() => onChange(mode)}
+          className={cn(
+            "relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            viewMode === mode ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Icon className={cn("h-3.5 w-3.5 transition-colors", viewMode === mode && "text-primary")} />
+          {label}
+          {mode === "preview" && previewRunning && (
+            <span aria-label="running" className="h-1.5 w-1.5 rounded-full bg-syntax-string" />
+          )}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -247,7 +290,7 @@ function EditableProjectName({ name, canRename, onRename }: {
       }}
       className={cn(
         "group/row flex min-w-0 max-w-[22rem] rounded-md px-1.5 py-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        canRename && "cursor-text hover:bg-primary/10 hover:text-primary"
+        canRename && "cursor-text hover:bg-white/[0.06] hover:text-foreground"
       )}
     >
       <OverflowSlideText text={name} />
@@ -284,6 +327,8 @@ function ProjectWorkspace() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [loadFailure, setLoadFailure] = useState<ProjectLoadFailure | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [failedLoads, setFailedLoads] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null);
   const [filesVersion, setFilesVersion] = useState(0);
@@ -332,16 +377,21 @@ function ProjectWorkspace() {
     if (!projectId) return;
     let isCancelled = false;
 
-    setLoadFailure(null);
     api.getProject(projectId)
       .then((projectData) => {
         if (isCancelled) return;
+        setLoadFailure(null);
         setProject(projectData);
         projectChat.loadHistory(projectId);
       })
       .catch((error) => {
         console.error("Failed to load project:", error);
-        if (!isCancelled) setLoadFailure(projectLoadFailure(error));
+        if (isCancelled) return;
+        setLoadFailure(projectLoadFailure(error));
+        setFailedLoads((count) => count + 1);
+      })
+      .finally(() => {
+        if (!isCancelled) setIsRetrying(false);
       });
 
     return () => {
@@ -350,9 +400,26 @@ function ProjectWorkspace() {
   }, [projectId, loadAttempt]);
 
   useEffect(() => {
-    if (!chat.historyError) return;
+    setLoadFailure(null);
+    setFailedLoads(0);
+  }, [projectId]);
+
+  const [isChatRetrying, setIsChatRetrying] = useState(false);
+  const [chatLoadAttempt, setChatLoadAttempt] = useState(1);
+  const hasMessages = chat.messages.length > 0;
+
+  useEffect(() => {
+    if (!chat.historyError || !hasMessages) return;
     toast({ title: "Couldn't load the chat", description: chat.historyError, variant: "destructive" });
-  }, [chat.historyError, toast]);
+  }, [chat.historyError, hasMessages, toast]);
+
+  const retryChatHistory = useCallback(async () => {
+    if (!projectId) return;
+    setIsChatRetrying(true);
+    await projectChat.loadHistory(projectId);
+    setIsChatRetrying(false);
+    setChatLoadAttempt((attempt) => attempt + 1);
+  }, [projectId]);
 
   useEffect(() => {
     if (!chat.notice || !projectId) return;
@@ -676,24 +743,17 @@ function ProjectWorkspace() {
 
   if (loadFailure) {
     return (
-      <div className="dash-night ws-shell relative flex h-screen overflow-hidden">
-        <SidebarSpacer sidebar={sidebar} />
-        <div className="ws-stage relative flex min-w-0 flex-1 items-center justify-center p-6">
-          <div className="chat-enter flex max-w-md flex-col items-center gap-3 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.03] text-muted-foreground">
-              <Eye className="h-5 w-5" />
-            </span>
-            <h1 className="text-lg font-semibold text-foreground">{loadFailure.title}</h1>
-            <p className="text-sm leading-relaxed text-muted-foreground">{loadFailure.detail}</p>
-            <div className="mt-2 flex items-center gap-2">
-              {loadFailure.kind === "error" && (
-                <Button variant="outline" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</Button>
-              )}
-              <Button onClick={() => navigate("/projects")}>Back to your projects</Button>
-            </div>
-          </div>
-        </div>
-        <AppSidebar sidebar={sidebar} inset />
+      <div className="dash-night relative flex h-screen overflow-hidden bg-background">
+        <ProjectUnavailable
+          failure={loadFailure}
+          attempt={failedLoads - 1}
+          isRetrying={isRetrying}
+          onRetry={() => {
+            setIsRetrying(true);
+            setLoadAttempt((attempt) => attempt + 1);
+          }}
+          onBack={() => navigate("/projects")}
+        />
       </div>
     );
   }
@@ -750,7 +810,6 @@ function ProjectWorkspace() {
           <div className="flex min-w-0 items-center">
             {project ? (
               <div className="flex min-w-0 items-center gap-1 pl-1">
-                <ProjectLetter name={title} current />
                 <EditableProjectName name={title} canRename={canEdit} onRename={handleRename} />
                 <div className="ml-1 flex shrink-0 items-center">
                   <HeaderIconButton
@@ -779,34 +838,7 @@ function ProjectWorkspace() {
           </div>
 
           <div className="flex items-center justify-center gap-2">
-          <div role="tablist" aria-label="View" className="app-track relative grid grid-cols-2 p-0.5">
-            <span
-              aria-hidden="true"
-              className={cn(
-                "seg-pill absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] transition-transform duration-[650ms] ease-[cubic-bezier(0.34,1.35,0.64,1)] motion-reduce:transition-none",
-                viewMode === "code" && "translate-x-full"
-              )}
-            />
-            {VIEW_OPTIONS.map(({ mode, label, Icon }) => (
-              <button
-                key={mode}
-                type="button"
-                role="tab"
-                aria-selected={viewMode === mode}
-                onClick={() => setViewMode(mode)}
-                className={cn(
-                  "relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  viewMode === mode ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Icon className={cn("h-3.5 w-3.5 transition-colors", viewMode === mode && "text-primary")} />
-                {label}
-                {mode === "preview" && livePreview.preview?.status === "RUNNING" && (
-                  <span aria-label="running" className="h-1.5 w-1.5 rounded-full bg-syntax-string" />
-                )}
-              </button>
-            ))}
-          </div>
+          <ViewSwitch viewMode={viewMode} onChange={setViewMode} previewRunning={livePreview.preview?.status === "RUNNING"} />
               {!isViewer && (
                 <HeaderIconButton
                   label={isChatCollapsed ? "Open chat" : "Close chat"}
@@ -871,11 +903,13 @@ function ProjectWorkspace() {
         </header>
 
         <div className="min-h-0 flex-1 pb-2 pr-2">
-          {isViewer ? (
+          {!project ? (
+            <WorkspaceSkeleton chatPercent={chatPanelPercent} showChat />
+          ) : isViewer ? (
             workArea
           ) : (
             <ResizablePanelGroup direction="horizontal" className="h-full">
-              <ResizablePanel ref={chatPanelRef} defaultSize={chatPanelPercent} minSize={20} maxSize={65} collapsible collapsedSize={0} onCollapse={() => setIsChatCollapsed(true)} onExpand={() => setIsChatCollapsed(false)} className={cn("ws-window", isChatCollapsed && "border-0")}>
+              <ResizablePanel ref={chatPanelRef} defaultSize={chatPanelPercent} minSize={20} maxSize={65} collapsible collapsedSize={0} onCollapse={() => setIsChatCollapsed(true)} onExpand={() => setIsChatCollapsed(false)} className={cn("ws-window ws-window-black", isChatCollapsed && "border-0")}>
                 <ChatPanel
                   messages={chat.messages}
                   quotaBlock={quotaBlock}
@@ -883,6 +917,11 @@ function ProjectWorkspace() {
                   onSendMessage={handleSendMessage}
                   isStreaming={chat.isStreaming}
                   isLoading={!chat.isHistoryLoaded}
+                  loadError={
+                    chat.historyError
+                      ? { message: chat.historyError, onRetry: () => void retryChatHistory(), isRetrying: isChatRetrying, attempt: chatLoadAttempt }
+                      : null
+                  }
                   readOnly={isViewer}
                   onOpenFile={handleOpenFile}
                   sharedWith={

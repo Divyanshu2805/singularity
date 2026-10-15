@@ -66,6 +66,42 @@ export function starWeight(x: number, y: number) {
     return column + (1 - column) * smooth(clamp((y - 0.5) / 0.18));
 }
 
+export interface NebulaGlint {
+    x: number;
+    y: number;
+    radius: number;
+    alpha: number;
+    phase: number;
+    pace: number;
+    flare: boolean;
+}
+
+const GLINT_AREA = 8000;
+
+export function glintCount(width: number, height: number) {
+    return Math.min(180, Math.max(28, Math.round((width * height) / GLINT_AREA)));
+}
+
+/** Tiny fast-twinkling points for the dark upper sky, thickest at the very top and gone by the coloured foot; seeded like the stars. */
+export function scatterGlints(count: number, seed = 31): NebulaGlint[] {
+    const random = seeded(seed);
+    const between = (low: number, high: number) => low + random() * (high - low);
+    const glints: NebulaGlint[] = [];
+    while (glints.length < count) {
+        const y = Math.pow(random(), 1.4) * 0.7;
+        glints.push({
+            x: random(),
+            y,
+            radius: between(0.45, 1.05),
+            alpha: between(0.5, 1),
+            phase: between(0, Math.PI * 2),
+            pace: between(0.0011, 0.0034),
+            flare: random() < 0.08,
+        });
+    }
+    return glints;
+}
+
 export function scatterStars(count: number, seed = 7): NebulaStar[] {
     const random = seeded(seed);
     const between = (low: number, high: number) => low + random() * (high - low);

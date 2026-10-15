@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildContentSecurityPolicy, buildContentSecurityPolicyHeaderDirective } from "../../csp";
 import { CSRF_HEADER, needsCsrf, readCsrfToken } from "./csrf";
 import { friendlyFirebaseError } from "./firebase";
-import { api, isAuthenticated, loginRedirectPath, startSession } from "./api";
+import { api, getUserPhoto, isAuthenticated, loginRedirectPath, removeUserInfo, startSession } from "./api";
 
 describe("csrf", () => {
   it("reads the token cookie among others, decoded", () => {
@@ -72,6 +72,24 @@ describe("session hint", () => {
 
     expect(isAuthenticated()).toBe(true);
     expect(JSON.stringify(localStorage)).not.toMatch(/eyJ/);
+  });
+
+  it("keeps the sign-in's picture for the avatar only when it is an https address, and forgets it on sign-out", () => {
+    const session = { user: { id: 1, username: "a@b.co", name: "A" }, expiresAt: new Date(Date.now() + 60_000).toISOString(), newAccount: false, secondFactorUsed: false };
+
+    startSession(session, "https://lh3.googleusercontent.com/a/photo");
+    expect(getUserPhoto()).toBe("https://lh3.googleusercontent.com/a/photo");
+
+    startSession(session, "javascript:alert(1)");
+    expect(getUserPhoto()).toBeNull();
+
+    startSession(session, "https://lh3.googleusercontent.com/a/photo");
+    startSession(session, null);
+    expect(getUserPhoto()).toBeNull();
+
+    startSession(session, "https://lh3.googleusercontent.com/a/photo");
+    removeUserInfo();
+    expect(getUserPhoto()).toBeNull();
   });
 
   it("an expired hint is signed out, and says the session lapsed", () => {

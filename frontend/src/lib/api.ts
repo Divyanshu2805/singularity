@@ -20,7 +20,9 @@
  * if this browser has none, and re-fetched once if the server rejects it, which is what a stale token looks like. A
  * network failure is rewritten into a clear sentence rather than the browser's vague default (one that names the
  * Gateway's port only in development - a visitor to the deployed app was once told to start a backend), and a 401 takes the app
- * through a full sign-out so no stale state survives.
+ * through a full sign-out so no stale state survives. Every response, or its absence, is also reported to
+ * lib/server-reach, which turns the whole page into one "can't reach Singularity" screen while nobody answers;
+ * probeServer is how that screen asks again.
  *
  * Requests are relative by default: in development Vite proxies them to the Gateway, so the browser only ever talks
  * to one origin and the SameSite cookie is always sent.
@@ -30,6 +32,8 @@ import { splitPeople, type ProjectPeople } from "./members";
 import { createSseParser, type SseEvent } from "./sse";
 import { CSRF_HEADER, ensureCsrfToken, needsCsrf, readCsrfToken } from "./csrf";
 import { clearSignedInState, signOutRedirect } from "./session";
+import { slideOutThenGo } from "./page-slide";
+import { answerKey, isNobodyAnswering, reportAnswer, reportNoAnswer } from "./server-reach";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -37,15 +41,28 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 export const projectThumbnailUrl = (projectId: number | string, takenAt: string) =>
   `${BASE_URL}/api/projects/${projectId}/thumbnail?v=${encodeURIComponent(takenAt)}`;
 
-const SERVER_UNREACHABLE = import.meta.env.DEV
+export const SERVER_UNREACHABLE = import.meta.env.DEV
   ? "Can't reach the Singularity server. Make sure the backend is running (the Gateway listens on port 8000)."
   : "Can't reach Singularity right now. Check your internet connection and try again in a moment.";
 
 const rawFetch = (input: string, init?: RequestInit) =>
-  fetch(input, { credentials: "same-origin", ...init }).catch((error: unknown) => {
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error(SERVER_UNREACHABLE);
-  });
+  fetch(input, { credentials: "same-origin", ...init }).then(
+    (response) => {
+      reportAnswer(answerKey(input, init?.method), isNobodyAnswering(response.status, response.headers.get("Content-Type"), init?.method));
+      return response;
+    },
+    (error: unknown) => {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      reportNoAnswer();
+      throw new Error(SERVER_UNREACHABLE);
+    },
+  );
+
+export const probeServer = () =>
+  rawFetch(`${BASE_URL}/api/auth/csrf`).then(
+    () => undefined,
+    () => undefined,
+  );
 
 const withCsrfHeader = (init: RequestInit | undefined): RequestInit => {
   const headers = new Headers(init?.headers);
@@ -84,10 +101,11 @@ export const renewSession = (session: SessionResponse) => {
   setUserInfo(session.user);
 };
 
-export const startSession = (session: SessionResponse) => {
+export const startSession = (session: SessionResponse, photoUrl?: string | null) => {
   clearSignedInState();
   localStorage.setItem(SESSION_HINT_KEY, session.expiresAt);
   setUserInfo(session.user);
+  setUserPhoto(photoUrl);
 };
 
 export const isAuthenticated = () => hasSessionHint() && !!getUserInfo();
@@ -104,7 +122,19 @@ export const getUserInfo = (): { id: number; username: string; name: string } | 
   return userInfo ? JSON.parse(userInfo) : null;
 };
 
-export const removeUserInfo = () => localStorage.removeItem("user_info");
+export const removeUserInfo = () => {
+  localStorage.removeItem("user_info");
+  localStorage.removeItem(USER_PHOTO_KEY);
+};
+
+const USER_PHOTO_KEY = "user_photo";
+
+const setUserPhoto = (photoUrl?: string | null) => {
+  if (photoUrl && /^https:\/\//i.test(photoUrl)) localStorage.setItem(USER_PHOTO_KEY, photoUrl);
+  else localStorage.removeItem(USER_PHOTO_KEY);
+};
+
+export const getUserPhoto = (): string | null => localStorage.getItem(USER_PHOTO_KEY);
 
 export const OPEN_TABS_KEY = "open_tabs";
 export const ACTIVE_TAB_KEY = "active_tab";
@@ -122,7 +152,8 @@ export const signOut = (to = "/login") => {
   removeUserInfo();
   clearSignedInState();
   if (!window.location.pathname.startsWith("/login")) {
-    signOutRedirect(to);
+    if ((to.startsWith("/login") && !to.includes("expired")) || to === "/") slideOutThenGo(() => signOutRedirect(to));
+    else signOutRedirect(to);
   }
 };
 
@@ -578,6 +609,12 @@ export const api = {
   async unpublish(projectId: string): Promise<void> {
     const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/publish`, { method: "DELETE" });
     await ensureOk(response, "Couldn't unpublish the app");
+  },
+
+  async cancelPublish(projectId: string): Promise<PublishState> {
+    const response = await apiFetch(`${BASE_URL}/api/projects/${projectId}/publish/build`, { method: "DELETE" });
+    await ensureOk(response, "Couldn't stop publishing");
+    return response.json();
   },
 
   async setCodeShared(projectId: string, shared: boolean): Promise<PublishState> {

@@ -103,12 +103,10 @@ Lighthouse 12 on the production build, served by the nginx image and configurati
 
 | Page | As | Performance | Accessibility | Best practices | SEO | First paint | Largest paint |
 |---|---|---|---|---|---|---|---|
-| `/` | Phone on slow 4G | 36 | 100 | 100 | 100 | 3.7 s | 6.1 s |
-| `/` | Desktop | 68 | 100 | 100 | 100 | 0.8 s | 1.3 s |
 | `/login` | Phone on slow 4G | 82 | 100 | 100 | 100 | 3.1 s | 3.9 s |
 | `/login` | Desktop | 97 | 100 | 100 | 100 | 0.9 s | 0.9 s |
 
-Accessibility, best practices and SEO are enforced in CI (floors of 95, 95 and 90). Performance is reported and not enforced: it is a simulated slow phone on whatever machine runs it, and the landing page's score is its animation - 1.4 s of blocked main thread on that simulated phone. The landing page is being rebuilt; that number is the one to beat.
+Accessibility, best practices and SEO are enforced in CI (floors of 95, 95 and 90). Performance is reported and not enforced: it is a simulated slow phone on whatever machine runs it. There is no landing page at the moment - `/` sends a visitor to `/login` - so the sign-in page is what a first visit loads.
 
 **What a visitor downloads.** The project view was one 931 kB script. The code editor, the Markdown renderer and the charts are now files of their own that only the pages using them load, and the server compresses text:
 
@@ -122,20 +120,20 @@ Accessibility, best practices and SEO are enforced in CI (floors of 95, 95 and 9
 
 | | Lines | Branches |
 |---|---|---|
-| Backend, all modules | 67.2% | 66.5% |
-| - intelligence-service (the build pipeline) | 80.1% | 76.3% |
-| - workspace-service (projects, files, previews) | 64.1% | 60.0% |
-| - account-service (sessions, billing) | 43.5% | 29.6% |
-| - common-lib (the shared security kit) | 29.3% | 33.6% |
-| Frontend, `src/lib` - where the logic and the tests are | 77.5% | 87.3% |
-| Frontend, the whole app | 27.3% | 84.0% |
+| Backend, all modules | 74.9% | 72.2% |
+| - intelligence-service (the build pipeline) | 82.2% | 77.1% |
+| - workspace-service (projects, files, previews) | 79.1% | 75.4% |
+| - account-service (sessions, billing) | 49.8% | 34.0% |
+| - common-lib (the shared security kit) | 28.1% | 31.9% |
+| Frontend, `src/lib` - where the logic and the tests are | 77.4% | 88.4% |
+| Frontend, the whole app | 42.6% | 85.6% |
 
-The whole-app figure for the frontend is low because most of the rest is the landing page and the sign-in screens, which are checked by eye and by the browser journey rather than rendered in unit tests. Each backend module and both frontend figures have a floor a little under these, and the build fails beneath it ([testing](testing.md#coverage)).
+Measured 2026-10-15 (`./mvnw verify && scripts/coverage-summary.sh`, `npm run coverage`). What the whole-app figure leaves out is mostly the sign-in screens and the canvas skies, which are checked by eye and by the browser journey rather than rendered in unit tests. Each backend module and both frontend figures have a floor a little under these, and the build fails beneath it ([testing](testing.md#coverage)).
 
 | Suite | Size |
 |---|---|
-| Backend | 1,593 tests |
-| Frontend | 947 tests |
+| Backend | 1,602 tests |
+| Frontend | 921 tests |
 | Preview proxy | 92 tests |
 | A real preview on a cluster | 11 steps on one project |
 | The browser journey | 16 steps in about a minute, and 7 steps with two people in about half a minute |

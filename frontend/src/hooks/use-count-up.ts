@@ -13,7 +13,7 @@
  * count on its target even if the frames stop part-way.
  */
 import { useEffect, useRef, useState } from "react";
-import { usePrefersReducedMotion } from "@/components/landing/motion";
+import { usePrefersReducedMotion } from "@/components/motion/motion";
 import { countUpAt } from "@/lib/count-up";
 
 const DURATION_MS = 480;

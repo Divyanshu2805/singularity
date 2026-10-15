@@ -343,9 +343,9 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
-      - name: Audit the landing and sign-in pages
+      - name: Audit the sign-in and pricing pages
         working-directory: e2e
-        run: node lighthouse.mjs http://127.0.0.1:14180/ http://127.0.0.1:14180/login
+        run: node lighthouse.mjs http://127.0.0.1:14180/login http://127.0.0.1:14180/pricing
 
       - name: Report the scores
         if: always()

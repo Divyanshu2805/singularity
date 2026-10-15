@@ -18,7 +18,7 @@
  * downward as an answer streamed in, since a dialog is centred. For the same reason everything that comes and goes
  * has a place kept for it: the line that says what is being written and the row of actions sit in a foot that is
  * always there, a word being defined takes its alphabetical place in the list at once rather than a row at the top
- * that then moves, and its comet sits after the word so the word does not shift when it goes. While the first words
+ * that then moves, and its ripple sits after the word so the word does not shift when it goes. While the first words
  * are on their way the pane shows the app's skeleton lines, where it once went on showing the empty state.
  *
  * It is drawn with the app's own pieces: a dialog, the header's sliding track for its two tabs, the lesson cards of
@@ -30,7 +30,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, BookOpen, CircleAlert, Compass, FilePen, GraduationCap, ListChecks, Map as MapIcon, MessagesSquare, Pencil, Search, Trash2 } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { ChatMarkdown } from "@/components/ChatMarkdown";
-import { Prose, TaughtCard } from "@/components/ChatEventRenderer";
+import { Prose, TaughtCard, sectionTone } from "@/components/ChatEventRenderer";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { cleanTerm, filterEntries, findEntry, isNotATerm, termKey } from "@/lib/learn";
@@ -38,6 +39,7 @@ import { learnPanel, useLearnPanel, type LearnTab } from "@/lib/learn-panel-stor
 import { parseBigPicture, termQuestion, type LessonQuestion } from "@/lib/lesson";
 import { forget, readTourBase, requestTour, termStateKey, tourKey, useLesson } from "@/lib/lesson-store";
 import { timeAgo } from "@/lib/revisions";
+import { useGlideHighlight } from "@/hooks/use-glide-highlight";
 import { cn } from "@/lib/utils";
 
 const TABS: { id: LearnTab; label: string; Icon: typeof MapIcon }[] = [
@@ -48,8 +50,8 @@ const TABS: { id: LearnTab; label: string; Icon: typeof MapIcon }[] = [
 const tourIcon = (title: string) =>
   /file/i.test(title) ? FilePen : /click|travel|work/i.test(title) ? ListChecks : /change/i.test(title) ? Pencil : Compass;
 
-const CHIP = "app-chip inline-flex h-7 shrink-0 items-center gap-1.5 px-3 text-xs text-foreground/90 disabled:pointer-events-none disabled:opacity-50";
-const FOOT = "flex h-11 shrink-0 items-center gap-2 border-t border-white/[0.08] pt-3";
+const CHIP = "app-chip ml-auto inline-flex h-7 shrink-0 items-center gap-1.5 px-3 text-xs text-foreground/90 disabled:pointer-events-none disabled:opacity-50";
+const FOOT = "flex h-12 shrink-0 items-center gap-3 border-t border-white/[0.08] pt-3";
 
 function Writing({ label }: { label: string }) {
   return (
@@ -67,7 +69,14 @@ function Writing({ label }: { label: string }) {
 
 function Status({ children, tone }: { children: ReactNode; tone?: "error" }) {
   return (
-    <span className={cn("flex min-w-0 flex-1 items-center gap-1.5 text-[11.5px]", tone === "error" ? "text-destructive" : "text-muted-foreground")}>
+    <span
+      className={cn(
+        "flex min-w-0 items-center gap-1.5 text-[11.5px]",
+        tone === "error"
+          ? "rounded-full border border-destructive/25 bg-destructive/10 px-2.5 py-1 text-destructive animate-in fade-in-0 slide-in-from-left-1 duration-300 motion-reduce:animate-none"
+          : "flex-1 text-muted-foreground"
+      )}
+    >
       {children}
     </span>
   );
@@ -117,14 +126,18 @@ function TourTab({ projectId, changedAt, latestRevision, onOpenFile }: {
       : !Number.isNaN(writtenAt) && !Number.isNaN(changed) && changed > writtenAt);
 
   return (
-    <div role="tabpanel" aria-label="Project tour" className="flex min-h-0 flex-1 flex-col">
-      <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pb-3 pr-2 [scrollbar-gutter:stable]">
+    <div role="tabpanel" aria-label="Project tour" className="flex min-h-0 flex-1 flex-col animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
+      <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pb-4 pr-2 [scrollbar-gutter:stable]">
         {picture ? (
-          <div className="min-w-0 space-y-3">
-            {picture.intro && <Prose text={picture.intro} onTerm={onTerm} onPath={onPath} />}
+          <div className="mx-auto min-w-0 max-w-[52rem] space-y-5">
+            {picture.intro && (
+              <div className="space-y-2 px-0.5 [&_p]:text-[15px] [&_p]:leading-[1.75] [&_p]:text-foreground/90">
+                <Prose roomy text={picture.intro} onTerm={onTerm} onPath={onPath} />
+              </div>
+            )}
             {picture.sections.map((section, index) => (
-              <TaughtCard key={`${section.title}-${index}`} title={section.title} Icon={tourIcon(section.title)}>
-                <Prose text={section.text} onTerm={onTerm} onPath={onPath} />
+              <TaughtCard key={`${section.title}-${index}`} title={section.title} Icon={tourIcon(section.title)} tone={sectionTone(section.title)}>
+                <Prose roomy text={section.text} onTerm={onTerm} onPath={onPath} />
               </TaughtCard>
             ))}
           </div>
@@ -134,7 +147,7 @@ function TourTab({ projectId, changedAt, latestRevision, onOpenFile }: {
           <Writing label="Reading your files" />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-primary">
+            <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.03] text-primary">
               <MapIcon className="h-4 w-4" />
             </span>
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
@@ -169,16 +182,18 @@ function TourTab({ projectId, changedAt, latestRevision, onOpenFile }: {
           </Status>
         )}
         {picture ? (
-          <button
+          <Button
             type="button"
+            size="sm"
+            variant="chip"
             disabled={isWriting}
             onClick={() => requestTour(projectId, true, latestRevision)}
             title="Reads your files again and replaces this tour. It uses some of your daily allowance."
-            className={cn(CHIP, isOutOfDate && "ring-1 ring-primary/50")}
+            className="ml-auto h-9 shrink-0 gap-2 px-4 text-[13px] font-medium text-foreground/90"
           >
-            <MapIcon className="h-3 w-3 text-primary/80" />
+            <MapIcon className="!size-3.5" />
             {isOutOfDate ? "Update the tour" : "Write it again"}
-          </button>
+          </Button>
         ) : (
           <button type="button" disabled={isWriting || isLoading} onClick={() => requestTour(projectId, false, latestRevision)} className={CHIP}>
             <MapIcon className="h-3 w-3 text-primary/80" />
@@ -251,9 +266,9 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
   const problem = failure ?? (live?.status === "error" ? live.error ?? "Couldn't define this word." : null);
 
   return (
-    <div role="tabpanel" aria-label="Glossary" className="flex min-h-0 flex-1 flex-col gap-3">
+    <div role="tabpanel" aria-label="Glossary" className="flex min-h-0 flex-1 flex-col gap-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
       <form
-        className="app-field relative flex shrink-0 items-center gap-1.5 rounded-2xl p-1.5"
+        className="app-field relative flex shrink-0 items-center gap-1.5 rounded-2xl p-2"
         onSubmit={(event) => {
           event.preventDefault();
           submit();
@@ -266,20 +281,20 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
           placeholder="Find a word, or look up a new one such as props"
           aria-label="Look up a word"
           onChange={(event) => setTyped(event.target.value)}
-          className="min-w-0 flex-1 bg-transparent py-1 pr-1 text-[13px] text-foreground caret-primary outline-none placeholder:text-muted-foreground"
+          className="min-w-0 flex-1 bg-transparent py-1 pr-1 text-sm text-foreground caret-primary outline-none placeholder:text-muted-foreground"
         />
         <button
           type="submit"
           disabled={!typedWord}
           aria-label={hasTyped ? "Open this word" : "Define this word"}
           title={hasTyped ? "Open this word" : "Define this word"}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[transform,opacity] duration-200 hover:scale-105 active:scale-95 disabled:pointer-events-none disabled:bg-white/[0.08] disabled:text-muted-foreground"
+          className="app-send h-8 w-8 shrink-0"
         >
           <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.4} />
         </button>
       </form>
 
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 sm:grid-cols-[11rem_minmax(0,1fr)] sm:grid-rows-1">
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 sm:grid-cols-[15rem_minmax(0,1fr)] sm:grid-rows-1">
         <div className="min-h-0 min-w-0 sm:overflow-y-auto sm:pr-1 sm:[scrollbar-gutter:stable]">
           {entries.isLoading ? (
             <div className="flex gap-1.5 sm:flex-col" aria-label="Loading your words">
@@ -297,15 +312,19 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
             </p>
           ) : (
             <ul aria-label="Your words" className="flex gap-1 overflow-x-auto pb-1 sm:flex-col sm:overflow-visible sm:pb-0">
-              {words.map((word) => (
-                <li key={word.key} className="group/word relative shrink-0 sm:shrink">
+              {words.map((word, position) => (
+                <li
+                  key={word.key}
+                  style={{ animationDelay: `${Math.min(position, 12) * 30}ms` }}
+                  className="group/word relative shrink-0 animate-in fade-in-0 slide-in-from-left-2 fill-mode-both duration-300 motion-reduce:animate-none sm:shrink"
+                >
                   <button
                     type="button"
                     aria-current={word.key === openKey}
                     aria-busy={word.pending || undefined}
                     onClick={() => learnPanel.selectTerm(word.term)}
                     className={cn(
-                      "flex h-7 w-full max-w-[12rem] items-center gap-1.5 rounded-lg px-2.5 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-none",
+                      "flex h-9 w-full max-w-[12rem] items-center gap-1.5 rounded-xl px-3.5 text-left text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-none",
                       !word.pending && "pr-7",
                       word.key === openKey ? "row-active" : "hl-row text-foreground/85"
                     )}
@@ -319,7 +338,7 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
                       aria-label={`Remove ${word.term} from your glossary`}
                       title="Remove from your glossary"
                       onClick={() => void removeWord(word.term)}
-                      className="absolute right-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity duration-150 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 group-hover/word:opacity-100"
+                      className="icon-btn icon-btn-danger absolute right-1 top-1/2 z-10 h-5 w-5 -translate-y-1/2 rounded-md opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover/word:opacity-100"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
@@ -330,25 +349,30 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
           )}
         </div>
 
-        <div className="flex min-h-0 min-w-0 flex-col rounded-xl border border-white/[0.07] bg-white/[0.025]">
+        <div className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-white/[0.08] bg-white/[0.025]">
           {!term ? (
-            <p className="flex flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-muted-foreground">
-              Pick one of your words to read it again, or look a new one up.
-            </p>
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center animate-in fade-in-0 zoom-in-95 duration-500 motion-reduce:animate-none">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/25 bg-primary/[0.08] text-primary shadow-[0_0_28px_-8px_hsl(var(--primary)/0.5)]">
+                <BookOpen className="h-5 w-5" />
+              </span>
+              <p className="max-w-xs text-[13px] leading-relaxed text-muted-foreground">
+                Pick one of your words to read it again, or look a new one up.
+              </p>
+            </div>
           ) : (
-            <>
-              <h3 className="shrink-0 truncate border-b border-white/[0.07] px-3.5 py-2.5 font-display text-[15px] font-semibold tracking-tight text-foreground" title={term}>
+            <div key={openKey} className="flex min-h-0 flex-1 flex-col animate-in fade-in-0 slide-in-from-right-2 duration-300 motion-reduce:animate-none">
+              <h3 className="shrink-0 truncate border-b border-white/[0.07] px-5 py-3.5 font-display text-[18px] font-semibold tracking-tight text-foreground" title={term}>
                 {entry?.term ?? term}
               </h3>
-              <div ref={entryRef} className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3 [scrollbar-gutter:stable]">
+              <div ref={entryRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4 [scrollbar-gutter:stable]">
                 {text ? (
-                  <ChatMarkdown className="text-[13px]">{text}</ChatMarkdown>
+                  <ChatMarkdown className="text-[14.5px]">{text}</ChatMarkdown>
                 ) : problem ? null : (
                   <Writing label="Looking for it in your project" />
                 )}
                 {isRefused && !isWriting && <p className="mt-2 text-[11.5px] text-muted-foreground">It was not added to your glossary.</p>}
               </div>
-              <div className={cn(FOOT, "mx-3.5 mb-2.5")}>
+              <div className={cn(FOOT, "mx-5 mb-3")}>
                 {problem ? (
                   <Status tone="error">
                     <CircleAlert className="h-3.5 w-3.5 shrink-0" />
@@ -385,7 +409,7 @@ function GlossaryTab({ projectId, term, onAsk }: { projectId: string; term: stri
                   )
                 )}
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -407,16 +431,21 @@ export function LearnPanel({ projectId, changedAt, latestRevision, onOpenFile, o
     <Dialog open={open} onOpenChange={(next) => { if (!next) learnPanel.close(); }}>
       <DialogContent
         aria-describedby={undefined}
-        className="flex h-[min(40rem,calc(100dvh-2rem))] w-[calc(100vw-1.5rem)] flex-col gap-3.5 rounded-[22px] p-5 sm:max-w-3xl sm:p-6"
+        className="flex h-[min(52rem,calc(100dvh-2rem))] w-[calc(100vw-1.5rem)] flex-col gap-5 overflow-hidden rounded-[28px] p-5 sm:max-w-5xl sm:p-8"
       >
-        <DialogHeader className="shrink-0 flex-row flex-wrap items-center gap-3 space-y-0 text-left sm:pr-9">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-primary">
-            <GraduationCap className="h-4 w-4" />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(60%_100%_at_50%_0%,hsl(42_100%_62%/0.09),transparent)]"
+        />
+        <DialogHeader className="relative shrink-0 flex-row flex-wrap items-center gap-4 space-y-0 border-b border-white/[0.07] pb-5 text-left sm:pr-10">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/[0.08] text-primary shadow-[0_0_28px_-8px_hsl(var(--primary)/0.55)]">
+            <GraduationCap className="h-5 w-5" />
           </div>
-          <DialogTitle className="min-w-0 flex-1 truncate pr-9 sm:pr-0">Learn your project</DialogTitle>
-          <div role="tablist" aria-label="Learning tools" className="app-track relative grid w-full shrink-0 grid-cols-2 p-0.5 sm:w-auto">
-            <TabButtons tab={panel.tab} />
+          <div className="min-w-0 flex-1 pr-9 sm:pr-0">
+            <DialogTitle className="truncate font-display text-[22px] font-semibold tracking-tight sm:text-2xl">Learn your project</DialogTitle>
+            <p className="mt-0.5 truncate text-[13px] text-muted-foreground">A map of your project, and the words you meet along the way.</p>
           </div>
+          <TabButtons tab={panel.tab} />
         </DialogHeader>
 
         {open && projectId && (panel.tab === "tour"
@@ -428,8 +457,11 @@ export function LearnPanel({ projectId, changedAt, latestRevision, onOpenFile, o
 }
 
 function TabButtons({ tab }: { tab: LearnTab }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const glideRef = useGlideHighlight(trackRef);
   return (
-    <>
+    <div ref={trackRef} role="tablist" aria-label="Learning tools" className="app-track relative grid w-full shrink-0 grid-cols-2 p-0.5 sm:w-auto">
+      <span ref={glideRef} aria-hidden="true" className="glide-pill rounded-full" />
       <span
         aria-hidden="true"
         className={cn(
@@ -443,6 +475,7 @@ function TabButtons({ tab }: { tab: LearnTab }) {
           type="button"
           role="tab"
           aria-selected={tab === id}
+          data-glide=""
           onClick={() => learnPanel.setTab(id)}
           className={cn(
             "relative z-10 flex h-7 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-xs font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -453,6 +486,6 @@ function TabButtons({ tab }: { tab: LearnTab }) {
           {label}
         </button>
       ))}
-    </>
+    </div>
   );
 }

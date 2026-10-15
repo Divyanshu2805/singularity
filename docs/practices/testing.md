@@ -4,8 +4,8 @@
 
 | Suite | Command | Size | Needs |
 |---|---|---|---|
-| Backend (all modules) | `./mvnw test` | 1,593 tests — common-lib 31, gateway 94, account 67, workspace 720, intelligence 681 | Docker, for one integration test (below) |
-| Frontend | `cd frontend && npm test` | 947 tests in 74 files (Vitest) | — |
+| Backend (all modules) | `./mvnw test` | 1,602 tests — common-lib 31, gateway 95, account 67, workspace 728, intelligence 681 | Docker, for one integration test (below) |
+| Frontend | `cd frontend && npm test` | 921 tests in 73 files (Vitest) | — |
 | Preview proxy | `cd proxy && node --test` | 92 tests: the access token, routing, the script injected into a previewed page (run against a stand-in window), the card picture the page draws of itself (`snapshot.js`), editing the page's words in place (`text-edit.js`), and publishing - the host and path rules, the headers, the storage signature (checked against AWS's own worked example) and the whole handler against a stand-in store | — |
 | The starter template's launcher | `node --test scripts/starter-launcher.test.mjs` | 8 tests: `start.mjs`, which runs a built project as one program on a host - the pages, the fallback for an app's own addresses, files outside the build staying out of reach, and `/api` on an app with no server | — |
 | A real preview on kind | see [below](#the-preview-pipeline-test) | 11 steps on one project (`PreviewPipelineIT`); not part of `./mvnw test` | A kind cluster and Docker |
@@ -86,7 +86,7 @@ The floors sit a little under what was measured when they were set ([the numbers
 ```bash
 cd frontend && npm run build
 # serve frontend/dist from the nginx image, as the `lighthouse` job in ci.yml does, then:
-(cd e2e && node lighthouse.mjs http://127.0.0.1:14180/ http://127.0.0.1:14180/login)
+(cd e2e && node lighthouse.mjs http://127.0.0.1:14180/login http://127.0.0.1:14180/pricing)
 ```
 
 Audits the pages anyone can open without signing in, as a phone and as a desktop. Accessibility, best practices and SEO are held to floors and fail the job; performance is reported and not enforced, since it measures the machine as much as the page. CI runs it on every push and pull request (job `lighthouse`).

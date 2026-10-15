@@ -151,9 +151,6 @@ export const sharePath = (slug: string) => `/p/${slug}`;
 
 export const shareUrl = (origin: string, slug: string) => `${origin}${sharePath(slug)}`;
 
-/** The text a person can paste to a friend. */
-export const shareMessage = (name: string, url: string) => `${name} - ${url}`;
-
 /** The file whose presence gives a project a server (PreviewBootstrapper.SERVER_ENTRY on the server side). */
 export const SERVER_ENTRY = "server/index.ts";
 

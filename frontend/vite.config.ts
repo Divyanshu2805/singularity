@@ -3,7 +3,11 @@
  *
  * Handles: the React plugin, the path alias, injecting the Content Security Policy into production builds (as a meta
  * tag, and as the csp-header.conf nginx include that serves it as a header too), and
- * proxying API calls in development.
+ * proxying API calls in development, and keeping the entry script render-blocking in a build (renderBlockingEntry).
+ *
+ * index.html marks the entry script blocking="render" so the app's code - which listens for pagereveal, the moment a
+ * signing-out slide arrives (lib/page-slide.ts) - runs before the first paint; Vite writes its own tag for the built
+ * entry and drops the attribute, so the build puts it back.
  *
  * The proxy is what keeps API calls same-origin in development, so the app works on any port without depending on
  * backend CORS and the SameSite session cookie is always sent. It points at the Gateway, which is the browser's
@@ -41,6 +45,15 @@ const contentSecurityPolicyHeader = (env: Record<string, string>): Plugin => ({
   apply: "build",
   closeBundle() {
     writeFileSync(path.resolve(__dirname, "csp-header.conf"), buildContentSecurityPolicyHeaderDirective(env));
+  },
+});
+
+const renderBlockingEntry = (): Plugin => ({
+  name: "render-blocking-entry",
+  apply: "build",
+  transformIndexHtml: {
+    order: "post",
+    handler: (html) => html.replace(/<script type="module" crossorigin src="([^"]+)">/, '<script type="module" crossorigin blocking="render" src="$1">'),
   },
 });
 
@@ -89,7 +102,7 @@ export default defineConfig(({ mode }) => {
         output: { manualChunks: vendorChunk },
       },
     },
-    plugins: [react(), contentSecurityPolicy(env), contentSecurityPolicyHeader(env)],
+    plugins: [react(), contentSecurityPolicy(env), contentSecurityPolicyHeader(env), renderBlockingEntry()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

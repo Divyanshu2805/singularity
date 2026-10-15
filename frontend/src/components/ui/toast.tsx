@@ -8,7 +8,10 @@
  * window losing focus: the queue dismisses each one on a timer of its own (hooks/use-toast). Every toast has the same width (capped by the
  * viewport) and grows taller to fit its text, at the viewport's right edge. Laid out like a system notification: a header
  * line with the app's mark and name and the close button, the title and message beneath, and, when a toast has
- * actions, equal buttons side by side below it. The close button only puts the toast away; what the toast was about
+ * actions, equal buttons side by side below it. Those buttons are the app's own pills (ui/button): the action is the
+ * primary, the dark pill lit gold from below, and a quiet one (quiet - Decline beside Accept) is the charcoal chip
+ * that "Browse all projects" and the prompt's Build button are; they used to be a flat yellow square-cornered block of
+ * the toast's own, which stood out from every other button in the app. The close button only puts the toast away; what the toast was about
  * is left as it was. A toast that should stay longer than the default three
  * seconds passes its own duration and sets --toast-ms to match, so the line drains as long as the toast stays.
  */
@@ -17,6 +20,7 @@ import * as ToastPrimitives from "@radix-ui/react-toast";
 import { cva, type VariantProps } from "class-variance-authority";
 import { X } from "lucide-react";
 
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const ToastProvider = ToastPrimitives.Provider;
@@ -77,14 +81,11 @@ Toast.displayName = ToastPrimitives.Root.displayName;
 
 const ToastAction = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Action>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Action>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Action> & { quiet?: boolean }
+>(({ className, quiet = false, ...props }, ref) => (
   <ToastPrimitives.Action
     ref={ref}
-    className={cn(
-      "btn inline-flex h-9 w-full min-w-0 items-center justify-center rounded-lg border border-transparent bg-primary px-3 text-sm font-semibold text-primary-foreground transition-colors group-[.destructive]:border-muted/40 hover:bg-primary/90 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 group-[.destructive]:focus:ring-destructive disabled:pointer-events-none disabled:opacity-50",
-      className,
-    )}
+    className={cn(buttonVariants({ variant: quiet ? "chip" : "default", size: "sm" }), "h-9 w-full min-w-0 px-3 text-[13px]", className)}
     {...props}
   />
 ));

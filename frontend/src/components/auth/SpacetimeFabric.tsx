@@ -1,10 +1,10 @@
 /**
- * The sheet of space-time the "Continue with Google" button is woven from - and, since the owner asked for the same
- * fabric there, the sidebar's "New project" row, whose mass is its plus badge (ProjectSidebar.tsx).
+ * The sheet of space-time the "Continue with Google" button is woven from. (The sidebar's "New project" row was woven
+ * from it too, until it became a plain nav row like the others.)
  *
  * Handles: a fine grid drawn on a canvas behind the button's label (CELL apart, and BEYOND the button's box on every
  * side, so that there is always more sheet to be drawn into view), bent by two masses and rippled by one of them.
- * The first mass is the mark the button carries (mass - the Google G, or the comet that stands in for it while the
+ * The first mass is the mark the button carries (mass - the Google G, or the ripple that stands in for it while the
  * popup is open): the sheet dips a little towards it (DIP), is a shade brighter round it, stops short of it (CLEAR)
  * so that no line crosses the mark, and slow rings spread from it along the sheet (RIPPLE, one every RIPPLE_MS). The
  * second is the pointer: while it is on the button the sheet sinks towards it (WELL, deeper while the button is held
@@ -14,7 +14,7 @@
  * delay and a period in seconds for their own slow beats); they are carried by it, further than the lines are
  * (STAR_CARRY), so they slide towards the pointer and brighten as they near it, which is what makes the pull read as
  * gravity rather than as a pattern changing. While the button waits on Google (busy) the rings grow and quicken
- * (BUSY_GAIN, BUSY_PACE): the comet circling where the G was sends waves out across the sheet until the answer comes.
+ * (BUSY_GAIN, BUSY_PACE): the ripple where the G was sends waves out across the sheet until the answer comes.
  * While the button is switched off for some other reason (asleep - the email form is being sent) the sheet goes flat
  * and the loop stops.
  *
@@ -33,7 +33,7 @@
  * still frame is drawn - the sheet flat but for the dip, the stars half lit - and left.
  */
 import { useEffect, useRef, type RefObject } from "react";
-import { useInView, usePrefersReducedMotion } from "@/components/landing/motion";
+import { useInView, usePrefersReducedMotion } from "@/components/motion/motion";
 import { ringAt, sinkAt, sinkLimit, springTowards, type Spring } from "@/lib/spacetime";
 
 const CELL = 12;

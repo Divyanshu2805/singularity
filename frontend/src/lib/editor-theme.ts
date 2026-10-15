@@ -9,7 +9,8 @@
  * the workspace window it sits in (index.css, .ws-window) rather than painting a slightly different block inside it;
  * the current line is a faint warm tint and the selection the app's ice blue (a gold one reads as a search hit), line numbers sit back until their line is active, and
  * comments are a step brighter than the muted text so they stay readable. editorReadabilityTheme sets the reading
- * size - 13.5px at a 1.7 line height, with room above the first line and below the last.
+ * size - 13.5px at a 1.7 line height, with room above the first line and below the last. The syntax theme is dark; most of it is the shared
+ * variables and the rest - the selection, the current line, comments - is given here.
  */
 import { createTheme } from '@uiw/codemirror-themes';
 import { tags as t } from '@lezer/highlight';
@@ -65,7 +66,7 @@ export const editorReadabilityTheme = EditorView.theme({
   '.cm-activeLineGutter': {
     backgroundColor: 'transparent',
   },
-}, { dark: true });
+});
 
 export const referencedLineTheme = EditorView.theme({
   '.cm-referencedLine': {
@@ -107,4 +108,4 @@ export const diffViewTheme = EditorView.theme({
     fontStyle: 'italic',
     fontSize: '12px',
   },
-}, { dark: true });
+});

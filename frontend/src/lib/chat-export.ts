@@ -2,16 +2,15 @@
  * Turning a conversation into a markdown file someone can keep.
  *
  * Handles: a filename that is filesystem-safe, sorts by date and is unique enough that two exports do not collide;
- * rendering both the project chat and a code lens thread; and triggering the download. A turn's thought process is
+ * rendering an assistant turn (which the chat's copy button uses) and a code lens thread; and triggering the download. A turn's thought process is
  * kept as a quote, and a teaching lesson as the what and the why it was written as, without its tags. What teaching
  * mode has written about a turn goes into the file too - its big picture, and the lesson on each step that has been
  * opened - under the turn they belong to, so the download is the learner's notes on the project as well as its chat.
  *
- * Both conversations are stored server-side, but neither in a form anyone can read outside the app - this download is
- * the readable copy. The lens turn type here is deliberately narrower than the store's: the bookkeeping the panel
+ * The lens thread is stored server-side, but not in a form anyone can read outside the app - this download is the
+ * readable copy. The lens turn type here is deliberately narrower than the store's: the bookkeeping the panel
  * needs has nothing to do with what the file says.
  */
-import type { ChatMessage } from "./project-chat-store";
 import type { LensTurn } from "./code-lens-store";
 import { ChatEventType, type ChatEvent } from "./types";
 import { parseLesson } from "./lesson";
@@ -38,27 +37,6 @@ function fencedCode(code: string, path?: string) {
   const longestRun = Math.max(0, ...[...code.matchAll(/`+/g)].map((match) => match[0].length));
   const fence = "`".repeat(Math.max(3, longestRun + 1));
   return `${fence}${language}\n${code}\n${fence}`;
-}
-
-export function buildChatMarkdown(messages: ChatMessage[], projectName: string): string {
-  const parts: string[] = [header(`${projectName} - chat`)];
-
-  for (const message of messages) {
-    if (message.role === "user") {
-      parts.push(`## You\n\n${message.content.trim()}`);
-      continue;
-    }
-
-    const body = assistantBody(message);
-    if (body) parts.push(`## Singularity\n\n${body}`);
-  }
-
-  if (parts.length === 1) parts.push("_This chat is empty._");
-  return parts.join("\n\n") + "\n";
-}
-
-function assistantBody(message: ChatMessage): string {
-  return assistantTurnText(message.events ?? [], message.content, message.error, message.overview);
 }
 
 const nested = (taught: string) => taught.trim().replace(/^###(?=[ \t])/gm, "####");
