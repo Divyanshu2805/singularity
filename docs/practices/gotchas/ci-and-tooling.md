@@ -89,3 +89,9 @@
 - **Symptom:** after adding `manualChunks` to split the code editor and the charts out of the project view, every page - the sign-in page included - downloads the charts. `index.html` preloads them.
 - **Cause:** a module no rule names goes into whichever named file needs it first. React, left unnamed, was placed inside the Markdown and charts files, so the entry point had to load those to get React.
 - **Fix:** name React as a file of its own (`VENDOR_CHUNKS` in `frontend/vite.config.ts`). After changing that list, build and check that `dist/index.html` preloads only `react`.
+
+## A dropped download from Maven Central fails the whole backend job
+
+- **Symptom:** the backend job fails at `intelligence-service` with `Could not transfer artifact ... from/to central ... Connection reset`, on a commit whose pull request passed. Rerunning the job passes.
+- **Cause:** Maven 3.9's HTTP transport retries a request only if it failed before being sent. A connection reset partway through a download is not retried, so one dropped connection fails the build.
+- **Fix:** `.mvn/maven.config` raises the retry count to 5 and retries requests that were already sent (`aether.connector.http.retryHandler.*`). It applies to every `./mvnw` run, locally and in CI.
