@@ -376,6 +376,48 @@ class PublishServiceImplTest {
     }
 
     @Test
+    @DisplayName("cancelling a build ends it, gives its pod back and leaves a live app live")
+    void cancelEndsTheBuildAndFreesThePod() {
+        PublishedApp building = row(PublishStatus.LIVE, PublishBuildStatus.BUILDING);
+        building.setBuildPodName("runner-3");
+        PublishedApp after = row(PublishStatus.LIVE, null);
+        when(appRepository.findByProjectId(PROJECT_ID)).thenReturn(Optional.of(building), Optional.of(after));
+        when(appRepository.cancelBuild(APP_ID)).thenReturn(1);
+
+        var response = service.cancelBuild(PROJECT_ID);
+
+        verify(builder).releasePod("runner-3");
+        verify(store, never()).deletePointer(anyString());
+        verify(appRepository, never()).markUnpublished(any(), any());
+        org.assertj.core.api.Assertions.assertThat(response.build()).isNull();
+        org.assertj.core.api.Assertions.assertThat(response.live()).isTrue();
+    }
+
+    @Test
+    @DisplayName("cancelling when no build is running changes nothing")
+    void cancelWithNoBuildIsANoOp() {
+        when(appRepository.findByProjectId(PROJECT_ID)).thenReturn(Optional.of(row(PublishStatus.LIVE, null)));
+
+        service.cancelBuild(PROJECT_ID);
+
+        verify(appRepository, never()).cancelBuild(any());
+        verify(builder, never()).releasePod(anyString());
+    }
+
+    @Test
+    @DisplayName("a build that ended on its own while Cancel was pressed gives no pod back")
+    void cancelLosingTheRace() {
+        PublishedApp building = row(PublishStatus.UNPUBLISHED, PublishBuildStatus.BUILDING);
+        building.setBuildPodName("runner-3");
+        when(appRepository.findByProjectId(PROJECT_ID)).thenReturn(Optional.of(building));
+        when(appRepository.cancelBuild(APP_ID)).thenReturn(0);
+
+        service.cancelBuild(PROJECT_ID);
+
+        verify(builder, never()).releasePod(anyString());
+    }
+
+    @Test
     @DisplayName("the code can be shared only while the app is live")
     void sharingNeedsALiveApp() {
         when(appRepository.findByProjectId(PROJECT_ID)).thenReturn(Optional.empty());

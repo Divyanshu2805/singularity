@@ -2,12 +2,10 @@
  * The home page once signed in: start something new, or pick up where you left off.
  *
  * Handles: the prompt box that creates a project from a description (through the idea interview), the recent projects
- * as cards, filtering and searching, and the per-project actions. An idea a visitor typed on the landing page before
- * signing up (lib/pending-idea) arrives here in the prompt, with the mode they picked, ready to send - it is never
- * sent by itself, so the quota checks and the interview still run when they press Build.
+ * as cards, filtering and searching, and the per-project actions.
  *
- * It is set in the landing page's night, so signing in carries on in the same place rather than cutting to a
- * different app: the root carries .dash-night (index.css), which gives the page the landing's Inter type and brighter
+ * It is set in the sign-in pages' night, so signing in carries on in the same place rather than cutting to a
+ * different app: the root carries .dash-night (index.css), which gives the page the Inter type and brighter
  * text, and .dash-sky, which makes the page near-black at its head, lightening only towards the wash of colour at its foot,
  * and its panel and cards black with hairlines strong enough to tell each from the one under it (the owner asked for
  * black cards and a darker head once the app had turned gold; they were charcoal steps, each lighter than the last,
@@ -16,11 +14,9 @@
  * nebula standing at the foot of the screen with stars round it (Nebula), held there whatever the scroll - the
  * starfield that first sat behind the page was removed when the owner found the app too dark, the nebula, taken out
  * with it, was asked back, then asked to look like a real nebula with stars round it, and then gave way to the wash
- * of rose, amber and gold that Nebula draws now, with more stars and a shooting star now and then - a low gold tint rising from the
- * hero's foot (gold and amber, kept faint so it colours the night without becoming a band of its own -
- * a stronger one, with a rose corner, turned the projects panel into an ember haze and muddied its text; it runs a
- * little way behind the panel and fades out there, since stopping at the hero's edge drew a hard line across the
- * page), a soft gold bloom behind the prompt, the horizon mark building itself above a Fraunces headline in
+ * of rose, amber and gold that Nebula draws now, with more stars and a shooting star now and then - the owner then asked for the stars, the gold tint
+ * rising from the hero's foot and the bloom behind the prompt to go and for the colour alone to stay, flowing, so the
+ * Nebula here has stars={false} and nothing else sits behind the page. On it stand the horizon mark building itself above a Fraunces headline in
  * near-white whose italic pale-gold accent is the visitor's name, the prompt on a matte glass card that takes a calm
  * gold ring while it has focus, and the recent projects on a glass panel below.
  *
@@ -36,16 +32,17 @@
  * in a slot that eases between their two heights (.dash-crown), the questions and the set-up steps share one glass
  * card that eases to each new height (use-smooth-height), and the headline changes once, when building starts; the
  * project's name appears in the last step instead of in the headline. The page arrives in a short
- * staggered rise - mark, headline (its words dropping in, as the landing hero's do, and again when the headline
+ * staggered rise - mark, headline (its words dropping in, as the sign-in headline's do, and again when the headline
  * changes between asking, shaping and setting up), prompt, suggestions, then the projects dealt in one after another - kept well under a second, since this is a
  * page people come back to all day, not one they see once.
  *
  * Creating a project shows its progress on the same glass: a progress line that fills as it works, and each step's
- * comet (OrbitSpinner) while it is the one under way.
+ * ripple (OrbitSpinner) while it is the one under way.
  *
  * Placeholders keep a row's exact height while loading, so the page does not jump as projects arrive; they shimmer
  * rather than blink.
  */
+import { LoadFailure } from "@/components/app/LoadFailure";
 import { Nebula } from "@/components/app/Nebula";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -56,13 +53,14 @@ import { InvitationNotice } from "@/components/InvitationNotice";
 import { ProjectCard } from "@/components/ProjectCard";
 import { ProjectFilterTabs } from "@/components/ProjectFilterTabs";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/Kbd";
 import { HorizonMark } from "@/components/HorizonMark";
 import { IdeaClarifier } from "@/components/IdeaClarifier";
 import { PromptModeMenu } from "@/components/PromptModeMenu";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
-import { HeadlineWords } from "@/components/landing/HeadlineWords";
-import { WORD_DROP } from "@/components/landing/intro";
-import { play } from "@/components/landing/motion";
+import { HeadlineWords } from "@/components/motion/HeadlineWords";
+import { WORD_DROP } from "@/components/motion/intro";
+import { play } from "@/components/motion/motion";
 import { useProjectActions } from "@/hooks/use-project-actions";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useSmoothHeight } from "@/hooks/use-smooth-height";
@@ -78,7 +76,6 @@ import { cn } from "@/lib/utils";
 import { IDEA_SUGGESTIONS } from "@/lib/idea-suggestions";
 import { clearInterview, getInterview, startInterview, useInterview } from "@/lib/idea-interview";
 import { projectTitle } from "@/lib/project-title";
-import { takePendingIdea } from "@/lib/pending-idea";
 
 const CREATION_STEPS = [
     { label: "Reading your idea", startsAtMs: 0 },
@@ -99,17 +96,6 @@ const EMPTY_MESSAGES: Record<NonNullable<ProjectFilter> | "all", { title: string
     shared: { title: "Nothing shared with you yet", hint: "Projects other people invite you to will show up here." },
     pinned: { title: "No pinned projects", hint: "Pin a project from its menu to keep it close at hand." },
     starred: { title: "No starred projects", hint: "Star the projects you love to find them here." },
-};
-
-const HERO_TINT: CSSProperties = {
-    backgroundImage: [
-        "radial-gradient(60% 45% at 50% 78%, hsl(40.7 99.9% 76.1% / 0.12) 0%, transparent 70%)",
-        "radial-gradient(45% 40% at 12% 78%, hsl(46 88% 62% / 0.05) 0%, transparent 70%)",
-        "radial-gradient(45% 40% at 88% 78%, hsl(41.3 100% 85.6% / 0.08) 0%, transparent 70%)",
-        "radial-gradient(70% 50% at 50% 52%, hsl(40.4 99.9% 77.1% / 0.05) 0%, transparent 75%)",
-    ].join(", "),
-    maskImage: "linear-gradient(to bottom, #000 62%, transparent)",
-    WebkitMaskImage: "linear-gradient(to bottom, #000 62%, transparent)",
 };
 
 const stagger = (index: number, delayMs = 0) => ({ "--i": index, "--rise-delay": `${delayMs}ms` }) as CSSProperties;
@@ -253,7 +239,7 @@ export function ProjectsDashboard() {
     const firstName = getUserInfo()?.name?.split(" ")[0];
     const ideaPlaceholder = useTypewriterPlaceholder(IDEA_SUGGESTIONS, !isCreating && prompt.length === 0);
 
-    const { data: projects = [], isLoading, error } = useQuery({
+    const { data: projects = [], isLoading, error, refetch, isFetching, errorUpdateCount } = useQuery({
         queryKey: ["projects"],
         queryFn: () => api.getProjects(),
         enabled: isSignedIn,
@@ -290,21 +276,6 @@ export function ProjectsDashboard() {
         next.delete("new");
         setSearchParams(next, { replace: true });
     }, [searchParams, setSearchParams, navigate]);
-
-    useEffect(() => {
-        if (!isSignedIn) return;
-        const pending = takePendingIdea();
-        if (!pending) return;
-        setPrompt(pending.text);
-        setTeachingMode(pending.teaching);
-        requestAnimationFrame(() => {
-            const el = promptRef.current;
-            if (!el) return;
-            el.focus();
-            resizePrompt(el);
-            el.setSelectionRange(pending.text.length, pending.text.length);
-        });
-    }, [isSignedIn, setTeachingMode]);
 
     const [blockedBy, setBlockedBy] = useState<QuotaDetails | null>(null);
     const { refresh: refreshBilling, quota, projects: projectAllowance, subscription } = useBilling();
@@ -389,19 +360,13 @@ export function ProjectsDashboard() {
 
     return (
         <div className="dash-night dash-sky relative flex h-screen overflow-hidden bg-background">
-            <Nebula />
+            <Nebula stars={false} strong />
             <SidebarSpacer sidebar={sidebar} />
 
             <div className="dash-frame relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
                 <main className="min-h-0 flex-1 overflow-y-auto">
                     <div className="flex min-h-full flex-col">
                         <section className="relative flex min-h-[460px] flex-1 flex-col items-center justify-center px-6 pb-24 pt-14">
-                            <div aria-hidden="true" className="app-fade pointer-events-none absolute inset-x-0 top-0 -bottom-[160px]" style={HERO_TINT} />
-                            <div
-                                aria-hidden="true"
-                                className="app-bloom absolute left-1/2 top-1/2 h-[560px] w-[min(1000px,110%)] -translate-x-1/2 -translate-y-1/2"
-                            />
-
                             <div
                                 ref={stageRef}
                                 data-focus={isFocused || undefined}
@@ -477,7 +442,11 @@ export function ProjectsDashboard() {
                                                 />
                                             </div>
                                             <div className="mt-2 flex items-center justify-between gap-3 pl-2">
-                                                <span className="min-w-0 truncate text-xs text-muted-foreground">Enter to create · Shift+Enter for a new line</span>
+                                                <span className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground">
+                                                    <Kbd>Enter</Kbd> create
+                                                    <span aria-hidden="true" className="text-muted-foreground/50">·</span>
+                                                    <Kbd>Shift</Kbd> <Kbd>Enter</Kbd> new line
+                                                </span>
                                                 <div className="flex shrink-0 items-center gap-2">
                                                     <PromptModeMenu teaching={teachingMode} onChange={setTeachingMode} />
                                                     <button type="submit" aria-label="Create project" disabled={!prompt.trim()} className="app-send h-9 w-9">
@@ -542,7 +511,19 @@ export function ProjectsDashboard() {
                                             <CardPlaceholder key={`slot-${i}`} shimmer={false} className="invisible" />
                                         ))}
 
-                                    {!isLoading && recentProjects.length === 0 && (
+                                    {!isLoading && recentProjects.length === 0 && error && (
+                                        <LoadFailure
+                                            title="Couldn't load your projects"
+                                            onRetry={() => void refetch()}
+                                            isRetrying={isFetching}
+                                            attempt={errorUpdateCount}
+                                            className="absolute inset-1"
+                                        >
+                                            {error instanceof Error ? error.message : "Check your connection and try again."}
+                                        </LoadFailure>
+                                    )}
+
+                                    {!isLoading && recentProjects.length === 0 && !error && (
                                         <div className="app-fade absolute inset-1 flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-white/10 bg-black/10 px-4 text-center">
                                             <FolderOpen className="mb-1 h-5 w-5 text-primary/60" />
                                             <p className="text-sm font-medium">{emptyMessage.title}</p>

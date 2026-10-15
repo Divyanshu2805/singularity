@@ -42,7 +42,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Handles: reading where a project's publish stands, starting a build (the first publish or an update), checking the
  * owner's plan allowance for live apps and the limits on how often a build may start, choosing or validating the link's
- * name, unpublishing, sharing the code, reading a failed build's output, and taking an app down when its project is
+ * name, stopping a build that is under way, unpublishing, sharing the code, reading a failed build's output, and taking an app down when its project is
  * deleted. The build itself is {@link PublishBuilder}'s, off the request thread.
  *
  * <p>Who may do what. Anyone who may view the project may read its state; only the owner (the PUBLISH permission) may
@@ -57,6 +57,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * taken effect; the one-build-at-a-time rule and the spacing between builds are a conditional update in the database
  * and hold across instances. Pressing Publish while a build is running answers with the build already under way
  * rather than an error.
+ *
+ * <p>Cancelling a build changes only the row - the build number it belongs to stops being the one under way, so the
+ * builder's next write finds out and stops, and the pod it holds is released at once so a long install does not keep
+ * running. What was live stays live; a first publish goes back to "not published". The spacing between builds still
+ * counts from the cancelled one's start, so Cancel cannot be used to start builds faster.
  *
  * <p>Taking an app down removes its pointer first, because that single object is what the proxy serves from; the row is
  * changed after, so a failure to reach storage leaves the app visibly published and the call can be repeated instead of
@@ -146,6 +151,25 @@ public class PublishServiceImpl implements PublishService {
         appRepository.markUnpublished(app.getId(), Instant.now());
         projectRepository.setPublic(projectId, false);
         log.info("User {} unpublished the app {} of project {}", authUtil.getCurrentUserId(), app.getSlug(), projectId);
+    }
+
+    @Override
+    @PreAuthorize("@security.canPublishProject(#projectId)")
+    public PublishResponse cancelBuild(Long projectId) {
+        Project project = liveProject(projectId);
+        PublishedApp app = appRepository.findByProjectId(projectId).orElse(null);
+        if (app == null || app.getBuildStatus() != PublishBuildStatus.BUILDING) {
+            return toResponse(project, app);
+        }
+        String podName = app.getBuildPodName();
+        if (appRepository.cancelBuild(app.getId()) > 0) {
+            log.info("User {} cancelled build {} of the app {} for project {}", authUtil.getCurrentUserId(),
+                    app.getBuildNumber(), app.getSlug(), projectId);
+            if (podName != null) {
+                builder.releasePod(podName);
+            }
+        }
+        return toResponse(project, appRepository.findByProjectId(projectId).orElse(app));
     }
 
     @Override

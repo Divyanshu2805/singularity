@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
  * A project's published app, for the browser.
  *
  * <p>Handles: reading where the publish stands (any member), starting a build that puts the project online or updates
- * what is online, unpublishing, switching whether the code is shared, and reading the output of a failed build (the
+ * what is online, stopping a build that is under way, unpublishing, switching whether the code is shared, and reading the output of a failed build (the
  * owner only).
  *
  * <p>Publishing answers 202: the build runs in a runner pod and the client polls the status until it ends. Who may call
@@ -43,6 +43,11 @@ public class PublishController {
     public ResponseEntity<Void> unpublish(@PathVariable Long projectId) {
         publishService.unpublish(projectId);
         return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/build")
+    public ResponseEntity<PublishResponse> cancelBuild(@PathVariable Long projectId) {
+        return ResponseEntity.ok(publishService.cancelBuild(projectId));
     }
 
     @PutMapping("/sharing")

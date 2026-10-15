@@ -38,10 +38,6 @@ public class SecurityExpressions {
         return hasPermission(projectId, ProjectPermission.EDIT);
     }
 
-    public boolean canDeleteProject(Long projectId) {
-        return hasPermission(projectId, ProjectPermission.DELETE);
-    }
-
     public boolean canViewMembers(Long projectId) {
         return hasPermission(projectId, ProjectPermission.VIEW_MEMBERS);
     }

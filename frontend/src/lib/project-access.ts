@@ -7,12 +7,17 @@
  *
  * The server answers a deleted project, a removed member and a stranger alike, on purpose: saying which would tell a
  * stranger that a project exists. So the page does not guess either, and says what the possibilities are.
+ *
+ * Each also carries the page's small mono line above the heading (eyebrow) and the closing words of its title that the
+ * page sets in gold (accent); the title always ends with them, so it still reads whole to a screen reader.
  */
 import { ApiRequestError } from "./api";
 
 export interface ProjectLoadFailure {
   kind: "unavailable" | "error";
+  eyebrow: string;
   title: string;
+  accent: string;
   detail: string;
 }
 
@@ -21,13 +26,17 @@ export function projectLoadFailure(error: unknown): ProjectLoadFailure {
   if (status === 403 || status === 404 || status === 400) {
     return {
       kind: "unavailable",
+      eyebrow: "Out of reach",
+      accent: "available",
       title: "This project isn't available",
       detail: "It may have been deleted, or it belongs to someone who hasn't shared it with you. If you were sent this link, ask the owner to invite you from the project's Share button.",
     };
   }
   return {
     kind: "error",
+    eyebrow: "Connection lost",
     title: "Couldn't load this project",
+    accent: "this project",
     detail: error instanceof Error && error.message ? error.message : "Check your connection and try again.",
   };
 }

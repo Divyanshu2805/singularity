@@ -1,30 +1,30 @@
 /**
- * The slide between the landing page and the sign-in pages.
+ * The page slides around signing in and out.
  *
- * Handles: running a navigation inside a page slide - the page on screen moves out to the left while the next one
- * follows it in from the right, and heading back to the landing page runs it the other way round, left to right -
- * deciding whether a navigation slides at all, and making the browser's Back and Forward buttons between the landing
- * page and the sign-in pages slide the same way.
+ * Handles: running the sign-in navigation inside a page slide - the sign-in page moves out to the left while the app
+ * follows it in from the right - and the sign-out slide, which runs the other way across a full document load.
  *
- * It is built on the browser's View Transitions: the old page is held as a snapshot while the router swaps the new one
- * in, and the slide itself is CSS (index.css, html.page-slide). The update waits until the destination page has
- * actually rendered - its root carries .landing-page or .auth-page - because both are loaded on demand, and sliding in
- * the empty Suspense fallback would show a blank page arriving. The wait polls on timers, not animation frames, since
- * the browser pauses rendering while a transition's update runs; READY_TIMEOUT_MS caps it, and a redirect that moves
- * the address on (a signed-in visitor sent from "/" to their projects) ends it too, so the screen is never held frozen.
- * The window is put back at the top once the new page is in, since the landing page may have been scrolled far down.
+ * Signing in is built on the browser's View Transitions: the old page is held as a snapshot while the router swaps the
+ * new one in, and the slide itself is CSS (index.css, html.page-slide). The update waits until the sign-in page is
+ * gone and the page that replaced it is not the loading screen ([data-app-loading], AppLoading) - sliding in the
+ * loading sky and then cutting to the dashboard was what made signing in look broken. The wait polls on timers, not
+ * animation frames, since the browser pauses rendering while a transition's update runs; READY_TIMEOUT_MS caps it, so
+ * the screen is never held frozen.
  *
- * Only navigations between "/" and /login or /signup slide; anything else, a browser without the API, and a visitor who
- * prefers reduced motion just navigate. A slide already running makes a second one navigate plainly rather than queue.
+ * Signing out is one slide: the app moves out to the right while the sign-in page follows it in from the left. It
+ * leaves by a full document load on purpose (lib/session.ts - module-level state must not outlive an account), so the
+ * slide is a cross-document view transition (index.css opts every same-origin load in; the pageswap listener turns
+ * down each one but a sign-out's). slideOutThenGo marks the departure, and a session-storage flag carries it across
+ * the load; on arrival (slideInFromLeft, installed before the first paint - the entry script is render-blocking in
+ * index.html) the app's picture is held still with the new page unseen behind it (.page-arrive) until the sign-in page
+ * has rendered, and only then do both move, driven from here on the transition's pseudo-elements. Browsers without
+ * cross-document view transitions, and reduced motion, simply load the sign-in page.
  *
- * For Back and Forward, the popstate event is held back from the router - this listener is added before the router's
- * own and in the capture phase, so it runs first - and sent on again from inside the slide, so the router swaps the
- * page while the old one is still pictured. isSliding() lets the landing page skip its opening sequence when it arrives
- * by a slide rather than a fresh load.
+ * A browser without the API, a visitor who prefers reduced motion, and a slide already running just navigate.
+ * isSliding() lets the sign-in page skip its opening sequence when it arrives by a slide rather than a fresh load.
  */
 const READY_TIMEOUT_MS = 3500;
 
-const LANDING = ".landing-page";
 const AUTH = ".auth-page";
 
 type ViewTransition = {
@@ -50,32 +50,27 @@ async function waitUntil(ready: () => boolean) {
   await pause(40);
 }
 
-export const isAuthPath = (path: string) => /^\/(login|signup)\/?$/.test(path);
-
 export function isSliding() {
   return sliding;
 }
 
-export function canSlide() {
+function canSlide() {
   const doc = document as DocumentWithTransitions;
   const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   return typeof doc.startViewTransition === "function" && !reduced && !sliding;
 }
 
 export function slideTo(to: string, go: () => unknown) {
-  const target = new URL(to, window.location.href).pathname;
-  const back = target === "/";
-  if (!canSlide() || (!back && !isAuthPath(target))) {
+  if (!canSlide() || !document.querySelector(AUTH)) {
     void go();
     return;
   }
 
-  const destination = back ? LANDING : AUTH;
-  const arrived = () => Boolean(document.querySelector(destination)) || window.location.pathname !== target;
+  const arrived = () =>
+    !document.querySelector(AUTH) && !document.querySelector("[data-app-loading]") && Boolean(document.querySelector("#root > *:not(:empty)"));
   const root = document.documentElement;
   sliding = true;
   root.classList.add("page-slide");
-  root.classList.toggle("page-slide-back", back);
 
   const transition = (document as DocumentWithTransitions).startViewTransition!(async () => {
     try {
@@ -90,32 +85,87 @@ export function slideTo(to: string, go: () => unknown) {
     .catch(() => {})
     .finally(() => {
       sliding = false;
-      root.classList.remove("page-slide", "page-slide-back");
+      root.classList.remove("page-slide");
     });
 }
 
-const replayed = new WeakSet<Event>();
-let historyInstalled = false;
+const ARRIVAL_KEY = "slide_in_back";
+const EASE = "cubic-bezier(0.76, 0, 0.24, 1)";
+const SLIDE_MS = 700;
+const ARRIVING = "page-arrive";
 
-export function slideOnHistoryMoves() {
-  if (historyInstalled || typeof window === "undefined") return;
-  historyInstalled = true;
-  window.addEventListener(
-    "popstate",
-    (event) => {
-      if (replayed.has(event) || !canSlide()) return;
-      const to = window.location.pathname;
-      const leavingAuth = Boolean(document.querySelector(AUTH));
-      const leavingLanding = Boolean(document.querySelector(LANDING));
-      if (!(leavingAuth && to === "/") && !(leavingLanding && isAuthPath(to))) return;
+type CrossDocumentEvent = Event & { viewTransition: (ViewTransition & { skipTransition: () => void }) | null };
 
-      event.stopImmediatePropagation();
-      slideTo(to, () => {
-        const again = new PopStateEvent("popstate", { state: event.state });
-        replayed.add(again);
-        window.dispatchEvent(again);
-      });
-    },
-    true
-  );
+let leavingBySlide = false;
+
+const crossDocumentSlides = () =>
+  typeof window !== "undefined" &&
+  "CSSViewTransitionRule" in window &&
+  !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+export function slideOutThenGo(go: () => void) {
+  if (crossDocumentSlides()) {
+    try {
+      sessionStorage.setItem(ARRIVAL_KEY, "1");
+      leavingBySlide = true;
+    } catch {
+    }
+  }
+  go();
+}
+
+function takeArrivalFlag() {
+  try {
+    const flagged = sessionStorage.getItem(ARRIVAL_KEY) === "1";
+    sessionStorage.removeItem(ARRIVAL_KEY);
+    return flagged;
+  } catch {
+    return false;
+  }
+}
+
+async function arriveFromLeft(transition: ViewTransition & { skipTransition: () => void }) {
+  const root = document.documentElement;
+  sliding = true;
+  root.classList.add(ARRIVING);
+  const settle = () => {
+    sliding = false;
+    root.classList.remove(ARRIVING);
+  };
+  transition.finished.then(settle, settle);
+  try {
+    await transition.ready;
+  } catch {
+    return;
+  }
+  await waitUntil(() => Boolean(document.querySelector(AUTH)));
+  const options = { duration: SLIDE_MS, easing: EASE, fill: "forwards" as const };
+  const leaving = root.animate({ transform: ["translateX(0)", "translateX(100%)"] }, { ...options, pseudoElement: "::view-transition-old(root)" });
+  root.animate({ transform: ["translateX(-100%)", "translateX(0)"], opacity: [1, 1] }, { ...options, pseudoElement: "::view-transition-new(root)" });
+  const end = () => transition.skipTransition();
+  leaving.finished.then(end, end);
+}
+
+export function slideInFromLeft() {
+  if (typeof window === "undefined") return () => {};
+  const onSwap = (event: Event) => {
+    const transition = (event as CrossDocumentEvent).viewTransition;
+    if (transition && !leavingBySlide) transition.skipTransition();
+  };
+  const onReveal = (event: Event) => {
+    const transition = (event as CrossDocumentEvent).viewTransition;
+    const flagged = takeArrivalFlag();
+    if (!transition) return;
+    if (!flagged || !crossDocumentSlides()) {
+      transition.skipTransition();
+      return;
+    }
+    void arriveFromLeft(transition);
+  };
+  window.addEventListener("pageswap", onSwap);
+  window.addEventListener("pagereveal", onReveal);
+  return () => {
+    window.removeEventListener("pageswap", onSwap);
+    window.removeEventListener("pagereveal", onReveal);
+  };
 }

@@ -1,10 +1,9 @@
 /**
- * Covers the questions a turn can put to the user: reading the suggested answers, collecting a turn's questions once
- * they have fully arrived, and writing the user's picks as the message sent back - a bare answer for one question,
+ * Covers the questions a turn can put to the user: reading the suggested answers, and writing the user's picks as the message sent back - a bare answer for one question,
  * labelled lines for several.
  */
 import { describe, expect, it } from "vitest";
-import { askedQuestions, formatAnswers, isFullyAnswered, parseAnswerOptions } from "./ask";
+import { formatAnswers, isFullyAnswered, parseAnswerOptions } from "./ask";
 import { ChatEventType, type ChatEvent } from "./types";
 
 const ask = (content: string, metadata?: string, isComplete = true): ChatEvent =>
@@ -18,25 +17,6 @@ describe("parseAnswerOptions", () => {
   it("is empty for a question with no suggestions", () => {
     expect(parseAnswerOptions(undefined)).toEqual([]);
     expect(parseAnswerOptions("")).toEqual([]);
-  });
-});
-
-describe("askedQuestions", () => {
-  it("collects every question of a turn, in order, ignoring other events", () => {
-    const events: ChatEvent[] = [
-      { type: ChatEventType.MESSAGE, content: "I need two things first." },
-      ask("How should people sign in?", "Email|Google"),
-      ask("Which city is this for?"),
-    ];
-
-    expect(askedQuestions(events)).toEqual([
-      { question: "How should people sign in?", options: ["Email", "Google"] },
-      { question: "Which city is this for?", options: [] },
-    ]);
-  });
-
-  it("leaves out a question that is still arriving", () => {
-    expect(askedQuestions([ask("How should peo", undefined, false)])).toEqual([]);
   });
 });
 

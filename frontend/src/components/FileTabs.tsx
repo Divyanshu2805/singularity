@@ -3,14 +3,16 @@
  *
  * Handles: selecting and closing a tab, marking the ones the last turn changed, and hosting whatever the panel wants
  * beside them. The strip is the editor window's lighter top band (index.css, .ws-bar). Tabs are rounded chips on it
- * that take the app's one highlight (.tab-hl): the gold wash fading in under the pointer and the deeper selected
- * wash inside a gold hairline on the open tab, as every row in the app does - a short gold bar along the open
- * tab's top was dropped with the sidebar's edge bar. A tab's close button turns its cross a quarter as the pointer
- * reaches it.
+ * that behave as the app's other switches do: one gold hover wash glides from tab to tab as in the sidebar (hooks/use-glide-highlight) and the
+ * selected chip (.seg-pill) slides to the open tab (hooks/use-sliding-pill), staying one steady look while it is
+ * selected - a short gold bar along the open tab's top was dropped with the sidebar's edge bar. A tab's close button
+ * turns its cross a quarter as the pointer reaches it.
  */
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { useSlidingPill } from "@/hooks/use-sliding-pill";
 import { getFileColor, getFileIcon, splitPath } from "@/lib/file-icons";
+import { useGlideHighlight } from "@/hooks/use-glide-highlight";
 import { cn } from "@/lib/utils";
 
 interface FileTabsProps {
@@ -25,6 +27,10 @@ interface FileTabsProps {
 
 export function FileTabs({ openTabs, activeTab, changedPaths, onSelectTab, onCloseTab, leading, actions }: FileTabsProps) {
   const activeTabRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const activeIndex = activeTab ? openTabs.indexOf(activeTab) : -1;
+  const glideRef = useGlideHighlight(listRef);
+  const pill = useSlidingPill(listRef, Math.max(0, activeIndex), "[role=tab]");
 
   useEffect(() => {
     activeTabRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -33,7 +39,15 @@ export function FileTabs({ openTabs, activeTab, changedPaths, onSelectTab, onClo
   return (
     <div className="ws-bar flex h-11 shrink-0 items-stretch gap-1 px-1.5 py-1.5">
       {leading}
-      <div role="tablist" className="tabs-scroll flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto overflow-y-hidden">
+      <div
+        ref={listRef}
+        role="tablist"
+        className="tabs-scroll relative flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto overflow-y-hidden [--gl-x:max(8rem,100%)] [--gl-y:360%]"
+      >
+        <span ref={glideRef} aria-hidden="true" className="glide-pill rounded-xl" />
+        {pill && activeIndex >= 0 && (
+          <span aria-hidden="true" className="seg-pill seg-slide absolute inset-y-0 rounded-xl [box-shadow:var(--hl-active-shadow),0_0_22px_-4px_hsl(42_100%_62%/0.32)]" style={pill} />
+        )}
         {openTabs.map((path) => {
           const isActive = path === activeTab;
           const hasChanges = changedPaths?.has(path) ?? false;
@@ -46,6 +60,7 @@ export function FileTabs({ openTabs, activeTab, changedPaths, onSelectTab, onClo
               ref={isActive ? activeTabRef : undefined}
               role="tab"
               aria-selected={isActive}
+              data-glide=""
               tabIndex={0}
               title={path}
               onClick={() => onSelectTab(path)}
@@ -62,8 +77,8 @@ export function FileTabs({ openTabs, activeTab, changedPaths, onSelectTab, onClo
                 }
               }}
               className={cn(
-                "tab-hl group relative flex min-w-0 max-w-[200px] shrink-0 cursor-pointer select-none items-center gap-2 rounded-xl pl-3 pr-1.5 text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/50",
-                isActive ? "font-medium" : "text-muted-foreground"
+                "group relative z-10 flex min-w-0 max-w-[200px] shrink-0 cursor-pointer select-none items-center gap-2 rounded-xl pl-3 pr-1.5 text-[13px] transition-colors duration-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/50",
+                isActive ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
             >
               <Icon className={cn("h-3.5 w-3.5 shrink-0", getFileColor(path))} />

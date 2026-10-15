@@ -15,15 +15,17 @@
  *
  * The button is GitHub's own mark with no word beside it - the owner asked for the logo in place of the text - and
  * says "Push to GitHub" in a tooltip. Inside the panel the connected account is a small chip with GitHub's mark
- * at the head, beside the title, where a line reading "Connected as ..." used to be squeezed into the foot beside
- * two text buttons; Forget repository and Disconnect are the app's chips in the foot, and the foot says the one
- * thing a push needs known - that it makes the repository match the project. The panel is drawn as Publish and Share beside it are: the same heading with one line
- * under it, a field and the app's primary button on one row, and the same foot. Nothing opens by itself and nothing is sent until a
+ * at the head, beside the title, with a bare icon button to disconnect it right next to the name; Forget repository
+ * is a red-text chip on one line with Push, under the repository's own row (they share the line equally; alone it is as wide as one), since it is about that repository - it was a
+ * chip in a foot of its own, apart from everything it acts on. The panel is drawn as Publish and Share
+ * beside it are: the same heading with one line under it, and a field and the app's primary button on one row.
+ * When the repository still needs a name, opening the panel puts the cursor in that field rather than on the
+ * Disconnect button, which comes first in the panel. Nothing opens by itself and nothing is sent until a
  * press. Leaving for GitHub is a whole-page navigation, and only ever to GitHub's own address (lib/github): the
  * address comes from a response, and the browser does not follow a response anywhere else.
  */
-import { useState } from "react";
-import { ExternalLink, FolderGit2, Github, Lock } from "lucide-react";
+import { useRef, useState } from "react";
+import { ExternalLink, FolderGit2, Github, Globe, Lock, Unplug } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import {
   AlertDialog,
@@ -38,6 +40,7 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useGlideHighlight } from "@/hooks/use-glide-highlight";
 import { useProjectGitHub } from "@/hooks/use-github";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
@@ -59,6 +62,43 @@ const TONE_DOT: Record<string, string> = {
   live: "bg-syntax-string",
   waiting: "bg-primary",
 };
+
+function VisibilitySwitch({ isPrivate, onChange }: { isPrivate: boolean; onChange: (isPrivate: boolean) => void }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const glideRef = useGlideHighlight(trackRef);
+  return (
+    <div ref={trackRef} role="radiogroup" aria-label="Who can see the repository" className="app-track relative mb-2.5 grid w-full grid-cols-2 p-0.5">
+      <span ref={glideRef} aria-hidden="true" className="glide-pill rounded-full" />
+      <span
+        aria-hidden="true"
+        className={cn(
+          "seg-pill absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] transition-transform duration-[650ms] ease-[cubic-bezier(0.34,1.35,0.64,1)] motion-reduce:transition-none",
+          !isPrivate && "translate-x-full"
+        )}
+      />
+      {[
+        { value: true, label: "Private", Icon: Lock },
+        { value: false, label: "Public", Icon: Globe },
+      ].map(({ value, label, Icon }) => (
+        <button
+          key={label}
+          type="button"
+          role="radio"
+          aria-checked={isPrivate === value}
+          data-glide=""
+          onClick={() => onChange(value)}
+          className={cn(
+            "relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            isPrivate === value ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Icon aria-hidden="true" className={cn("h-3.5 w-3.5 transition-colors", isPrivate === value && "text-primary")} />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function GitHubMenu({ projectId, role, projectName, turns = [] }: {
   projectId: string;
@@ -118,7 +158,7 @@ export function GitHubMenu({ projectId, role, projectName, turns = [] }: {
               <button
                 type="button"
                 aria-label={`GitHub. ${text.title}`}
-                className="btn btn-glass flex h-8 w-8 items-center justify-center rounded-full active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35 data-[state=open]:border-primary/50"
+                className="btn app-chip flex h-8 w-8 items-center justify-center rounded-full [--light-size:2.8rem] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35 data-[state=open]:border-primary/50"
               >
                 {github.isPushing ? <OrbitSpinner /> : <Github className="h-4 w-4" />}
               </button>
@@ -127,7 +167,12 @@ export function GitHubMenu({ projectId, role, projectName, turns = [] }: {
           <TooltipContent side="bottom" className="px-2 py-1 text-xs">Push to GitHub</TooltipContent>
         </Tooltip>
 
-        <PopoverContent align="end" sideOffset={8} className="w-[380px] overflow-hidden rounded-2xl p-0">
+        <PopoverContent
+          align="end"
+          sideOffset={8}
+          className="w-[380px] overflow-hidden rounded-2xl p-0"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
           <div className="flex items-start justify-between gap-3 px-3.5 pb-2.5 pt-3.5">
             <div className="min-w-0">
               <h3 className="flex items-center gap-2 font-display text-[17px] font-semibold tracking-tight">
@@ -136,52 +181,85 @@ export function GitHubMenu({ projectId, role, projectName, turns = [] }: {
               </h3>
               <p className="mt-0.5 text-xs text-muted-foreground">{text.detail}</p>
             </div>
-            {owner && state.connected && state.login && (
-              <span
-                title={`Connected as ${state.login}`}
-                className="mt-0.5 inline-flex h-6 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 text-[11px] font-medium text-foreground/85"
-              >
-                <Github aria-hidden="true" className="h-3 w-3 shrink-0" />
-                <span className="truncate">{state.login}</span>
-              </span>
+            {owner && state.connected && (
+              <div className="mt-0.5 flex shrink-0 items-center gap-1.5">
+                {state.login && (
+                  <span
+                    title={`Connected as ${state.login}`}
+                    className="inline-flex h-6 max-w-[9rem] items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 text-[11px] font-medium text-foreground/85"
+                  >
+                    <Github aria-hidden="true" className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{state.login}</span>
+                  </span>
+                )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Disconnect"
+                      disabled={github.isDisconnecting}
+                      onClick={() => void github.disconnect().catch(failed("Couldn't disconnect GitHub"))}
+                      className="icon-btn icon-btn-danger h-6 w-6 rounded-full disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.5"
+                    >
+                      <Unplug aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="px-2 py-1 text-xs">Disconnect GitHub</TooltipContent>
+                </Tooltip>
+              </div>
             )}
           </div>
 
           <div className="px-3.5 pb-3.5">
             {state.linked && state.url && (
-              <div className="flex gap-2">
+              <div>
                 <a
                   href={state.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="Open the repository on GitHub in a new tab"
                   title={state.url}
-                  className="app-field group/link flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full px-3 text-sm text-foreground/90 hover:text-primary"
+                  className="app-field group/link flex h-9 min-w-0 items-center gap-2 rounded-full px-3 text-sm text-foreground/90"
                 >
                   {state.privateRepo ? (
-                    <Lock aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover/link:text-primary" />
+                    <Lock aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   ) : (
-                    <FolderGit2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover/link:text-primary" />
+                    <FolderGit2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   )}
                   <span className="min-w-0 flex-1 truncate">{state.fullName}</span>
-                  <ExternalLink aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <ExternalLink aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-colors group-hover/link:text-primary" />
                 </a>
-                {owner && state.connected && state.hasChanges && (
-                  <Button type="button" disabled={github.isPushing} onClick={push} className="h-9 px-4 text-xs">
+              </div>
+            )}
+
+            {owner && state.linked && (
+              <div className="mt-2.5 flex justify-center gap-2">
+                {state.connected && state.hasChanges && (
+                  <Button variant="chip" type="button" disabled={github.isPushing} onClick={push} className="h-9 flex-1 px-4 text-xs">
                     {pushLabel(state)}
                   </Button>
                 )}
+                <Button
+                  variant="chip"
+                  type="button"
+                  disabled={github.isForgetting}
+                  onClick={() => setConfirmForget(true)}
+                  className="app-chip-danger h-9 flex-1 border-red-400/40 px-4 text-xs text-red-300"
+                >
+                  Forget repository
+                </Button>
               </div>
             )}
 
             {owner && !state.connected && (
-              <Button type="button" disabled={isConnecting} onClick={connect} className={cn("h-9 w-full px-4 text-xs", state.linked && "mt-2")}>
+              <Button variant="chip" type="button" disabled={isConnecting} onClick={connect} className={cn("h-9 w-full px-4 text-xs", state.linked && "mt-2")}>
                 {isConnecting ? "Opening GitHub" : "Connect GitHub"}
               </Button>
             )}
 
             {owner && state.connected && !state.linked && (
               <>
+                <VisibilitySwitch isPrivate={isPrivate} onChange={setIsPrivate} />
                 <div className="flex gap-2">
                   <div
                     className={cn(
@@ -201,20 +279,11 @@ export function GitHubMenu({ projectId, role, projectName, turns = [] }: {
                       className="h-full min-w-0 flex-1 bg-transparent px-2 text-sm caret-primary outline-none placeholder:text-muted-foreground"
                     />
                   </div>
-                  <Button type="button" disabled={github.isPushing || !!problem} onClick={push} className="h-9 px-4 text-xs">
+                  <Button variant="chip" type="button" disabled={github.isPushing || !!problem} onClick={push} className="h-9 px-4 text-xs">
                     {pushLabel(state)}
                   </Button>
                 </div>
                 {problem && <p className="mt-1.5 text-xs text-destructive animate-fade-in">{problem}</p>}
-                <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground/90">
-                  <input
-                    type="checkbox"
-                    checked={isPrivate}
-                    onChange={(e) => setIsPrivate(e.target.checked)}
-                    className="accent-[hsl(var(--primary))]"
-                  />
-                  Private repository
-                </label>
               </>
             )}
 
@@ -225,33 +294,6 @@ export function GitHubMenu({ projectId, role, projectName, turns = [] }: {
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] bg-black/15 px-3.5 py-2.5">
-            <p className="min-w-0 text-[11px] leading-snug text-muted-foreground">A push makes the repository match this project.</p>
-            {owner && (state.connected || state.linked) && (
-              <div className="flex shrink-0 items-center gap-1.5">
-                {state.linked && (
-                  <button
-                    type="button"
-                    disabled={github.isForgetting}
-                    onClick={() => setConfirmForget(true)}
-                    className="app-chip inline-flex h-7 items-center rounded-full px-3 text-xs text-foreground/80 hover:text-destructive disabled:pointer-events-none disabled:opacity-50"
-                  >
-                    Forget repository
-                  </button>
-                )}
-                {state.connected && (
-                  <button
-                    type="button"
-                    disabled={github.isDisconnecting}
-                    onClick={() => void github.disconnect().catch(failed("Couldn't disconnect GitHub"))}
-                    className="app-chip inline-flex h-7 items-center rounded-full px-3 text-xs text-foreground/80 hover:text-destructive disabled:pointer-events-none disabled:opacity-50"
-                  >
-                    Disconnect
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
         </PopoverContent>
       </Popover>
 

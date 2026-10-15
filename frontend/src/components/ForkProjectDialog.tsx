@@ -6,7 +6,7 @@
  * The copy has every file but starts with a fresh chat, and the person forking owns it - nothing they do there
  * reaches the original, and nothing done to the original reaches them.
  *
- * Its mark sits in a quiet tile, and the fork button shows the app's comet while it copies.
+ * Its mark sits in a quiet tile, and the fork button shows the app's ripple while it copies.
  */
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { useEffect, useState, type FormEvent } from "react";
@@ -63,7 +63,7 @@ export function ForkProjectDialog({ project, onOpenChange }: {
       <DialogContent className="sm:max-w-md">
         <form onSubmit={fork} className="grid gap-4">
           <DialogHeader>
-            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-primary">
+            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.03] text-primary">
               <GitFork className="h-4 w-4" />
             </div>
             <DialogTitle>Fork this project?</DialogTitle>

@@ -2,6 +2,8 @@
 
 Singularity is a React single-page app in front of a Spring Boot 4.1 (Java 25) backend made of three domain services, each with its own database, behind one Gateway. Live previews run outside the JVMs entirely — in Kubernetes pods behind a standalone Node proxy — because generated project code has to execute somewhere the backend itself never touches.
 
+![Singularity system architecture](../assets/diagrams/system-architecture.png)
+
 ## Services
 
 | Service | Port | Owns | Database |

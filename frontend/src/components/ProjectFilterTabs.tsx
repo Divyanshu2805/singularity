@@ -4,7 +4,8 @@
  * Handles: the filters and their counts (each ticking to its number rather than jumping - CountUp), and the
  * selection pill that slides to whichever tab is active - measured rather than assumed, since tabs size to their
  * labels. A sunken track holds a raised neutral chip that slides
- * between the tabs (index.css, .app-track and .seg-pill).
+ * between the tabs (index.css, .app-track and .seg-pill). The selected chip is one flat gold wash; hovering a tab
+ * glides the sidebar's single gold wash to it (hooks/use-glide-highlight), under the selected chip.
  *
  * The track is two elements on purpose: the outer one scrolls sideways on a narrow screen, the inner one holds the
  * tabs and the pill and clips sideways (overflow-x: clip). The pill's left springs past its target and its width
@@ -16,6 +17,7 @@ import { CountUp } from "@/components/CountUp";
 import { useSlidingPill } from "@/hooks/use-sliding-pill";
 import { Pin, Star, type LucideIcon } from "lucide-react";
 import { PROJECT_FILTERS, type ProjectFilter, type ProjectFilterCounts } from "@/lib/project-filters";
+import { useGlideHighlight } from "@/hooks/use-glide-highlight";
 import { cn } from "@/lib/utils";
 
 interface ProjectFilterTabsProps {
@@ -32,6 +34,7 @@ export function ProjectFilterTabs({ value, onChange, counts, isLoading, classNam
     const listRef = useRef<HTMLDivElement>(null);
     const activeIndex = Math.max(0, PROJECT_FILTERS.findIndex((filter) => filter.key === value));
 
+    const glideRef = useGlideHighlight(listRef);
     const pill = useSlidingPill(listRef, activeIndex, "[role=tab]");
 
     return (
@@ -42,6 +45,7 @@ export function ProjectFilterTabs({ value, onChange, counts, isLoading, classNam
                 aria-label="Filter projects"
                 className="relative flex shrink-0 items-center overflow-x-clip rounded-full p-1"
             >
+                <span ref={glideRef} aria-hidden="true" className="glide-pill rounded-full" />
                 {pill && (
                     <span
                         aria-hidden="true"
@@ -58,6 +62,7 @@ export function ProjectFilterTabs({ value, onChange, counts, isLoading, classNam
                             type="button"
                             role="tab"
                             aria-selected={isActive}
+                            data-glide=""
                             onClick={() => onChange(key)}
                             className={cn(
                                 "relative z-10 flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

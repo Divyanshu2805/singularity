@@ -9,11 +9,12 @@
  * they had been invited to another. It is drawn as the project's Learn panel is - the app's dialog with an icon
  * tile beside its title - and nothing is asked for until it is opened.
  *
- * The panel is one fixed size: the list scrolls inside it however many invitations there are, and the empty and
- * loading states stand in the same box, so it does not change shape between them. Nothing in it takes the focus
+ * It is drawn like the undo dialog (RestoreDialog): it drops in (.dialog-pop), the header carries the glowing icon
+ * tile, and each invitation is a card that rises in turn. The panel is as tall as its content up to a cap, and the
+ * list scrolls inside it beyond that. Nothing in it takes the focus
  * when it opens; the first button used to, and a gold ring around Decline read as the suggested answer.
  */
-import { Mail } from "lucide-react";
+import { Mail, MailOpen } from "lucide-react";
 import { InvitationRows } from "@/components/InvitationsList";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useInvitations } from "@/hooks/use-invitations";
@@ -36,7 +37,10 @@ function InvitationsBody({ onAccepted }: { onAccepted: () => void }) {
 
   if (invitations.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+      <div className="app-rise flex flex-col items-center gap-2 px-4 py-8 text-center">
+        <span className="mb-1 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.03] text-muted-foreground">
+          <MailOpen className="h-5 w-5" />
+        </span>
         <p className="text-sm font-medium">No invitations waiting</p>
         <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">
           When someone invites you to their project, it shows here. It gives you nothing until you accept it.
@@ -55,15 +59,15 @@ export function InvitationsDialog({ open, onOpenChange }: { open: boolean; onOpe
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         onOpenAutoFocus={(event) => event.preventDefault()}
-        className="flex h-[min(26rem,calc(100dvh-2rem))] w-[calc(100vw-1.5rem)] flex-col gap-3.5 rounded-[22px] p-5 sm:max-w-lg sm:p-6"
+        className="dialog-pop flex max-h-[min(34rem,calc(100dvh-2rem))] w-[calc(100vw-1.5rem)] flex-col gap-4 rounded-[24px] p-5 sm:max-w-lg sm:p-7"
       >
-        <DialogHeader className="shrink-0 flex-row items-center gap-3 space-y-0 text-left sm:pr-9">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-primary">
-            <Mail className="h-4 w-4" />
+        <DialogHeader className="shrink-0 flex-row items-start gap-3.5 space-y-0 text-left sm:pr-10">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/[0.07] text-primary shadow-[0_0_24px_-8px_hsl(var(--primary)/0.6)]">
+            <Mail className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <DialogTitle>Project invites</DialogTitle>
-            <DialogDescription className="mt-0.5 text-xs">Projects other people have invited you to.</DialogDescription>
+            <DialogTitle className="text-xl leading-tight">Project invites</DialogTitle>
+            <DialogDescription className="mt-1.5 leading-snug">Projects other people have invited you to.</DialogDescription>
           </div>
         </DialogHeader>
         <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-gutter:stable]">

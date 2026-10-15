@@ -81,7 +81,7 @@ class PublishAuthorizationTest {
     }
 
     static Stream<Arguments> ownerOnly() {
-        return Stream.of(arguments("publish"), arguments("unpublish"), arguments("setSharing"), arguments("getBuildLog"));
+        return Stream.of(arguments("publish"), arguments("unpublish"), arguments("cancelBuild"), arguments("setSharing"), arguments("getBuildLog"));
     }
 
     static Stream<Arguments> everyEndpoint() {

@@ -101,7 +101,7 @@ export function AppSidebar({
                     type="button"
                     onClick={toggle}
                     aria-label="Open sidebar"
-                    className="absolute inset-0 flex items-center justify-center rounded-lg text-primary opacity-0 outline-none transition-opacity duration-150 hover:bg-primary/10 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-primary/50"
+                    className="icon-btn absolute inset-0 rounded-lg text-primary opacity-0 outline-none transition-[opacity,color,box-shadow,transform] duration-150 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-primary/50"
                   >
                     <PanelLeftOpen className="panel-anim h-[18px] w-[18px]" />
                   </button>
@@ -130,7 +130,7 @@ export function AppSidebar({
                 onClick={toggle}
                 tabIndex={isExpanded ? undefined : -1}
                 aria-label="Close sidebar"
-                className="sidebar-fade ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-primary/10 hover:text-primary focus-visible:ring-1 focus-visible:ring-primary/50"
+                className="icon-btn sidebar-fade ml-auto h-8 w-8 rounded-lg outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
               >
                 <PanelLeftClose className="panel-anim h-4 w-4" />
               </button>

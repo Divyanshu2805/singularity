@@ -793,7 +793,7 @@ export const CodePanel = memo(function CodePanel({
                     type="button"
                     disabled={isSaving}
                     onClick={() => setEdit(null)}
-                    className="btn btn-glass flex h-8 items-center rounded-full px-3.5 text-xs font-semibold text-foreground/90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35"
+                    className="btn app-chip flex h-8 items-center rounded-full px-3.5 text-xs font-semibold text-foreground/90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35"
                   >
                     {isDirty ? "Discard" : "Done"}
                   </button>
@@ -801,7 +801,7 @@ export const CodePanel = memo(function CodePanel({
                     type="button"
                     disabled={!isDirty || isSaving || isStreaming}
                     onClick={() => void saveEdit()}
-                    className="btn btn-primary flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35 disabled:opacity-50"
+                    className="btn app-chip flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold text-foreground/90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-50"
                   >
                     {isSaving && <OrbitSpinner className="h-3 w-3" />}
                     {isSaving ? "Saving…" : "Save"}
