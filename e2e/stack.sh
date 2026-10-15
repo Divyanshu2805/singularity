@@ -137,6 +137,21 @@ wait_for() {
   echo "  $what is up"
 }
 
+wait_for_refusal() {
+  local what="$1" url="$2" seconds="${3:-180}" log="${4:-}"
+  local deadline=$(( $(date +%s) + seconds )) code=""
+  until [ "$code" = "401" ]; do
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      echo "$what did not come up within ${seconds}s ($url answered ${code:-nothing})." >&2
+      [ -n "$log" ] && [ -f "$log" ] && tail -40 "$log" >&2
+      exit 1
+    fi
+    sleep 2
+    code=$(curl -s --max-time 5 -H "Cookie: __Host-vc_session=stack-readiness" -w '\n%{http_code}' "$url" 2>/dev/null | tail -n 1 || true)
+  done
+  echo "  $what is up"
+}
+
 secret() {
   $KN get secret "$1" -o "jsonpath={.data.$2}" | base64 -d
 }
@@ -319,6 +334,11 @@ health gateway-service 5
 
 # A service being up is not the Gateway knowing where it is: that takes one more round of discovery.
 wait_for "The Gateway's route to account-service" "http://127.0.0.1:$E2E_GATEWAY_PORT/api/plans" 180 "$LOGS/gateway-service.log"
+# The same holds for the other two, and for each of them finding account-service in turn: a session is checked there,
+# so a made-up cookie is refused with a 401 only once both hops resolve. Before that the Gateway answers 503 and the
+# service 500, and the journey's first dashboard sat behind those errors while its sign-in slide ran on.
+wait_for_refusal "The Gateway's route to workspace-service" "http://127.0.0.1:$E2E_GATEWAY_PORT/api/projects" 180 "$LOGS/workspace-service.log"
+wait_for_refusal "The Gateway's route to intelligence-service" "http://127.0.0.1:$E2E_GATEWAY_PORT/api/usage/today" 180 "$LOGS/intelligence-service.log"
 
 echo "Building and serving the frontend"
 (
