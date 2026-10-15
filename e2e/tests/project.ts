@@ -4,6 +4,10 @@
  * Handles: signing in through the app's own form; describing the idea, answering the interview and pressing Build
  * it; and waiting until the server - not the chat, which draws a build before it is saved - hands back the page the
  * build wrote. The model is the scripted one, so the app is always the same small notes app.
+ *
+ * Signing in is done when the page slide has finished, not when the address changes: the slide is a view transition
+ * that holds the old page's picture until the dashboard has loaded (up to 3.5 s), and text typed while it runs is
+ * dropped. A journey that typed its idea mid-slide waited ten minutes on a Create button that never enabled.
  */
 import { expect, type Page } from "@playwright/test";
 import type { Person } from "./support";
@@ -19,6 +23,7 @@ export async function signIn(page: Page, person: Person) {
   await page.getByRole("textbox", { name: "Password" }).fill(person.password);
   await page.locator("form").getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL("**/projects");
+  await expect(page.locator("html")).not.toHaveClass(/page-slide/, { timeout: 10_000 });
 }
 
 export async function buildTheNotesApp(page: Page): Promise<string> {

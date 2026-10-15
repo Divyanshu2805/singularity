@@ -117,7 +117,7 @@ k8s/preview-test-cluster.sh --context kind-singularity --seed
 ./mvnw -pl common-lib,workspace-service test -Dtest=PublishPipelineIT -Dsurefire.failIfNoSpecifiedTests=false
 ```
 
-With `--seed` the whole run takes about 75 seconds; without it every build is a full `npm install`. It writes how long each publish took to `workspace-service/target/publish-timings.txt`. Run it after any change to `PublishBuilder`, `PublishedStore`, `PublishSweeper`, `PublishSourceReader`, `util/TarArchive`, `proxy/published*.js` or `proxy/s3.js`, and put new numbers in [capacity](../deployment/capacity.md#publishing) when they move.
+With `--seed` the whole run takes about 75 seconds; without it every build is a full `npm install`. A build whose install could not reach the npm registry is published once more before it is judged, and the output says `[publish-retry]` when that happened; any other failure fails the test as it stands. It writes how long each publish took to `workspace-service/target/publish-timings.txt`. Run it after any change to `PublishBuilder`, `PublishedStore`, `PublishSweeper`, `PublishSourceReader`, `util/TarArchive`, `proxy/published*.js` or `proxy/s3.js`, and put new numbers in [capacity](../deployment/capacity.md#publishing) when they move.
 
 Written first against a mock pod, the pipeline failed on the real cluster twice, each time on something no mock could show: a tar sent through a command's standard input never finished, because the exec's websocket cannot say "end of input" ([pitfalls](gotchas/kubernetes.md#a-websocket-exec-cannot-end-standard-input)); and unpublishing straight after an update left the live build in storage, because the row remembers one retired build and the update had already used the slot.
 

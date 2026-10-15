@@ -22,6 +22,7 @@ import com.singularity.workspace.enums.PublishFailureKind;
 import com.singularity.workspace.enums.PublishStatus;
 import com.singularity.workspace.repository.ProjectRepository;
 import com.singularity.workspace.repository.PublishedAppRepository;
+import com.singularity.workspace.util.PublishFailureExplainer;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.client.Config;
@@ -112,6 +113,13 @@ import static org.mockito.Mockito.when;
  * service; the cluster, MinIO and the proxy are reached through port-forwards the test opens itself. The spacing between
  * builds and the delay before a retired build is deleted are set to nothing so the test does not wait for them.
  * The page is fetched over a plain socket with the Host header written by hand, for the reason the preview test gives.
+ *
+ * <p>The public npm registry is the one thing it reaches outside the cluster, and in CI, with no pre-installed
+ * {@code node_modules}, every build is a full install. A build that failed because the registry could not be reached -
+ * which the product itself counts as the platform's failure, worth trying again unchanged - is published once more
+ * before anything is asserted, and says so on the output; any other failure, a platform one included, is judged as it
+ * stands. It was the install, not the build, that once made the broken edit's build a platform failure in CI. Because a
+ * retried build takes the next number, a live prefix is checked against the build that went live, never a fixed one.
  */
 @DataJpaTest(properties = {
         "spring.flyway.locations=classpath:db/migration",
@@ -141,6 +149,7 @@ class PublishPipelineIT {
     private static final String SLUG = "it-demo";
     private static final String HOST = SLUG + ".localhost";
     private static final String MARKER = "Published by PublishPipelineIT";
+    private static final String REGISTRY_UNREACHABLE = PublishFailureExplainer.install("npm error code ECONNRESET").detail();
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -276,14 +285,13 @@ class PublishPipelineIT {
     @Order(1)
     void aFirstPublishPutsTheAppOnlineAtItsLink() throws Exception {
         long began = System.nanoTime();
-        service.publish(projectId, new PublishRequest(SLUG));
-        PublishedApp app = settled();
+        PublishedApp app = publish(new PublishRequest(SLUG));
         TIMINGS.put("first publish (install, build, store, live)", (System.nanoTime() - began) / 1e9);
 
         assertThat(app.getBuildStatus()).as("build: %s\n%s", app.getFailureDetail(), app.getFailureLog()).isNull();
         assertThat(app.getStatus()).isEqualTo(PublishStatus.LIVE);
         assertThat(app.getSlug()).isEqualTo(SLUG);
-        assertThat(app.getLivePrefix()).isEqualTo("b1/");
+        assertThat(app.getLivePrefix()).isEqualTo("b" + app.getBuildNumber() + "/");
         assertThat(app.getLiveFileCount()).isGreaterThan(1);
 
         Response page = get(HOST, "/", "text/html");
@@ -331,13 +339,13 @@ class PublishPipelineIT {
         revise(appTsx + "\nconsole.log(\"" + MARKER + "\");\n");
         assertThat(service.getStatus(projectId).hasChanges()).isTrue();
 
+        String before = appRepository.findByProjectId(projectId).orElseThrow().getLivePrefix();
         long began = System.nanoTime();
-        service.publish(projectId, null);
-        PublishedApp app = settled();
+        PublishedApp app = publish(null);
         TIMINGS.put("update (install, build, store, live)", (System.nanoTime() - began) / 1e9);
 
         assertThat(app.getBuildStatus()).as("build: %s\n%s", app.getFailureDetail(), app.getFailureLog()).isNull();
-        assertThat(app.getLivePrefix()).isEqualTo("b2/");
+        assertThat(app.getLivePrefix()).isEqualTo("b" + app.getBuildNumber() + "/").isNotEqualTo(before);
         assertThat(service.getStatus(projectId).hasChanges()).isFalse();
 
         Response served = eventually(Duration.ofSeconds(30), () -> bundleOf(get(HOST, "/", "text/html")), r -> r.body().contains(MARKER));
@@ -347,16 +355,17 @@ class PublishPipelineIT {
     @Test
     @Order(4)
     void aBrokenEditFailsTheBuildInPlainWordsAndLeavesTheLiveAppAlone() throws Exception {
+        String live = appRepository.findByProjectId(projectId).orElseThrow().getLivePrefix();
         revise("export default function App( {\n  return <div>\n");
-        service.publish(projectId, null);
-        PublishedApp app = settled();
+        PublishedApp app = publish(null);
 
         assertThat(app.getBuildStatus()).isEqualTo(PublishBuildStatus.FAILED);
-        assertThat(app.getFailureKind()).isEqualTo(PublishFailureKind.BUILD);
+        assertThat(app.getFailureKind()).as("build: %s\n%s", app.getFailureDetail(), app.getFailureLog())
+                .isEqualTo(PublishFailureKind.BUILD);
         assertThat(app.getFailureDetail()).isNotBlank();
         assertThat(app.getFailureLog()).as("the bundler's own output is kept").isNotBlank();
         assertThat(app.getStatus()).as("the live app is untouched").isEqualTo(PublishStatus.LIVE);
-        assertThat(app.getLivePrefix()).isEqualTo("b2/");
+        assertThat(app.getLivePrefix()).isEqualTo(live);
         assertThat(service.getBuildLog(projectId).log()).isNotBlank();
         assertThat(service.getStatus(projectId).build().failureMessage()).isNotBlank();
 
@@ -385,14 +394,25 @@ class PublishPipelineIT {
     @Order(6)
     void publishingAgainComesBackAtTheSameLink() throws Exception {
         revise(appTsx);
-        service.publish(projectId, null);
-        PublishedApp app = settled();
+        PublishedApp app = publish(null);
 
         assertThat(app.getBuildStatus()).as("build: %s\n%s", app.getFailureDetail(), app.getFailureLog()).isNull();
         assertThat(app.getStatus()).isEqualTo(PublishStatus.LIVE);
         assertThat(app.getSlug()).isEqualTo(SLUG);
         Response page = eventually(Duration.ofSeconds(30), () -> get(HOST, "/", "text/html"), r -> r.status() == 200);
         assertThat(page.status()).isEqualTo(200);
+    }
+
+    private PublishedApp publish(PublishRequest request) throws Exception {
+        service.publish(projectId, request);
+        PublishedApp app = settled();
+        if (app.getFailureKind() == PublishFailureKind.PLATFORM && REGISTRY_UNREACHABLE.equals(app.getFailureDetail())) {
+            System.out.println("[publish-retry] build " + app.getBuildNumber()
+                    + " could not reach the npm registry; publishing once more\n" + app.getFailureLog());
+            service.publish(projectId, request);
+            app = settled();
+        }
+        return app;
     }
 
     private PublishedApp settled() throws Exception {

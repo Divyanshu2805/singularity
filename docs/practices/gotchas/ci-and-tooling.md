@@ -89,3 +89,15 @@
 - **Symptom:** after adding `manualChunks` to split the code editor and the charts out of the project view, every page - the sign-in page included - downloads the charts. `index.html` preloads them.
 - **Cause:** a module no rule names goes into whichever named file needs it first. React, left unnamed, was placed inside the Markdown and charts files, so the entry point had to load those to get React.
 - **Fix:** name React as a file of its own (`VENDOR_CHUNKS` in `frontend/vite.config.ts`). After changing that list, build and check that `dist/index.html` preloads only `react`.
+
+## A dropped download from Maven Central fails the whole backend job
+
+- **Symptom:** the backend job fails at `intelligence-service` with `Could not transfer artifact ... from/to central ... Connection reset`, on a commit whose pull request passed. Rerunning the job passes.
+- **Cause:** Maven 3.9's HTTP transport retries a request only if it failed before being sent. A connection reset partway through a download is not retried, so one dropped connection fails the build.
+- **Fix:** `.mvn/maven.config` raises the retry count to 5 and retries requests that were already sent (`aether.connector.http.retryHandler.*`). It applies to every `./mvnw` run, locally and in CI.
+
+## An install that cannot reach the npm registry fails the publish test as a platform failure
+
+- **Symptom:** `PublishPipelineIT` fails at the broken edit with `expected: BUILD but was: PLATFORM`, on a commit that changed nothing near publishing. The build never got as far as `vite build`; the row went from "Installing packages" straight to failed.
+- **Cause:** CI stands the cluster up without `--seed`, so each of the test's builds is a full `npm install` from the public registry, and one that cannot reach it fails at the install. The explainer rightly files that as the platform's failure, not the project's - but a failed install says nothing about the broken file the step was there to test. npm's output was not printed, so the exact code is not known.
+- **Fix:** the test publishes once more when a build failed for that one reason (`PublishPipelineIT.publish`) and prints `[publish-retry]` with npm's output. Every other failure is judged as it stands, and the assertion on the failure's kind now prints the detail and the log, so the next one says why without a rerun.
