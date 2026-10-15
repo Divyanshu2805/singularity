@@ -1,17 +1,16 @@
 /**
  * The heading every settings-style page in the app opens with - Usage, Plans & billing, Security, All projects.
  *
- * Handles: a small mono eyebrow, a Fraunces title whose last part is set in italic gold (the landing page's and the
- * dashboard's own voice), a line of description, and the page's own controls on the right; and the entrance - the
- * eyebrow fades up, the title's words drop in one after another (motion.ts's play, the same drop the landing hero
- * and the sign-in pages use), and the description and controls follow - played again whenever the title changes.
+ * Handles: a small mono eyebrow, a Fraunces title whose last part is set in italic gold (the dashboard's own voice), a line of description, and the page's own controls on the right; and the entrance - the
+ * eyebrow fades up, the title's words drop in one after another (motion.ts's play, the same drop the sign-in pages
+ * use), and the description and controls follow - played again whenever the title changes.
  *
  * Under reduced motion it is simply there.
  */
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { HeadlineWords } from "@/components/landing/HeadlineWords";
-import { WORD_DROP } from "@/components/landing/intro";
-import { play } from "@/components/landing/motion";
+import { HeadlineWords } from "@/components/motion/HeadlineWords";
+import { WORD_DROP } from "@/components/motion/intro";
+import { play } from "@/components/motion/motion";
 
 export function PageHeading({ eyebrow, title, accent, children, actions }: {
   eyebrow: string;

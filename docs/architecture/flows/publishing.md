@@ -12,7 +12,7 @@ Publishing puts a production build of one saved revision of a project online at 
 6. **It is stored, then pointed at.** `PublishedStore` writes the build under `<name>/b<N>/site/`, the sources it was built from (environment files removed) under `<name>/b<N>/src/`, and **last** `<name>/current.json`. Then `markLive` records it in the database. The pod is released whatever happened.
 7. **`proxy/published-server.js` serves it.** See [serving](#serving).
 
-If the build is ended from outside - Unpublish, the project's deletion, the sweeper - every write the builder makes names its build number and applies only while that build is still the one under way, so it finds out at its next step, deletes what it stored and stops. It can never put a pointer live over what replaced it.
+If the build is ended from outside - Unpublish, Cancel (`DELETE ./publish/build`, which also gives the build's pod back at once so a long install stops), the project's deletion, the sweeper - every write the builder makes names its build number and applies only while that build is still the one under way, so it finds out at its next step, deletes what it stored and stops. It can never put a pointer live over what replaced it.
 
 ## The record
 

@@ -5,21 +5,21 @@
  * plan in place for someone who already has one.
  *
  * Feature lists are built from each plan's own numbers rather than written out per tier (lib/billing's
- * planFeatures, shared with the landing page's plan section), so a limit changed on the server cannot leave the page
+ * planFeatures), so a limit changed on the server cannot leave the page
  * claiming the old one. The unlimited-AI flag is deliberately not shown: no plan sets it, and a card promising
  * unlimited AI beside a daily token figure would contradict itself.
  *
  * It stands on the signed-in pages' night (.dash-night) under the horizon mark and a Fraunces headline with an
  * italic gold close. Signed in, the page sits in the rounded inset frame (.dash-frame) beside the docked sidebar, as
  * the dashboard, usage and billing pages do, over the wash of colour at the foot of the screen and the stars above it (Nebula);
- * signed out there is no sidebar and the quiet sky (LandingBackdrop) fills the window, since a visitor arrives here from
- * the landing page's sky, so the wash is asked for without its stars and the stars are that sky's. The owner asked for this page's background
- * to match the others and its cards to match the landing page's, so the cards are the landing's own (PlanCard): glass
- * for the outer plans, the lit card with the "Most popular" pill for the recommended one, and the landing's buttons -
- * the dark primary pill on the recommended card and its quiet twin on the others, or on any card whose button can't
- * be pressed (the current plan, or a free plan already scheduled), which shows no arrow.
+ * signed out there is no sidebar and the quiet sky (PageBackdrop) fills the window, so the wash is asked for without its
+ * stars and the stars are that sky's. The cards (PlanCard) are glass
+ * for the outer plans, the lit card with the "Most popular" pill for the recommended one, and the app's own buttons
+ * (ui/button, so they answer the pointer as every other button does) - the primary on the recommended card and the
+ * outline on the others, or on any card whose button can't be pressed (the current plan, or a free plan already
+ * scheduled), which shows no arrow.
  *
- * The cards come in once, when the plans arrive, the way the landing's open with the scroll: the recommended card
+ * The cards come in once, when the plans arrive: the recommended card
  * rises into place first (RISE) and the other two then slide out from behind it to either side (FAN, starting at the
  * recommended card's centre - measured from the grid cells, which never move). When the cards are stacked rather than
  * side by side, each simply rises in turn. Each card is marked landed half-way through its entrance (LAND_AT), which
@@ -29,15 +29,14 @@
  * be squeezed too narrow for their buttons (PlanCard's columns).
  */
 import { Nebula } from "@/components/app/Nebula";
-import { LandingBackdrop } from "@/components/landing/LandingBackdrop";
+import { PageBackdrop } from "@/components/app/PageBackdrop";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { HorizonMark } from "@/components/HorizonMark";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
-import { LandingButton } from "@/components/landing/LandingButton";
-import { PlanCard } from "@/components/landing/PlanCard";
-import { usePrefersReducedMotion } from "@/components/landing/motion";
+import { PlanCard } from "@/components/PlanCard";
+import { usePrefersReducedMotion } from "@/components/motion/motion";
 import { Button } from "@/components/ui/button";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { useSidebar } from "@/hooks/use-sidebar";
@@ -177,8 +176,8 @@ export function Pricing() {
 
     return (
         <div className="dash-night dash-sky relative flex h-screen overflow-hidden bg-background">
-            {!signedIn && <LandingBackdrop mode="quiet" />}
-            <Nebula stars={signedIn} />
+            {!signedIn && <PageBackdrop mode="quiet" />}
+            <Nebula stars={false} strong />
             {signedIn && <SidebarSpacer sidebar={sidebar} />}
 
             <div className={cn("relative flex min-w-0 flex-1 flex-col overflow-hidden", signedIn && "dash-frame my-2 mr-2 rounded-2xl")}>
@@ -195,17 +194,17 @@ export function Pricing() {
 
                 <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
                     <div className="mx-auto w-full max-w-[1080px] px-4 pb-20 pt-6 sm:px-6">
-                        <div className="mb-14 text-center">
-                            <div className="mb-6 flex justify-center">
-                                <span className="relative inline-flex h-14 w-14">
+                        <div className="mb-12 text-center">
+                            <div className="mb-4 flex justify-center">
+                                <span className="relative inline-flex h-11 w-11">
                                     <span aria-hidden="true" className="nav-brand-glow pointer-events-none absolute -inset-[60%] rounded-full" />
                                     <HorizonMark drawn className="relative h-full w-full" />
                                 </span>
                             </div>
-                            <h1 className="landing-heading app-fade font-display text-[34px] font-semibold leading-[1.05] tracking-[-0.02em] sm:text-[44px]" style={{ "--i": 1 } as CSSProperties}>
+                            <h1 className="landing-heading app-fade font-display text-[26px] font-semibold leading-[1.1] tracking-[-0.02em] sm:text-[34px]" style={{ "--i": 1 } as CSSProperties}>
                                 Build more, for less than <em className="heat-text animate-heat-sweep pr-1 font-medium motion-reduce:animate-none">you&rsquo;d think</em>
                             </h1>
-                            <p className="app-fade mx-auto mt-3 max-w-lg text-sm text-muted-foreground" style={{ "--i": 3 } as CSSProperties}>
+                            <p className="app-fade mx-auto mt-2.5 max-w-md text-[13px] leading-relaxed text-muted-foreground" style={{ "--i": 3 } as CSSProperties}>
                                 Every plan includes the whole editor - the AI chat, teaching mode, ExplainLLM and live
                                 previews. What changes is how many projects you keep and how much you can build each day.
                             </p>
@@ -245,18 +244,19 @@ export function Pricing() {
                                                 pops.current[position] = node;
                                             }}
                                         >
-                                            <LandingButton
-                                                variant={featured[position] && !locked ? "primary" : "quiet"}
-                                                block
-                                                arrow={!locked}
-                                                busy={isStarting}
-                                                knob={isStarting ? <OrbitSpinner className="h-3.5 w-3.5" /> : undefined}
+                                            <Button
+                                                variant={featured[position] && !locked ? "default" : "outline"}
+                                                size="lg"
+                                                aria-busy={isStarting || undefined}
                                                 disabled={locked || isStarting}
-                                                className={locked ? "!text-white !opacity-100" : undefined}
+                                                style={{ "--icon-hover": "translateX(3px)" } as CSSProperties}
+                                                className={cn("w-full gap-1.5", locked && "text-white disabled:opacity-100")}
                                                 onClick={() => void choose(plan)}
                                             >
+                                                {isStarting && <OrbitSpinner className="h-3.5 w-3.5" />}
                                                 {isStarting ? "Taking you to Stripe…" : planActionLabel(action, plan, subscription)}
-                                            </LandingButton>
+                                                {!locked && !isStarting && <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />}
+                                            </Button>
                                         </PlanCard>
                                     );
                                 })}

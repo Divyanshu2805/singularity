@@ -5,6 +5,9 @@
  * the project the person left from; and saying in plain words when GitHub was refused, when the server did not accept
  * what came back, or when nothing came back at all.
  *
+ * Both its states are the app's status stage (components/app/StatusScreen): ripples spreading from the mark while it
+ * connects, and the alert form with the way back when it did not.
+ *
  * It exists because the server cannot be the place GitHub redirects to. The session cookie is not sent on a
  * navigation that arrives from another site, so the server would see a signed-out caller; this page loads without
  * needing one, and its own request to the server is made from inside the site, with the session.
@@ -14,8 +17,9 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { OrbitSpinner } from "@/components/app/OrbitSpinner";
-import { HorizonMark } from "@/components/HorizonMark";
+import { ArrowLeft } from "lucide-react";
+import { StatusScreen } from "@/components/app/StatusScreen";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { takeReturnPath } from "@/lib/github";
 
@@ -47,23 +51,30 @@ export function GitHubCallback() {
       .catch((error: unknown) => setProblem(error instanceof Error ? error.message : "GitHub could not be connected."));
   }, [params, navigate]);
 
+  if (problem) {
+    return (
+      <StatusScreen
+        alert
+        eyebrow="Connection"
+        title="GitHub is not"
+        accent="connected"
+        actions={
+          <Button asChild variant="chip" className="gap-1.5">
+            <Link to={backTo}>
+              <ArrowLeft />
+              Back to your project
+            </Link>
+          </Button>
+        }
+      >
+        {problem}
+      </StatusScreen>
+    );
+  }
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-center">
-      <HorizonMark className="h-8 w-8" />
-      {problem ? (
-        <>
-          <h1 className="font-display text-xl font-semibold tracking-tight">GitHub is not connected</h1>
-          <p className="max-w-sm text-sm text-muted-foreground">{problem}</p>
-          <Link to={backTo} className="text-sm font-medium text-primary hover:underline">
-            Back to your project
-          </Link>
-        </>
-      ) : (
-        <>
-          <OrbitSpinner />
-          <p className="text-sm text-muted-foreground">Connecting GitHub</p>
-        </>
-      )}
-    </main>
+    <StatusScreen busy eyebrow="GitHub" title="Connecting" accent="GitHub">
+      Finishing the link with your account. This takes a moment.
+    </StatusScreen>
   );
 }

@@ -4,7 +4,10 @@
  * Handles: the current plan and its renewal or cancellation state, the token and project meters, opening the payment
  * provider's portal, changing plan, and settling a checkout the browser has just returned from.
  *
- * Both meters are drawn by the same component, so tokens and projects read as the same kind of thing.
+ * Both meters are drawn by the same component, so tokens and projects read as the same kind of thing. The plan and
+ * the usage are boxes of the Settings page's own kind (components/settings/SettingsCard - a gold icon tile, a mono
+ * label, a title and a recessed body), so the two pages of the account menu look like one place, and every action
+ * on the plan carries an icon as Manage billing does.
  *
  * It is a page of its own, reached from the account menu's Plans & billing entry; it was once a tab of an Account
  * place with the profile and security, which are now boxes on the Settings page.
@@ -14,14 +17,15 @@
  * owner found the app too dark to read its panels on, and stars came back when the nebula was redrawn as gas -
  * under the shared page heading (PageHeading - a mono eyebrow, a
  * Fraunces title with an italic gold close, its words dropping in), its panels are solid raised surfaces that rise in one
- * after another (index.css, .app-glass, .app-rise), and anything working shows the app's comet (OrbitSpinner).
+ * after another (index.css, .app-glass, .app-rise), and anything working shows the app's ripple (OrbitSpinner).
  */
 import { Nebula } from "@/components/app/Nebula";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { PageHeading } from "@/components/app/PageHeading";
+import { SettingsCard } from "@/components/settings/SettingsCard";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ArrowUpRight, CreditCard } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CircleX, CreditCard, Crown, Gauge, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { useSidebar } from "@/hooks/use-sidebar";
@@ -142,7 +146,7 @@ export function BillingSettings() {
 
     return (
         <div className="dash-night dash-sky relative flex h-screen overflow-hidden bg-background">
-            <Nebula />
+            <Nebula stars={false} strong />
             <SidebarSpacer sidebar={sidebar} />
 
             <div className="dash-frame relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
@@ -152,7 +156,7 @@ export function BillingSettings() {
                 </header>
 
                 <main className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-                    <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-4 sm:px-6">
+                    <div className="mx-auto w-full max-w-4xl px-4 pb-16 pt-4 sm:px-6">
                         <div className="mb-6">
                             <PageHeading eyebrow="Billing" title="Plans &" accent="billing">
                                 What you're on, what you've used, and how to change it.
@@ -183,21 +187,15 @@ export function BillingSettings() {
                                     </div>
                                 )}
 
-                                <section className="app-glass app-rise rounded-[22px] p-5" style={{ "--i": 1 } as CSSProperties}>
-                                    <div className="flex flex-wrap items-start justify-between gap-4">
-                                        <div className="min-w-0">
-                                            <p className="app-label">
-                                                Current plan
-                                            </p>
-                                            <h2 className="mt-1 font-display text-2xl font-semibold">
-                                                {plan?.name ?? "Free"}
-                                            </h2>
-                                            <p className="mt-1 text-xs text-muted-foreground">
-                                                {subscriptionStatusLabel(subscription)}
-                                            </p>
-                                        </div>
-                                        {plan && (
-                                            <p className="shrink-0 text-right">
+                                <SettingsCard
+                                    index={1}
+                                    label="Current plan"
+                                    title={plan?.name ?? "Free"}
+                                    Icon={Crown}
+                                    description={subscriptionStatusLabel(subscription)}
+                                    action={
+                                        plan && (
+                                            <p className="text-right">
                                                 <span className="font-display text-xl font-semibold">{plan.price}</span>
                                                 {!plan.isFree && plan.billingInterval && (
                                                     <span className="text-xs text-muted-foreground">
@@ -206,10 +204,10 @@ export function BillingSettings() {
                                                 )}
                                                 <span className="sr-only">{planPriceLabel(plan)}</span>
                                             </p>
-                                        )}
-                                    </div>
-
-                                    <div className="mt-5 flex flex-wrap gap-2">
+                                        )
+                                    }
+                                >
+                                    <div className="flex flex-wrap gap-2">
                                         <Button variant="outline" className="gap-1.5" onClick={() => navigate("/pricing")}>
                                             {subscription?.isFree ? "See plans" : "Change plan"}
                                             <ArrowUpRight className="h-3.5 w-3.5 transition-colors [button:hover>&]:text-yellow-400" />
@@ -230,36 +228,42 @@ export function BillingSettings() {
                                             </Button>
                                         )}
                                         {!subscription?.isFree && subscription?.cancelAtPeriodEnd && plan && (
-                                            <Button variant="default" onClick={() => setChangingTo(plan)}>
+                                            <Button variant="default" className="gap-1.5" onClick={() => setChangingTo(plan)}>
+                                                <RotateCcw className="h-3.5 w-3.5" />
                                                 Keep {plan.name}
                                             </Button>
                                         )}
                                         {!subscription?.isFree && !subscription?.cancelAtPeriodEnd && freePlan && (
                                             <Button
-                                                variant="ghost"
-                                                className="text-muted-foreground hover:text-destructive"
+                                                variant="outline"
+                                                className="app-chip-danger gap-1.5 border-red-400/40 text-red-300"
                                                 onClick={() => setChangingTo(freePlan)}
                                             >
+                                                <CircleX className="h-3.5 w-3.5" />
                                                 Cancel plan
                                             </Button>
                                         )}
                                     </div>
-                                </section>
+                                </SettingsCard>
 
-                                <section className="app-glass app-rise rounded-[22px] p-5" style={{ "--i": 2 } as CSSProperties}>
-                                    <div className="flex items-center justify-between gap-2">
-                                        <p className="app-label">Usage</p>
+                                <SettingsCard
+                                    index={2}
+                                    label="Usage"
+                                    title="What you've used"
+                                    Icon={Gauge}
+                                    description="Tokens cover everything the AI does for you - building, ExplainLLM and the idea interview."
+                                    action={
                                         <button
                                             type="button"
                                             onClick={() => navigate("/usage")}
-                                            className="flex items-center gap-1 text-xs text-primary hover:underline"
+                                            className="wipe-link flex items-center gap-1 text-xs text-primary hover:text-white focus-visible:text-white focus-visible:outline-none"
                                         >
                                             View detailed usage
                                             <ArrowUpRight className="h-3 w-3" />
                                         </button>
-                                    </div>
-
-                                    <div className="mt-4 space-y-5">
+                                    }
+                                >
+                                    <div className="space-y-5">
                                         <Meter
                                             label="AI tokens today"
                                             used={quota?.used ?? 0}
@@ -286,11 +290,10 @@ export function BillingSettings() {
 
                                     {usage && (
                                         <p className="mt-5 text-[11px] text-muted-foreground">
-                                            Tokens cover everything the AI does for you - building, ExplainLLM and the
-                                            idea interview. The daily allowance resets at midnight.
+                                            The daily allowance resets at midnight.
                                         </p>
                                     )}
-                                </section>
+                                </SettingsCard>
                             </div>
                         )}
                     </div>

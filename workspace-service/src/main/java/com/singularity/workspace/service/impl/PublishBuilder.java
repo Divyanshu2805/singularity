@@ -45,7 +45,7 @@ import static com.singularity.workspace.service.impl.PreviewRunnerPool.RUNNER_CO
  * rejects anything that is not a plain relative path, and the build is bounded by file count and size before and
  * after it is read. What comes back is stored as bytes and served as bytes; it is never run here.
  *
- * <p>The build can be ended from outside - Unpublish, the project being deleted, the sweeper - by changing the row.
+ * <p>The build can be ended from outside - Unpublish, Cancel, the project being deleted, the sweeper - by changing the row.
  * Every write here names its build number and applies only while that build is still the one under way, so a build
  * that lost simply finds out at its next step, deletes what it stored and stops; it can never put a pointer live
  * over what replaced it. While a command runs in the pod, a second thread keeps the row's heartbeat fresh, because the
@@ -192,10 +192,18 @@ public class PublishBuilder {
         } catch (ConflictException e) {
             fail(appId, build, PublishFailureKind.PLATFORM, e.getMessage(), null);
         } catch (ExternalServiceException | FileStorageException e) {
+            if (endedFromOutside(appId, build)) {
+                log.info("Build {} of {} stopped because it was ended from outside", build, slug);
+                return;
+            }
             log.warn("Publishing {} (build {}) failed on the platform", slug, build, e);
             fail(appId, build, PublishFailureKind.PLATFORM,
                     "Something went wrong on our side while publishing. Try again in a moment.", null);
         } catch (RuntimeException e) {
+            if (endedFromOutside(appId, build)) {
+                log.info("Build {} of {} stopped because it was ended from outside", build, slug);
+                return;
+            }
             log.error("Publishing {} (build {}) failed unexpectedly", slug, build, e);
             fail(appId, build, PublishFailureKind.PLATFORM,
                     "Something went wrong on our side while publishing. Try again in a moment.", null);
@@ -282,6 +290,18 @@ public class PublishBuilder {
 
     private void fail(Long appId, long build, PublishFailureKind kind, String detail, String output) {
         appRepository.markFailed(appId, build, kind, detail, tail(output));
+    }
+
+    /** Gives back the pod of a build that was cancelled, so whatever is running in it stops with it. */
+    void releasePod(String podName) {
+        release(podName);
+    }
+
+    private boolean endedFromOutside(Long appId, long build) {
+        return appRepository.findById(appId)
+                .map(app -> app.getBuildStatus() != com.singularity.workspace.enums.PublishBuildStatus.BUILDING
+                        || app.getBuildNumber() != build)
+                .orElse(false);
     }
 
     private void release(String podName) {

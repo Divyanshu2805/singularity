@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { KeyRound, MailCheck, ShieldAlert } from "lucide-react";
 import { applyActionCode, checkActionCode } from "firebase/auth";
+import { OrbitSpinner } from "@/components/app/OrbitSpinner";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthCardHeading, AuthSubmitButton, AuthTextLink, FormAlert } from "@/components/auth/AuthForm";
 import { NewPasswordForm } from "@/components/auth/NewPasswordForm";
@@ -68,9 +69,9 @@ export default function AuthAction() {
     return (
         <AuthLayout title={TITLE} view={view.kind}>
             {view.kind === "loading" && (
-                <p role="status" className="flex items-center justify-center gap-2.5 py-8 text-[14px] text-muted-foreground">
-                    <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-primary shadow-[0_0_12px_hsl(var(--primary))]" />
-                    Checking your link…
+                <p role="status" className="flex items-center justify-center gap-3 py-8 text-[14px] text-muted-foreground">
+                    <OrbitSpinner className="h-4 w-4" />
+                    <span className="text-shimmer">Checking your link…</span>
                 </p>
             )}
 

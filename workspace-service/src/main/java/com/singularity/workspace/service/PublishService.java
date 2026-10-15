@@ -11,7 +11,7 @@ import java.util.Map;
  * A project's published app: putting it online, updating it, taking it down, and saying where it stands.
  *
  * <p>Handles: reading the state of a project's publish, starting a build that will put the project's current revision
- * online at its link (the first time, or as an update), unpublishing, sharing or un-sharing the code, reading the
+ * online at its link (the first time, or as an update), stopping a build that is under way, unpublishing, sharing or un-sharing the code, reading the
  * output of a failed build, taking an app down because its project was deleted, and the links of the live apps among a
  * set of projects, for the project cards.
  *
@@ -27,6 +27,8 @@ public interface PublishService {
     PublishResponse publish(Long projectId, PublishRequest request);
 
     void unpublish(Long projectId);
+
+    PublishResponse cancelBuild(Long projectId);
 
     PublishResponse setSharing(Long projectId, boolean shared);
 

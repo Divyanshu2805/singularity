@@ -7,7 +7,7 @@
  * The minimum query length keeps single letters from fanning out across every file, and the debounce exists because
  * the search reads every file from storage, so it is not free per keystroke.
  *
- * The query box is the app's matte well (index.css, .app-field), showing the app's comet while it searches, and a
+ * The query box is the app's matte well (index.css, .app-field), showing the app's ripple while it searches, and a
  * hit's row takes the app's row highlight under the pointer (.hl-row).
  */
 import { useEffect, useMemo, useState, type CSSProperties } from "react";

@@ -250,11 +250,11 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
           style={{ top: anchor.top, left: anchor.left, transform: anchor.below ? undefined : "translateY(-100%)" }}
           className="app-menu app-menu-raised absolute z-20 flex items-center gap-1.5 rounded-full border p-1 pl-3.5 animate-in fade-in-0 zoom-in-95 duration-200"
         >
-          <span className="mr-1 font-mono text-[10.5px] uppercase tracking-[0.16em] text-[hsl(40_31.5%_88%/0.7)]">{lineLabel}</span>
+          <span className="mr-1 font-mono text-[10.5px] uppercase tracking-[0.16em] [color:hsl(40_31.5%_88%/0.7)]">{lineLabel}</span>
           <button
             type="button"
             onClick={() => onSelectionAction(selection, "explain")}
-            className="btn btn-primary flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35"
+            className="btn app-chip flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold text-foreground/90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35"
           >
             <Sparkles className="h-3.5 w-3.5" />
             Explain
@@ -262,7 +262,7 @@ export const CodeEditor = memo(function CodeEditor({ content, filePath, isLoadin
           <button
             type="button"
             onClick={() => onSelectionAction(selection, "ask")}
-            className="btn btn-glass flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold text-foreground/90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35"
+            className="btn app-chip flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold text-foreground/90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35"
           >
             <MessagesSquare className="h-3.5 w-3.5" />
             Ask

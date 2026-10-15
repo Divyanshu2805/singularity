@@ -2,7 +2,7 @@
  * A project's published app: its state, and the actions that change it.
  *
  * Handles: polling the state (quickly while a build runs, slowly while the app is live, not at all when there is
- * nothing to watch), publishing and updating, unpublishing, switching the sharing of the code, and refreshing the project
+ * nothing to watch), publishing and updating, stopping a build that is under way, unpublishing, switching the sharing of the code, and refreshing the project
  * list when a build finishes or the app comes down so the "Published" mark on every card follows.
  *
  * How often to poll is lib/publish's (publishPollInterval). Nothing here starts a build by itself: a build costs the
@@ -20,9 +20,11 @@ export interface ProjectPublish {
   state: PublishState | undefined;
   isLoaded: boolean;
   publish: (slug?: string) => Promise<PublishState>;
+  cancelBuild: () => Promise<PublishState>;
   unpublish: () => Promise<void>;
   setShared: (shared: boolean) => Promise<PublishState>;
   isPublishing: boolean;
+  isCancelling: boolean;
   isUnpublishing: boolean;
   isSharing: boolean;
   publishError: unknown;
@@ -55,6 +57,14 @@ export function useProjectPublish(projectId: string, isOpen: boolean): ProjectPu
     onSuccess: (next) => queryClient.setQueryData(publishQueryKey(projectId), next),
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: () => api.cancelPublish(projectId),
+    onSuccess: (next) => {
+      queryClient.setQueryData(publishQueryKey(projectId), next);
+      void refreshProjects();
+    },
+  });
+
   const unpublishMutation = useMutation({
     mutationFn: () => api.unpublish(projectId),
     onSuccess: async () => {
@@ -74,9 +84,11 @@ export function useProjectPublish(projectId: string, isOpen: boolean): ProjectPu
     state,
     isLoaded: query.isFetched,
     publish: publishMutation.mutateAsync,
+    cancelBuild: cancelMutation.mutateAsync,
     unpublish: unpublishMutation.mutateAsync,
     setShared: shareMutation.mutateAsync,
     isPublishing: publishMutation.isPending,
+    isCancelling: cancelMutation.isPending,
     isUnpublishing: unpublishMutation.isPending,
     isSharing: shareMutation.isPending,
     publishError: publishMutation.error,

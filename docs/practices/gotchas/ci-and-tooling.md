@@ -86,6 +86,6 @@
 
 ## Naming a library as its own bundle file can put React inside it
 
-- **Symptom:** after adding `manualChunks` to split the code editor and the charts out of the project view, every page - the landing page included - downloads the charts. `index.html` preloads them.
+- **Symptom:** after adding `manualChunks` to split the code editor and the charts out of the project view, every page - the sign-in page included - downloads the charts. `index.html` preloads them.
 - **Cause:** a module no rule names goes into whichever named file needs it first. React, left unnamed, was placed inside the Markdown and charts files, so the entry point had to load those to get React.
 - **Fix:** name React as a file of its own (`VENDOR_CHUNKS` in `frontend/vite.config.ts`). After changing that list, build and check that `dist/index.html` preloads only `react`.

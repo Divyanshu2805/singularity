@@ -1,20 +1,17 @@
 /**
  * The application shell: the providers every page needs, and the route table.
  *
- * Handles: the query client, the tooltip context and the two toast outlets; the top-level error boundary that keeps a
- * render failure from blanking the page; the routes themselves; and making the browser's Back and Forward buttons
- * between the landing page and the sign-in pages run the page slide (lib/page-slide). That listener is installed when
- * this module loads, before the router mounts and adds its own, because it has to see each popstate first.
+ * Handles: the query client, the tooltip context and the two toast outlets; the whole-page "can't reach Singularity"
+ * screen (ServerUnreachable), shown over any page while the server does not answer; the top-level error boundary that keeps a
+ * render failure from blanking the page; the routes themselves; and installing the sign-out slide's arrival listener
+ * (lib/page-slide) when this module loads, before the first paint.
  *
  * Every page but the entry redirect is loaded on demand. Eagerly importing them put the code editor, the charting
  * library and the auth pages in one bundle that every visitor downloaded before seeing anything, including someone
  * who only wanted the pricing page. While a page's code arrives the app shows its own night (AppLoading) - the sky
  * with the horizon mark building itself - rather than a blank screen.
  *
- * One route is registered in development only (import.meta.env.DEV), so a production build neither serves nor
- * bundles it: /genesis, the landing page being rebuilt as one continuous scene (pages/Genesis.tsx), there to be
- * reviewed section by section until the owner approves it to replace the page at the root (pages/Home.tsx, shown
- * by Index).
+ * The root (Index) has no landing page: it sends visitors to /login and signed-in people to /projects.
  *
  * /p/:slug is the one public page: the read-only view of a shared app's code, open to anyone with the link and
  * without signing in (pages/SharedApp).
@@ -32,10 +29,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLoading } from "@/components/app/AppLoading";
-import { slideOnHistoryMoves } from "@/lib/page-slide";
+import { ServerUnreachable } from "@/components/app/ServerUnreachable";
+import { slideInFromLeft } from "@/lib/page-slide";
 import Index from "./pages/Index";
 
-slideOnHistoryMoves();
+slideInFromLeft();
 
 const AuthPage = lazy(() => import("./pages/AuthPage"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -51,7 +49,6 @@ const SharedApp = lazy(() => import("./pages/SharedApp").then((m) => ({ default:
 const GitHubCallback = lazy(() => import("./pages/GitHubCallback").then((m) => ({ default: m.GitHubCallback })));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Legal = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Legal })));
-const Genesis = import.meta.env.DEV ? lazy(() => import("./pages/Genesis")) : null;
 
 const queryClient = new QueryClient();
 
@@ -62,6 +59,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <ServerUnreachable />
       <ErrorBoundary>
         <BrowserRouter>
           <Suspense fallback={<RouteFallback />}>
@@ -84,7 +82,6 @@ const App = () => (
               <Route path="/terms" element={<Legal />} />
               <Route path="/p/:slug" element={<SharedApp />} />
               <Route path="/github/callback" element={<GitHubCallback />} />
-              {Genesis && <Route path="/genesis" element={<Genesis />} />}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

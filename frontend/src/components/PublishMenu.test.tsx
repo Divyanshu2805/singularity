@@ -17,6 +17,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
     getPublish: vi.fn(),
     publish: vi.fn(),
     unpublish: vi.fn(),
+    cancelPublish: vi.fn(),
     setCodeShared: vi.fn(),
     getPublishLog: vi.fn(),
     getFilePaths: vi.fn(),
@@ -83,7 +84,7 @@ describe("PublishMenu", () => {
 
     expect(await screen.findByLabelText(/Link name/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Publish" })).toBeTruthy();
-    expect(screen.getByText(/Anyone with the link can open it/)).toBeTruthy();
+    expect(screen.queryByText(/Anyone with the link can open it/)).toBeNull();
   });
 
   it("starts a build with the chosen name, and nothing is sent before the press", async () => {
@@ -114,6 +115,17 @@ describe("PublishMenu", () => {
 
     const steps = await screen.findByRole("list", { name: "Publishing steps" });
     expect(steps.querySelector('[aria-current="step"]')?.textContent).toContain("Installing packages");
+  });
+
+  it("lets the owner stop a build that is under way, and shows the state it leaves", async () => {
+    renderMenu({ ...never, slug: "my-app-ab12", build: { status: "BUILDING", step: "Installing packages", startedAt: null, failureKind: null, failureMessage: null } });
+    vi.mocked(api.cancelPublish).mockResolvedValue({ ...never, slug: "my-app-ab12" });
+    await open();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(api.cancelPublish).toHaveBeenCalledWith("7"));
+    await waitFor(() => expect(screen.queryByRole("list", { name: "Publishing steps" })).toBeNull());
   });
 
   it("shows a live app's link with copy and open, and no Update while nothing has changed", async () => {

@@ -24,7 +24,8 @@
  * deleting the account - to Plans & billing, and to Usage (the entry for the page you are on carries the sidebar's
  * selected-row wash, .account-menu in index.css), opens the panel of
  * project invitations (InvitationsDialog) with the number waiting beside it, opens the Privacy and Terms page, and
- * signs out. While an invitation is waiting the avatar itself
+ * signs out. On a project's page the "Couldn't load projects" card is not drawn: that page says so itself, in its own
+ * words, and two notices for the one failure read as two failures. While an invitation is waiting the avatar itself
  * carries a small gold dot, so it is seen without opening the menu. The invitations are asked for when the sidebar
  * mounts, as the projects are.
  *
@@ -32,8 +33,8 @@
  * section labels (BitBin's "// projects" code-comment labels were tried and turned down), with BitBin's two gliding
  * highlights - one that follows the pointer from row to row (use-glide-highlight) and one under the row for the page
  * you are on, a nav row or the open project, which slides to the new row when you navigate (use-active-pill). Every
- * row but the new-project one (which lights itself) is marked data-glide and positioned, so it paints over both (index.css,
- * .glide-pill, .active-pill). Both are the prompt's Build/Teach menu highlight - a gold wash fading rightwards with
+ * row but New project (a chip, below) is marked data-glide and positioned, so it paints over both (index.css,
+ * .glide-pill, .active-pill). The selected row's pill is a solid gold fill, not a gradient. Both are the prompt's Build/Teach menu highlight - a gold wash fading rightwards with
  * a soft glow inside its left edge - the selected one deeper, with a glow pooled at its left end and a soft gold
  * drop shadow (a solid tab at the sidebar's edge was tried and removed); a hovered or selected row's label nudges right (the sidebar's alone - menus hold still),
  * and its icon turns pale gold (open only - on the rail the icons hold still). Each row's icon answers the pointer
@@ -44,18 +45,20 @@
  * On the rail every icon stays exactly where it sits in the open panel - rows are padded so their icons fall on the
  * rail's centre line - while labels, counts and shortcuts fade (.sidebar-fade, which keeps their space, so nothing
  * shifts up or down), the project groups fade with them and go inert, and the usage warning folds away
- * (.sidebar-fold). Rail rows name themselves in a tooltip instead; open, the tooltips stay shut. The new-project row
- * is a row like the others with a gold plus badge kept on the rail's centre line, so closed it is simply a plus.
- * Open, it reads as a small field labelled "New project" woven from the sheet of space-time the "Continue with
- * Google" button is made of (SpacetimeFabric, on a canvas under the label): a fine grid that dips towards the plus,
- * its mass, with slow rings spreading from it and a few stars lying on it, and that sinks towards the pointer while
- * it is on the row. The owner asked for that fabric here by name. On the rail there is no sheet, only the plus.
- * Turned down before this: a few invitations typed out in turn (the row sat half-empty), a gold spill across the row
- * with a letter-by-letter label roll, the badge filling with a hue-turning project-tile blend (it read green, off the
- * palette), and a few gold stars resting on the row that fell into the plus under the pointer.
+ * (.sidebar-fold). Rail rows name themselves in a tooltip instead; open, the tooltips stay shut. New project is the
+ * app's chip (index.css, .app-chip), the same button as the prompt's Build trigger at the owner's request: a charcoal
+ * pill with a few small stars twinkling on its right (the plans' .plan-star, a few fewer on the rail) that takes the gold light following the pointer (lib/button-light, a little wider here than a chip's) and a gold hairline under it, its gold
+ * plus turning a quarter; it fills the row open and narrows to a round chip on the rail, its label gone and the plus centred in
+ * it by the layout, on the rail's centre line. It does not take the rows' gliding highlight (data-glide-none), since the chip lights itself the way every
+ * other button in the app does. Before that it was a taller field woven from the sheet of space-time the "Continue
+ * with Google" button is made of (SpacetimeFabric), and before that a few invitations typed out, a gold spill with a
+ * letter-by-letter label roll, a hue-turning badge and gold stars that fell into the plus.
+ *
+ * When the list cannot be fetched the Recent group is a small card instead of a bare line: a cloud with a slash
+ * through it, what went wrong in two short lines, and Retry, whose arrow turns while the list is asked for again.
  */
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import { SpacetimeFabric } from "@/components/auth/SpacetimeFabric";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import { canForkProject } from "@/lib/project-fork";
 import { deleteCopy } from "@/lib/project-delete";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -83,6 +86,8 @@ import {
   StarOff,
   Trash2,
   CreditCard,
+  CloudOff,
+  RotateCcw,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -97,6 +102,7 @@ import { OverflowSlideText } from "@/components/OverflowSlideText";
 import { projectTitle } from "@/lib/project-title";
 import { ProjectCommandPalette } from "@/components/ProjectCommandPalette";
 import { InvitationsDialog } from "@/components/InvitationsDialog";
+import { ProjectFolderIcon } from "@/components/ProjectFolderIcon";
 import { useInvitations } from "@/hooks/use-invitations";
 import { OPEN_INVITES_EVENT } from "@/lib/invitations-event";
 import { OPEN_SEARCH_EVENT } from "@/lib/search-event";
@@ -108,6 +114,7 @@ import { groupSidebarSections } from "@/lib/project-filters";
 import type { ProjectSummaryResponse } from "@/lib/types";
 import { useActivePill } from "@/hooks/use-active-pill";
 import { useGlideHighlight } from "@/hooks/use-glide-highlight";
+import { UserAvatar } from "@/components/UserAvatar";
 import { cn } from "@/lib/utils";
 
 const RECENT_LIMIT = 12;
@@ -116,20 +123,6 @@ const SEARCH_SHORTCUT = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.te
 const COLLAPSED_SECTIONS_KEY = "sidebar_collapsed_sections";
 
 type ProjectActions = ReturnType<typeof useProjectActions>;
-
-export function ProjectLetter({ name, current }: { name: string; current?: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-[10px] font-semibold uppercase leading-none ring-1 ring-inset transition-colors duration-300",
-        current ? "bg-primary/15 text-primary ring-primary/40" : "bg-white/[0.05] text-foreground/60 ring-white/10 group-hover/row:text-foreground/90"
-      )}
-    >
-      {name.trim().charAt(0) || "?"}
-    </span>
-  );
-}
 
 interface SidebarPanelProps {
   currentProjectId?: string;
@@ -275,24 +268,26 @@ function ShowMore({ count, label, onClick }: { count: number; label: string; onC
   );
 }
 
-const NEW_PROJECT_LABEL = "New project";
-function NewProjectItem({ onClick, rail }: { onClick: () => void; rail: boolean }) {
-  const plus = useRef<HTMLSpanElement>(null);
-
+function NewProjectButton({ onClick, rail }: { onClick: () => void; rail: boolean }) {
+  const mark = useRef<HTMLSpanElement>(null);
   return (
     <RailTip label="New project" rail={rail}>
       <button
         type="button"
         data-glide-none
         onClick={onClick}
-        aria-label="Start a new project"
-        className="sidebar-new-row group relative isolate mb-1 flex h-10 w-full items-center gap-2.5 overflow-hidden whitespace-nowrap rounded-[0.625rem] pl-1.5 pr-3 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
+        aria-label={rail ? "New project" : undefined}
+        style={{ ...iconMotion("rotate(90deg)"), "--light-size": "9rem" } as CSSProperties}
+        className={cn(
+          "app-chip mb-1.5 flex h-10 items-center overflow-hidden whitespace-nowrap text-left text-[13.5px] font-medium transition-[width] duration-300 ease-out",
+          rail ? "w-10 justify-center px-0" : "w-full gap-3 px-3"
+        )}
       >
-        <SpacetimeFabric mass={plus} />
-        <span ref={plus} aria-hidden="true" className="sidebar-new-plus relative z-[1] flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
-          <Plus className="icon-pop h-4 w-4" />
+        <SpacetimeFabric mass={mark} />
+        <span ref={mark} className="grid h-4 w-4 shrink-0 place-items-center">
+          <Plus className="h-4 w-4 text-primary" />
         </span>
-        <span className="sidebar-fade sidebar-new-label relative z-[1] min-w-0 flex-1 truncate text-[13.5px] font-medium">{NEW_PROJECT_LABEL}</span>
+        {!rail && <span className="sidebar-fade min-w-0 flex-1 truncate">New project</span>}
       </button>
     </RailTip>
   );
@@ -318,7 +313,6 @@ function RenameField({ project, onDone }: { project: ProjectSummaryResponse; onD
 
   return (
     <div className="flex h-8 items-center gap-3 rounded-lg bg-background px-3 ring-1 ring-inset ring-primary/60">
-      <ProjectLetter name={title} current />
       <input
         ref={inputRef}
         value={draft}
@@ -377,7 +371,7 @@ function ProjectItem({ project, isCurrent, isRenaming, onOpen, onStartRename, on
             isCurrent ? "font-medium text-foreground" : "text-foreground/70 hover:text-foreground"
           )}
         >
-          <ProjectLetter name={title} current={isCurrent} />
+          <ProjectFolderIcon name={project.name} isOpen={isCurrent} className="h-4 w-4" />
           <OverflowSlideText text={title} />
         </button>
       )}
@@ -387,7 +381,7 @@ function ProjectItem({ project, isCurrent, isRenaming, onOpen, onStartRename, on
             type="button"
             aria-label={`Actions for ${title}`}
             className={cn(
-              "absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,background-color,color] duration-300 hover:bg-primary/15 hover:text-primary focus-visible:opacity-100 group-hover/item:opacity-100 data-[state=open]:bg-primary/15 data-[state=open]:text-primary data-[state=open]:opacity-100",
+              "icon-btn absolute right-1 top-1 z-10 h-6 w-6 rounded-md opacity-0 transition-[opacity,color,box-shadow,transform] duration-300 focus-visible:opacity-100 group-hover/item:opacity-100 data-[state=open]:bg-primary/15 data-[state=open]:text-primary data-[state=open]:opacity-100",
               isRenaming && "hidden"
             )}
           >
@@ -575,7 +569,7 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
   const { invitations } = useInvitations();
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const sections = useCollapsedSections();
-  const { data: projects, isLoading, isError } = useQuery({
+  const { data: projects, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ["projects"],
     queryFn: () => api.getProjects(),
   });
@@ -625,7 +619,6 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
   const activeRef = useActivePill(panelRef, `${location.pathname}${location.search}|${currentProjectId ?? ""}`);
 
   const userInfo = getUserInfo();
-  const initial = userInfo?.name?.charAt(0).toUpperCase() || "U";
 
   const handleLogout = () => signOut();
 
@@ -653,7 +646,7 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
       <span ref={activeRef} aria-hidden="true" className="active-pill" />
       <span ref={glideRef} aria-hidden="true" className="glide-pill" />
       <nav className="space-y-0.5 px-3 pt-1">
-        <NewProjectItem rail={collapsed} onClick={() => go("/projects?new=1")} />
+        <NewProjectButton rail={collapsed} onClick={() => go("/projects?new=1")} />
         <NavItem
           icon={Search}
           label="Search"
@@ -719,7 +712,28 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
               </div>
             </>
           ) : isError ? (
-            <p className="px-3 pt-4 text-xs text-muted-foreground">Couldn&rsquo;t load projects</p>
+            currentProjectId ? null : (
+            <div role="alert" className="chat-enter mx-1 mt-4 flex flex-col gap-2.5 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+              <div className="flex items-start gap-2.5">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-muted-foreground">
+                  <CloudOff className="h-3.5 w-3.5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-foreground">Couldn&rsquo;t load projects</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">The server didn&rsquo;t answer. Your projects are safe.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => refetch()}
+                disabled={isFetching}
+                className="flex h-7 items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] text-[11.5px] text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground disabled:opacity-70"
+              >
+                <RotateCcw className={cn("h-3 w-3", isFetching && "animate-spin [animation-direction:reverse]")} />
+                {isFetching ? "Retrying" : "Retry"}
+              </button>
+            </div>
+            )
           ) : (
             <RecentSection
               label="Recent"
@@ -748,9 +762,7 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
                 className="group relative flex h-11 w-full items-center gap-2.5 whitespace-nowrap rounded-lg px-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50 data-[state=open]:bg-primary/10"
               >
                 <span className="relative shrink-0">
-                  <span className="avatar-ring flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-primary-foreground">
-                    {initial}
-                  </span>
+                  <UserAvatar name={userInfo?.name} className="h-8 w-8 text-xs" />
                   {invitations.length > 0 && (
                     <span
                       role="status"
@@ -798,7 +810,7 @@ export function SidebarPanel({ currentProjectId, collapsed, onNavigate }: Sideba
               Privacy &amp; terms
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} data-danger="">
+            <DropdownMenuItem onClick={handleLogout} data-danger="delete">
               <LogOut />
               Sign out
             </DropdownMenuItem>

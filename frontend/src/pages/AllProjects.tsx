@@ -10,21 +10,23 @@
  * near-black page with the dim app-wide tokens, which is why it stayed dark when the others were lightened. It sits
  * under the shared page heading (PageHeading - a mono eyebrow, a
  * Fraunces title with an italic gold close, its words dropping in), its panels are solid raised surfaces that rise in one
- * after another (index.css, .app-glass, .app-rise), and anything working shows the app's comet (OrbitSpinner).
+ * after another (index.css, .app-glass, .app-rise), and anything working shows the app's ripple (OrbitSpinner).
  *
- * The controls stand straight on the page, all one height: the filter track, the search well, the sort chip and the
- * view switch are each a bordered capsule already, and a panel round all four made capsules inside a capsule inside
- * a capsule. The list (ProjectList) is one panel: a band of column labels over a hairline, then the rows, with a
+ * The controls stand straight on the page: the filter track, the sort chip and the view switch are each a bordered
+ * capsule already, and a panel round all three made capsules inside a capsule inside a capsule. There is no search
+ * here (it was removed at the owner's request; the command palette still finds a project) and no coloured letter tile on a row. The list (ProjectList) is one panel: a band of column labels over a hairline, then the rows, with a
  * single gold highlight gliding between them (hooks/use-glide-highlight, index.css .project-list) - the row paints no
- * hover of its own. The highlight stays on a row while that row's menu is open. While loading, each view shows a
+ * hover of its own. The highlight stays on a row while that row's menu is open. The view switch (ViewSwitch) lights
+ * the option under the pointer with the same gliding wash, and leaves the selected one alone. While loading, each view shows a
  * skeleton of its own shape.
  */
+import { LoadFailure } from "@/components/app/LoadFailure";
 import { Nebula } from "@/components/app/Nebula";
 import { PageHeading } from "@/components/app/PageHeading";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { FolderOpen, LayoutGrid, List, Search } from "lucide-react";
+import { FolderOpen, LayoutGrid, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
@@ -44,7 +46,6 @@ import {
 } from "@/lib/project-filters";
 import { ProjectSummaryResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { OPEN_SEARCH_EVENT } from "@/lib/search-event";
 import { projectTitle } from "@/lib/project-title";
 
 const SORT_LABELS = { edited: "Last edited", created: "Date created", name: "Name (A–Z)" } as const;
@@ -71,8 +72,7 @@ const PAGE_GLOW: CSSProperties = {
     ].join(", "),
 };
 
-const emptyCopy = (filter: ProjectFilter, term: string, query: string) => {
-    if (term) return { title: `No projects match “${query}”`, hint: "Try a different search." };
+const emptyCopy = (filter: ProjectFilter) => {
     if (filter === "pinned") return { title: "No pinned projects", hint: "Pin a project from its menu to keep it close at hand." };
     if (filter === "starred") return { title: "No starred projects", hint: "Star the projects you love to find them here." };
     if (filter === "shared") return { title: "Nothing shared with you yet", hint: "Projects other people invite you to will show up here." };
@@ -80,13 +80,44 @@ const emptyCopy = (filter: ProjectFilter, term: string, query: string) => {
     return { title: "No projects yet", hint: "Describe an idea on the dashboard to create one." };
 };
 
+function ViewSwitch({ viewMode, viewIndex, onChange }: { viewMode: ViewMode; viewIndex: number; onChange: (mode: ViewMode) => void }) {
+    const trackRef = useRef<HTMLDivElement>(null);
+    const glideRef = useGlideHighlight(trackRef);
+    return (
+        <div ref={trackRef} role="radiogroup" aria-label="View" className="app-track relative grid shrink-0 grid-cols-2 p-[3px]">
+            <span ref={glideRef} aria-hidden="true" className="glide-pill rounded-full" />
+            <span
+                aria-hidden="true"
+                className="seg-pill absolute inset-y-[3px] left-[3px] w-[calc(50%-3px)] transition-transform duration-[650ms] ease-[cubic-bezier(0.34,1.35,0.64,1)]"
+                style={{ transform: `translateX(${viewIndex * 100}%)` }}
+            />
+            {VIEW_MODES.map(({ mode, label, Icon }) => (
+                <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={viewMode === mode}
+                    aria-label={label}
+                    data-glide=""
+                    onClick={() => onChange(mode)}
+                    className={cn(
+                        "relative z-10 flex h-[30px] w-9 items-center justify-center rounded-full transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35",
+                        viewMode === mode ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    <Icon className="h-3.5 w-3.5" />
+                </button>
+            ))}
+        </div>
+    );
+}
+
 function ProjectList({ children }: { children: ReactNode }) {
     const listRef = useRef<HTMLDivElement>(null);
     const glideRef = useGlideHighlight(listRef);
     return (
         <div className="app-glass app-rise overflow-hidden rounded-[22px]" style={{ "--i": 2 } as CSSProperties}>
             <div className="app-label flex items-center gap-3.5 border-b border-white/[0.07] bg-white/[0.015] px-[19px] py-3">
-                <span className="w-9 shrink-0" />
                 <span className="flex-1">Name</span>
                 <span className="hidden w-28 sm:block">Access</span>
                 <span className="hidden w-44 md:block">Last edited</span>
@@ -108,7 +139,6 @@ export function AllProjects() {
     const [searchParams, setSearchParams] = useSearchParams();
     const ownershipFilter = parseProjectFilter(searchParams.get("filter"));
 
-    const searchQuery = "";
     const [sort, setSort] = useState<SortKey>("edited");
     const [viewMode, setViewMode] = useState<ViewMode>(() => {
         try {
@@ -122,7 +152,7 @@ export function AllProjects() {
     const pageTitle = firstName ? `${firstName}'s` : "Your";
 
     const isSignedIn = isAuthenticated();
-    const { data: projects = [], isLoading, error } = useQuery({
+    const { data: projects = [], isLoading, error, refetch, isFetching, errorUpdateCount } = useQuery({
         queryKey: ["projects"],
         queryFn: () => api.getProjects(),
         enabled: isSignedIn,
@@ -149,15 +179,11 @@ export function AllProjects() {
     }, [viewMode]);
 
     const counts = useMemo(() => countByFilter(projects), [projects]);
-    const term = searchQuery.trim().toLowerCase();
     const visibleProjects = useMemo(
-        () =>
-            projects
-                .filter((project) => matchesProjectFilter(project, ownershipFilter) && `${projectTitle(project)} ${project.name}`.toLowerCase().includes(term))
-                .sort(compareProjects[sort]),
-        [projects, ownershipFilter, term, sort]
+        () => projects.filter((project) => matchesProjectFilter(project, ownershipFilter)).sort(compareProjects[sort]),
+        [projects, ownershipFilter, sort]
     );
-    const empty = emptyCopy(ownershipFilter, term, searchQuery.trim());
+    const empty = emptyCopy(ownershipFilter);
 
     const itemProps = (project: ProjectSummaryResponse) => ({
         project,
@@ -177,7 +203,7 @@ export function AllProjects() {
 
     return (
         <div className="dash-night dash-sky relative flex h-screen overflow-hidden bg-background">
-            <Nebula />
+            <Nebula stars={false} strong />
             <SidebarSpacer sidebar={sidebar} />
 
             <div className="dash-frame relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
@@ -205,16 +231,6 @@ export function AllProjects() {
                             />
 
                             <div className="flex flex-wrap items-center gap-2">
-                                <button
-                                    type="button"
-                                    aria-label="Search projects"
-                                    onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
-                                    className="app-field flex h-[38px] min-w-0 flex-1 items-center gap-2 rounded-full px-3.5 text-left text-muted-foreground sm:w-64 sm:flex-none"
-                                >
-                                    <Search className="h-3.5 w-3.5 shrink-0" />
-                                    <span className="min-w-0 flex-1 truncate text-[13px]">Search projects</span>
-                                </button>
-
                                 <Select value={sort} onValueChange={(value) => setSort(value as SortKey)}>
                                     <SelectTrigger chip aria-label="Sort projects" className="h-[38px] w-[150px] text-xs">
                                         <SelectValue />
@@ -226,29 +242,7 @@ export function AllProjects() {
                                     </SelectContent>
                                 </Select>
 
-                                <div role="radiogroup" aria-label="View" className="app-track relative grid shrink-0 grid-cols-2 p-[3px]">
-                                    <span
-                                        aria-hidden="true"
-                                        className="seg-pill absolute inset-y-[3px] left-[3px] w-[calc(50%-3px)] transition-transform duration-[650ms] ease-[cubic-bezier(0.34,1.35,0.64,1)]"
-                                        style={{ transform: `translateX(${viewIndex * 100}%)` }}
-                                    />
-                                    {VIEW_MODES.map(({ mode, label, Icon }) => (
-                                        <button
-                                            key={mode}
-                                            type="button"
-                                            role="radio"
-                                            aria-checked={viewMode === mode}
-                                            aria-label={label}
-                                            onClick={() => setViewMode(mode)}
-                                            className={cn(
-                                                "relative z-10 flex h-[30px] w-9 items-center justify-center rounded-full transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35",
-                                                viewMode === mode ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                                            )}
-                                        >
-                                            <Icon className="h-3.5 w-3.5" />
-                                        </button>
-                                    ))}
-                                </div>
+                                <ViewSwitch viewMode={viewMode} viewIndex={viewIndex} onChange={setViewMode} />
                             </div>
                         </div>
 
@@ -257,7 +251,6 @@ export function AllProjects() {
                                 <ProjectList>
                                     {[1, 2, 3, 4].map((i) => (
                                         <div key={i} className="flex items-center gap-3.5 px-3 py-3">
-                                            <div className="app-skeleton h-9 w-9 shrink-0 rounded-[10px]" />
                                             <div className="flex-1">
                                                 <div className="app-skeleton h-3 w-40 max-w-full rounded" />
                                             </div>
@@ -286,14 +279,24 @@ export function AllProjects() {
                                         </div>
                                     ))}
                                 </div>
+                            ) : error && projects.length === 0 ? (
+                                <LoadFailure
+                                    title="Couldn't load your projects"
+                                    onRetry={() => void refetch()}
+                                    isRetrying={isFetching}
+                                    attempt={errorUpdateCount}
+                                    className="h-[60vh]"
+                                >
+                                    {error instanceof Error ? error.message : "Check your connection and try again."}
+                                </LoadFailure>
                             ) : visibleProjects.length === 0 ? (
                                 <div className="app-fade flex h-[60vh] flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-black/10 px-6 text-center">
-                                    <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-muted/40">
+                                    <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl border border-border/70 bg-muted/40">
                                         <FolderOpen className="h-5 w-5 text-muted-foreground" />
                                     </span>
                                     <p className="text-sm font-medium">{empty.title}</p>
                                     <p className="mt-1 text-xs text-muted-foreground">{empty.hint}</p>
-                                    {!term && (ownershipFilter === null || ownershipFilter === "owned") && (
+                                    {(ownershipFilter === null || ownershipFilter === "owned") && (
                                         <Button variant="outline" size="sm" className="mt-4 h-8 text-xs" onClick={() => navigate("/projects?new=1")}>
                                             Start a project
                                         </Button>

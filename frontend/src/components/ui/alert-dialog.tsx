@@ -1,26 +1,46 @@
 /**
  * A modal that interrupts to confirm something, styled for this app.
  *
- * Handles: the overlay, the content frame and the title, description, action and cancel parts. Focus is trapped and
- * the dialog cannot be dismissed by clicking away, because the choice has to be made deliberately.
+ * Handles: the overlay, the content frame and the title, description, action and cancel parts. Focus is trapped, and
+ * pressing outside the box (the overlay) or Escape closes it, as it does in every other window of the app: the
+ * overlay only asks the dialog to close, so it does what Cancel does and nothing the action does. The root keeps its
+ * own open state when the caller gives none, so the overlay can close an uncontrolled dialog too.
  *
- * The frame is the sign-in card's dark glass (index.css, .app-dialog) carrying that card's grid, bottom light and
- * stars turned down to barely there (PlanLight under .auth-dialog-card), the same surface the security page's
- * "confirm it's you" dialog has, so every confirmation in the app reads as one family. It drops in from just above
- * with a slight grow and leaves the same way (.dialog-pop). The title is in the display face, the two buttons share
- * the row equally, the cancel is the soft neutral fill so the action is the only gold (or red) thing in the box,
- * and the action carries an arrow that nudges along under the pointer - the owner asked for one.
+ * The frame is the app's plain panel (index.css, .app-dialog): the same solid surface as the workspace's cards, with a
+ * charcoal hairline, depth beneath and a faint gold tint across its top - no grid, no glow, no stars, which the owner
+ * turned down for something that only asks a question. It drops in from just above with a slight grow and leaves the same way (.dialog-pop). The
+ * title is in the display face, the two buttons share the row equally, and both are the app's buttons: the cancel is
+ * the chip with the usual gold light - in a dialog that deletes something, cancelling is the safe choice, so it is
+ * the one that lights gold - and the action is the primary button, gold, or red (red before the pointer arrives as
+ * well as after) when the caller makes it destructive. The action once carried an arrow that nudged along under the
+ * pointer; it was taken off, and with it the pale gold the arrow turned inside a red button.
  */
 import * as React from "react";
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
-import { ArrowRight } from "lucide-react";
+import type { VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
-import { PlanLight } from "@/components/landing/PlanLight";
-import { followPointer } from "@/components/landing/motion";
 
-const AlertDialog = AlertDialogPrimitive.Root;
+const CloseContext = React.createContext<(() => void) | null>(null);
+
+const AlertDialog = ({ open, defaultOpen, onOpenChange, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) => {
+  const [inner, setInner] = React.useState(defaultOpen ?? false);
+  const isOpen = open ?? inner;
+  const change = React.useCallback(
+    (next: boolean) => {
+      setInner(next);
+      onOpenChange?.(next);
+    },
+    [onOpenChange],
+  );
+  const close = React.useCallback(() => change(false), [change]);
+  return (
+    <CloseContext.Provider value={close}>
+      <AlertDialogPrimitive.Root open={isOpen} onOpenChange={change} {...props} />
+    </CloseContext.Provider>
+  );
+};
 
 const AlertDialogTrigger = AlertDialogPrimitive.Trigger;
 
@@ -29,16 +49,20 @@ const AlertDialogPortal = AlertDialogPrimitive.Portal;
 const AlertDialogOverlay = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+>(({ className, ...props }, ref) => {
+  const close = React.useContext(CloseContext);
+  return (
   <AlertDialogPrimitive.Overlay
+    onClick={() => close?.()}
     className={cn(
-      "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-[hsl(var(--scrim))] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
     )}
     {...props}
     ref={ref}
   />
-));
+  );
+});
 AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName;
 
 const AlertDialogContent = React.forwardRef<
@@ -55,10 +79,7 @@ const AlertDialogContent = React.forwardRef<
       )}
       {...props}
     >
-      <div data-landed="true" onPointerMove={followPointer} className="plan-card auth-dialog-card relative rounded-[inherit]">
-        <PlanLight landed />
-        <div className="relative grid gap-6 p-6 sm:p-7">{children}</div>
-      </div>
+      <div className="grid gap-6 p-6 sm:p-7">{children}</div>
     </AlertDialogPrimitive.Content>
   </AlertDialogPortal>
 ));
@@ -92,17 +113,9 @@ AlertDialogDescription.displayName = AlertDialogPrimitive.Description.displayNam
 
 const AlertDialogAction = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Action>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>
->(({ className, children, style, ...props }, ref) => (
-  <AlertDialogPrimitive.Action
-    ref={ref}
-    style={{ "--icon-hover": "translateX(3px)", ...style } as React.CSSProperties}
-    className={cn(buttonVariants(), className, "h-11 px-6 sm:flex-1")}
-    {...props}
-  >
-    {children}
-    <ArrowRight aria-hidden="true" />
-  </AlertDialogPrimitive.Action>
+  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action> & Pick<VariantProps<typeof buttonVariants>, "variant">
+>(({ className, variant, ...props }, ref) => (
+  <AlertDialogPrimitive.Action ref={ref} className={cn(buttonVariants({ variant }), className, "h-11 px-6 sm:flex-1")} {...props} />
 ));
 AlertDialogAction.displayName = AlertDialogPrimitive.Action.displayName;
 
@@ -112,7 +125,7 @@ const AlertDialogCancel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Cancel
     ref={ref}
-    className={cn(buttonVariants({ variant: "secondary" }), className, "h-11 px-6 sm:flex-1")}
+    className={cn(buttonVariants({ variant: "chip" }), "text-foreground/90", className, "h-11 px-6 sm:flex-1")}
     {...props}
   />
 ));

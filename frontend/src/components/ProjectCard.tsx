@@ -14,17 +14,19 @@
  * used to answer with a gold hairline all the way round and an ember glow beneath, and its name turned gold. On the
  * row (the list form, pages/AllProjects.tsx) the wash is the list's gliding highlight (data-glide,
  * hooks/use-glide-highlight), which is why the row itself paints no hover background, and the arrow fades in beside
- * the name. On both, the tile swells and the dim text brightens (.proj-tile, .proj-name, .proj-meta), and nothing
- * shifts sideways; that nudge is the sidebar's alone. The same look holds while the item's menu is open.
+ * the name. On both, the dim text brightens (.proj-name, .proj-meta), and nothing
+ * shifts sideways; that nudge is the sidebar's alone. The card's foot is the name and its edited time only - the
+ * coloured letter tile it once had was removed at the owner's request, and so was the row's. The same look holds while the item's menu is open.
  *
  * At rest the actions button is always in view but dim. The role is a small chip (.role-chip): on the row for
  * everyone, gold for an owner; on the card only for someone who is not the owner, set on the thumbnail over a dark
- * backing. Renaming holds the card still. A project that has just been deleted fades and shrinks away (isLeaving,
- * data-leaving) before the list drops it, rather than vanishing. The initial on its tile carries a faint shadow,
- * since the tile can be any hue and white on a yellow needs it.
+ * backing. Renaming holds the card still: the edited time stays, the field is exactly one line tall and the actions button keeps
+ * its room (it only turns invisible), so the foot does not change height as the field opens, and a tilt the pointer left on
+ * the card is released. The project's menu has no dividers, at the owner's request. A project that has just been deleted fades and shrinks away (isLeaving,
+ * data-leaving) before the list drops it, rather than vanishing.
  */
 import { useEffect, useRef, useState } from "react";
-import { releaseTilt, tiltToPointer } from "@/components/landing/motion";
+import { releaseTilt, tiltToPointer } from "@/components/motion/motion";
 import { deleteCopy } from "@/lib/project-delete";
 import { formatDistanceToNow } from "date-fns";
 import { ArrowUpRight, Download, Globe, GitFork, MoreHorizontal, Pencil, Pin, PinOff, Star, StarOff, Trash2 } from "lucide-react";
@@ -33,7 +35,6 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { projectThumbnailUrl } from "@/lib/api";
@@ -102,7 +103,7 @@ function RenameNameField({ project, onDone, className }: {
                 }
             }}
             className={cn(
-                "min-w-0 flex-1 rounded-md border border-primary/50 bg-[hsl(30_11%_3%)] px-1.5 py-0.5 text-sm text-foreground caret-primary outline-none ring-[3px] ring-primary/[0.12]",
+                "h-5 min-w-0 flex-1 rounded-md border border-primary/50 [background-color:hsl(30_11%_3%)] px-1.5 py-0 text-sm text-foreground caret-primary outline-none ring-[3px] ring-primary/[0.12]",
                 className
             )}
         />
@@ -126,7 +127,7 @@ function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin
                     aria-label={`Actions for ${projectTitle(project)}`}
                     className={cn(
                         "icon-btn h-7 w-7 opacity-60 transition-[opacity,background-color,color] focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:text-foreground data-[state=open]:opacity-100",
-                        isRenaming && "hidden"
+                        isRenaming && "invisible"
                     )}
                 >
                     <MoreHorizontal className="h-4 w-4" />
@@ -153,7 +154,6 @@ function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin
                             <Pencil />
                             Rename
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator />
                     </>
                 )}
                 <DropdownMenuItem onClick={onTogglePin}>
@@ -164,7 +164,6 @@ function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin
                     {project.starredAt ? <StarOff /> : <Star />}
                     {project.starredAt ? "Remove star" : "Star"}
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onDownload}>
                     <Download />
                     Download ZIP
@@ -176,16 +175,13 @@ function ProjectActionsMenu({ project, onDownload, onDelete, onFork, onTogglePin
                     </DropdownMenuItem>
                 )}
                 {project.role && (
-                    <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            onClick={onDelete}
-                            data-danger="delete"
-                        >
-                            <Trash2 />
-                            {deleteCopy(project.role, projectTitle(project)).menuLabel}
-                        </DropdownMenuItem>
-                    </>
+                    <DropdownMenuItem
+                        onClick={onDelete}
+                        data-danger="delete"
+                    >
+                        <Trash2 />
+                        {deleteCopy(project.role, projectTitle(project)).menuLabel}
+                    </DropdownMenuItem>
                 )}
             </DropdownMenuContent>
         </DropdownMenu>
@@ -241,6 +237,9 @@ export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, isLeaving,
             onKeyDown={isRenaming ? undefined : openOnEnter(onOpen)}
             onPointerMove={isRenaming ? undefined : (e) => tiltToPointer(e, 3)}
             onPointerLeave={releaseTilt}
+            ref={(node) => {
+                if (node && isRenaming) releaseTilt({ currentTarget: node });
+            }}
             data-interactive={!isRenaming}
             data-leaving={isLeaving || undefined}
             className={cn(
@@ -267,7 +266,7 @@ export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, isLeaving,
                 ) : (
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.14),transparent_55%)]" />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-[hsl(30_11%_3.7%/0.6)] via-transparent to-transparent" />
+                <div className="absolute inset-0 [background-image:linear-gradient(to_top,hsl(30_11%_3.7%/0.6),transparent_50%)]" />
                 {project.role && project.role !== "OWNER" && (
                     <span className="role-chip absolute left-2.5 top-2.5" data-on="thumb">
                         {ROLE_LABELS[project.role]}
@@ -281,13 +280,6 @@ export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, isLeaving,
                 )}
             </div>
             <div className="card-foot relative flex items-center gap-3 px-3 py-3">
-                <span
-                    aria-hidden="true"
-                    className="proj-tile flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold text-white ring-1 ring-inset ring-white/15 [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
-                    style={generateGradient(project.name)}
-                >
-                    {projectTitle(project).charAt(0).toUpperCase()}
-                </span>
                 <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5">
                         {isRenaming ? (
@@ -299,7 +291,7 @@ export function ProjectCard({ onOpen, thumbnailClassName, isRenaming, isLeaving,
                             </>
                         )}
                     </div>
-                    {!isRenaming && <p className="proj-meta mt-0.5 truncate text-xs">Edited {editedAgo(project)}</p>}
+                    <p className="proj-meta mt-0.5 truncate text-xs">Edited {editedAgo(project)}</p>
                 </div>
                 <ProjectActionsMenu {...props} isRenaming={isRenaming} />
             </div>
@@ -322,13 +314,6 @@ export function ProjectRow({ onOpen, isRenaming, isLeaving, onRenameDone, ...pro
                 isRenaming ? "border-primary/50 bg-white/[0.03]" : "cursor-pointer border-transparent"
             )}
         >
-            <span
-                aria-hidden="true"
-                className="proj-tile flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-sm font-semibold text-white ring-1 ring-inset ring-white/15 [text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
-                style={generateGradient(project.name)}
-            >
-                {projectTitle(project).charAt(0).toUpperCase()}
-            </span>
             <div className="flex min-w-0 flex-1 items-center gap-2">
                 {isRenaming ? (
                     <RenameNameField project={project} onDone={onRenameDone!} />

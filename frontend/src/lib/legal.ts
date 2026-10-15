@@ -2,17 +2,16 @@
  * The text of the Privacy and Terms pages.
  *
  * Handles: both documents as plain data - a title, the date they were last changed, one sentence saying what the
- * page is, and short sections - plus where the source and the maker are, for the pages and the footer to link to.
+ * page is, and short sections - plus where the source is, for the pages to link to.
  *
  * Every sentence here describes what the app does today and must change when the app does: sign-in is by email and
  * password through Firebase, the session is a cookie, a build sends the request and the project's files to the AI
  * provider, a sign-in is recorded with its address and browser in the account's security trail, payments run in
- * Stripe's test mode, and there is no advertising or analytics script. Deleting an account from inside the app is
- * not built, so the page says how to ask for it and does not claim a button that is not there.
+ * Stripe's test mode, and there is no advertising or analytics script. An account is deleted from Settings, and the page says what that
+ * removes.
  */
 
 export const SOURCE_URL = "https://github.com/Divyanshu2805/singularity";
-export const MAKER_URL = "https://github.com/Divyanshu2805";
 export const CONTACT_URL = `${SOURCE_URL}/issues`;
 
 export interface LegalSection {

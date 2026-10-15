@@ -1,17 +1,20 @@
 /**
- * One hover highlight that glides between the rows of a list instead of each row lighting up on its own - the landing
- * navigation's hover pill, for the app's sidebar.
+ * One hover highlight that glides between the rows of a list instead of each row lighting up on its own - the app
+ * sidebar's hover pill.
  *
  * Handles: finding the row under the pointer (anything marked data-glide inside the container; a row marked
  * data-glide-none, which paints its own hover, clears the highlight instead of leaving it on the row before), moving a single
  * highlight onto it by writing its box into CSS variables (--gx, --gy, --gw, --gh) that the highlight's transform and
  * size read, so the glide itself is a CSS transition (index.css, .glide-pill); fading it out when the pointer leaves
- * the container; and following the row when a list inside the container scrolls under a still pointer.
+ * the container; following the row when a list inside the container scrolls under a still pointer; and writing the
+ * pointer's place along the row (--px), which the highlight's light is centred on, so it is the same light that comes
+ * up under the pointer on every button, travelling along the row with it.
  *
  * A highlight that is appearing is placed without a transition (data-snap) and fades in where it lands, rather than
- * sliding in from wherever it last was - the same rule the landing navigation follows. Positions are measured from the
+ * sliding in from wherever it last was. Positions are measured from the
  * row's own box against the container's at the moment of hover, so rows of any height, nested lists and collapsing
- * sections all work without the caller doing any bookkeeping.
+ * sections all work without the caller doing any bookkeeping. A container that itself scrolls (the file tabs) is
+ * allowed for: the highlight sits in its scrolled content, so the container's own scroll offset is added.
  */
 import { useEffect, useRef, type RefObject } from "react";
 
@@ -38,8 +41,8 @@ export function useGlideHighlight<T extends HTMLElement>(containerRef: RefObject
       const box = container.getBoundingClientRect();
       const rect = target.getBoundingClientRect();
       pill.dataset.snap = String(snap);
-      pill.style.setProperty("--gx", `${rect.left - box.left}px`);
-      pill.style.setProperty("--gy", `${rect.top - box.top}px`);
+      pill.style.setProperty("--gx", `${rect.left - box.left - container.clientLeft + container.scrollLeft}px`);
+      pill.style.setProperty("--gy", `${rect.top - box.top - container.clientTop + container.scrollTop}px`);
       pill.style.setProperty("--gw", `${rect.width}px`);
       pill.style.setProperty("--gh", `${rect.height}px`);
       pill.dataset.on = "true";
@@ -55,6 +58,12 @@ export function useGlideHighlight<T extends HTMLElement>(containerRef: RefObject
       const showing = pill.dataset.on === "true";
       target = next;
       place(!showing);
+      follow(event);
+    };
+
+    const follow = (event: PointerEvent) => {
+      if (!target) return;
+      pill.style.setProperty("--px", `${Math.round(event.clientX - target.getBoundingClientRect().left)}px`);
     };
 
     const onScroll = () => {
@@ -64,11 +73,13 @@ export function useGlideHighlight<T extends HTMLElement>(containerRef: RefObject
     };
 
     container.addEventListener("pointerover", onOver);
+    container.addEventListener("pointermove", follow, { passive: true });
     container.addEventListener("pointerleave", hide);
     container.addEventListener("scroll", onScroll, true);
     return () => {
       window.cancelAnimationFrame(frame);
       container.removeEventListener("pointerover", onOver);
+      container.removeEventListener("pointermove", follow);
       container.removeEventListener("pointerleave", hide);
       container.removeEventListener("scroll", onScroll, true);
     };

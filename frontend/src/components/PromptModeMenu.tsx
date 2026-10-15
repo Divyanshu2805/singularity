@@ -71,7 +71,7 @@ export function PromptModeMenu({ teaching, onChange }: PromptModeMenuProps) {
                 {value === teaching && <Check className="no-icon-anim h-4 w-4" />}
               </DropdownMenuItem>
             </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={10} className="app-menu-raised max-w-[220px] rounded-xl px-3 py-2 text-xs leading-5 text-[hsl(40_30%_92%)]">
+            <TooltipContent side="right" sideOffset={10} className="app-menu-raised max-w-[220px] rounded-xl px-3 py-2 text-xs leading-5 [color:hsl(40_30%_92%)]">
               {hint}
             </TooltipContent>
           </Tooltip>
@@ -97,7 +97,7 @@ export function PromptModeMenu({ teaching, onChange }: PromptModeMenuProps) {
                 {value === level && <Check className="no-icon-anim h-3.5 w-3.5" />}
               </DropdownMenuItem>
             </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={10} className="app-menu-raised max-w-[220px] rounded-xl px-3 py-2 text-xs leading-5 text-[hsl(40_30%_92%)]">
+            <TooltipContent side="right" sideOffset={10} className="app-menu-raised max-w-[220px] rounded-xl px-3 py-2 text-xs leading-5 [color:hsl(40_30%_92%)]">
               {hint}
             </TooltipContent>
           </Tooltip>

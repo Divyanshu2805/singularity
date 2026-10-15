@@ -12,7 +12,7 @@
  *
  * A turn is shown in the order things happen, the way a terminal agent shows its work. Each run of files between two
  * of the model's sentences is one line, while it is being written and afterwards alike: "Writing Index.tsx" with the
- * comet while a file arrives, "4 files written" once they have, opening when pressed to the files alone. It is one
+ * ripple while a file arrives, "4 files written" once they have, opening when pressed to the files alone. It is one
  * element that changes its words, so nothing moves when the turn is saved. It used to be a line per file while the
  * turn ran - the step it belonged to, the file, its place in the plan ("3/12") - which then collapsed into a fold
  * and a card at the moment of saving; the owner asked for the file alone, no what or why, and no jump. The build
@@ -62,6 +62,10 @@
  * "Try changing this" - one small change made by hand in the editor and checked by reading the saved file - until the
  * owner had it taken out in favour of the exercise.
  *
+ * A step's lesson is laid out as the Learn panel is: each section is a card of its own (the line range and its title in the head,
+ * the lines, the explanation and the three questions below), the closing words and the exercise are the same roomy
+ * cards (the exercise tinted orange), and the answer box has its Ctrl+Enter hint and its "Check my code" button beneath it.
+ *
  * What teaching mode draws is drawn as the rest of the app is: a file is the chat's file chip, and a term and every
  * action are the app's chip (.app-chip) in its own pill shape, lighting under the pointer as every button does, with
  * nothing in a colour of its own. The
@@ -93,10 +97,12 @@
  * the saved "Worked for" line once the turn is done.
  *
  * The blocks are cards a step lighter than the chat window with a lighter head (index.css, .chat-tile), their rows
- * and toggles take the app's row highlight (.hl-row) under the pointer, anything under way shows the app's comet
+ * take the app's row highlight (.hl-row) under the pointer, the folding card heads and the lesson toggles take the
+ * buttons' light that follows the pointer (.lit-row, lib/button-light.ts), anything under way shows the app's ripple
  * (OrbitSpinner) rather than a spinning icon, and the turn is signed with the horizon mark (HorizonMark).
  */
 import { Fragment, type CSSProperties, type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useGlideHighlight } from '@/hooks/use-glide-highlight';
 import { ArrowRight, ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleAlert, CircleHelp, Clock, Compass, FilePen, FileSearch, GraduationCap, Lightbulb, ListChecks, MessagesSquare, Trash2 } from 'lucide-react';
 import { HorizonMark } from '@/components/HorizonMark';
 import { OrbitSpinner } from '@/components/app/OrbitSpinner';
@@ -419,18 +425,29 @@ function ActivityFold({ block, onOpen }: { block: ActivityBlock; onOpen?: OpenFi
         <ChevronRight className={cn("h-3 w-3 shrink-0 transition-transform", isOpen && "rotate-90")} />
       </button>
       {isOpen && (
-        <ul id={detailsId} className="mt-1.5 flex min-w-0 flex-col gap-0.5 border-l-2 border-white/[0.12] pl-3">
+        <GlidingFileList id={detailsId}>
           {block.items.map(({ key, file }) => (
             <li key={key} className="flex min-h-6 min-w-0 items-center gap-2 text-xs text-muted-foreground">
               {file.active
                 ? <OrbitSpinner className="h-3.5 w-3.5 shrink-0" />
                 : <Check className="h-3.5 w-3.5 shrink-0 text-primary/80" />}
-              <StepFileChip file={{ ...file, active: false }} onOpen={file.active ? undefined : onOpen} />
+              <StepFileChip file={{ ...file, active: false }} onOpen={file.active ? undefined : onOpen} glide />
             </li>
           ))}
-        </ul>
+        </GlidingFileList>
       )}
     </div>
+  );
+}
+
+function GlidingFileList({ id, children }: { id: string; children: ReactNode }) {
+  const listRef = useRef<HTMLUListElement>(null);
+  const glideRef = useGlideHighlight(listRef);
+  return (
+    <ul ref={listRef} id={id} className="relative mt-1.5 flex min-w-0 flex-col gap-0.5 border-l-2 border-white/[0.12] pl-3">
+      <span ref={glideRef} aria-hidden="true" className="glide-pill glide-pill-flat rounded-full" />
+      {children}
+    </ul>
   );
 }
 
@@ -453,7 +470,7 @@ function FileChip({ path, onOpen, inline }: { path: string; onOpen?: (path: stri
       type="button"
       title={`Open ${path}`}
       onClick={() => onOpen(path)}
-      className={cn(className, "duration-200 hover:border-primary/45 hover:bg-primary/[0.12] hover:text-white")}
+      className={cn(className, "duration-200 hover:border-primary/20 hover:bg-primary/[0.14] hover:text-white")}
     >
       {content}
     </button>
@@ -622,7 +639,7 @@ export function LessonText({ text, onTerm, onPath }: { text: string; onTerm?: (t
           onPath && FILE_PATH.test(part.slice(1, -1)) ? (
             <FileChip key={index} path={part.slice(1, -1)} onOpen={onPath} inline />
           ) : (
-            <code key={index} className="rounded bg-muted px-1 py-px font-mono text-[11px] text-foreground">
+            <code key={index} className="rounded-lg border border-white/[0.1] bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
               {part.slice(1, -1)}
             </code>
           )
@@ -671,7 +688,7 @@ function CodeExcerpt({ lines, startLine, onClick }: { lines: string[]; startLine
     </>
   );
   const className =
-    "mt-1.5 block w-full min-w-0 rounded-lg border border-primary/25 border-l-2 border-l-primary/70 bg-primary/[0.07] px-2.5 py-1.5 text-left font-mono text-[11px] leading-[1.6]";
+    "block w-full min-w-0 rounded-xl border border-primary/25 border-l-2 border-l-primary/70 bg-primary/[0.07] px-3 py-2 text-left font-mono text-[11px] leading-[1.6]";
   const style = { "--gutter": `${gutter}ch` } as CSSProperties;
 
   if (!onClick) return <code className={className} style={style}>{body}</code>;
@@ -688,24 +705,31 @@ function CodeExcerpt({ lines, startLine, onClick }: { lines: string[]; startLine
   );
 }
 
-export function Prose({ text, onTerm, onPath }: { text: string; onTerm?: (term: string) => void; onPath?: (path: string) => void }) {
+export function Prose({ text, onTerm, onPath, roomy = false }: { text: string; onTerm?: (term: string) => void; onPath?: (path: string) => void; roomy?: boolean }) {
+  const type = roomy ? "text-[13px] leading-[1.75] text-foreground/[0.88]" : "text-[12.5px] leading-[1.7] text-foreground/85";
   return (
     <>
       {proseBlocks(text).map((block, index) =>
         block.kind === "paragraph" ? (
-          <p key={index} className="break-words text-[12.5px] leading-[1.7] text-foreground/85">
+          <p key={index} className={cn("break-words", type)}>
             <LessonText text={block.text} onTerm={onTerm} onPath={onPath} />
           </p>
         ) : (
-          <ol key={index} className="space-y-1.5">
+          <ol key={index} className={roomy ? "-mx-1 divide-y divide-[hsl(var(--tone,var(--primary))/0.14)]" : "space-y-1.5"}>
             {block.items.map((item, itemIndex) => (
-              <li key={itemIndex} className="flex min-w-0 gap-2 text-[12.5px] leading-[1.7] text-foreground/85">
+              <li key={itemIndex} className={cn("flex min-w-0 gap-2.5", type, roomy && "px-1 py-1.5 first:pt-0 last:pb-0")}>
                 {block.kind === "steps" ? (
-                  <span aria-hidden="true" className="mt-[3px] flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[10px] font-medium tabular-nums text-foreground/80">
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "flex shrink-0 items-center justify-center rounded-full font-medium tabular-nums",
+                      roomy ? "mt-[3px] h-5 w-5 border border-[hsl(var(--tone,var(--primary))/0.4)] bg-[hsl(var(--tone,var(--primary))/0.16)] text-[10.5px] text-[hsl(var(--tone,var(--primary)))]" : "mt-[3px] h-4 w-4 bg-white/[0.08] text-[10px] text-foreground/80"
+                    )}
+                  >
                     {itemIndex + 1}
                   </span>
                 ) : (
-                  <span aria-hidden="true" className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-muted-foreground/60" />
+                  <span aria-hidden="true" className={cn("shrink-0 rounded-full", roomy ? "mt-[10px] h-1.5 w-1.5 bg-[hsl(var(--tone,var(--primary))/0.75)]" : "mt-[9px] h-1 w-1 bg-muted-foreground/60")} />
                 )}
                 <span className="min-w-0 break-words">
                   <LessonText text={item} onTerm={onTerm} onPath={onPath} />
@@ -720,32 +744,36 @@ export function Prose({ text, onTerm, onPath }: { text: string; onTerm?: (term: 
 }
 
 const CARD_TONES = {
-  gold: {
-    box: "border-primary/20 bg-primary/[0.035]",
-    head: "border-primary/15 bg-primary/[0.08]",
-    icon: "text-primary/85",
-  },
-  orange: {
-    box: "border-[hsl(var(--syntax-keyword)/0.3)] bg-[hsl(var(--syntax-keyword)/0.05)]",
-    head: "border-[hsl(var(--syntax-keyword)/0.22)] bg-[hsl(var(--syntax-keyword)/0.12)]",
-    icon: "text-[hsl(var(--syntax-keyword))]",
-  },
+  gold: "var(--primary)",
+  orange: "var(--syntax-keyword)",
+  blue: "var(--syntax-function)",
+  green: "var(--syntax-string)",
+  purple: "var(--syntax-number)",
 };
+
+export type CardTone = keyof typeof CARD_TONES;
+
+export const sectionTone = (title: string): CardTone =>
+  /piece|file/i.test(title) ? "blue" : /how|click|travel|work/i.test(title) ? "green" : /idea|change/i.test(title) ? "purple" : "gold";
 
 export function TaughtCard({ title, Icon, tone = "gold", children }: {
   title: string;
   Icon: typeof Lightbulb;
-  tone?: keyof typeof CARD_TONES;
+  tone?: CardTone;
   children: ReactNode;
 }) {
-  const colours = CARD_TONES[tone];
   return (
-    <section className={cn("min-w-0 overflow-hidden rounded-xl border animate-in fade-in duration-500 motion-reduce:animate-none", colours.box)}>
-      <h4 className={cn("flex items-center gap-1.5 border-b px-3 py-1.5 text-[11.5px] font-medium text-foreground/90", colours.head)}>
-        <Icon className={cn("h-3.5 w-3.5 shrink-0", colours.icon)} />
+    <section
+      style={{ "--tone": CARD_TONES[tone] } as CSSProperties}
+      className="min-w-0 overflow-hidden rounded-2xl border border-[hsl(var(--tone)/0.24)] bg-[hsl(var(--tone)/0.035)] shadow-[0_10px_30px_-22px_rgba(0,0,0,0.9)] animate-in fade-in duration-500 motion-reduce:animate-none"
+    >
+      <h4 className="flex items-center gap-2.5 border-b border-[hsl(var(--tone)/0.2)] bg-[hsl(var(--tone)/0.09)] px-4 py-2 text-[13px] font-semibold tracking-[-0.005em] text-foreground">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--tone)/0.35)] bg-[hsl(var(--tone)/0.15)]">
+          <Icon className="h-3.5 w-3.5 text-[hsl(var(--tone))]" />
+        </span>
         <span className="truncate">{title}</span>
       </h4>
-      <div className="min-w-0 space-y-2 px-3 py-2.5">{children}</div>
+      <div className="min-w-0 space-y-2 px-4 py-2.5">{children}</div>
     </section>
   );
 }
@@ -779,21 +807,20 @@ function BigPictureCard({ projectId, turnId, saved, onOpen, onAsk }: {
   const onPath = onOpen ? (path: string) => onOpen(path) : undefined;
 
   return (
-    <div className="chat-tile overflow-hidden rounded-xl">
+    <div className="chat-tile overflow-hidden rounded-2xl">
       <button
         type="button"
         aria-expanded={isOpen}
         aria-controls={panelId}
         onClick={toggle}
-        className={cn("chat-tile-head hl-row flex h-8 w-full min-w-0 items-center gap-2 px-3 text-left text-xs focus-visible:outline-none", !isOpen && "border-b-0")}
+        className={cn("chat-tile-head lit-row flex h-10 w-full min-w-0 items-center gap-2.5 px-4 text-left text-[13px] focus-visible:outline-none", !isOpen && "border-b-0")}
       >
-        <Compass className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <span className="shrink-0 font-medium text-foreground/90">The big picture</span>
-        <span className="min-w-0 truncate text-[11px] text-muted-foreground">Start here: what this build made and how it fits together</span>
-        <ChevronDown className={cn("ml-auto h-3 w-3 shrink-0 text-muted-foreground transition-transform", !isOpen && "-rotate-90")} />
+        <span className="shrink-0 font-semibold text-foreground/95">The big picture</span>
+        <span className="min-w-0 truncate text-xs text-muted-foreground">Start here: what this build made and how it fits together</span>
+        <ChevronDown className={cn("ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", !isOpen && "-rotate-90")} />
       </button>
       {isOpen && (
-        <div id={panelId} className="min-w-0 space-y-3 px-3 py-3">
+        <div id={panelId} className="min-w-0 space-y-2.5 px-3 py-3">
           {state?.status === "error" && (
             <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
               <CircleAlert className="h-3.5 w-3.5 shrink-0 text-destructive" />
@@ -816,11 +843,11 @@ function BigPictureCard({ projectId, turnId, saved, onOpen, onAsk }: {
             </div>
           )}
 
-          {picture?.intro && <Prose text={picture.intro} onTerm={onTerm} onPath={onPath} />}
+          {picture?.intro && <Prose roomy text={picture.intro} onTerm={onTerm} onPath={onPath} />}
 
           {picture?.sections.map((section, index) => (
-            <TaughtCard key={`${section.title}-${index}`} title={section.title} Icon={sectionIcon(section.title)}>
-              <Prose text={section.text} onTerm={onTerm} onPath={onPath} />
+            <TaughtCard key={`${section.title}-${index}`} title={section.title} Icon={sectionIcon(section.title)} tone={sectionTone(section.title)}>
+              <Prose roomy text={section.text} onTerm={onTerm} onPath={onPath} />
             </TaughtCard>
           ))}
 
@@ -851,12 +878,12 @@ function CheckYourself({ question, path, onAsk }: { question: string; path: stri
 
   return (
     <TaughtCard title="Check yourself" Icon={CircleHelp} tone="orange">
-      <label htmlFor={fieldId} className="block break-words text-[12.5px] leading-[1.7] text-foreground/90">
+      <label htmlFor={fieldId} className="block break-words text-[13px] leading-[1.75] text-foreground/90">
         <LessonText text={question} />
       </label>
       {onAsk && (
         <>
-          <div className="app-field relative flex items-end gap-1.5 rounded-2xl p-1.5">
+          <div className="app-field relative rounded-2xl p-1.5">
             <textarea
               id={fieldId}
               ref={fieldRef}
@@ -876,22 +903,27 @@ function CheckYourself({ question, path, onAsk }: { question: string; path: stri
                   send();
                 }
               }}
-              className="max-h-[260px] min-h-[88px] min-w-0 flex-1 resize-none bg-transparent px-2 py-1 font-mono text-[12px] leading-[1.6] text-foreground caret-primary outline-none placeholder:font-sans placeholder:text-muted-foreground"
+              className="block max-h-[260px] min-h-[96px] w-full min-w-0 resize-none bg-transparent px-2.5 py-2 font-mono text-[12px] leading-[1.6] text-foreground caret-primary outline-none placeholder:font-sans placeholder:text-muted-foreground"
             />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <kbd className="rounded-md border border-white/[0.12] bg-white/[0.04] px-1.5 py-px font-sans text-[10.5px] text-foreground/80">Ctrl</kbd>
+              <kbd className="rounded-md border border-white/[0.12] bg-white/[0.04] px-1.5 py-px font-sans text-[10.5px] text-foreground/80">Enter</kbd>
+              to submit
+            </p>
             <button
               type="button"
               onClick={send}
               disabled={!answer.trim()}
               aria-label="Check my code"
               title="Check my code (Ctrl+Enter)"
-              className="app-send h-7 w-7"
+              className="app-chip inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-xs font-medium text-foreground disabled:pointer-events-none disabled:opacity-40"
             >
               <ArrowUp className="h-3.5 w-3.5" />
+              Check my code
             </button>
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            <kbd className="font-sans">Ctrl+Enter</kbd> to submit
-          </p>
         </>
       )}
     </TaughtCard>
@@ -911,8 +943,8 @@ function WalkthroughNoteView({ projectId, note, path, content, onOpen, onAsk }: 
   const excerpt = linesOf(content, note.startLine, note.endLine);
 
   return (
-    <li className="min-w-0 animate-in fade-in duration-500 motion-reduce:animate-none">
-      <div className="flex min-w-0 items-center gap-2">
+    <li className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.09] bg-white/[0.025] animate-in fade-in duration-500 motion-reduce:animate-none">
+      <div className="flex min-w-0 items-center gap-2.5 border-b border-white/[0.07] bg-white/[0.03] px-3.5 py-2.5">
         {show ? (
           <button
             type="button"
@@ -928,16 +960,17 @@ function WalkthroughNoteView({ projectId, note, path, content, onOpen, onAsk }: 
             {range}
           </span>
         )}
-        <span className="min-w-0 break-words text-[12.5px] font-medium leading-5 text-foreground">{note.title}</span>
+        <span className="min-w-0 break-words text-[13px] font-semibold leading-5 text-foreground">{note.title}</span>
       </div>
+      <div className="min-w-0 space-y-2.5 px-3.5 py-3">
       <CodeExcerpt lines={excerpt} startLine={note.startLine} onClick={show} />
       {note.text && (
-        <p className="mt-1.5 break-words text-[12.5px] leading-[1.7] text-foreground/80">
+        <p className="break-words text-[13px] leading-[1.75] text-foreground/[0.88]">
           <LessonText text={note.text} onTerm={(term) => learnPanel.openTerm(projectId, term)} />
         </p>
       )}
       {onAsk && note.isComplete && excerpt.length > 0 && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label={`Ask ExplainLLM about ${range}`}>
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5" role="group" aria-label={`Ask ExplainLLM about ${range}`}>
           {DEEPER_QUESTIONS.map((deeper) => (
             <button
               key={deeper.id}
@@ -949,7 +982,7 @@ function WalkthroughNoteView({ projectId, note, path, content, onOpen, onAsk }: 
                 endLine: note.startLine + excerpt.length - 1,
                 code: excerpt.join("\n").slice(0, MAX_ASKED_CODE_CHARS),
               })}
-              className="app-chip inline-flex h-7 items-center gap-1.5 px-3 text-xs text-foreground/90"
+              className="app-chip inline-flex h-7 items-center gap-1.5 rounded-xl px-3 text-xs text-foreground/90"
             >
               <MessagesSquare className="h-3 w-3 shrink-0 text-primary/80" />
               {deeper.label}
@@ -958,11 +991,12 @@ function WalkthroughNoteView({ projectId, note, path, content, onOpen, onAsk }: 
         </div>
       )}
       {!note.isComplete && !note.text && (
-        <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <OrbitSpinner className="h-3 w-3" />
           Writing&hellip;
         </p>
       )}
+      </div>
     </li>
   );
 }
@@ -985,7 +1019,7 @@ function LessonToggle({ file, isOpen, panelId, onToggle }: {
       title={isOpen ? "Hide the lesson" : `Learn what this step changed in ${name}`}
       onClick={onToggle}
       className={cn(
-        "hl-row flex h-6 w-6 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "lit-row flex h-6 w-6 shrink-0 items-center justify-center rounded-md [--lx:170%] [--ly:170%] [--dim:0.2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isOpen ? "bg-primary/[0.14] text-primary" : "text-primary/75"
       )}
     >
@@ -1029,7 +1063,7 @@ function StepLesson({ projectId, file, panelId, showFile, isLastStep, onOpen, on
   const hasText = !!walkthrough && (walkthrough.overview !== "" || walkthrough.notes.length > 0);
 
   return (
-    <div id={panelId} ref={panelRef} className="relative mb-3 ml-[34px] mr-3 mt-1 min-w-0 scroll-mt-16 space-y-3 pb-1 pl-3 before:absolute before:bottom-1 before:left-0 before:top-1 before:w-[2px] before:rounded-full before:bg-white/[0.12]">
+    <div id={panelId} ref={panelRef} className="relative mb-3 ml-[34px] mr-3 mt-1.5 min-w-0 scroll-mt-16 space-y-3.5 pb-1 pl-3.5 before:absolute before:bottom-1 before:left-0 before:top-1 before:w-[2px] before:rounded-full before:bg-gradient-to-b before:from-primary/50 before:to-white/[0.06]">
       {showFile && (
         <p className="flex min-w-0 items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary">
           <GraduationCap className="h-3 w-3 shrink-0" />
@@ -1060,13 +1094,13 @@ function StepLesson({ projectId, file, panelId, showFile, isLastStep, onOpen, on
       )}
 
       {walkthrough?.overview && (
-        <p className="break-words text-[12.5px] leading-[1.7] text-foreground/90">
+        <p className="break-words text-[13px] leading-[1.75] text-foreground/90">
           <LessonText text={walkthrough.overview} onTerm={(term) => learnPanel.openTerm(projectId, term)} />
         </p>
       )}
 
       {walkthrough && walkthrough.notes.length > 0 && (
-        <ol className="space-y-4">
+        <ol className="space-y-3.5">
           {walkthrough.notes.map((note, index) => (
             <WalkthroughNoteView key={index} projectId={projectId} note={note} path={file.path} content={code} onOpen={onOpen} onAsk={onAsk} />
           ))}
@@ -1075,7 +1109,7 @@ function StepLesson({ projectId, file, panelId, showFile, isLastStep, onOpen, on
 
       {walkthrough?.closing && walkthrough.closing.text && !isLastStep && (
         <TaughtCard title={walkthrough.closing.title} Icon={Lightbulb}>
-          <p className="break-words text-[12.5px] leading-[1.7] text-foreground/85">
+          <p className="break-words text-[13px] leading-[1.75] text-foreground/[0.88]">
             <LessonText text={walkthrough.closing.text} />
           </p>
         </TaughtCard>
@@ -1105,7 +1139,7 @@ function FoldedLessons({ label, children }: { label: string; children: ReactNode
         aria-controls={panelId}
         onClick={() => setIsOpen((open) => !open)}
         className={cn(
-          "hl-row -ml-1.5 flex h-6 max-w-full items-center gap-1.5 rounded-md px-1.5 text-[11.5px] focus-visible:outline-none",
+          "lit-row -ml-1.5 flex h-6 max-w-full items-center gap-1.5 rounded-md px-1.5 text-[11.5px] [--lx:90%] [--ly:240%] [--dim:0.25] focus-visible:outline-none",
           isOpen ? "text-primary" : "text-muted-foreground"
         )}
       >
@@ -1125,7 +1159,7 @@ function CodeReference({ path, part, showFile, onOpen }: {
   onOpen?: OpenFile;
 }) {
   const className =
-    "flex min-w-0 max-w-full items-center gap-2 rounded-md border border-white/[0.1] bg-[hsl(var(--ws-well))] px-1.5 py-0.5 text-left font-mono text-[11px]";
+    "flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-white/[0.1] bg-[hsl(var(--ws-well))] px-1.5 py-0.5 text-left font-mono text-[11px]";
   const content = (
     <>
       {showFile && path && (
@@ -1204,7 +1238,7 @@ function LessonBody({ item, stepLabel, showFile, onOpen, onExplain }: {
               aria-expanded={showsLines}
               aria-controls={linesId}
               onClick={() => setShowsLines((shown) => !shown)}
-              className="hl-row -ml-1.5 flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground focus-visible:outline-none"
+              className="lit-row -ml-1.5 flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground [--lx:90%] [--ly:240%] [--dim:0.25] focus-visible:outline-none"
             >
               Line by line
               <span className="tabular-nums">({lesson.parts.length})</span>
@@ -1248,10 +1282,10 @@ function LessonBody({ item, stepLabel, showFile, onOpen, onExplain }: {
   );
 }
 
-function StepFileChip({ file, onOpen }: { file: StepFile; onOpen?: OpenFile }) {
+function StepFileChip({ file, onOpen, glide }: { file: StepFile; onOpen?: OpenFile; glide?: boolean }) {
   const Icon = getFileIcon(file.path);
   const { base } = splitPath(file.path);
-  const className = "inline-flex h-6 min-w-0 max-w-[230px] items-center gap-1.5 rounded-md px-1.5 font-mono text-[11px]";
+  const className = "inline-flex h-7 min-w-0 max-w-[240px] items-center gap-1.5 rounded-full px-3 font-mono text-[11.5px]";
   const content = (
     <>
       {file.active
@@ -1276,7 +1310,8 @@ function StepFileChip({ file, onOpen }: { file: StepFile; onOpen?: OpenFile }) {
       type="button"
       title={file.lines ? `Open ${file.path} (${file.lines} lines)` : `Open ${file.path}`}
       onClick={() => onOpen(file.path)}
-      className={cn(className, "hl-row focus-visible:outline-none")}
+      {...(glide ? { "data-glide": "" } : {})}
+      className={cn(className, "relative z-10 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50", !glide && "hover:bg-primary/[0.14]")}
     >
       {content}
     </button>
@@ -1329,20 +1364,20 @@ function StepRow({ step, index, isLastStep, isStreaming, teaching, projectId, on
 
   return (
     <li data-status={step.status} data-open={openLesson !== null || undefined} className={cn("scroll-mt-3 transition-colors", openLesson !== null && "bg-primary/[0.045]")}>
-      <div className="flex min-h-8 min-w-0 items-center gap-2 py-0.5 pl-3 pr-2">
-        {step.status === 'done' ? (
-          <Check className="h-3.5 w-3.5 shrink-0 text-syntax-string" />
-        ) : step.status === 'active' ? (
-          <OrbitSpinner className="h-3.5 w-3.5" />
-        ) : (
-          <span aria-hidden="true" className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[10px] tabular-nums text-muted-foreground/70">
-            {index + 1}
-          </span>
-        )}
+      <div className="flex min-h-9 min-w-0 items-center gap-3 py-1 pl-4 pr-3">
+        <span aria-hidden="true" className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/[0.06]">
+          {step.status === 'done' ? (
+            <Check className="h-3 w-3 text-syntax-string" strokeWidth={2.5} />
+          ) : step.status === 'active' ? (
+            <OrbitSpinner className="h-3.5 w-3.5" />
+          ) : (
+            <span className="text-[10px] tabular-nums text-muted-foreground/70">{index + 1}</span>
+          )}
+        </span>
         {!(step.isExtra && rowFile) && (
           <span
             className={cn(
-              "min-w-0 truncate text-[12px] transition-colors",
+              "min-w-0 truncate text-[13px] transition-colors",
               step.status === 'done' && "text-foreground/80",
               step.status === 'active' && "text-foreground",
               step.status === 'pending' && "text-muted-foreground/75"
@@ -1365,7 +1400,7 @@ function StepRow({ step, index, isLastStep, isStreaming, teaching, projectId, on
         )}
       </div>
       {!hasOwnRowFile && (
-        <div className="flex flex-wrap gap-x-1 pb-1 pl-[30px] pr-2">
+        <div className="flex flex-wrap gap-x-1 gap-y-1 pb-2.5 pl-[48px] pr-3">
           {step.files.map((file, fileIndex) => (
             <span key={`${file.path}-${fileIndex}`} className="flex min-w-0 items-center">
               <StepFileChip file={file} onOpen={onOpen} />
@@ -1375,7 +1410,7 @@ function StepRow({ step, index, isLastStep, isStreaming, teaching, projectId, on
         </div>
       )}
       {step.lessons.length > 0 && (
-        <div className="mb-2 ml-[34px] mr-3 mt-0.5">
+        <div className="mb-3 ml-[48px] mr-4 mt-0.5">
           <FoldedLessons label={step.lessons.length > 1 ? `What this step does (${step.lessons.length})` : "What this step does"}>
             {step.lessons.map((item, lessonIndex) => (
               <LessonBody
@@ -1438,29 +1473,29 @@ function BuildCard({ block, isStreaming, teaching, projectId, onOpen, onExplain,
   const lessonsRead = lessons.filter(({ file }) => !!file.lesson).length + useLessonsWritten(projectId ?? "", unsavedIds);
   const lastLessonStep = lessons.length > 0 ? lessons[lessons.length - 1].stepIndex : -1;
   return (
-    <div className="chat-tile overflow-hidden rounded-xl">
+    <div className="chat-tile overflow-hidden rounded-2xl">
       <button
         type="button"
         aria-expanded={isOpen}
         aria-controls={stepsId}
         onClick={() => setIsOpen((shown) => !shown)}
-        className={cn("chat-tile-head hl-row flex h-8 w-full items-center gap-2 px-3 text-left text-xs focus-visible:outline-none", !isOpen && "border-b-0")}
+        className={cn("chat-tile-head lit-row flex h-10 w-full items-center gap-2.5 px-4 text-left text-[13px] focus-visible:outline-none", !isOpen && "border-b-0")}
       >
         {block.isRunning
-          ? <OrbitSpinner className="h-3.5 w-3.5" />
+          ? <OrbitSpinner className="h-4 w-4" />
           : block.isPlanned
-            ? <ListChecks className="h-3.5 w-3.5 text-muted-foreground" />
-            : <FilePen className="h-3.5 w-3.5 text-muted-foreground" />}
-        <span className="font-medium text-foreground/90">{title}</span>
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            ? <ListChecks className="h-4 w-4 text-muted-foreground" />
+            : <FilePen className="h-4 w-4 text-muted-foreground" />}
+        <span className="font-semibold text-foreground/95">{title}</span>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {block.isPlanned && (
-            <span className="tabular-nums text-muted-foreground" aria-label={`${doneCount} of ${steps.length} steps done`}>
+            <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs tabular-nums text-muted-foreground" aria-label={`${doneCount} of ${steps.length} steps done`}>
               {doneCount}/{steps.length}
             </span>
           )}
           {lessons.length > 0 && (
             <span
-              className="flex items-center gap-1 tabular-nums text-primary/85"
+              className="flex items-center gap-1 rounded-full bg-primary/[0.1] px-2 py-0.5 text-xs tabular-nums text-primary/90"
               title="Lessons opened"
               aria-label={`${lessonsRead} of ${lessons.length} lessons opened`}
             >
@@ -1468,7 +1503,7 @@ function BuildCard({ block, isStreaming, teaching, projectId, onOpen, onExplain,
               {lessonsRead}/{lessons.length}
             </span>
           )}
-          <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform", !isOpen && "-rotate-90")} />
+          <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", !isOpen && "-rotate-90")} />
         </div>
       </button>
       {isOpen && (

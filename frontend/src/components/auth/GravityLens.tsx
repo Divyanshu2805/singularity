@@ -7,7 +7,7 @@
  * not out: a fade-out left it hanging on the left half after the pointer had crossed to the form, and the owner asked
  * for that to go; it was also larger and bent harder at first, and was asked smaller and subtler) - and that really bends
  * what is behind it, whatever that is: the nebula, a shooting star, the mark, the name, the demo under them. The bending is
- * an SVG displacement filter run over the lens's backdrop (backdrop-filter: url(#gravity-lens-map)), so nothing under
+ * an SVG displacement filter (now a 190px lens bending at 0.46, up from 150px at 0.3, as the owner asked for more) run over the lens's backdrop (backdrop-filter: url(#gravity-lens-map)), so nothing under
  * it has to know it is there. The filter reads a displacement map painted once onto a canvas (lensMap): each pixel's
  * red and green say how far to look sideways and upwards for the colour to show, and the map pulls every look towards
  * the centre along a curve that is nothing at the centre, most a little under half-way out and nothing again at the
@@ -22,10 +22,10 @@
  * the working demo, IdeaForge.tsx, took its place.)
  */
 import { useEffect, useRef, useState } from "react";
-import { usePrefersReducedMotion } from "@/components/landing/motion";
+import { usePrefersReducedMotion } from "@/components/motion/motion";
 
-const SIZE = 150;
-const STRENGTH = 0.3;
+const SIZE = 190;
+const STRENGTH = 0.46;
 const PEAK = 0.2862;
 const SCALE = Math.ceil(SIZE * STRENGTH * PEAK) + 2;
 
