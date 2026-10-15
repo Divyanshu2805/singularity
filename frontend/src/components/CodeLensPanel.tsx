@@ -8,7 +8,7 @@
  * code, and a popover anchored to the selection would cover exactly what is being discussed.
  *
  * It is dressed as the build chat is (index.css): the app's charcoal surface, the horizon mark signing each answer,
- * turns rising in as they arrive, the question in a gold bubble, the app's comet while it reads the code, and a
+ * turns rising in as they arrive, the question in a gold bubble, the app's ripple while it reads the code, and a
  * matte composer that takes a calm gold ring while focused. Its header is the window's lighter top band (.ws-bar)
  * with the app's icon buttons, a quoted snippet is a card with its file named in a lighter head, and the line that
  * explained where notes are kept was removed from under the composer, as the owner asked of explanatory footnotes.
@@ -63,18 +63,18 @@ function SnippetQuote({ selection, onOpen }: { selection: CodeSelection; onOpen:
   const lineCount = selection.code.split("\n").length;
 
   return (
-    <div className="ws-card mb-2 overflow-hidden rounded-lg">
+    <div className="ws-card mb-2 overflow-hidden rounded-2xl">
       <button
         type="button"
         onClick={onOpen}
         title={`Go to ${selection.path}:${selection.startLine}`}
-        className="hl-row group flex w-full items-center gap-1.5 border-b border-white/[0.08] bg-[hsl(var(--ws-card-head))] px-2 py-1 text-left text-[11px] focus-visible:outline-none"
+        className="hl-row group flex w-full items-center gap-2 border-b border-white/[0.08] bg-[hsl(var(--ws-card-head))] px-3.5 py-2 text-left text-[11.5px] focus-visible:outline-none"
       >
-        <Icon className={cn("h-3 w-3 shrink-0", getFileColor(selection.path))} />
+        <Icon className={cn("h-3.5 w-3.5 shrink-0", getFileColor(selection.path))} />
         <span className="truncate font-medium text-foreground/85 group-hover:text-primary">{base}</span>
-        <span className="shrink-0 text-muted-foreground">{rangeLabel(selection)}</span>
+        <span className="ml-auto shrink-0 rounded-full border border-white/[0.1] px-2 py-px text-[10.5px] text-muted-foreground">{rangeLabel(selection)}</span>
       </button>
-      <pre className="max-h-52 overflow-y-auto px-2 py-1.5 text-[11px] leading-[1.6]">
+      <pre className="max-h-52 overflow-y-auto px-3.5 py-3 text-[11.5px] leading-[1.7]">
         <code className="block whitespace-pre-wrap break-words font-mono text-foreground/80">
           {highlightCode(selection.code, selection.path).map((token, index) =>
             token.cls ? <span key={index} className={token.cls}>{token.text}</span> : token.text
@@ -314,7 +314,7 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
 
       <div className="shrink-0 border-t border-white/[0.08] p-2.5">
         {selection && (
-          <div className="ws-card hl-row group mb-2 flex items-center gap-0.5 rounded-2xl text-[11px] text-muted-foreground">
+          <div className="app-chip group mb-2 flex items-center gap-0.5 rounded-2xl text-[11px] text-muted-foreground [--light-size:20rem]">
             <button
               type="button"
               onClick={() => onOpenSelection(selection.path, selection.startLine, selection.code, selection.endLine)}
@@ -332,7 +332,7 @@ export function CodeLensPanel({ projectId, projectName, onClose, onOpenSelection
                   type="button"
                   aria-label="Stop asking about the selected code"
                   onClick={() => codeLens.clearSelection(projectId)}
-                  className="icon-btn mr-1.5 h-6 w-6 rounded-full"
+                  className="icon-btn icon-btn-danger mr-1.5 h-6 w-6 rounded-full"
                 >
                   <X className="h-3 w-3" />
                 </button>

@@ -77,8 +77,14 @@ export function DeleteAccount() {
 
   return (
     <>
-      <Button variant="outline" size="sm" className="gap-1.5" disabled={isDeleting} onClick={() => openWarning(true)}>
-        {isDeleting ? <OrbitSpinner className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5 text-red-500" />}
+      <Button
+        variant="destructive"
+        size="sm"
+        className="gap-1.5"
+        disabled={isDeleting}
+        onClick={() => openWarning(true)}
+      >
+        {isDeleting ? <OrbitSpinner className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
         {isDeleting ? "Deleting…" : "Delete account"}
       </Button>
 

@@ -12,7 +12,7 @@
  *
  * It needs the build served the way production serves it - compressed, with its headers - so point it at the real
  * nginx image rather than a dev server:
- *   node lighthouse.mjs http://127.0.0.1:14180/ http://127.0.0.1:14180/login
+ *   node lighthouse.mjs http://127.0.0.1:14180/login http://127.0.0.1:14180/pricing
  * Pages are given as whole addresses because Git Bash rewrites a bare "/login" argument into a Windows path. The
  * browser is the one Playwright installed.
  */

@@ -19,9 +19,9 @@ import { formatDistanceToNow } from "date-fns";
 import { CornerDownLeft, LayoutDashboard, LayoutGrid, Pin, Plus, Star, type LucideIcon } from "lucide-react";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { ProjectFolderIcon } from "@/components/ProjectFolderIcon";
 import { byLastEdited } from "@/lib/project-filters";
 import type { ProjectSummaryResponse } from "@/lib/types";
-import { generateGradient } from "@/lib/utils";
 import { projectTitle } from "@/lib/project-title";
 
 const FRESH_MS = 700;
@@ -93,7 +93,9 @@ export function ProjectCommandPalette({ open, onOpenChange, projects, onNavigate
                                         className={ITEM_CLASS}
                                         style={order(index)}
                                     >
-                                        <span aria-hidden="true" className="cmd-swatch" style={generateGradient(project.name)} />
+                                        <span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center">
+                                            <ProjectFolderIcon name={project.name} isOpen={pathname === `/projects/${project.id}`} className="h-[18px] w-[18px]" />
+                                        </span>
                                         <span className="min-w-0 flex-1 truncate">{projectTitle(project)}</span>
                                         {project.pinnedAt && <Pin aria-label="Pinned" className="pin-active h-3.5 w-3.5 shrink-0" />}
                                         {project.starredAt && <Star aria-label="Starred" className="h-3.5 w-3.5 shrink-0 fill-current text-muted-foreground" />}

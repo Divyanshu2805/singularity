@@ -49,8 +49,6 @@ function writeAnnounced(ids: Set<number>) {
   }
 }
 
-const QUIET_BUTTON = "border-white/[0.08] bg-white/[0.06] text-foreground/90 hover:bg-white/[0.12]";
-
 function invitationText(invitation: ProjectInvitation) {
   const what = `${roleOffer(invitation.role)} “${invitation.projectName}”`;
   if (!invitation.invitedByName) return <>You've been invited to {what}.</>;
@@ -84,7 +82,7 @@ export function InvitationNotice() {
           <ToastAction altText={`Accept the invitation to ${only.projectName}`} onClick={() => void answerRef.current(only, true)}>
             Accept
           </ToastAction>
-          <ToastAction altText={`Decline the invitation to ${only.projectName}`} className={QUIET_BUTTON} onClick={() => void answerRef.current(only, false)}>
+          <ToastAction altText={`Decline the invitation to ${only.projectName}`} quiet onClick={() => void answerRef.current(only, false)}>
             Decline
           </ToastAction>
         </>

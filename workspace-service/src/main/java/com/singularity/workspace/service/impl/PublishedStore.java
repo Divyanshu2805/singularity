@@ -175,10 +175,6 @@ public class PublishedStore {
         deletePrefix(slug + "/" + buildPrefix);
     }
 
-    public void deleteApp(String slug) {
-        deletePrefix(slug + "/");
-    }
-
     private void deletePrefix(String prefix) {
         try {
             List<DeleteObject> keys = new ArrayList<>();

@@ -3,7 +3,7 @@
  *
  * Handles: the DOM matchers, a stub for the media-query API jsdom does not implement, a no-op resize observer, and a
  * canvas that has no drawing context - jsdom has none, and without the stub every page standing on the app's sky
- * (LandingBackdrop's starfield) logged a not-implemented error; the starfield already draws nothing without one.
+ * (PageBackdrop's starfield) logged a not-implemented error; the starfield already draws nothing without one.
  *
  * The resize observer matters: anything rendering the sliding overflow text - the sidebar's project names, the chat
  * rail's labels - observes its own width with one, and without a stub those components cannot mount. Treating "never

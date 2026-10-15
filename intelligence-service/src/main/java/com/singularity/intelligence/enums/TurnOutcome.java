@@ -5,11 +5,10 @@ package com.singularity.intelligence.enums;
  *
  * <p>Handles: naming each ending - the turn's files were saved; it answered without changing anything; it saved what
  * it wrote but did not finish what it planned; it wrote changes that could not be saved; the model returned nothing;
- * the call failed; someone stopped it; the daily allowance ran out part-way, with whatever was finished saved - and
- * saying which of those leave the request worth sending again.
+ * the call failed; someone stopped it; the daily allowance ran out part-way, with whatever was finished saved.
  *
- * <p>Stored as the name, on the turn's first event, so a conversation reloaded tomorrow still knows which turns to
- * offer a retry on. The column has no check constraint, so adding a value needs no migration.
+ * <p>Stored as the name, on the turn's first event, so a conversation reloaded tomorrow still knows how each turn
+ * ended. The column has no check constraint, so adding a value needs no migration.
  */
 public enum TurnOutcome {
     SAVED,
@@ -19,9 +18,5 @@ public enum TurnOutcome {
     EMPTY,
     FAILED,
     STOPPED,
-    OUT_OF_BUDGET;
-
-    public boolean isWorthRetrying() {
-        return this != SAVED && this != ANSWERED;
-    }
+    OUT_OF_BUDGET
 }

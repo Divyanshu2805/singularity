@@ -4,8 +4,8 @@
  * Handles: which files are scanned for classes, the colour tokens mapped onto the CSS custom properties defined in
  * the stylesheet, the fonts, the radii, and the keyframes and animations the UI uses.
  *
- * Colours are indirections onto CSS variables rather than literal values, so light and dark are one definition and
- * the code editor's theme can read the same variables.
+ * Colours are indirections onto CSS variables rather than literal values, so the code editor's theme can read the same
+ * variables. White and black are indirections too (--tw-white, --tw-black), defined in index.css.
  */
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
@@ -24,6 +24,8 @@ export default {
     },
     extend: {
       colors: {
+        white: "rgb(var(--tw-white) / <alpha-value>)",
+        black: "rgb(var(--tw-black) / <alpha-value>)",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

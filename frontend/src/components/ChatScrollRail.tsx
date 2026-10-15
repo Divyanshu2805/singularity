@@ -109,7 +109,7 @@ export function ChatScrollRail({ items, activeIndex, onSelect }: {
                   setIsOpen(false);
                 }}
                 className={cn(
-                  "hl-row group/row flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] focus-visible:outline-none",
+                  "hl-row group/row flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] focus-visible:outline-none",
                   !isActive && "text-muted-foreground"
                 )}
               >

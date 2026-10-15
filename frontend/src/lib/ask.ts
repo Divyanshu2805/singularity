@@ -1,7 +1,7 @@
 /**
  * The questions an assistant turn can put to the user, as the chat talks about them.
  *
- * Handles: reading the suggested answers off an ask event, collecting every question a turn asked, and turning the
+ * Handles: reading the suggested answers off an ask event, and turning the
  * user's picks into the message that is sent back as their answer.
  *
  * The suggested answers travel as one pipe-separated string in the event's metadata - the same separator the backend
@@ -30,12 +30,6 @@ export function parseAnswerOptions(metadata: string | undefined | null): string[
     }
   }
   return options;
-}
-
-export function askedQuestions(events: readonly ChatEvent[]): AskedQuestion[] {
-  return events
-    .filter((event) => event.type === ChatEventType.ASK && event.content.trim() && event.isComplete !== false)
-    .map((event) => ({ question: event.content.trim(), options: parseAnswerOptions(event.metadata) }));
 }
 
 export function isFullyAnswered(questions: readonly AskedQuestion[], answers: Readonly<Record<number, string>>): boolean {

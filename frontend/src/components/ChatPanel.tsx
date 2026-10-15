@@ -36,8 +36,12 @@
  * gold glass (.chat-user-bubble) in white 14px text, and the composer is the dashboard's prompt - a sparkle badge
  * that brightens and turns while it has focus, white text, and the Build/Teach mode menu (PromptModeMenu) beside the
  * send button. While Singularity is
- * answering, a comet (OrbitSpinner) sits beside "Working on it" and the send button becomes a stop button, so the
- * wait reads as the app working rather than as a frozen box. The text box is a bare textarea rather than the app's
+ * answering, the orbit (OrbitSpinner) sits beside "Working on it" and the send button becomes a stop button, so the
+ * wait reads as the app working rather than as a frozen box. While the conversation is being fetched the window shows its
+ * outline - a request, a reply, another - in the app's shimmer, each part fading up in turn, with the orbit and "Loading
+ * the conversation" in the middle; it was the orbit alone on an empty window. A conversation that could not be fetched
+ * says so (LoadFailure, with Try again) instead of falling through to the empty state: a project with a whole history
+ * opened on "What should we build?" whenever the history request failed, as if it had never been talked to. The text box is a bare textarea rather than the app's
  * Textarea: that one is a field well with its own gradient fill, which painted a darker block inside the prompt. An
  * empty conversation opens on the horizon mark building itself over a soft light (index.css, .empty-glow) and the
  * dashboard's Fraunces headline (near-white, with a pale gold sweep on "build?"); the explanatory line under the
@@ -56,6 +60,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { ArrowDown, ArrowRight, ArrowUp, ChevronDown, CodeXml, Eye, Lock, PenLine, RotateCcw, Sparkles, Square, Zap } from "lucide-react";
 import { HorizonMark } from "@/components/HorizonMark";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
+import { LoadFailure } from "@/components/app/LoadFailure";
 import { Button } from "@/components/ui/button";
 import { findSafeEnd, findVisibleRanges, useStreamParser } from "@/hooks/use-stream-parser";
 import { useSmoothStream } from "@/hooks/use-smooth-stream";
@@ -63,6 +68,7 @@ import { AssistantError, AssistantEvents, type StepToExplain } from "./ChatEvent
 import type { LessonQuestion } from "@/lib/lesson";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { PromptModeMenu } from "./PromptModeMenu";
+import { Kbd } from "./Kbd";
 import { MessageActions } from "./MessageActions";
 import { assistantTurnText } from "@/lib/chat-export";
 import { canUndoTurn } from "@/lib/revisions";
@@ -95,6 +101,7 @@ interface ChatPanelProps {
   onSendMessage: (message: string) => void;
   isStreaming: boolean;
   isLoading?: boolean;
+  loadError?: { message: string; onRetry: () => void; isRetrying: boolean; attempt: number } | null;
   readOnly?: boolean;
   quotaBlock?: { message: string; detail: string; onUpgrade: () => void } | null;
   usageMeter?: ReactNode;
@@ -127,13 +134,6 @@ const resizeTextarea = (el: HTMLTextAreaElement) => {
   el.style.height = `${Math.min(el.scrollHeight, MAX_INPUT_HEIGHT)}px`;
 };
 
-function Kbd({ children }: { children: ReactNode }) {
-  return (
-    <kbd className="sidebar-kbd inline-flex h-[18px] items-center px-1 font-sans text-[10px] font-medium leading-none text-foreground/80">
-      {children}
-    </kbd>
-  );
-}
 
 export function ChatPanel({
   messages,
@@ -142,6 +142,7 @@ export function ChatPanel({
   quotaBlock,
   usageMeter,
   isLoading,
+  loadError,
   readOnly,
   onStop,
   onRetry,
@@ -368,10 +369,42 @@ export function ChatPanel({
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} onScroll={handleScroll} onClickCapture={holdWhenSomethingIsOpened} className="h-full overflow-y-auto">
           {isLoading ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3">
-              <OrbitSpinner className="h-6 w-6" label="Loading the conversation" />
-              <span aria-hidden="true" className="text-shimmer text-xs">Loading the conversation…</span>
+            <div aria-busy="true" className="relative flex h-full flex-col gap-7 overflow-hidden py-5 pl-4 pr-4">
+              <div className="app-fade app-skeleton ml-auto h-10 w-3/5 rounded-2xl" style={{ "--i": 0 } as CSSProperties} />
+              <div className="app-fade flex gap-3" style={{ "--i": 1 } as CSSProperties}>
+                <div className="app-skeleton h-6 w-6 shrink-0 rounded-full" />
+                <div className="flex-1 space-y-2.5">
+                  <div className="app-skeleton h-3 w-full rounded" />
+                  <div className="app-skeleton h-3 w-11/12 rounded" />
+                  <div className="app-skeleton h-3 w-2/5 rounded" />
+                  <div className="app-skeleton mt-3 h-9 w-full rounded-xl" />
+                </div>
+              </div>
+              <div className="app-fade app-skeleton ml-auto h-8 w-2/5 rounded-2xl" style={{ "--i": 2 } as CSSProperties} />
+              <div className="app-fade flex gap-3" style={{ "--i": 3 } as CSSProperties}>
+                <div className="app-skeleton h-6 w-6 shrink-0 rounded-full" />
+                <div className="flex-1 space-y-2.5">
+                  <div className="app-skeleton h-3 w-10/12 rounded" />
+                  <div className="app-skeleton h-3 w-3/5 rounded" />
+                </div>
+              </div>
+              <div role="status" aria-label="Loading the conversation" className="app-loading pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span className="flex items-center gap-3 rounded-full border border-white/[0.07] bg-black/50 px-4 py-2 backdrop-blur-md">
+                  <OrbitSpinner className="h-4 w-4" />
+                  <span aria-hidden="true" className="text-shimmer font-mono text-[10.5px] uppercase tracking-[0.26em]">Loading the conversation</span>
+                </span>
+              </div>
             </div>
+          ) : messages.length === 0 && loadError ? (
+            <LoadFailure
+              title="Couldn't load the conversation"
+              onRetry={loadError.onRetry}
+              isRetrying={loadError.isRetrying}
+              attempt={loadError.attempt}
+              className="m-4 h-[calc(100%-2rem)]"
+            >
+              {loadError.message}
+            </LoadFailure>
           ) : messages.length === 0 ? (
             sharedWith ? (
               <SharedProjectWelcome info={sharedWith} readOnly={readOnly} onBrowseCode={onBrowseCode} />
@@ -554,7 +587,7 @@ function SharedProjectWelcome({ info, readOnly, onBrowseCode }: {
       <div className="relative mb-5">
         <span
           aria-hidden="true"
-          className="flex h-14 w-14 items-center justify-center rounded-2xl text-xl font-semibold text-white shadow-lg shadow-black/40 ring-1 ring-inset ring-white/15"
+          className="flex h-14 w-14 items-center justify-center rounded-2xl text-xl font-semibold text-[#fff] shadow-lg shadow-[rgb(0_0_0/0.4)] ring-1 ring-inset ring-[rgb(255_255_255/0.15)]"
           style={generateGradient(info.projectName)}
         >
           {projectInitial}

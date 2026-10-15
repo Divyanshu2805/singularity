@@ -19,10 +19,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, FileWarning, GitFork } from "lucide-react";
+import { ArrowLeft, ExternalLink, FileWarning, GitFork, RotateCcw } from "lucide-react";
+import { AppLoading } from "@/components/app/AppLoading";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
+import { StatusScreen } from "@/components/app/StatusScreen";
 import { FileTree } from "@/components/FileTree";
 import { HorizonMark } from "@/components/HorizonMark";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { ApiRequestError, api, buildFileTree, isAuthenticated, isQuotaError } from "@/lib/api";
 import { highlightCode, MAX_HIGHLIGHT_CHARS } from "@/lib/highlight-code";
@@ -31,6 +34,17 @@ import { sharePath } from "@/lib/publish";
 import { cn, generateGradient } from "@/lib/utils";
 
 const FIRST_FILES = ["src/App.tsx", "src/pages/Index.tsx", "src/main.tsx", "package.json", "index.html"];
+
+function ViewerNote({ children, tone }: { children: string; tone?: "alert" }) {
+  return (
+    <div role={tone ? "alert" : undefined} className="app-fade flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03]">
+        <FileWarning className={tone ? "h-[18px] w-[18px] text-primary/80" : "h-[18px] w-[18px] text-muted-foreground"} />
+      </span>
+      <p className="max-w-[16rem] text-xs leading-relaxed text-muted-foreground">{children}</p>
+    </div>
+  );
+}
 
 function CodeViewer({ slug, path }: { slug: string; path: string }) {
   const { data, isLoading, error } = useQuery({
@@ -45,23 +59,17 @@ function CodeViewer({ slug, path }: { slug: string; path: string }) {
   );
 
   if (isLoading) {
-    return <div className="flex h-full items-center justify-center"><OrbitSpinner /></div>;
+    return (
+      <div role="status" aria-label="Opening the file" className="app-loading flex h-full items-center justify-center">
+        <OrbitSpinner className="h-5 w-5" />
+      </div>
+    );
   }
   if (error || !data) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
-        <FileWarning className="h-5 w-5" />
-        {error instanceof ApiRequestError ? error.message : "This file couldn't be loaded."}
-      </div>
-    );
+    return <ViewerNote tone="alert">{error instanceof ApiRequestError ? error.message : "This file couldn't be loaded."}</ViewerNote>;
   }
   if (data.binary) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
-        <FileWarning className="h-5 w-5" />
-        This is a binary file, so there is no code to show.
-      </div>
-    );
+    return <ViewerNote>This is a binary file, so there is no code to show.</ViewerNote>;
   }
   return (
     <pre className="h-full overflow-auto p-4 font-mono text-[12.5px] leading-5" aria-label={`Code of ${path}`}>
@@ -123,21 +131,38 @@ export function SharedApp() {
   };
 
   if (app.isLoading) {
-    return <div className="dash-night flex min-h-screen items-center justify-center"><OrbitSpinner /></div>;
+    return <AppLoading label="Opening the app" />;
   }
 
   if (app.isError || !app.data) {
     const missing = app.error instanceof ApiRequestError && app.error.status === 404;
     return (
-      <div className="dash-night flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
-        <h1 className="font-display text-2xl">{missing ? "This app isn't shared" : "Couldn't load this app"}</h1>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          {missing
-            ? "The link may be wrong, or its owner hasn't shared the code, or has taken the app down."
-            : "Check your connection and try again in a moment."}
-        </p>
-        <Link to="/" className="app-chip mt-1 inline-flex h-8 items-center px-3 text-xs">Back to Singularity</Link>
-      </div>
+      <StatusScreen
+        alert
+        eyebrow={missing ? "Shared app" : "Connection"}
+        title={missing ? "This app isn't" : "Couldn't load"}
+        accent={missing ? "shared" : "this app"}
+        actions={
+          <>
+            {!missing && (
+              <Button variant="chip" onClick={() => void app.refetch()} disabled={app.isFetching} className="gap-1.5">
+                {app.isFetching ? <OrbitSpinner /> : <RotateCcw />}
+                {app.isFetching ? "Trying again" : "Try again"}
+              </Button>
+            )}
+            <Button asChild variant="chip" className="gap-1.5">
+              <Link to="/">
+                <ArrowLeft />
+                Back to Singularity
+              </Link>
+            </Button>
+          </>
+        }
+      >
+        {missing
+          ? "The link may be wrong, or its owner hasn't shared the code, or has taken the app down."
+          : "Check your connection and try again in a moment."}
+      </StatusScreen>
     );
   }
 
@@ -175,14 +200,18 @@ export function SharedApp() {
         <div className="grid min-h-0 flex-1 gap-2 px-2 pb-2 md:grid-cols-[260px_minmax(0,1fr)]">
           <aside className="ws-window min-h-[8rem] overflow-auto" aria-label="Files">
             <FileTree files={tree} selectedPath={selected} onSelectFile={setSelected} isLoading={files.isLoading} changedPaths={changed} />
-            {files.isError && <p className="p-3 text-xs text-muted-foreground">The code couldn't be loaded.</p>}
+            {files.isError && (
+              <p role="alert" className="app-fade p-3 text-xs leading-relaxed text-muted-foreground">
+                The code couldn't be loaded. Reload the page to try again.
+              </p>
+            )}
           </aside>
           <main className={cn("ws-window min-h-[16rem] min-w-0 overflow-hidden")}>
             {selected ? (
               <CodeViewer slug={slug} path={selected} />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                {files.isLoading ? <OrbitSpinner /> : "Pick a file to read it."}
+                {files.isLoading ? <OrbitSpinner className="h-5 w-5" label="Loading the code" /> : "Pick a file to read it."}
               </div>
             )}
           </main>

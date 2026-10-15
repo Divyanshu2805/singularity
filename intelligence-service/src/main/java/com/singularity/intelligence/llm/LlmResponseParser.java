@@ -103,7 +103,6 @@ public class LlmResponseParser {
         }
     }
 
-    private static final Pattern LESSON_PART_PATTERN = Pattern.compile("<part\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern LESSON_PART_CONCEPT_PATTERN = Pattern.compile(
             "<part\\b[^>]*?\\bconcept=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
     private static final Pattern PLAIN_SPACE_RUN = Pattern.compile("[ \\t\\n\\r\\f\\x0B]+");
@@ -297,11 +296,6 @@ public class LlmResponseParser {
             if (options.size() == MAX_ANSWER_OPTIONS) break;
         }
         return options.isEmpty() ? null : String.join(ANSWER_OPTION_SEPARATOR, options);
-    }
-
-    public static int lessonPartCount(String lessonBody) {
-        if (lessonBody == null) return 0;
-        return (int) LESSON_PART_PATTERN.matcher(lessonBody).results().count();
     }
 
     static String lessonConcepts(String tagConcept, String lessonBody) {

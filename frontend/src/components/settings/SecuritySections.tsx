@@ -14,13 +14,14 @@
  * (ConfirmIdentityDialog) is also what the Delete account box asks with, told what the confirmation is for.
  */
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
-import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatDistanceToNow } from "date-fns";
 import QRCode from "qrcode";
-import { KeyRound, Lock, LogOut, ShieldCheck, ShieldOff, Smartphone } from "lucide-react";
+import { Activity, KeyRound, Lock, LogOut, MonitorSmartphone, ShieldCheck, ShieldOff, Smartphone } from "lucide-react";
 import type { MultiFactorInfo, MultiFactorResolver, TotpSecret, User } from "firebase/auth";
 import { AuthDialogCard, AuthDivider, AuthField, AuthSubmitButton, FormAlert, GoogleButton, PasswordField } from "@/components/auth/AuthForm";
 import { NewPasswordForm } from "@/components/auth/NewPasswordForm";
+import { SettingsCard } from "@/components/settings/SettingsCard";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -167,7 +168,7 @@ export function ConfirmIdentityDialog({ open, onOpenChange, onConfirmed, purpose
                     onChange={(e) => setCode(e.target.value.replace(/[^\d\s]/g, ""))}
                 />
                 <div className="mt-7">
-                    <AuthSubmitButton isLoading={busy === "code"} loadingText="Verifying…">
+                    <AuthSubmitButton chip isLoading={busy === "code"} loadingText="Verifying…">
                         Verify
                     </AuthSubmitButton>
                 </div>
@@ -196,7 +197,7 @@ export function ConfirmIdentityDialog({ open, onOpenChange, onConfirmed, purpose
                         onChange={(e) => setPassword(e.target.value)}
                     />
                     <div className="mt-7">
-                        <AuthSubmitButton isLoading={busy === "password"} loadingText="Confirming…">
+                        <AuthSubmitButton chip isLoading={busy === "password"} loadingText="Confirming…">
                             Confirm
                         </AuthSubmitButton>
                     </div>
@@ -371,31 +372,28 @@ export function SecuritySections({ startIndex }: { startIndex: number }) {
 
     return (
         <>
-            <section id="security" className="app-glass app-rise scroll-mt-4 rounded-[22px] p-5" style={{ "--i": startIndex } as CSSProperties}>
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0">
-                        <p className="app-label">Sign-in protection</p>
-                        <h2 className="mt-1 flex items-center gap-2 text-lg font-semibold">
-                            <ShieldCheck className="h-4 w-4 text-primary" /> Two-step verification &amp; password
-                        </h2>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            With two-step verification, a stolen password alone isn't enough to get into your account.
-                        </p>
-                    </div>
-                    {!user && (
-                        <Button variant="outline" onClick={() => setConfirmOpen(true)}>
-                            Manage
-                        </Button>
-                    )}
-                    {user && (
+            <SettingsCard
+                id="security"
+                index={startIndex}
+                label="Sign-in protection"
+                title={<>Two-step verification &amp; password</>}
+                Icon={ShieldCheck}
+                description="With two-step verification, a stolen password alone isn't enough to get into your account."
+                action={
+                    user ? (
                         <Button variant="ghost" onClick={finishManaging}>
                             Done
                         </Button>
-                    )}
-                </div>
-
+                    ) : (
+                        <Button variant="outline" onClick={() => setConfirmOpen(true)}>
+                            Manage
+                        </Button>
+                    )
+                }
+                bodyClassName={user ? "space-y-6" : undefined}
+            >
                 {user && (
-                    <div className="mt-5 space-y-5 border-t border-border/50 pt-5">
+                    <>
                         <div>
                             <p className="text-sm font-medium">Authenticator app</p>
                             {factors.length > 0 ? (
@@ -469,23 +467,20 @@ export function SecuritySections({ startIndex }: { startIndex: number }) {
                                 )}
                             </div>
                         )}
-                    </div>
+                    </>
                 )}
-            </section>
+            </SettingsCard>
 
-            <section className="app-glass app-rise rounded-[22px] p-5" style={{ "--i": startIndex + 1 } as CSSProperties}>
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0">
-                        <p className="app-label">Sessions</p>
-                        <h2 className="mt-1 text-lg font-semibold">Sign out everywhere</h2>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            Ends every session on every device, this one included. Use it if you signed in somewhere you shouldn't have
-                            stayed signed in, or think someone else has access.
-                        </p>
-                    </div>
+            <SettingsCard
+                index={startIndex + 1}
+                label="Sessions"
+                title="Sign out everywhere"
+                Icon={MonitorSmartphone}
+                description="Ends every session on every device, this one included. Use it if you signed in somewhere you shouldn't have stayed signed in, or think someone else has access."
+                action={
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="outline" className="gap-1.5" disabled={isSigningOutEverywhere}>
+                            <Button variant="outline" className="app-chip-danger gap-1.5 border-red-400/40 text-red-300" disabled={isSigningOutEverywhere}>
                                 {isSigningOutEverywhere ? <OrbitSpinner className="h-3.5 w-3.5" /> : <LogOut className="h-3.5 w-3.5 text-red-500" />}
                                 Sign out everywhere
                             </Button>
@@ -503,42 +498,51 @@ export function SecuritySections({ startIndex }: { startIndex: number }) {
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
-                </div>
-            </section>
+                }
+            />
 
-            <section className="app-glass app-rise rounded-[22px] p-5" style={{ "--i": startIndex + 2 } as CSSProperties}>
-                <p className="app-label">Recent activity</p>
-                <p className="mt-1 text-xs text-muted-foreground">Your last 8 sign-in and security events.</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                    Anything you don't recognise? Change your password and sign out everywhere.
-                </p>
+            <SettingsCard
+                index={startIndex + 2}
+                label="Recent activity"
+                title="Your last sign-ins and security events"
+                Icon={Activity}
+                description="Anything you don't recognise? Change your password and sign out everywhere."
+                bodyClassName="px-3 py-3 sm:px-4"
+            >
                 {eventsError ? (
-                    <p className="mt-4 text-sm text-destructive">{eventsError}</p>
+                    <p className="px-2 py-1 text-sm text-destructive">{eventsError}</p>
                 ) : events === null ? (
-                    <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+                    <p className="flex items-center gap-2 px-2 py-1 text-sm text-muted-foreground">
                         <OrbitSpinner className="h-4 w-4" /> Loading…
                     </p>
                 ) : events.length === 0 ? (
-                    <p className="mt-4 text-sm text-muted-foreground">Nothing recorded yet.</p>
+                    <p className="px-2 py-1 text-sm text-muted-foreground">Nothing recorded yet.</p>
                 ) : (
-                    <ul className="mt-4 divide-y divide-border/50">
-                        {events.slice(0, 8).map((event) => (
-                            <li key={event.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-2.5">
-                                <span className={event.type === "SIGN_IN_REJECTED" ? "text-sm text-destructive" : "text-sm"}>
-                                    {EVENT_LABELS[event.type] ?? event.type}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                    {describeDevice(event.userAgent)}
-                                    {event.ipAddress ? ` · ${event.ipAddress}` : ""} ·{" "}
-                                    <time dateTime={event.createdAt} title={new Date(event.createdAt).toLocaleString()}>
-                                        {formatDistanceToNow(new Date(event.createdAt), { addSuffix: true })}
-                                    </time>
-                                </span>
-                            </li>
-                        ))}
+                    <ul>
+                        {events.slice(0, 8).map((event) => {
+                            const rejected = event.type === "SIGN_IN_REJECTED";
+                            return (
+                                <li key={event.id} className="flex flex-wrap items-center gap-x-4 gap-y-0.5 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/[0.035]">
+                                    <span
+                                        aria-hidden="true"
+                                        className={rejected ? "h-2 w-2 shrink-0 rounded-full bg-red-400" : "h-2 w-2 shrink-0 rounded-full bg-primary/70"}
+                                    />
+                                    <span className={rejected ? "min-w-0 flex-1 basis-40 text-sm font-medium text-destructive" : "min-w-0 flex-1 basis-40 text-sm font-medium"}>
+                                        {EVENT_LABELS[event.type] ?? event.type}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {describeDevice(event.userAgent)}
+                                        {event.ipAddress ? ` · ${event.ipAddress}` : ""} ·{" "}
+                                        <time dateTime={event.createdAt} title={new Date(event.createdAt).toLocaleString()}>
+                                            {formatDistanceToNow(new Date(event.createdAt), { addSuffix: true })}
+                                        </time>
+                                    </span>
+                                </li>
+                            );
+                        })}
                     </ul>
                 )}
-            </section>
+            </SettingsCard>
             <ConfirmIdentityDialog open={confirmOpen} onOpenChange={setConfirmOpen} onConfirmed={onConfirmed} />
         </>
     );

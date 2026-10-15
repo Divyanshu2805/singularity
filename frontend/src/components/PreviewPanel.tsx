@@ -60,12 +60,14 @@
  * sits in a sunken pill like a browser's. Show output is not on it: it floats as a small pill centred at the foot of the
  * preview, with the console's error count, and gives way to the output panel it opens - moved there at the owner's
  * request. Edit text's icon is an arrow cursor, also at the owner's request. Each state - starting, stopped, failed - rises in as a centred card with a
- * Fraunces title, the app's comet marking whatever is under way. The idle ones are only a gold tile over a soft
+ * Fraunces title, the app's ripple marking whatever is under way. The idle ones are only a gold tile over a soft
  * light, the title and the action - the explanatory sentence under the title was removed at the owner's request, so
  * a stopped preview shows a line only when it has a real reason (an idle timeout, say).
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
+import { IdleWindow } from "@/components/IdleWindow";
+import { PreviewSteps } from "@/components/PreviewSteps";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -662,7 +664,7 @@ export function PreviewPanel({
           type="button"
           onClick={() => setIsLogsOpen(true)}
           style={{ "--icon-hover": "scale(1.08)" } as CSSProperties}
-          className="app-menu absolute bottom-4 left-1/2 z-40 flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full border px-3.5 text-[11.5px] font-medium text-foreground/85 shadow-[0_12px_30px_-12px_rgb(0_0_0/0.8)] transition-colors hover:text-foreground [&_svg]:size-3.5"
+          className="app-chip absolute bottom-4 left-1/2 z-40 flex h-8 -translate-x-1/2 items-center gap-1.5 px-3.5 text-[11.5px] font-medium shadow-[0_12px_30px_-12px_rgb(0_0_0/0.8)] [&_svg]:size-3.5"
         >
           <SquareTerminal />
           Show output
@@ -694,10 +696,10 @@ export function PreviewPanel({
 
       {status === "TERMINATED" || (!preview && isLoaded && !isStarting) ? (
         <div className="flex shrink-0 justify-center gap-2 pb-4">
-          <Button variant="outline" size="sm" onClick={onViewCode} className="h-8 gap-1.5 px-3.5 text-xs [&_svg]:size-3.5">
+          <Button variant="chip" size="sm" onClick={onViewCode} className="h-8 gap-1.5 px-3.5 text-xs [&_svg]:size-3.5">
             <CodeXml /> View code
           </Button>
-          <Button variant="outline" size="sm" onClick={onDownload} className="h-8 gap-1.5 px-3.5 text-xs [&_svg]:size-3.5">
+          <Button variant="chip" size="sm" onClick={onDownload} className="h-8 gap-1.5 px-3.5 text-xs [&_svg]:size-3.5">
             <Download /> Download ZIP
           </Button>
         </div>
@@ -908,8 +910,9 @@ function PreviewToolbar({
   );
 }
 
-function CenteredState({ icon, title, children, tone = "default" }: {
-  icon: ReactNode;
+function CenteredState({ icon, art, title, children, tone = "default" }: {
+  icon?: ReactNode;
+  art?: ReactNode;
   title: string;
   children?: ReactNode;
   tone?: "default" | "error";
@@ -917,16 +920,17 @@ function CenteredState({ icon, title, children, tone = "default" }: {
   return (
     <div className="idle-state flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-8 text-center">
       <div className="relative mb-1">
-        {tone === "default" && <span aria-hidden="true" className="empty-glow absolute -inset-[95%]" />}
-        <div
-          className={cn(
-            "relative flex h-14 w-14 items-center justify-center rounded-2xl border",
-            tone === "default" && "idle-tile",
-            tone === "error" ? "border-destructive/35 bg-destructive/[0.12] text-destructive" : "border-primary/30 bg-[hsl(30_11%_16%)] text-[hsl(46_100%_86%)] shadow-[0_14px_30px_-18px_hsl(32.8_100%_60%/0.6)]"
-          )}
-        >
-          {icon}
-        </div>
+        {art ?? (
+          <div
+            className={cn(
+              "relative flex h-14 w-14 items-center justify-center rounded-2xl border",
+              tone === "default" && "idle-tile",
+              tone === "error" ? "border-destructive/35 bg-destructive/[0.12] text-destructive" : "border-primary/30 [background-color:hsl(30_11%_16%)] [color:hsl(46_100%_86%)] shadow-[0_14px_30px_-18px_hsl(32.8_100%_60%/0.6)]"
+            )}
+          >
+            {icon}
+          </div>
+        )}
       </div>
       <h3 className="max-w-[420px] font-display text-[24px] font-semibold leading-tight tracking-tight text-white">{title}</h3>
       {children}
@@ -938,27 +942,8 @@ function StartingState({ detail }: { detail: string | null }) {
   const current = previewStepIndex(detail);
 
   return (
-    <CenteredState icon={<OrbitSpinner className="h-6 w-6" />} title="Starting your preview">
-      <ol className="w-full max-w-[260px] space-y-2 text-left text-xs">
-        {PREVIEW_STEPS.map((step, index) => {
-          const isDone = index < current;
-          const isCurrent = index === current;
-          return (
-            <li key={step.detail} className={cn("flex items-center gap-2", isDone ? "text-muted-foreground" : !isCurrent && "text-muted-foreground/70")}>
-              {isDone ? (
-                <Check className="h-3.5 w-3.5 shrink-0 text-syntax-string" />
-              ) : isCurrent ? (
-                <OrbitSpinner className="h-3.5 w-3.5" />
-              ) : (
-                <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-                  <span className="h-1 w-1 rounded-full bg-current" />
-                </span>
-              )}
-              <span className={cn(isCurrent && "text-foreground")}>{step.label}</span>
-            </li>
-          );
-        })}
-      </ol>
+    <CenteredState art={<IdleWindow stage={current} />} title="Starting your preview">
+      <PreviewSteps current={current} />
     </CenteredState>
   );
 }
@@ -999,11 +984,11 @@ function StoppedState({ reason, hasStartedBefore, onStart, isStarting }: {
   isStarting: boolean;
 }) {
   return (
-    <CenteredState icon={<Play className="h-5 w-5 translate-x-px" />} title={hasStartedBefore ? "The preview isn't running" : "Preview your app"}>
+    <CenteredState art={<IdleWindow />} title={hasStartedBefore ? "The preview isn't running" : "Preview your app"}>
       {reason && reason !== "Stopped" && (
         <p className="-mt-1 max-w-[320px] text-xs leading-5 text-muted-foreground">{reason}</p>
       )}
-      <Button size="sm" onClick={onStart} disabled={isStarting} className="btn-invite mt-1 h-9 gap-1.5 px-5 text-[13px] [&_svg]:size-3.5">
+      <Button variant="chip" size="sm" onClick={onStart} disabled={isStarting} className="btn-invite mt-1 h-9 gap-1.5 px-5 text-[13px] [&_svg]:size-3.5">
         {isStarting ? <OrbitSpinner className="h-3.5 w-3.5" /> : <Play />}
         Start preview
       </Button>
@@ -1034,10 +1019,10 @@ function FailedState({ detail, kind, projectId, previewId, onRetry, onViewCode }
         </pre>
       )}
       <div className="flex flex-wrap justify-center gap-2">
-        <Button variant="outline" size="sm" onClick={onRetry} style={{ "--icon-hover": "rotate(-180deg)" } as CSSProperties} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
+        <Button variant="chip" size="sm" onClick={onRetry} style={{ "--icon-hover": "rotate(-180deg)" } as CSSProperties} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
           <RotateCcw /> Try again
         </Button>
-        <Button variant="outline" size="sm" onClick={onViewCode} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
+        <Button variant="chip" size="sm" onClick={onViewCode} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
           <CodeXml /> View code
         </Button>
       </div>
@@ -1114,10 +1099,10 @@ function StartErrorState({ error, onRetry, onDownload }: { error: unknown; onRet
       <p className="max-w-[340px] text-xs leading-5 text-muted-foreground">{failure.message}</p>
       {failure.hint && <p className="max-w-[340px] text-xs leading-5 text-muted-foreground/70">{failure.hint}</p>}
       <div className="flex gap-2">
-        <Button size="sm" onClick={onRetry} style={{ "--icon-hover": "rotate(-180deg)" } as CSSProperties} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
+        <Button variant="chip" size="sm" onClick={onRetry} style={{ "--icon-hover": "rotate(-180deg)" } as CSSProperties} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
           <RotateCcw /> Try again
         </Button>
-        <Button variant="outline" size="sm" onClick={onDownload} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
+        <Button variant="chip" size="sm" onClick={onDownload} className="h-8 gap-1.5 text-xs [&_svg]:size-3.5">
           <Download /> Download ZIP
         </Button>
       </div>

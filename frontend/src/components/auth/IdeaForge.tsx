@@ -7,7 +7,7 @@
  * prompt in miniature (the spark badge, which warms while the idea is typed, the idea itself behind a gold caret, and
  * the send button, which lights once there is something to send and presses in). When the idea is sent the card
  * unrolls downwards and the app it asked for is built under the prompt: its tile and name, a chip that turns from
- * "Building" beside the app's comet to "Live" beside a gold dot, and the app's own parts rising in one after another.
+ * "Building" beside the app's ripple to "Live" beside a gold dot, and the app's own parts rising in one after another.
  * Once it is live the app does one thing by itself, so that it reads as working rather than as a picture - then the
  * card rolls back up, the prompt empties and the next idea is typed. There are three (IDEAS), each with its own
  * small app: a habit tracker whose last day gets ticked and whose streak goes from twelve to thirteen, a trip budget
@@ -24,15 +24,15 @@
  * The owner asked for "something better instead of this, maybe some working animation" about the two-line tagline
  * that stood here ("Describe an idea. / Watch it become real.", whose letters bent away from the pointer); the
  * sentence is kept as the caption and the card under it does what the sentence says. An earlier IdeaForge stood beside
- * the form in a column of its own, in the landing page's glass - a prompt bar, a thread with a spark running down it
+ * the form in a column of its own - a prompt bar, a thread with a spark running down it
  * and a separate, larger app window - and was taken out when the owner asked for just the logo, the name and the
  * form; this one is a single small card in the app's material, with the words the owner chose kept over it.
  */
 import { type CSSProperties, type ReactNode } from "react";
 import { ArrowUp, Check, Flame, Sparkles } from "lucide-react";
 import { OrbitSpinner } from "@/components/app/OrbitSpinner";
-import { useIntroReached } from "@/components/landing/intro";
-import { STILL, useInView, usePrefersReducedMotion, useStopwatch } from "@/components/landing/motion";
+import { useIntroReached } from "@/components/motion/intro";
+import { STILL, useInView, usePrefersReducedMotion, useStopwatch } from "@/components/motion/motion";
 import { cn } from "@/lib/utils";
 
 const IDEA_MS = 9200;
@@ -48,7 +48,6 @@ const STILL_AT = WORK + 800;
 
 const ROW_H = 50;
 const BODY_H = 162;
-const RISE_DELAY_MS = 450;
 
 const GOLD = "hsl(42 100% 66%)";
 const PALE = "hsl(44 72% 86%)";
@@ -233,8 +232,7 @@ export function IdeaForge({ from, className }: { from: number; className?: strin
     return (
         <div
             ref={ref}
-            style={{ "--rise-delay": `${RISE_DELAY_MS}ms` } as CSSProperties}
-            className={cn("app-rise relative w-full max-w-[26rem] select-none", className)}
+            className={cn("relative w-full max-w-[26rem] select-none", className)}
         >
             <p className="sr-only">Describe an idea. Watch it become real.</p>
             <p aria-hidden="true" className="flex h-8 items-end justify-center text-[17px] leading-7 text-muted-foreground">

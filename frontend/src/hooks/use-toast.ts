@@ -6,10 +6,15 @@
  * duration is up (three seconds unless it asks for longer) on a timer of its own: Radix's timer holds every toast while
  * the window does not have focus, and keeps holding a toast shown after that, so one raised while the person typed in
  * the preview frame used to stay until they clicked back into the workspace.
+ *
+ * An error toast raised while the server cannot be reached is dropped: the whole-page screen (ServerUnreachable) says
+ * so once, and the dashboard's "Couldn't load projects" used to pile up under it and still be showing after the
+ * connection came back. dismissAllToasts is how that screen clears what was already up when it appeared.
  */
 import * as React from "react";
 
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
+import { isServerUnreachable } from "@/lib/server-reach";
 
 const TOAST_LIMIT = 1;
 const TOAST_REMOVE_DELAY = 1000000;
@@ -145,6 +150,10 @@ type Toast = Omit<ToasterToast, "id">;
 function toast({ ...props }: Toast) {
   const id = genId();
 
+  if (props.variant === "destructive" && isServerUnreachable()) {
+    return { id, dismiss: () => undefined, update: () => undefined };
+  }
+
   const update = (props: ToasterToast) =>
     dispatch({
       type: "UPDATE_TOAST",
@@ -194,4 +203,6 @@ function useToast() {
   };
 }
 
-export { useToast, toast };
+const dismissAllToasts = () => dispatch({ type: "DISMISS_TOAST" });
+
+export { useToast, toast, dismissAllToasts };

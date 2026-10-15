@@ -1,118 +1,61 @@
 /**
- * Covers exporting a conversation as markdown: each side under its own heading, an assistant turn rebuilt from its
- * events rather than from the row's own content, build steps and changed files kept while progress chatter is
- * dropped, walkthroughs labelled with the file they explain, a failed turn recorded as failed, and an empty
- * conversation saying so.
+ * Covers turning an assistant turn into markdown: rebuilt from its events rather than from the row's own content,
+ * build steps and changed files kept while progress chatter is dropped, walkthroughs labelled with the file they
+ * explain, and a failed turn recorded as failed.
  *
  * Also covers the code-lens export, where each snippet is quoted inline where it was first asked about.
  */
 import { describe, it, expect } from "vitest";
-import { assistantTurnText, buildChatMarkdown, buildLensMarkdown, exportFilename } from "./chat-export";
+import { assistantTurnText, buildLensMarkdown, exportFilename } from "./chat-export";
 import { ChatEventType } from "./types";
 import type { ChatEvent, CodeSelection } from "./types";
 
 const event = (type: ChatEventType, content: string, filePath?: string): ChatEvent =>
   ({ type, content, filePath });
 
-describe("buildChatMarkdown", () => {
-  it("writes each side of the conversation under its own heading", () => {
-    const markdown = buildChatMarkdown(
-      [
-        { id: "1", role: "user", content: "Add a navbar" },
-        { id: "2", role: "assistant", content: "", events: [event(ChatEventType.MESSAGE, "Done - added the navbar.")] },
-      ],
-      "My App"
-    );
-
-    expect(markdown).toContain("# My App - chat");
-    expect(markdown).toContain("## You\n\nAdd a navbar");
-    expect(markdown).toContain("## Singularity\n\nDone - added the navbar.");
-  });
-
+describe("assistantTurnText", () => {
   it("rebuilds an assistant turn from its events, not the placeholder content the backend stores", () => {
-    const markdown = buildChatMarkdown(
-      [{
-        id: "1",
-        role: "assistant",
-        content: "Assistant Message here...",
-        events: [event(ChatEventType.MESSAGE, "Here's what I changed.")],
-      }],
-      "App"
-    );
-
-    expect(markdown).toContain("Here's what I changed.");
-    expect(markdown).not.toContain("Assistant Message here...");
+    const text = assistantTurnText([event(ChatEventType.MESSAGE, "Here's what I changed.")], "Assistant Message here...");
+    expect(text).toContain("Here's what I changed.");
+    expect(text).not.toContain("Assistant Message here...");
   });
 
   it("keeps the build steps and the files changed, and drops the progress chatter", () => {
-    const markdown = buildChatMarkdown(
-      [{
-        id: "1",
-        role: "assistant",
-        content: "",
-        events: [
-          event(ChatEventType.THOUGHT, "Thought for 4s"),
-          event(ChatEventType.TOOL_LOG, "Reading files..."),
-          event(ChatEventType.TODO, "Building the header", "src/Header.tsx"),
-          event(ChatEventType.MESSAGE, "All set."),
-          event(ChatEventType.FILE_EDIT, "…", "src/Header.tsx"),
-        ],
-      }],
-      "App"
-    );
+    const text = assistantTurnText([
+      event(ChatEventType.THOUGHT, "Thought for 4s"),
+      event(ChatEventType.TOOL_LOG, "Reading files..."),
+      event(ChatEventType.TODO, "Building the header", "src/Header.tsx"),
+      event(ChatEventType.MESSAGE, "All set."),
+      event(ChatEventType.FILE_EDIT, "…", "src/Header.tsx"),
+    ]);
 
-    expect(markdown).toContain("**Build steps**");
-    expect(markdown).toContain("- Building the header");
-    expect(markdown).toContain("**Files changed**");
-    expect(markdown).toContain("- `src/Header.tsx`");
-    expect(markdown).not.toContain("Thought for 4s");
-    expect(markdown).not.toContain("Reading files...");
+    expect(text).toContain("**Build steps**");
+    expect(text).toContain("- Building the header");
+    expect(text).toContain("**Files changed**");
+    expect(text).toContain("- `src/Header.tsx`");
+    expect(text).not.toContain("Thought for 4s");
+    expect(text).not.toContain("Reading files...");
   });
 
   it("keeps a teaching-mode walkthrough, labelled with the file it explains", () => {
-    const markdown = buildChatMarkdown(
-      [{
-        id: "1",
-        role: "assistant",
-        content: "",
-        events: [event(ChatEventType.LEARN, "`useState` stores a value across renders.", "src/App.tsx")],
-      }],
-      "App"
-    );
-
-    expect(markdown).toContain("**How `src/App.tsx` works**");
-    expect(markdown).toContain("`useState` stores a value across renders.");
+    const text = assistantTurnText([event(ChatEventType.LEARN, "`useState` stores a value across renders.", "src/App.tsx")]);
+    expect(text).toContain("**How `src/App.tsx` works**");
+    expect(text).toContain("`useState` stores a value across renders.");
   });
 
   it("writes a lesson's what and why as prose, and the thought process as a quote, with no tags left in", () => {
-    const markdown = buildChatMarkdown(
-      [{
-        id: "1",
-        role: "assistant",
-        content: "",
-        events: [
-          event(ChatEventType.THINKING, "One page.\nNo router."),
-          event(ChatEventType.LEARN, "<what>Adds the list's memory.</what><why>It would empty on refresh.</why>", "src/useTasks.ts"),
-        ],
-      }],
-      "App"
-    );
+    const text = assistantTurnText([
+      event(ChatEventType.THINKING, "One page.\nNo router."),
+      event(ChatEventType.LEARN, "<what>Adds the list's memory.</what><why>It would empty on refresh.</why>", "src/useTasks.ts"),
+    ]);
 
-    expect(markdown).toContain("**Thought process**\n\n> One page.\n> No router.");
-    expect(markdown).toContain("**About `src/useTasks.ts`**\n\nAdds the list's memory.\n\n_Why:_ It would empty on refresh.");
-    expect(markdown).not.toContain("<what>");
+    expect(text).toContain("**Thought process**\n\n> One page.\n> No router.");
+    expect(text).toContain("**About `src/useTasks.ts`**\n\nAdds the list's memory.\n\n_Why:_ It would empty on refresh.");
+    expect(text).not.toContain("<what>");
   });
 
   it("records a failed turn rather than exporting it as if it succeeded", () => {
-    const markdown = buildChatMarkdown(
-      [{ id: "1", role: "assistant", content: "", error: "Rate limited" }],
-      "App"
-    );
-    expect(markdown).toContain("> Failed: Rate limited");
-  });
-
-  it("says so when there is nothing to export", () => {
-    expect(buildChatMarkdown([], "App")).toContain("_This chat is empty._");
+    expect(assistantTurnText([], "", "Rate limited")).toContain("> Failed: Rate limited");
   });
 });
 

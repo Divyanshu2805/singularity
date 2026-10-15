@@ -7,7 +7,8 @@
  * Firebase user once our own session cookie exists.
  *
  * Each sign-in ends by exchanging the resulting token for this app's session cookie, which is what the rest of the
- * app actually authenticates with.
+ * app actually authenticates with. The profile picture the sign-in provider gave (Google's, for a Google sign-in)
+ * is kept beside the session for the avatar; a password sign-in has none and the avatar shows the name's initial.
  */
 import {
   EmailAuthProvider,
@@ -53,7 +54,7 @@ function isSecondFactorRequired(error: unknown): boolean {
 async function exchangeForSession(user: User): Promise<SessionResponse> {
   try {
     const session = await api.createSession(await user.getIdToken());
-    startSession(session);
+    startSession(session, user.photoURL);
     return session;
   } finally {
     await firebaseSignOut(getFirebaseAuth()).catch(() => undefined);

@@ -3,7 +3,7 @@
  *
  * Handles: the wordmark - the name wiped in from the left (and faded) when `drawn` is given, played forwards on open and
  * backwards and quicker on close, so it finishes before whatever holds it has gone; with no `drawn` it simply shows. It
- * respects a reduced-motion preference. The text can be swapped (the landing nav shows just "Singularity"), defaulting
+ * respects a reduced-motion preference. The text can be swapped, defaulting
  * to the full product name.
  *
  * The mark that once sat beside it here - a gold tile with a check and a spark, in static and self-building forms, with

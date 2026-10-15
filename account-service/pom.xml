@@ -20,7 +20,7 @@
 
 	<properties>
 		<!-- The least of this module's lines the tests must run; `./mvnw verify` fails under it (root pom). -->
-		<coverage.minimum.lines>0.40</coverage.minimum.lines>
+		<coverage.minimum.lines>0.45</coverage.minimum.lines>
 	</properties>
 
 	<dependencies>

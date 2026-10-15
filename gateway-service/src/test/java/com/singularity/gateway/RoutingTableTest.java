@@ -85,6 +85,7 @@ class RoutingTableTest {
                         "/api/projects/7/publish",
                         "/api/projects/7/publish/sharing",
                         "/api/projects/7/publish/log",
+                        "/api/projects/7/publish/build",
                         "/api/projects/7/github",
                         "/api/projects/7/github/push",
                         "/api/github",

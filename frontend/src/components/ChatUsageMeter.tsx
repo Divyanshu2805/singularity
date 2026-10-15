@@ -109,7 +109,7 @@ export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; 
         <div className="border-b border-white/[0.07] px-4 pb-3 pt-3">
           <div className="flex items-center justify-between gap-2">
             <p className="font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Today&rsquo;s AI usage</p>
-            <span className="rounded-full border border-primary/30 bg-primary/[0.12] px-2.5 py-0.5 text-[10px] font-medium text-[hsl(46_100%_88%)]">
+            <span className="rounded-full border border-primary/30 bg-primary/[0.12] px-2.5 py-0.5 text-[10px] font-medium [color:hsl(46_100%_88%)]">
               {usage.planName} plan
             </span>
           </div>
@@ -159,7 +159,7 @@ export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; 
           <button
             type="button"
             onClick={() => navigate("/usage")}
-            className="wipe-link flex items-center gap-1 text-xs text-primary"
+            className="wipe-link flex items-center gap-1 text-xs text-primary hover:text-white focus-visible:text-white focus-visible:outline-none"
           >
             View detailed usage <ArrowUpRight className="h-3 w-3" />
           </button>
@@ -167,7 +167,7 @@ export function ChatUsageMeter({ projectId, isStreaming }: { projectId: string; 
             <button
               type="button"
               onClick={() => navigate("/pricing")}
-              className="btn btn-glass h-6 rounded-full px-2.5 text-[11px] font-semibold text-foreground/90"
+              className="btn app-chip h-6 rounded-full px-2.5 text-[11px] font-semibold text-foreground/90"
             >
               Upgrade
             </button>

@@ -19,12 +19,13 @@
  * address that looks like one, a name, and when creating an account a password long enough - a tick draws itself at
  * its end (the fields' valid); a password being typed to sign in gets none, since only the server can say whether it
  * is right. While a sign-in is in flight the submit button shows the
- * app's comet; a refusal shakes the card once. The second-factor code is entered in six boxes and sent as soon as
+ * app's ripple; a refusal shakes the card once. The second-factor code is entered in six boxes and sent as soon as
  * the sixth digit is in, and the form's rows are marked data-cascade so the stage can bring them up in turn.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { Lock, Mail, MailCheck, UserRound } from "lucide-react";
 import type { MultiFactorResolver } from "firebase/auth";
+import { slideTo } from "@/lib/page-slide";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import {
@@ -67,9 +68,9 @@ import {
 import { cn } from "@/lib/utils";
 import { safeNextPath } from "@/lib/next-path";
 
-const COPY: Record<AuthMode, { submit: string; loading: string; google: string; lead: string; accent: string }> = {
-    login: { submit: "Sign in", loading: "Signing you in…", google: "Continue with Google", lead: "Welcome", accent: "back" },
-    signup: { submit: "Create account", loading: "Creating your account…", google: "Sign up with Google", lead: "Start", accent: "building" },
+const COPY: Record<AuthMode, { submit: string; loading: string; google: string; lead: string; accent: string; note: string }> = {
+    login: { submit: "Sign in", loading: "Signing you in…", google: "Continue with Google", lead: "Welcome", accent: "back", note: "Pick up right where you left off." },
+    signup: { submit: "Create account", loading: "Creating your account…", google: "Sign up with Google", lead: "Start", accent: "building", note: "Describe an idea and watch it become real." },
 };
 
 const TITLES: Record<AuthMode | "second-factor" | "check-inbox", string> = {
@@ -184,7 +185,7 @@ export default function AuthPage() {
     const handleOutcome = (outcome: SignInOutcome) => {
         if (outcome.kind === "signed-in") {
             greet(outcome.session.user, outcome.session.newAccount, outcome.session.secondFactorUsed);
-            navigate(afterSignIn, { replace: true });
+            slideTo(afterSignIn, () => navigate(afterSignIn, { replace: true }));
             return;
         }
         if (outcome.kind === "second-factor") {
@@ -350,7 +351,9 @@ export default function AuthPage() {
     return (
         <AuthLayout title={TITLES[mode]} shake={shake}>
             <div data-cascade>
-                <AuthCardHeading eclipse={{ busy: isBusy, slip: shake }} title={copy.lead} accent={copy.accent} compact={isSignup} />
+                <AuthCardHeading eclipse={{ busy: isBusy, slip: shake }} title={copy.lead} accent={copy.accent} compact={isSignup}>
+                    {copy.note}
+                </AuthCardHeading>
             </div>
             <div data-cascade className="mt-5">
                 <AuthModeSwitch mode={mode} onChange={switchMode} disabled={isBusy} />

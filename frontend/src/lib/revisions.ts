@@ -11,6 +11,9 @@
  * earlier version" told nobody which version they were on. A restore made before the server recorded its target keeps
  * the plain wording.
  *
+ * Each entry also says how many files it added, edited and removed, and every file it touched with what happened to it, so a row answers "what did this do" without
+ * opening it. An older server that does not say which paths were new or removed has them all counted as edited.
+ *
  * A change made by hand says what it did to its file - "Added notes.ts by hand", "Deleted Old.tsx by hand", "Edited
  * App.tsx by hand" - from the server's own account of which paths the revision made new or removed; all three once
  * read "Edited".
@@ -27,6 +30,11 @@ export interface HistoryEntry {
   byline: string | null;
   files: string;
   paths: string[];
+  /** Every touched file and what the revision did to it, in the server's order. */
+  fileChanges: RevisionChange[];
+  added: number;
+  edited: number;
+  removed: number;
   at: string | null;
   source: RevisionSource;
   isCurrent: boolean;
@@ -76,6 +84,16 @@ export function requestsByRevision(turns: readonly TurnForHistory[]): Map<number
     }
   }
   return requests;
+}
+
+/** "2 added · 3 edited · 1 removed", leaving out what is zero; "No files" for a change that touched none. */
+export function describeChangeCounts(counts: { added: number; edited: number; removed: number }): string {
+  const parts = [
+    counts.added > 0 ? `${counts.added} added` : "",
+    counts.edited > 0 ? `${counts.edited} edited` : "",
+    counts.removed > 0 ? `${counts.removed} removed` : "",
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "No files";
 }
 
 const STARTING_POINT = "the starting point";
@@ -136,12 +154,21 @@ export function historyEntries(
       : maker
         ? maker.name || maker.username
         : null;
+    const fileChanges = revision.changedPaths.map((path): RevisionChange => ({
+      path,
+      kind: revision.deletedPaths?.includes(path) ? "DELETED" : revision.addedPaths?.includes(path) ? "ADDED" : "MODIFIED",
+    }));
+    const countOf = (kind: RevisionChange["kind"]) => fileChanges.filter((change) => change.kind === kind).length;
     return {
       id: revision.id,
       title: titleFor(revision, requests, byId),
       byline,
       files: `${plural(revision.changedPaths.length, "file")}: ${describeFiles(revision.changedPaths)}`,
       paths: revision.changedPaths,
+      fileChanges,
+      added: countOf("ADDED"),
+      edited: countOf("MODIFIED"),
+      removed: countOf("DELETED"),
       at: revision.appliedAt ?? revision.createdAt ?? null,
       source: revision.source,
       isCurrent: index === 0,

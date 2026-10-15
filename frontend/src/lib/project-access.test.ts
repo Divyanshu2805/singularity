@@ -2,7 +2,7 @@
  * Tests for lib/project-access: which failed loads are "not yours to open" and which are worth another try.
  *
  * Handles: a forbidden, missing or malformed project is unavailable and never names which of those it was; a server
- * or network failure is an error that carries its own message.
+ * or network failure is an error that carries its own message; and each title ends with the words the page sets apart.
  */
 import { describe, expect, it } from "vitest";
 import { ApiRequestError } from "./api";
@@ -22,6 +22,14 @@ describe("projectLoadFailure", () => {
 
     expect(failure.kind).toBe("error");
     expect(failure.detail).toBe("The server is restarting");
+  });
+
+  it.each([new ApiRequestError("Gone", 404), new ApiRequestError("Down", 503)])("ends each title with its accent", (error) => {
+    const failure = projectLoadFailure(error);
+
+    expect(failure.accent.length).toBeGreaterThan(0);
+    expect(failure.title.endsWith(failure.accent)).toBe(true);
+    expect(failure.eyebrow.length).toBeGreaterThan(0);
   });
 
   it("gives a network failure a sentence of its own when it has none", () => {

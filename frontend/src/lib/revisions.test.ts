@@ -7,7 +7,7 @@
  * relative time.
  */
 import { describe, expect, it } from "vitest";
-import { canUndoTurn, describeFiles, historyEntries, requestsByRevision, restoreSummary, timeAgo, type TurnForHistory } from "./revisions";
+import { canUndoTurn, describeChangeCounts, describeFiles, historyEntries, requestsByRevision, restoreSummary, timeAgo, type TurnForHistory } from "./revisions";
 import type { ProjectMember, RevisionSummary } from "./types";
 
 const revision = (over: Partial<RevisionSummary>): RevisionSummary => ({
@@ -242,5 +242,42 @@ describe("a history with steps back in it", () => {
 
   it("marks nothing when the newest change is an ordinary one", () => {
     expect(historyEntries([made(1, null), made(2, 1)], turns, [], 1).some((entry) => entry.matchesCurrent)).toBe(false);
+  });
+});
+
+describe("what each entry says about its change", () => {
+  it("counts the files it added, edited and removed", () => {
+    const entries = historyEntries(
+      [
+        revision({
+          id: 2,
+          changedPaths: ["src/New.tsx", "src/App.tsx", "src/Old.tsx"],
+          addedPaths: ["src/New.tsx"],
+          deletedPaths: ["src/Old.tsx"],
+        }),
+        revision({ id: 1, source: "MANUAL_EDIT" }),
+      ],
+      [],
+      members,
+      7
+    );
+
+    expect(entries[0].fileChanges).toEqual([
+      { path: "src/New.tsx", kind: "ADDED" },
+      { path: "src/App.tsx", kind: "MODIFIED" },
+      { path: "src/Old.tsx", kind: "DELETED" },
+    ]);
+    expect([entries[0].added, entries[0].edited, entries[0].removed]).toEqual([1, 1, 1]);
+  });
+
+  it("counts every file as edited when an older server does not say which were new or removed", () => {
+    const [entry] = historyEntries([revision({ changedPaths: ["a.ts", "b.ts"] })], [], members, 7);
+
+    expect([entry.added, entry.edited, entry.removed]).toEqual([0, 2, 0]);
+  });
+
+  it("writes the counts in words and leaves out what is zero", () => {
+    expect(describeChangeCounts({ added: 2, edited: 0, removed: 1 })).toBe("2 added · 1 removed");
+    expect(describeChangeCounts({ added: 0, edited: 0, removed: 0 })).toBe("No files");
   });
 });
