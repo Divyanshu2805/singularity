@@ -13,6 +13,9 @@
  *
  * The root (Index) has no landing page: it sends visitors to /login and signed-in people to /projects.
  *
+ * The pages that need a signed-in person sit behind SessionGate, which has the server confirm the remembered session
+ * before any of them draws, so an expired one goes to sign in without its old dashboard flashing past first.
+ *
  * /p/:slug is the one public page: the read-only view of a shared app's code, open to anyone with the link and
  * without signing in (pages/SharedApp).
  *
@@ -29,6 +32,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLoading } from "@/components/app/AppLoading";
+import { SessionGate } from "@/components/app/SessionGate";
 import { ServerUnreachable } from "@/components/app/ServerUnreachable";
 import { slideInFromLeft } from "@/lib/page-slide";
 import Index from "./pages/Index";
@@ -69,14 +73,16 @@ const App = () => (
               <Route path="/signup" element={<AuthPage />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/auth/action" element={<AuthAction />} />
-              <Route path="/projects" element={<ProjectsDashboard />} />
-              <Route path="/projects/all" element={<AllProjects />} />
-              <Route path="/projects/:projectId" element={<ProjectView />} />
+              <Route element={<SessionGate />}>
+                <Route path="/projects" element={<ProjectsDashboard />} />
+                <Route path="/projects/all" element={<AllProjects />} />
+                <Route path="/projects/:projectId" element={<ProjectView />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/settings/billing" element={<BillingSettings />} />
+                <Route path="/usage" element={<UsageInsights />} />
+              </Route>
               <Route path="/pricing" element={<Pricing />} />
-              <Route path="/settings" element={<Settings />} />
               <Route path="/account" element={<Navigate to="/settings" replace />} />
-              <Route path="/settings/billing" element={<BillingSettings />} />
-              <Route path="/usage" element={<UsageInsights />} />
               <Route path="/settings/security" element={<Navigate to="/settings#security" replace />} />
               <Route path="/privacy" element={<Legal />} />
               <Route path="/terms" element={<Legal />} />
