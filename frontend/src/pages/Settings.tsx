@@ -16,7 +16,8 @@
  * Whether a new chat starts in Build or Teach is not offered: it is off at the start of every session on purpose
  * (hooks/use-teaching-mode). The name and email are shown and not edited: they come from the sign-in provider.
  * Deleting the account is the last box (components/settings/DeleteAccount); it was once a link to where to ask for
- * it by hand.
+ * it by hand. The shared demo account sees one box in place of sign-in security and deleting: what those boxes do is
+ * turned off for it, since anyone can sign in to it, and it is put back every day.
  *
  * It stands on the app's night like Usage and billing - the shared page heading over raised cards that rise in one
  * after another. Each box is a components/settings/SettingsCard (an icon tile, a label, a title and a line of
@@ -31,7 +32,7 @@ import { PageHeading } from "@/components/app/PageHeading";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, ArrowUpRight, Check, Code2, Github, GraduationCap, Layers, Link2, Rocket, Sparkles, Sprout, Trash2, UserRound, WrapText, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, ArrowUpRight, Check, Code2, Github, GraduationCap, Layers, Link2, Rocket, Sparkles, Sprout, Trash2, UserRound, UsersRound, WrapText, type LucideIcon } from "lucide-react";
 import { AppSidebar, SidebarSpacer } from "@/components/AppSidebar";
 import { DeleteAccount } from "@/components/settings/DeleteAccount";
 import { SecuritySections } from "@/components/settings/SecuritySections";
@@ -290,18 +291,31 @@ export function Settings() {
                 </div>
               </SettingsCard>
 
-              <SecuritySections startIndex={5} />
+              {user?.demo ? (
+                <SettingsCard
+                  id="security"
+                  index={5}
+                  label="Shared account"
+                  title="This is the demo account"
+                  Icon={UsersRound}
+                  description="Anyone can sign in to it, so its password, sign-in security, billing, publishing, GitHub and invitations are turned off, and it is put back every day. Make an account of your own to use them."
+                />
+              ) : (
+                <>
+                  <SecuritySections startIndex={5} />
 
-              <SettingsCard
-                id="delete-account"
-                index={8}
-                label="The way out"
-                title="Delete your account"
-                Icon={Trash2}
-                tone="danger"
-                description="Removes your account and everything in it, at once and for good. Projects you own are deleted for everyone in them, and a paid plan ends today."
-                action={<DeleteAccount />}
-              />
+                  <SettingsCard
+                    id="delete-account"
+                    index={8}
+                    label="The way out"
+                    title="Delete your account"
+                    Icon={Trash2}
+                    tone="danger"
+                    description="Removes your account and everything in it, at once and for good. Projects you own are deleted for everyone in them, and a paid plan ends today."
+                    action={<DeleteAccount />}
+                  />
+                </>
+              )}
             </div>
           </div>
         </main>

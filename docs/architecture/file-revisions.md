@@ -2,8 +2,6 @@
 
 Every change to a project's files — an AI turn, a file saved by hand or a restore — is published as one atomic, immutable **revision**. A revision either lands completely or not at all, and any earlier revision can be restored. The implementation lives in workspace-service: `RevisionPublisherImpl`, `RevisionManifestStore`, `RevisionServiceImpl` and `RevisionSnapshotReader`. The design rationale is in [ADR 0005](decisions/0005-content-addressed-file-revisions.md).
 
-![Publishing a revision](../assets/diagrams/file-revisions.png)
-
 ## Publishing a revision
 
 1. **Stage.** Every changed path's new content is uploaded to a dedicated MinIO bucket (`project-blobs`, `minio.blob-bucket`) under `blob/<sha256>`. Blobs are content-addressed and immutable: the same bytes written twice, even across projects, land at the same key. A failure here leaves the live file layout and every table untouched, because nothing references the new content yet.

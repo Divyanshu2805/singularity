@@ -1,5 +1,6 @@
 package com.singularity.account.controller;
 
+import com.singularity.common.security.DemoAccount;
 import com.stripe.model.Invoice;
 import com.stripe.model.StripeObject;
 import com.stripe.model.Subscription;
@@ -46,7 +47,8 @@ class BillingControllerWebhookTest {
     private final PlanService planService = mock(PlanService.class);
     private final SubscriptionService subscriptionService = mock(SubscriptionService.class);
     private final PaymentProcessor paymentProcessor = mock(PaymentProcessor.class);
-    private final BillingController controller = new BillingController(planService, subscriptionService, paymentProcessor);
+    private final BillingController controller = new BillingController(planService, subscriptionService, paymentProcessor,
+            new DemoAccount("singularity-demo"));
 
     @BeforeEach
     void injectWebhookSecret() throws Exception {

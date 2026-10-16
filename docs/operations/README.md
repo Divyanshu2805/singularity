@@ -10,6 +10,7 @@ The runbook for the live deployment: how changes reach it, how it's watched, bac
 | [Backups and restore](backups.md) | Take a backup or restore from one |
 | [Routine upkeep](upkeep.md) | Upgrade k3s, handle OS updates, renew the domain |
 | [Logs](logs.md) | Read logs, and know what is and isn't logged |
+| [The demo account](demo-account.md) | Know what the public demo login can do, reset it now, or turn it off |
 | [Going live with Stripe](stripe-live-mode.md) | Move payments out of test mode |
 | [Useful commands](commands.md) | Look up a `kubectl` command |
 

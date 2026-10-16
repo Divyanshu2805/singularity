@@ -37,3 +37,6 @@ data:
   ai-build-reasoning-effort: low
   # The idea interview, step lessons, explain and suggested next steps.
   ai-light-model: gemini-3.5-flash-lite
+  # The shared public demo account (account-service's DemoAccountReset): off here, on in the oracle overlay. When on,
+  # account-service makes it on its first start and puts it back every day.
+  demo-enabled: "false"

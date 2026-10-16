@@ -39,7 +39,9 @@ You type a one-line idea. A short interview the model writes for that idea turns
 
 | | |
 |---|---|
-| **Live app** | [singularity.divyanshuagrahari.dev](https://singularity.divyanshuagrahari.dev) - sign in with Google or with an email and password |
+| **Live app** | [singularity.divyanshuagrahari.dev](https://singularity.divyanshuagrahari.dev) |
+| **Demo login** | `demo@divyanshuagrahari.dev` / `demo1234`. A shared, public account (Journey Tester) that opens on the notes app from the screenshots, already built with its chat, files and preview: it can't publish, connect GitHub, invite anyone, pay, change its sign-in security or delete itself, and it is put back every day |
+| **Your own account** | Sign in with Google, or register with an email and verify it |
 | **Paying** | Production runs Stripe in **test mode**: use card `4242 4242 4242 4242`, any future date and any CVC. No money moves |
 | **Locally, with no keys** | `e2e/stack.sh up --context kind-<cluster>` starts the whole application with a scripted model and the Firebase Auth emulator; see [the browser journey](docs/practices/testing.md#the-browser-journey) |
 
@@ -96,8 +98,6 @@ All screenshots are from the local stack (`e2e/stack.sh`) with the scripted mode
 
 ## Architecture
 
-![Singularity system architecture](docs/assets/diagrams/system-architecture.png)
-
 A Spring Cloud Gateway is the browser's only origin and routes each path to one of three domain services - **account**, **workspace** and **intelligence** - each with its own PostgreSQL database. Services find each other through Eureka and call each other over a private `/internal` API that needs a shared-secret authority and is never routed from outside. Sign-in is Firebase; each service checks the session cookie itself. **Generated code runs only inside runner pods**, never on a service.
 
 | Area | Choice |
@@ -124,7 +124,7 @@ The decisions behind the shape, each with the alternatives it was chosen over:
 | [A server in the preview](docs/architecture/decisions/0009-a-server-in-the-preview.md) | Apps that share data between people, still sandboxed |
 | [Push a project to GitHub](docs/architecture/decisions/0010-push-a-project-to-github.md) | The code is the user's to take |
 
-More in the [architecture overview](docs/architecture/README.md), the [request flows](docs/architecture/README.md#flow-diagrams) and the [tech stack](docs/tech-stack.md).
+More in the [architecture overview](docs/architecture/README.md), the [request flows](docs/architecture/flows/) and the [tech stack](docs/tech-stack.md).
 
 ## Security
 
@@ -201,8 +201,6 @@ docs/                   documentation
 ## Deployment
 
 The live app runs on one free-tier Oracle Cloud Arm VM as single-node k3s, with no open inbound ports: visitors arrive through a Cloudflare tunnel, deploys over Tailscale. GitHub Actions tests every change - including a real preview and a real publish on kind and both browser journeys - builds eight arm64 images, deploys them, smoke-tests the site and rolls back automatically on failure. A nightly job backs up the databases and object storage to Cloudflare R2.
-
-![Production deployment topology](docs/assets/diagrams/deployment-topology.png)
 
 See [deployment](docs/deployment/README.md) and [operations](docs/operations/README.md).
 

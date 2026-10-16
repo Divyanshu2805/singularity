@@ -58,6 +58,4 @@ e2e/.run/
 e2e/test-results/
 e2e/playwright-report/
 
-# Diagram generator scratch output
-docs/assets/diagrams/src/out/
 __pycache__/

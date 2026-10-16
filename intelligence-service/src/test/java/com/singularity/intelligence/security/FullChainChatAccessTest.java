@@ -3,6 +3,7 @@ package com.singularity.intelligence.security;
 import com.singularity.common.error.GlobalExceptionHandler;
 import com.singularity.common.security.AuthProperties;
 import com.singularity.common.security.AuthUtil;
+import com.singularity.common.security.DemoAccount;
 import com.singularity.common.security.InternalServiceAuthFilter;
 import com.singularity.common.security.ServiceSecurityConfig;
 import com.singularity.common.security.SessionAuthenticator;
@@ -105,6 +106,9 @@ class FullChainChatAccessTest {
     @MockitoBean
     private AiGenerationService aiGenerationService;
 
+    @MockitoBean
+    private com.singularity.intelligence.service.DemoProjectService demoProjectService;
+
     @Test
     @DisplayName("no session cookie at all is unauthenticated")
     void noCookieIsUnauthenticated() throws Exception {
@@ -192,6 +196,11 @@ class FullChainChatAccessTest {
         @Bean
         AuthUtil authUtil() {
             return new AuthUtil();
+        }
+
+        @Bean
+        DemoAccount demoAccount() {
+            return new DemoAccount("singularity-demo");
         }
 
         // Not injected by type: intelligence-service's @EnableFeignClients registers its own

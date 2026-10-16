@@ -2,7 +2,9 @@
  * Sign-in and sign-up as one card.
  *
  * Handles: both modes, validating before anything is sent, password and Google sign-in, the second-factor step,
- * sending a verification email, and exchanging the result for this app's session before moving on.
+ * sending a verification email, and exchanging the result for this app's session before moving on. The welcome
+ * after signing in suggests two-step verification, except to the shared demo account, which is made again every day
+ * and so could never keep it.
  *
  * The card is headed by the eclipse over a headline ("Welcome back", or "Start building" when creating an account).
  * The eclipse plays by itself on a slow loop - twenty seconds to totality, which is the logo, then the sun comes back
@@ -156,7 +158,7 @@ export default function AuthPage() {
         if (formError) setFormError(null);
     };
 
-    const greet = (user: { name?: string } | undefined, isNew: boolean, secondFactorUsed: boolean) => {
+    const greet = (user: { name?: string; demo?: boolean } | undefined, isNew: boolean, secondFactorUsed: boolean) => {
         const firstName = user?.name?.trim().split(" ")[0];
         toast(
             isNew
@@ -169,7 +171,7 @@ export default function AuthPage() {
                       description: "Picking up right where you left off.",
                   }
         );
-        if (!secondFactorUsed) {
+        if (!secondFactorUsed && !user?.demo) {
             toast({
                 title: "Protect your account",
                 description: "Add two-step verification with an authenticator app.",
