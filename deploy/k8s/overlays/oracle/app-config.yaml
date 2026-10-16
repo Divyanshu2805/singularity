@@ -4,6 +4,7 @@
 # client-url is a single-level subdomain (singularity.divyanshuagrahari.dev), not singularity.app.* - Cloudflare's
 # free wildcard cert only covers one subdomain level (deploy/k8s/overlays/oracle/cloudflared.yaml's own comment
 # has the full account). preview-public-domain stays the bare apex on purpose - previews never moved.
+# demo-enabled turns on the shared public demo account the README gives the sign-in of (docs/operations/demo-account.md).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -15,3 +16,4 @@ data:
   preview-public-scheme: https
   preview-public-domain: divyanshuagrahari.dev
   preview-public-port: "443"
+  demo-enabled: "true"

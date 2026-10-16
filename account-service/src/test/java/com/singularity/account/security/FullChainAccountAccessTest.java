@@ -9,6 +9,7 @@ import com.singularity.account.service.SubscriptionService;
 import com.singularity.account.service.UserService;
 import com.singularity.common.error.GlobalExceptionHandler;
 import com.singularity.common.security.AuthProperties;
+import com.singularity.common.security.DemoAccount;
 import com.singularity.common.security.InternalServiceAuthFilter;
 import com.singularity.common.security.SessionAuthenticator;
 import com.singularity.common.security.SessionCookies;
@@ -31,6 +32,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -60,6 +64,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class FullChainAccountAccessTest {
 
     private static final long USER_ID = 7L;
+    private static final String DEMO_COOKIE = "valid-for-the-demo";
+    private static final long DEMO_USER_ID = 99L;
     private static final String VALID_COOKIE = "valid-for-user-7";
     private static final String SESSION_COOKIE_NAME = "__Host-vc_session";
 
@@ -207,6 +213,22 @@ class FullChainAccountAccessTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    @DisplayName("the shared demo account cannot delete itself or sign every device out")
+    void theDemoAccountCannotDeleteItselfOrSignEveryoneOut() throws Exception {
+        Cookie xsrf = mockMvc.perform(get("/api/auth/csrf")).andReturn().getResponse().getCookie("__Host-XSRF-TOKEN");
+        Cookie demo = new Cookie(SESSION_COOKIE_NAME, DEMO_COOKIE);
+
+        mockMvc.perform(post("/api/auth/account/delete").cookie(demo, xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
+                        .contentType("application/json").content("{\"idToken\":\"token\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/auth/logout-all").cookie(demo, xsrf).header("X-XSRF-TOKEN", xsrf.getValue()))
+                .andExpect(status().isForbidden());
+
+        verify(accountDeletionService, never()).deleteAccount(any(), any());
+        verify(sessionService, never()).signOutEverywhere(any(), any());
+    }
+
     private static Cookie sessionCookie() {
         return new Cookie(SESSION_COOKIE_NAME, VALID_COOKIE);
     }
@@ -218,6 +240,9 @@ class FullChainAccountAccessTest {
         @Bean
         SessionAuthenticator sessionAuthenticator() {
             return cookie -> {
+                if (DEMO_COOKIE.equals(cookie)) {
+                    return Optional.of(new UserPrincipal(DEMO_USER_ID, "demo@divyanshuagrahari.dev", "singularity-demo", List.of()));
+                }
                 if (!VALID_COOKIE.equals(cookie)) return Optional.empty();
                 return Optional.of(new UserPrincipal(USER_ID, "caller@example.com", "firebase-uid-7", List.of()));
             };
@@ -233,6 +258,11 @@ class FullChainAccountAccessTest {
         @Bean
         InternalServiceAuthFilter internalServiceAuthFilter() {
             return new InternalServiceAuthFilter("test-shared-secret");
+        }
+
+        @Bean
+        DemoAccount demoAccount() {
+            return new DemoAccount("singularity-demo");
         }
     }
 }

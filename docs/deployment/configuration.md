@@ -54,6 +54,7 @@ Non-secret settings are set as environment variables or `app-config` entries in 
 | `PREVIEW_PUBLIC_SCHEME`, `PREVIEW_PUBLIC_DOMAIN`, `PREVIEW_PUBLIC_PORT` | `https`, the preview root domain, `443` |
 | `FIREBASE_CREDENTIALS_PATH` | `/var/secrets/firebase/sa.json`, mounted from the `firebase-service-account` Secret |
 | `SPRING_JPA_SHOW_SQL` | `false` |
+| `DEMO_ENABLED` | From `app-config`'s `demo-enabled` key: `true` in the oracle overlay, `false` in base. account-service makes the shared [demo account](../operations/demo-account.md) on its first start and puts it back every day. Its address and password are public, so they are plain values in `application.yaml`, not secrets |
 | `SPRING_AI_OPENAI_BASE_URL`, `SPRING_AI_OPENAI_CHAT_COMPLETIONS_PATH` | From `app-config`'s `ai-base-url` and `ai-completions-path`: Google's OpenAI-compatible endpoint, not the code default (OpenRouter) |
 | `SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL` | From `app-config`'s `ai-model` key (`gemini-3.8-flash`) — the model for build and repair turns |
 | `AI_CALLS_BUILD_REASONINGEFFORT`, `AI_CALLS_REPAIR_REASONINGEFFORT` | From `ai-build-reasoning-effort` (`low`) |

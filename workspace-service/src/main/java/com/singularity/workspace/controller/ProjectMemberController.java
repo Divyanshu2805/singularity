@@ -1,5 +1,6 @@
 package com.singularity.workspace.controller;
 
+import com.singularity.common.security.DemoAccount;
 import com.singularity.workspace.dto.member.InviteMemberRequest;
 import com.singularity.workspace.dto.member.MemberResponse;
 import com.singularity.workspace.dto.member.UpdateMemberRoleRequest;
@@ -18,6 +19,8 @@ import java.util.List;
  * <p>Handles: listing members, inviting an email address, accepting or declining an invitation addressed to the
  * caller, the owner withdrawing an invitation, changing a member's role and removing them. The caller's own
  * invitations across every project are listed by ProjectController, since that list belongs to no one project.
+ *
+ * <p>The shared demo account cannot invite anyone (DemoAccount): an invitation reaches a real person's dashboard.
  */
 @RestController
 @RequestMapping("/api/projects/{projectId}/members")
@@ -25,6 +28,7 @@ import java.util.List;
 public class ProjectMemberController {
 
     private final ProjectMemberService projectMemberService;
+    private final DemoAccount demoAccount;
 
     @GetMapping
     public ResponseEntity<List<MemberResponse>> getProjectMembers(@PathVariable Long projectId) {
@@ -36,6 +40,7 @@ public class ProjectMemberController {
             @PathVariable Long projectId,
             @RequestBody @Valid InviteMemberRequest request
     ) {
+        demoAccount.refuseCurrent();
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 projectMemberService.inviteMember(projectId, request)
         );

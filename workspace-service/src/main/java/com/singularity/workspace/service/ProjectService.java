@@ -12,7 +12,8 @@ import java.util.List;
  * Projects: creating them, reading them, and everything that changes one.
  *
  * <p>Handles: the caller's project list and one project by id, creating by name or from a typed description,
- * renaming, deleting, removing every project of an account that is being deleted, forking, retrying starter-template initialisation, the per-member pin and star flags, and
+ * renaming, deleting, removing every project of an account that is being deleted, making the shared demo account's
+ * sample project, forking, retrying starter-template initialisation, the per-member pin and star flags, and
  * giving a project that has no title the one a model wrote for it.
  *
  * <p>Deleting means different things to different people: the owner deletes the project for everyone, while an editor
@@ -34,6 +35,8 @@ public interface ProjectService {
     void softDelete(Long id);
 
     void removeAllForUser(Long userId);
+
+    Long createDemoProject(Long userId, String title);
 
     ProjectResponse forkProject(Long id, ForkProjectRequest request);
 

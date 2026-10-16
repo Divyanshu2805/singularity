@@ -4,6 +4,7 @@ import com.singularity.account.dto.subscription.*;
 import com.singularity.account.service.PaymentProcessor;
 import com.singularity.account.service.PlanService;
 import com.singularity.account.service.SubscriptionService;
+import com.singularity.common.security.DemoAccount;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.model.EventDataObjectDeserializer;
@@ -33,6 +34,9 @@ import java.util.Map;
  * <p>The webhook is verified by Stripe's own signature rather than by a session or CSRF token - it is the one caller
  * that structurally cannot carry either. An event whose payload will not deserialize is acknowledged rather than
  * retried forever; a bad signature is rejected with a 400.
+ *
+ * <p>The shared demo account can read plans and its subscription but not start, change or confirm a payment, or open
+ * the billing portal (DemoAccount): its plan is the next visitor's too.
  */
 @RestController
 @RequiredArgsConstructor
@@ -42,6 +46,7 @@ public class BillingController {
     private final PlanService planService;
     private final SubscriptionService subscriptionService;
     private final PaymentProcessor paymentProcessor;
+    private final DemoAccount demoAccount;
 
     @Value("${stripe.webhook.secret}")
     private String webhookSecret;
@@ -60,16 +65,19 @@ public class BillingController {
     public ResponseEntity<CheckoutResponse> createCheckoutResponse(
             @RequestBody @Valid CheckoutRequest request
     ) {
+        demoAccount.refuseCurrent();
         return ResponseEntity.ok(paymentProcessor.createCheckoutSessionUrl(request));
     }
 
     @PostMapping("/api/payments/portal")
     public ResponseEntity<PortalResponse> openCustomerPortal() {
+        demoAccount.refuseCurrent();
         return ResponseEntity.ok(paymentProcessor.openCustomerPortal());
     }
 
     @PostMapping("/api/payments/change-plan")
     public ResponseEntity<SubscriptionResponse> changePlan(@RequestBody @Valid ChangePlanRequest request) {
+        demoAccount.refuseCurrent();
         return ResponseEntity.ok(paymentProcessor.changePlan(request));
     }
 
@@ -77,6 +85,7 @@ public class BillingController {
     public ResponseEntity<SubscriptionResponse> confirmCheckout(
             @RequestBody @Valid ConfirmCheckoutRequest request
     ) {
+        demoAccount.refuseCurrent();
         return ResponseEntity.ok(paymentProcessor.confirmCheckoutSession(request));
     }
 

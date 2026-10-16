@@ -1,5 +1,6 @@
 package com.singularity.workspace.controller;
 
+import com.singularity.common.security.DemoAccount;
 import com.singularity.workspace.dto.publish.PublishLogResponse;
 import com.singularity.workspace.dto.publish.PublishRequest;
 import com.singularity.workspace.dto.publish.PublishResponse;
@@ -20,6 +21,9 @@ import org.springframework.web.bind.annotation.*;
  *
  * <p>Publishing answers 202: the build runs in a runner pod and the client polls the status until it ends. Who may call
  * what is the service's to enforce, because the caller is a user there: every member may read, only the owner may change.
+ *
+ * <p>The shared demo account cannot publish or share an app (DemoAccount): anyone can sign in to it, so whatever it put at
+ * a public link would be anybody's. Taking an app down, and everything that only reads, stay open to it.
  */
 @RestController
 @RequiredArgsConstructor
@@ -27,6 +31,7 @@ import org.springframework.web.bind.annotation.*;
 public class PublishController {
 
     private final PublishService publishService;
+    private final DemoAccount demoAccount;
 
     @GetMapping
     public ResponseEntity<PublishResponse> getStatus(@PathVariable Long projectId) {
@@ -36,6 +41,7 @@ public class PublishController {
     @PostMapping
     public ResponseEntity<PublishResponse> publish(@PathVariable Long projectId,
                                                    @RequestBody(required = false) @Valid PublishRequest request) {
+        demoAccount.refuseCurrent();
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(publishService.publish(projectId, request));
     }
 
@@ -53,6 +59,7 @@ public class PublishController {
     @PutMapping("/sharing")
     public ResponseEntity<PublishResponse> setSharing(@PathVariable Long projectId,
                                                       @RequestBody @Valid SharingRequest request) {
+        demoAccount.refuseCurrent();
         return ResponseEntity.ok(publishService.setSharing(projectId, request.shared()));
     }
 

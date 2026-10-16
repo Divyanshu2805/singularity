@@ -30,6 +30,9 @@ import java.util.regex.Pattern;
  * <p>The app it writes uses plain Tailwind utilities and one icon package the starter template installs, so it
  * compiles and runs on the template whatever component kit that ships. It is a real, working app on purpose: the
  * end-to-end test opens its preview.
+ *
+ * <p>The brief and the first build are also what the shared demo account's sample project is made of each day
+ * (DemoProjectSeeder), outside this profile: the project the README's screenshots show is the one a visitor finds.
  */
 public final class StubReplies {
 
@@ -98,6 +101,14 @@ public final class StubReplies {
             case MESSAGE_TITLES -> messageTitles(request == null ? "" : request);
             case ANSWER -> ANSWER;
         };
+    }
+
+    public static String demoBrief() {
+        return BRIEF;
+    }
+
+    public static String demoFirstBuild() {
+        return firstBuild(true);
     }
 
     private static String messageTitles(String request) {
