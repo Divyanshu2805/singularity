@@ -80,6 +80,11 @@ import java.util.stream.Collectors;
  * is called only from the internal API, by account-service, for the account it is deleting. Each project is read
  * afresh: stopping one project's preview clears the persistence context, which would leave the next membership's
  * project detached and unloadable.
+ *
+ * <p>The shared demo account's sample project (createDemoProject) is made the way any project is, from the starter
+ * template, for the user account-service names, with the title its first build is given. Like removeAllForUser it is
+ * for the internal API only, so it carries no guard and no quota check: account-service has just removed every project
+ * the account had.
  */
 @Service
 @RequiredArgsConstructor
@@ -171,8 +176,19 @@ public class ProjectServiceImpl implements ProjectService {
         return project;
     }
 
+    @Override
+    public Long createDemoProject(Long userId, String title) {
+        Project project = createOwnedProject(ProjectNameHeuristic.nameFrom(null, title), fitName(title), userId);
+        log.info("Made the demo sample project {} for user {}", project.getId(), userId);
+        return project.getId();
+    }
+
     private ProjectResponse createOwnedProject(String name, String summary) {
-        Long userId = authUtil.getCurrentUserId();
+        return projectMapper.toProjectResponse(createOwnedProject(name, summary, authUtil.getCurrentUserId()),
+                ProjectRole.OWNER);
+    }
+
+    private Project createOwnedProject(String name, String summary, Long userId) {
         Project project = saveProjectWithOwner(name, summary, userId, null);
 
         TemplateInitResult templateResult;
@@ -188,7 +204,7 @@ public class ProjectServiceImpl implements ProjectService {
             project = projectRepository.save(project);
         }
 
-        return projectMapper.toProjectResponse(project, ProjectRole.OWNER);
+        return project;
     }
 
     @Override

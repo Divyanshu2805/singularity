@@ -11,6 +11,7 @@ import com.singularity.common.feign.AccountServiceClient;
 import com.singularity.common.feign.FeignClientInterceptor;
 import com.singularity.common.security.AuthProperties;
 import com.singularity.common.security.AuthUtil;
+import com.singularity.common.security.DemoAccount;
 import com.singularity.common.security.FirebaseIdentityVerifier;
 import com.singularity.common.security.IdentityVerifier;
 import com.singularity.common.security.InternalServiceAuthFilter;
@@ -44,7 +45,7 @@ import java.util.List;
  *
  * <p>Handles: the shared error handler, clock and async config; the Firebase app and the identity verifier built on
  * it; the whole session-authentication kit (properties, cookie reader/writer, cache, the /internal/v1/sessions/evict
- * endpoint and the caller-principal helper); the default browser-facing security chain; both halves of
+ * endpoint and the caller-principal helper); the shared demo account's identity (DemoAccount); the default browser-facing security chain; both halves of
  * service-to-service authentication, the outbound Feign interceptor and the inbound InternalServiceAuthFilter; and
  * the bounded Feign retry policy every outbound call gets (FeignResilienceConfig) - per-service connect/read
  * timeouts live in each service's own application.yaml (feign.client.config.default) instead, since that's plain
@@ -72,6 +73,11 @@ public class CommonLibAutoConfiguration {
     @Bean
     public AuthUtil authUtil() {
         return new AuthUtil();
+    }
+
+    @Bean
+    public DemoAccount demoAccount(@Value("${demo.firebase-uid:singularity-demo}") String firebaseUid) {
+        return new DemoAccount(firebaseUid);
     }
 
     @Bean

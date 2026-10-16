@@ -2,8 +2,6 @@
 
 How Singularity runs in production: a single free-tier Arm VM running single-node k3s, behind a Cloudflare tunnel, deployed by GitHub Actions. The design rationale is in [ADR 0007](../architecture/decisions/0007-single-node-k3s-deployment.md); day-to-day running is covered in [Operations](../operations/README.md).
 
-![Production deployment topology](../assets/diagrams/deployment-topology.png)
-
 **Key properties**
 
 - **No open inbound ports.** Web traffic arrives through the Cloudflare tunnel; deploys and administration arrive over Tailscale.

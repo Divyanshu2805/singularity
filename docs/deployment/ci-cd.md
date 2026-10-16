@@ -2,8 +2,6 @@
 
 Everything is one workflow, `.github/workflows/ci.yml`.
 
-![The CI/CD pipeline](../assets/diagrams/ci-cd-pipeline.png)
-
 ## Jobs
 
 | Job | Runs on | Does |
