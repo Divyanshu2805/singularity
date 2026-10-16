@@ -29,6 +29,7 @@ The service-to-service API. It is not part of the browser contract and is **neve
 | `GET` | `/internal/v1/projects/{projectId}` | `ProjectSummaryDto { id, name, isPublic, deleted, templateInitIssue }` | `404` if unknown or deleted. |
 | `GET` | `/internal/v1/projects?ids=1,2,3` | `List<ProjectSummaryDto>` | Batched. Deleted projects are included, so usage insights can attribute tokens spent before a delete. |
 | `POST` | `/internal/v1/users/{userId}/delete-data` | — | Called by account-service while deleting an account, body `DeleteUserDataRequest { email }`: deletes every project the user owns and leaves the rest (the same code as doing it by hand), deletes invitations sent to that address or by the user, and forgets the GitHub connection. Repeatable. |
+| `POST` | `/internal/v1/users/{userId}/demo-project` | `ProjectSummaryDto` | Called by account-service's daily reset of the [demo account](../operations/demo-account.md), body `ProjectTitleDto { title }`: makes a project from the starter template, owned by that user and given that title. No quota check - the account's projects were all deleted a moment before. |
 | `GET` | `/internal/v1/projects/owned-count?userId=` | `int` | How many projects the user owns — the count half of the project-limit check. |
 | `GET` | `/internal/v1/projects/{projectId}/files` | `FileTreeDto { projectId, entries: [{ path, size, type }] }` | |
 | `GET` | `/internal/v1/projects/{projectId}/files/content?path=` | `FileContentDto { path, content }` | |
@@ -45,5 +46,6 @@ The service-to-service API. It is not part of the browser contract and is **neve
 | Method | Path | Response | Notes |
 |---|---|---|---|
 | `POST` | `/internal/v1/users/{userId}/delete-data` | — | Called by account-service while deleting an account: deletes the user's chats, notes, tours, glossary and usage rows. Repeatable. |
+| `POST` | `/internal/v1/projects/{projectId}/demo-build?userId=` | `200` | Called by account-service's daily reset of the [demo account](../operations/demo-account.md): records the sample project's first build - the scripted model's brief and notes app, the build the README's screenshots show - as a real turn, through the same `TurnRecorder` a build uses. No model is called and nothing is metered. Anything short of a saved turn is an error. |
 | `POST` | `/internal/v1/projects/{projectId}/generation/stop?userId=` | `200` | Stops in-flight generations that a project delete or member removal just revoked — only that user's if `userId` is given, every generation on the project otherwise. Sent by workspace-service. Best-effort: generation re-checks access before committing files regardless. |
 | `POST` | `/internal/v1/sessions/evict` | `204` | As above. |

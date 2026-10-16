@@ -9,6 +9,7 @@ import com.singularity.account.dto.auth.UserProfileResponse;
 import com.singularity.account.service.AccountDeletionService;
 import com.singularity.account.service.SessionService;
 import com.singularity.account.service.UserService;
+import com.singularity.common.security.DemoAccount;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -31,6 +32,9 @@ import java.util.List;
  *
  * <p>Signing in, signing up, Google, second factors and password resets all happen between the browser and Firebase;
  * this controller only turns the result into a session and ends it again.
+ *
+ * <p>The shared demo account cannot sign every device out or delete itself (DemoAccount): either would end it for
+ * whoever else is using it.
  */
 @RestController
 @RequiredArgsConstructor
@@ -41,6 +45,7 @@ public class AuthController {
     SessionService sessionService;
     UserService userService;
     AccountDeletionService accountDeletionService;
+    DemoAccount demoAccount;
 
     @GetMapping("/csrf")
     public ResponseEntity<Void> csrf(CsrfToken csrfToken) {
@@ -62,12 +67,14 @@ public class AuthController {
 
     @PostMapping("/logout-all")
     public ResponseEntity<Void> logoutEverywhere(HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        demoAccount.refuseCurrent();
         sessionService.signOutEverywhere(httpRequest, httpResponse);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/account/delete")
     public ResponseEntity<Void> deleteAccount(@RequestBody @Valid DeleteAccountRequest request, HttpServletResponse httpResponse) {
+        demoAccount.refuseCurrent();
         accountDeletionService.deleteAccount(request, httpResponse);
         return ResponseEntity.noContent().build();
     }

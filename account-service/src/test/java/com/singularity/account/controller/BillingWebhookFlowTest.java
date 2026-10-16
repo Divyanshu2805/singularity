@@ -1,5 +1,6 @@
 package com.singularity.account.controller;
 
+import com.singularity.common.security.DemoAccount;
 import com.singularity.account.entity.Plan;
 import com.singularity.account.entity.Subscription;
 import com.singularity.account.entity.User;
@@ -94,7 +95,7 @@ class BillingWebhookFlowTest {
     private final StripePaymentProcessor processor = new StripePaymentProcessor(authUtil, planRepository,
             userRepository, intents, webhookEvents, subscriptionService, clock);
     private final BillingController controller = new BillingController(mock(PlanService.class), subscriptionService,
-            processor);
+            processor, new DemoAccount("singularity-demo"));
 
     private String stripeHolds;
     private boolean stripeUnreachable;

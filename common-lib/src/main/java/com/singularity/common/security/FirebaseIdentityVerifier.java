@@ -6,6 +6,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
 import com.google.firebase.auth.SessionCookieOptions;
+import com.google.firebase.auth.UserRecord;
 import com.singularity.common.error.ExternalServiceException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,8 +24,12 @@ import java.util.Set;
  *
  * <p>Handles: verifying an ID token or a session cookie including revocation, decoding a cookie offline for sign-out,
  * minting a session cookie, revoking every session of a user, deleting a user - a user already gone counts as
- * deleted, so a deletion can be repeated - and mapping a Firebase token's claims onto
- * VerifiedIdentity.
+ * deleted, so a deletion can be repeated - making a user again from nothing under a fixed uid, and mapping a
+ * Firebase token's claims onto VerifiedIdentity.
+ *
+ * <p>Making a user again deletes whatever is under that uid first, so a second factor, a changed address or a changed
+ * password set from the browser go with it. Any failure there is an ExternalServiceException: nothing in it is a
+ * caller's credential.
  *
  * <p>It also decides which Firebase failures mean what. Firebase's own unavailable/internal/unknown/deadline codes
  * become an ExternalServiceException, so the caller fails closed on a 503; everything else - revoked, expired,
@@ -80,6 +85,25 @@ public class FirebaseIdentityVerifier implements IdentityVerifier {
             }
             return null;
         });
+    }
+
+    @Override
+    public void recreateUser(String uid, String email, String password, String displayName) {
+        try {
+            try {
+                firebaseAuth.deleteUser(uid);
+            } catch (FirebaseAuthException ex) {
+                if (ex.getAuthErrorCode() != AuthErrorCode.USER_NOT_FOUND) throw ex;
+            }
+            firebaseAuth.createUser(new UserRecord.CreateRequest()
+                    .setUid(uid)
+                    .setEmail(email)
+                    .setEmailVerified(true)
+                    .setPassword(password)
+                    .setDisplayName(displayName));
+        } catch (FirebaseAuthException ex) {
+            throw new ExternalServiceException("Couldn't make the Firebase user " + uid + " again", ex);
+        }
     }
 
     private <T> T call(String action, FirebaseCall<T> call) {

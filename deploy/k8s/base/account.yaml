@@ -69,6 +69,11 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: client-url
+            - name: DEMO_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: demo-enabled
             - name: INTERNAL_SERVICE_SHARED_SECRET
               valueFrom:
                 secretKeyRef:

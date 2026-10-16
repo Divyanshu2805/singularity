@@ -119,11 +119,11 @@ export const isAuthenticated = () => hasSessionHint() && !!getUserInfo();
 export const loginRedirectPath = () =>
   localStorage.getItem(SESSION_HINT_KEY) ? "/login?expired=1" : "/login";
 
-export const setUserInfo = (user: { id: number; username: string; name: string }) => {
+export const setUserInfo = (user: { id: number; username: string; name: string; demo?: boolean }) => {
   localStorage.setItem("user_info", JSON.stringify(user));
 };
 
-export const getUserInfo = (): { id: number; username: string; name: string } | null => {
+export const getUserInfo = (): { id: number; username: string; name: string; demo?: boolean } | null => {
   const userInfo = localStorage.getItem("user_info");
   return userInfo ? JSON.parse(userInfo) : null;
 };

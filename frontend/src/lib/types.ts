@@ -421,7 +421,7 @@ export interface QuotaDetails {
 }
 
 export interface SessionResponse {
-  user: { id: number; username: string; name: string };
+  user: { id: number; username: string; name: string; demo?: boolean };
   expiresAt: string;
   newAccount: boolean;
   secondFactorUsed: boolean;

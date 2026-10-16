@@ -1,5 +1,6 @@
 package com.singularity.workspace.controller;
 
+import com.singularity.common.security.DemoAccount;
 import com.singularity.workspace.dto.github.GitHubCallbackRequest;
 import com.singularity.workspace.dto.github.GitHubConnectResponse;
 import com.singularity.workspace.dto.github.GitHubStatusResponse;
@@ -24,6 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
  * not sent on a navigation that arrives from another site, so an endpoint GitHub redirected to directly would see a
  * signed-out caller; the page at the redirect address reads the two values out of its own address and posts them
  * from inside the site, with the session and the CSRF header like any other change.
+ *
+ * <p>The shared demo account cannot connect a GitHub account (DemoAccount): the connection would be every visitor's.
  */
 @RestController
 @RequiredArgsConstructor
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class GitHubController {
 
     private final GitHubService gitHubService;
+    private final DemoAccount demoAccount;
 
     @GetMapping
     public ResponseEntity<GitHubStatusResponse> status() {
@@ -39,11 +43,13 @@ public class GitHubController {
 
     @PostMapping("/connect")
     public ResponseEntity<GitHubConnectResponse> connect() {
+        demoAccount.refuseCurrent();
         return ResponseEntity.ok(gitHubService.startConnect());
     }
 
     @PostMapping("/callback")
     public ResponseEntity<GitHubStatusResponse> callback(@RequestBody @Valid GitHubCallbackRequest request) {
+        demoAccount.refuseCurrent();
         return ResponseEntity.ok(gitHubService.completeConnect(request.code(), request.state()));
     }
 

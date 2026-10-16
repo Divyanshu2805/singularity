@@ -1,5 +1,6 @@
 package com.singularity.workspace.controller;
 
+import com.singularity.common.security.DemoAccount;
 import com.singularity.workspace.dto.github.GitHubPushRequest;
 import com.singularity.workspace.dto.github.ProjectGitHubResponse;
 import com.singularity.workspace.service.GitHubService;
@@ -22,6 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>A push answers when it is done: it is a handful of calls to GitHub and takes seconds, not a build. Who may call
  * what is the service's to enforce, because the caller is a user there.
+ *
+ * <p>The shared demo account cannot push (DemoAccount); it never has a connection to push with either.
  */
 @RestController
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProjectGitHubController {
 
     private final GitHubService gitHubService;
+    private final DemoAccount demoAccount;
 
     @GetMapping
     public ResponseEntity<ProjectGitHubResponse> status(@PathVariable Long projectId) {
@@ -38,6 +42,7 @@ public class ProjectGitHubController {
     @PostMapping("/push")
     public ResponseEntity<ProjectGitHubResponse> push(@PathVariable Long projectId,
                                                       @RequestBody(required = false) @Valid GitHubPushRequest request) {
+        demoAccount.refuseCurrent();
         return ResponseEntity.ok(gitHubService.push(projectId, request));
     }
 

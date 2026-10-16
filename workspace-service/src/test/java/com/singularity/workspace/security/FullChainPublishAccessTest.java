@@ -3,6 +3,7 @@ package com.singularity.workspace.security;
 import com.singularity.common.error.GlobalExceptionHandler;
 import com.singularity.common.security.AuthProperties;
 import com.singularity.common.security.AuthUtil;
+import com.singularity.common.security.DemoAccount;
 import com.singularity.common.security.InternalServiceAuthFilter;
 import com.singularity.common.security.ServiceSecurityConfig;
 import com.singularity.common.security.SessionAuthenticator;
@@ -42,6 +43,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -50,6 +52,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -70,6 +73,7 @@ class FullChainPublishAccessTest {
 
     private static final long PROJECT_ID = 42L;
     private static final long USER_ID = 7L;
+    private static final String DEMO_COOKIE = "valid-for-the-demo";
     private static final String VALID_COOKIE = "valid-for-user-7";
     private static final String SESSION_COOKIE_NAME = "__Host-vc_session";
 
@@ -182,6 +186,25 @@ class FullChainPublishAccessTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    @DisplayName("the shared demo account cannot publish an app or share it, and reaches neither service call")
+    void theDemoAccountCannotPublishOrShare() throws Exception {
+        Cookie xsrf = primeCsrf();
+        Cookie demo = new Cookie(SESSION_COOKIE_NAME, DEMO_COOKIE);
+
+        mockMvc.perform(post("/api/projects/{projectId}/publish", PROJECT_ID)
+                        .cookie(demo, xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/projects/{projectId}/publish/sharing", PROJECT_ID)
+                        .cookie(demo, xsrf).header("X-XSRF-TOKEN", xsrf.getValue())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"shared\":true}"))
+                .andExpect(status().isForbidden());
+
+        verify(publishService, never()).publish(any(), any());
+        verify(publishService, never()).setSharing(any(), anyBoolean());
+    }
+
     private Cookie primeCsrf() throws Exception {
         MvcResult priming = mockMvc.perform(get("/api/projects/{projectId}/publish", PROJECT_ID).cookie(sessionCookie()))
                 .andReturn();
@@ -202,6 +225,9 @@ class FullChainPublishAccessTest {
         @Bean
         SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity, HandlerExceptionResolver handlerExceptionResolver) {
             SessionAuthenticator sessionAuthenticator = cookie -> {
+                if (DEMO_COOKIE.equals(cookie)) {
+                    return Optional.of(new UserPrincipal(99L, "demo@divyanshuagrahari.dev", "singularity-demo", List.of()));
+                }
                 if (!VALID_COOKIE.equals(cookie)) return Optional.empty();
                 return Optional.of(new UserPrincipal(USER_ID, "caller@example.com", "firebase-uid-7", List.of()));
             };
@@ -216,6 +242,11 @@ class FullChainPublishAccessTest {
         @Bean
         AuthUtil authUtil() {
             return new AuthUtil();
+        }
+
+        @Bean
+        DemoAccount demoAccount() {
+            return new DemoAccount("singularity-demo");
         }
 
         @Bean

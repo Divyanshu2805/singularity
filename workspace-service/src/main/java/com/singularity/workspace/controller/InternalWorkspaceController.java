@@ -41,8 +41,8 @@ import java.util.List;
  * batch, the file tree and file content that AI prompts and code insight read, the atomic revision publish a
  * generated turn commits through (CODE_REVIEW.md AI-05), the type-check of a turn's files in the project's running
  * preview before they are saved, giving a project with no title the one a model wrote for it, and the two counts the
- * usage meter shows - projects owned and previews running - and removing everything of an account account-service is
- * deleting.
+ * usage meter shows - projects owned and previews running - removing everything of an account account-service is
+ * deleting, and making the shared demo account's sample project for its daily reset.
  *
  * <p>Guarded by the shared internal-service secret rather than a caller's permissions, exactly like account-service's
  * equivalent: the caller is intelligence-service acting on a request it has already authorized itself. These
@@ -123,6 +123,13 @@ public class InternalWorkspaceController {
     @PostMapping("/users/{userId}/delete-data")
     public void deleteUserData(@PathVariable Long userId, @RequestBody DeleteUserDataRequest request) {
         userDataService.deleteAllFor(userId, request.email());
+    }
+
+    @PostMapping("/users/{userId}/demo-project")
+    public ProjectSummaryDto createDemoProject(@PathVariable Long userId, @RequestBody ProjectTitleDto request) {
+        Long projectId = projectService.createDemoProject(userId, request.title());
+        return toSummaryDto(projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project", projectId.toString())));
     }
 
     @GetMapping("/projects/owned-count")
