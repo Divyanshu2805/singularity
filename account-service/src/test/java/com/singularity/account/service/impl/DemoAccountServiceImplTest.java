@@ -36,7 +36,7 @@ import static org.mockito.Mockito.when;
 class DemoAccountServiceImplTest {
 
     private static final String UID = "singularity-demo";
-    private static final String EMAIL = "demo@divyanshuagrahari.dev";
+    private static final String EMAIL = "demo@singularity.dev";
     private static final long USER_ID = 5L;
     private static final long PROJECT_ID = 31L;
 

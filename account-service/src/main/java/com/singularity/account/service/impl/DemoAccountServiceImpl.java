@@ -42,7 +42,7 @@ import java.util.Optional;
 @Service
 public class DemoAccountServiceImpl implements DemoAccountService {
 
-    static final String NAME = "Journey Tester";
+    static final String NAME = "Demo User";
     static final String SAMPLE_TITLE = "Quick notes you can jot and clear";
 
     private final DemoAccount demoAccount;
@@ -58,7 +58,7 @@ public class DemoAccountServiceImpl implements DemoAccountService {
                                   UserRepository userRepository, AuthAuditEventRepository authAuditEventRepository,
                                   WorkspaceServiceClient workspaceServiceClient,
                                   IntelligenceServiceClient intelligenceServiceClient,
-                                  @Value("${demo.email:demo@divyanshuagrahari.dev}") String email,
+                                  @Value("${demo.email:demo@singularity.dev}") String email,
                                   @Value("${demo.password:demo1234}") String password) {
         this.demoAccount = demoAccount;
         this.identityVerifier = identityVerifier;

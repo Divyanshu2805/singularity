@@ -1,6 +1,6 @@
 # Build Benchmark Results
 
-What the [build benchmark](testing.md#the-build-benchmark) measured, run by run. Each run up to 2026-10-08 is the same twenty requests: eight first builds, eight changes to the apps those builds left, two questions and two requests for another stack. From 2026-10-10 there are twenty-three: a first build and two changes that need a server of the project's own were added.
+What the [build benchmark](testing.md#the-build-benchmark) measured, run by run. Each run up to 2026-10-08 is the same twenty requests: eight first builds, eight changes to the apps those builds left, two questions and two requests for another stack. From 2026-10-10 there are twenty-three: a first build and two changes that need a server of the project's own were added. By 2026-10-16 there are twenty-four, with a change that removes a page.
 
 All of it was measured on Google's models through the OpenAI-compatible endpoint, on one developer machine, with each project held in memory. **None of it says what production does**: production is configured for a different model on a different provider, which has not been measured.
 
@@ -113,3 +113,20 @@ Two other things moved in that row. A project's `server/` files are now shown to
 - Whether the two-player game is playable by two people. Its server starts and its routes exist; nobody has played it. That is a row of the [preview checklist](../local-development/preview-checklist.md).
 - The in-turn server check on a real model's turn. It is proven on kind with a server written for the test (`PreviewPipelineIT`), not with the turn above that would have needed it.
 - Cost, as before: no prices were entered.
+
+## 2026-10-16: the repair loop switched off
+
+Is the repair loop - the edit, syntax and import checks that send a turn's problems back to the model before it is saved - what keeps the generated projects compiling? The whole benchmark was run twice, back to back, on the same code: once with `generation.max-repairs=0`, so nothing found is ever sent back, and once with the default of 3. Each run's projects were then compiled with `scripts/bench-verify.sh`. `gemini-3.8-flash`, low reasoning, as before; the benchmark now holds twenty-four requests (`todo-remove-page` is the one added since the last section). The prices were entered this time: $0.75 in and $3.75 out per million tokens.
+
+| Run | Right | First word, first build | First build | Slowest build | First word, change | Change | Tokens out, first build | Cost per turn | Compile, and servers start |
+|---|---|---|---|---|---|---|---|---|---|
+| Repairs off | 24 / 24 | 2.3 s | 54.0 s | 74.8 s | 2.3 s | 12.4 s | 8,921 | 2.4 cents | 20 / 20, and 3 of 3 servers |
+| Repairs on (the default) | 24 / 24 | 2.9 s | 63.6 s | 111.8 s | 2.6 s | 12.8 s | 8,214 | 2.4 cents | 20 / 20, and 3 of 3 servers |
+
+The two runs cost $1.16 together.
+
+### What it showed
+
+- **The repair loop was never needed.** In neither run did a turn leave an edit that could not be applied, a file that does not parse or an import that does not resolve: the log has no repair at all, so switching repairs off changed nothing that was saved. The two turns of the second run that made two calls (`expenses-build`, `pomodoro-build`) were continuations of a reply that stopped early, not repairs, and they are most of why that run's first builds are slower.
+- **So this does not measure what the loop is worth.** It says the model, on these twenty-four requests and this prompt, now writes code those checks have nothing to say about - forty of forty projects compiled across the two runs. The faults the loop was built for are on record ([pitfalls](gotchas/ai-generation.md)) and came from longer turns, older prompts and whole-file rewrites; a benchmark that showed the loop working would need requests that provoke them.
+- **The compiler check was not exercised either.** The benchmark has no running preview, so the type-check in the preview pod never runs here; what compiled was checked afterwards by `bench-verify.sh`.

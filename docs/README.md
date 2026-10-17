@@ -18,10 +18,9 @@ Everything about how Singularity is built, run and changed. Start with the secti
 - [API reference](api/README.md) — every endpoint, the streaming formats, and the error model.
 - [Known gaps](known-gaps/README.md) — constraints, trade-offs, and what isn't built yet.
 
-## Contributing
+## Working on the code
 
 - [Engineering practices](practices/README.md) — conventions, security guardrails, testing, definition of done, and known pitfalls.
-- [`CONTRIBUTING.md`](../CONTRIBUTING.md) — the contribution workflow.
 
 ## Running in production
 

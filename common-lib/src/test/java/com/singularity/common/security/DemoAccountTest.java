@@ -34,7 +34,7 @@ class DemoAccountTest {
     @Test
     @DisplayName("the demo account is refused, with a message that says why")
     void refusesTheDemoAccount() {
-        signIn(new UserPrincipal(7L, "demo@divyanshuagrahari.dev", "singularity-demo", List.of()));
+        signIn(new UserPrincipal(7L, "demo@singularity.dev", "singularity-demo", List.of()));
 
         assertThat(demoAccount.isCurrent()).isTrue();
         assertThatThrownBy(demoAccount::refuseCurrent)
@@ -45,7 +45,7 @@ class DemoAccountTest {
     @Test
     @DisplayName("anyone else is let through, even with the demo account's address")
     void letsEveryoneElseThrough() {
-        signIn(new UserPrincipal(8L, "demo@divyanshuagrahari.dev", "someone-else", List.of()));
+        signIn(new UserPrincipal(8L, "demo@singularity.dev", "someone-else", List.of()));
 
         assertThat(demoAccount.isCurrent()).isFalse();
         assertThatCode(demoAccount::refuseCurrent).doesNotThrowAnyException();
