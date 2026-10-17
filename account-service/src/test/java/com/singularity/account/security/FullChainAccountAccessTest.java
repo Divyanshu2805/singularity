@@ -241,7 +241,7 @@ class FullChainAccountAccessTest {
         SessionAuthenticator sessionAuthenticator() {
             return cookie -> {
                 if (DEMO_COOKIE.equals(cookie)) {
-                    return Optional.of(new UserPrincipal(DEMO_USER_ID, "demo@divyanshuagrahari.dev", "singularity-demo", List.of()));
+                    return Optional.of(new UserPrincipal(DEMO_USER_ID, "demo@singularity.dev", "singularity-demo", List.of()));
                 }
                 if (!VALID_COOKIE.equals(cookie)) return Optional.empty();
                 return Optional.of(new UserPrincipal(USER_ID, "caller@example.com", "firebase-uid-7", List.of()));

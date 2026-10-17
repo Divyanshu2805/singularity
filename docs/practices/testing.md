@@ -23,7 +23,7 @@ Include `common-lib` in the `-pl` list so it is built from source rather than re
 
 ## The build benchmark
 
-Twenty-three fixed requests - first builds, changes to the apps those builds left, questions, requests for another stack, and three that need a server of the project's own - run as whole build turns against the configured model, in memory, with no sign-in and nothing saved (`BuildBenchmarkIT`, scenarios in `intelligence-service/src/test/resources/bench/scenarios.json`). It spends real tokens, so it is not part of the suite: its name keeps the build from picking it up, and it runs only when asked for.
+Twenty-four fixed requests - first builds, changes to the apps those builds left, questions, requests for another stack, and three that need a server of the project's own - run as whole build turns against the configured model, in memory, with no sign-in and nothing saved (`BuildBenchmarkIT`, scenarios in `intelligence-service/src/test/resources/bench/scenarios.json`). It spends real tokens, so it is not part of the suite: its name keeps the build from picking it up, and it runs only when asked for.
 
 ```bash
 ./mvnw -pl common-lib,intelligence-service test -Dtest=BuildBenchmarkIT -Dsurefire.failIfNoSpecifiedTests=false \
@@ -69,6 +69,8 @@ The scripted model finishes a build in two seconds, so its files arrive while th
 Run it after any change that crosses a service boundary or touches sign-in, the chat stream, the preview panel or the lesson panel. A step that fails leaves a trace, a video and every service's log in `e2e/test-results` and `e2e/.run/logs`.
 
 The same stack serves two measurements that are not tests and run only when asked for: `npm run load` (the [load test](product-numbers.md#under-load)) and, with the stack started with `--real-ai <env file>`, `npm run numbers` (one pass with the configured model, which spends tokens). What they measured is in [the product's numbers](product-numbers.md).
+
+The load test also runs against the deployed site: `node load.mjs --prod https://<site> --emails a@x.com,b@x.com`, in a terminal. It never creates an account - make the test accounts on the site first, with verified addresses and one password between them, and it asks for that password in a hidden prompt. Its builds use the real model and each account's daily allowance, and its previews take production runners for a few minutes; the projects it made are deleted at the end, and the accounts are kept for the next run.
 
 ## Coverage
 

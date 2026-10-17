@@ -40,7 +40,7 @@ You type a one-line idea. A short interview the model writes for that idea turns
 | | |
 |---|---|
 | **Live app** | [singularity.divyanshuagrahari.dev](https://singularity.divyanshuagrahari.dev) |
-| **Demo login** | `demo@divyanshuagrahari.dev` / `demo1234`. A shared, public account (Journey Tester) that opens on the notes app from the screenshots, already built with its chat, files and preview: it can't publish, connect GitHub, invite anyone, pay, change its sign-in security or delete itself, and it is put back every day |
+| **Demo login** | `demo@singularity.dev` / `demo1234`. A shared, public account (Demo User) that opens on the notes app from the screenshots, already built with its chat, files and preview: it can't publish, connect GitHub, invite anyone, pay, change its sign-in security or delete itself, and it is put back every day |
 | **Your own account** | Sign in with Google, or register with an email and verify it |
 | **Paying** | Production runs Stripe in **test mode**: use card `4242 4242 4242 4242`, any future date and any CVC. No money moves |
 | **Locally, with no keys** | `e2e/stack.sh up --context kind-<cluster>` starts the whole application with a scripted model and the Firebase Auth emulator; see [the browser journey](docs/practices/testing.md#the-browser-journey) |
@@ -217,7 +217,7 @@ Everything lives in [`docs/`](docs/README.md):
 | [Engineering practices](docs/practices/README.md) | Conventions, guardrails, testing, known pitfalls, measured numbers |
 | [Known gaps](docs/known-gaps/README.md) | Trade-offs and what isn't built yet |
 | [Deployment](docs/deployment/README.md) · [Operations](docs/operations/README.md) | Running it in production |
-| [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) | Workflow and checks; reporting a vulnerability |
+| [Security](SECURITY.md) | Reporting a vulnerability |
 
 ## License
 

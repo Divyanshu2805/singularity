@@ -1,11 +1,11 @@
 /**
- * A small load test against the journey stack: how long the application's own work takes when several people use it
- * at once, and whether anything fails.
+ * A small load test against the journey stack, or against the deployed application: how long the application's own
+ * work takes when several people use it at once, and whether anything fails.
  *
  * Handles: signing in a handful of people through the Auth emulator and the real session exchange; giving each a
- * project with one scripted build in it; then four measurements - a steady mix of the read calls a workspace makes,
- * every person sending a build at the same moment, every person starting a preview at the same moment and loading
- * its page through the proxy, and one person going past the per-user rate limit to show that it holds. It writes
+ * project with one build in it; then four measurements - a steady mix of the read calls a workspace makes, every
+ * person sending a build at the same moment, every person starting a preview at the same moment and loading its page
+ * through the proxy, and one person going past the per-user rate limit to show that it holds. It writes
  * test-results/load-report.md and load-results.json.
  *
  * It talks to the Gateway directly, not through the frontend's proxy, so what is timed is the backend. Each person is
@@ -13,38 +13,90 @@
  * part of what is being run - which also caps how hard this can push: it is a check that latency stays flat with
  * several people working, not a search for the breaking point.
  *
- * The model is the scripted one, so the build numbers are the pipeline's own cost - parsing, checking, saving,
- * publishing a revision - with the provider's time taken out. Everything runs on one machine, load generator
- * included, so the numbers are a floor for comparison between runs, not a forecast of production.
+ * Against the stack the model is the scripted one, so the build numbers are the pipeline's own cost - parsing,
+ * checking, saving, publishing a revision - with the provider's time taken out. Everything runs on one machine, load
+ * generator included, so the numbers are a floor for comparison between runs, not a forecast of production.
+ *
+ * With --prod it runs the same four measurements against the deployed site, as test accounts that already exist there
+ * with verified addresses and one password between them. It never creates an account: the person running it made
+ * them, and types the password once into a hidden prompt, so it is never on the command line, in a file or in the
+ * shell's history. Signing in uses Firebase's public web key, read from the site's own scripts as a browser would. The
+ * model there is the real one, so its builds spend real tokens from each account's daily allowance, its previews take
+ * production runners for a few minutes, and every call crosses the internet and Cloudflare. The projects it made are
+ * deleted at the end, whether or not it finished; the accounts are left for the next run. It writes
+ * test-results/load-report-prod.md and load-results-prod.json.
  *
  * Usage, with the stack up (e2e/stack.sh up --context kind-<cluster>):
  *   node load.mjs [--users 8] [--seconds 60] [--rate 6] [--previews 4]
+ * Against production, in a terminal (the password prompt needs one):
+ *   node load.mjs --prod https://<site> --emails a@x.com,b@x.com [--seconds 60] [--rate 6] [--previews 4]
  */
 import http from "node:http";
+import https from "node:https";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const option = (name, fallback) => {
+const argument = (name) => {
   const at = process.argv.indexOf(`--${name}`);
-  return at > 0 ? Number(process.argv[at + 1]) : fallback;
+  return at > 0 ? process.argv[at + 1] : undefined;
 };
-const USERS = option("users", 8);
+const option = (name, fallback) => (argument(name) === undefined ? fallback : Number(argument(name)));
+const PROD = argument("prod")?.replace(/\/+$/, "");
+const EMAILS = (argument("emails") ?? "").split(",").map((email) => email.trim()).filter(Boolean);
+if (PROD && !EMAILS.length) throw new Error("--prod needs --emails: the test accounts' addresses, comma-separated");
+const USERS = PROD ? EMAILS.length : option("users", 8);
 const SECONDS = option("seconds", 60);
 const RATE = option("rate", 6);
 const PREVIEWS = Math.min(option("previews", 4), USERS);
+const AGENT = { "user-agent": "singularity-load-test" };
 
-const stack = JSON.parse(readFileSync(fileURLToPath(new URL("./.run/stack.json", import.meta.url)), "utf8"));
+const stack = PROD ? { gateway: PROD } : JSON.parse(readFileSync(fileURLToPath(new URL("./.run/stack.json", import.meta.url)), "utf8"));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const askHidden = (question) =>
+  new Promise((resolve) => {
+    if (!process.stdin.isTTY) throw new Error("Run it in a terminal: the password is asked for in a hidden prompt");
+    let value = "";
+    process.stdout.write(question);
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    const onData = (chunk) => {
+      for (const character of chunk.toString("utf8")) {
+        if (character === "\u0003") process.exit(130);
+        if (character === "\r" || character === "\n") {
+          process.stdin.off("data", onData);
+          process.stdin.setRawMode(false);
+          process.stdin.pause();
+          process.stdout.write("\n");
+          return resolve(value);
+        }
+        value = character === "\u007f" || character === "\b" ? value.slice(0, -1) : value + character;
+      }
+    };
+    process.stdin.on("data", onData);
+  });
+
+async function firebaseWebKey(site) {
+  const read = (path) => fetch(new URL(path, site + "/"), { headers: AGENT }).then((response) => response.text());
+  const entry = (await read("/")).match(/<script[^>]+src="([^"]+\.js)"/)?.[1];
+  if (!entry) throw new Error(`${site} served no script to read Firebase's web key from`);
+  const chunks = [...new Set((await read(entry)).match(/assets\/[\w.-]+\.js/g) ?? [])];
+  for (const chunk of [entry, ...chunks.sort((a, b) => /firebase/.test(b) - /firebase/.test(a))]) {
+    const key = (await read(chunk)).match(/AIza[\w-]{35}/)?.[0];
+    if (key) return key;
+  }
+  throw new Error(`None of ${site}'s scripts carries a Firebase web key`);
+}
+
 class Person {
-  constructor(number) {
-    this.email = `load-${Date.now()}-${number}@example.com`;
+  constructor(number, email) {
+    this.email = email ?? `load-${Date.now()}-${number}@example.com`;
     this.password = "Load-test-pass-2026!";
     this.cookies = new Map();
   }
 
   async call(method, path, body) {
-    const headers = { cookie: [...this.cookies].map(([name, value]) => `${name}=${value}`).join("; ") };
+    const headers = { ...AGENT, cookie: [...this.cookies].map(([name, value]) => `${name}=${value}`).join("; ") };
     if (method !== "GET") {
       headers["X-XSRF-TOKEN"] = decodeURIComponent(this.cookies.get("__Host-XSRF-TOKEN") ?? "");
       if (body !== undefined) headers["content-type"] = "application/json";
@@ -68,15 +120,31 @@ class Person {
     return response.status === 204 ? null : response.json();
   }
 
-  async signIn() {
+  async emulatorToken() {
     const emulator = `${stack.authEmulator}/identitytoolkit.googleapis.com/v1`;
     const post = (url, payload, extra = {}) =>
       fetch(url, { method: "POST", headers: { "content-type": "application/json", ...extra }, body: JSON.stringify(payload) }).then((r) => r.json());
     const created = await post(`${emulator}/accounts:signUp?key=load`, { email: this.email, password: this.password, returnSecureToken: true });
     await post(`${emulator}/projects/${stack.firebaseProject}/accounts:update`, { localId: created.localId, emailVerified: true }, { authorization: "Bearer owner" });
     const signedIn = await post(`${emulator}/accounts:signInWithPassword?key=load`, { email: this.email, password: this.password, returnSecureToken: true });
+    return signedIn.idToken;
+  }
+
+  async firebaseToken(password) {
+    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${stack.firebaseKey}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", referer: stack.gateway + "/", ...AGENT },
+      body: JSON.stringify({ email: this.email, password, returnSecureToken: true }),
+    });
+    const signedIn = await response.json();
+    if (!signedIn.idToken) throw new Error(`Firebase would not sign in ${this.email}: ${signedIn.error?.message ?? response.status}`);
+    return signedIn.idToken;
+  }
+
+  async signIn(password) {
+    const idToken = PROD ? await this.firebaseToken(password) : await this.emulatorToken();
     await this.call("GET", "/api/auth/csrf");
-    await this.json("POST", "/api/auth/session", { idToken: signedIn.idToken });
+    await this.json("POST", "/api/auth/session", { idToken });
   }
 
   async build(message) {
@@ -105,13 +173,14 @@ class Person {
 
 function previewRequest(url, cookie) {
   const target = new URL(url);
+  const secure = target.protocol === "https:";
   return new Promise((resolve) => {
-    const request = http.request(
+    const request = (secure ? https : http).request(
       {
-        host: "127.0.0.1",
-        port: target.port,
+        host: secure ? target.hostname : "127.0.0.1",
+        port: target.port || (secure ? 443 : 80),
         path: target.pathname + target.search,
-        headers: cookie ? { host: target.host, cookie } : { host: target.host },
+        headers: { ...AGENT, host: target.host, ...(cookie ? { cookie } : {}) },
         timeout: 15_000,
       },
       (response) => {
@@ -151,171 +220,215 @@ function summarise(samples) {
 const ms = (value) => (Number.isFinite(value) ? `${value < 10 ? value.toFixed(1) : Math.round(value)} ms` : "-");
 const seconds = (value) => (Number.isFinite(value) ? `${(value / 1000).toFixed(1)} s` : "-");
 const row = (name, s) => `| ${name} | ${s.calls} | ${ms(s.p50)} | ${ms(s.p95)} | ${ms(s.p99)} | ${ms(s.max)} | ${(100 * s.errorRate).toFixed(2)}% |`;
-
-console.log(`Signing in ${USERS} people and giving each a project with one build in it`);
-const people = Array.from({ length: USERS }, (_, number) => new Person(number));
-for (const person of people) {
-  await person.signIn();
-  person.projectId = (await person.json("POST", "/api/projects/from-prompt", { prompt: "A notes app" })).id;
-}
-for (const person of people) {
-  const first = await person.build("A notes app where I can write and delete notes");
-  if (first.outcome !== "SAVED") throw new Error(`A first build did not save: ${first.outcome}`);
-}
-
-const READS = [
-  ["GET /api/auth/me", "account", () => "/api/auth/me"],
-  ["GET /api/me/subscription", "account", () => "/api/me/subscription"],
-  ["GET /api/plans", "account", () => "/api/plans"],
-  ["GET /api/projects", "workspace", () => "/api/projects"],
-  ["GET /api/projects/{id}", "workspace", (p) => `/api/projects/${p.projectId}`],
-  ["GET /api/projects/{id}/files", "workspace", (p) => `/api/projects/${p.projectId}/files`],
-  ["GET /api/projects/{id}/files/content", "workspace", (p) => `/api/projects/${p.projectId}/files/content?path=${encodeURIComponent("src/pages/Index.tsx")}`],
-  ["GET /api/chat/projects/{id}", "intelligence", (p) => `/api/chat/projects/${p.projectId}`],
-  ["GET /api/usage/today", "intelligence", (p) => `/api/usage/today?projectId=${p.projectId}`],
-];
-
-console.log(`Reads: ${USERS} people, ${RATE} calls a second each, for ${SECONDS} s`);
-const readSamples = new Map(READS.map(([name]) => [name, []]));
-const inFlight = [];
-const readsStarted = performance.now();
-let tick = 0;
-while (performance.now() - readsStarted < SECONDS * 1000) {
-  for (const person of people) {
-    const [name, , path] = READS[(tick + people.indexOf(person)) % READS.length];
-    const started = performance.now();
-    inFlight.push(
-      person
-        .call("GET", path(person))
-        .then(async (response) => {
-          await response.arrayBuffer();
-          readSamples.get(name).push({ ms: performance.now() - started, ok: response.ok, status: response.status });
-        })
-        .catch(() => readSamples.get(name).push({ ms: performance.now() - started, ok: false, status: 0 })),
-    );
-  }
-  tick++;
-  const next = readsStarted + (tick * 1000) / RATE;
-  await sleep(Math.max(0, next - performance.now()));
-}
-await Promise.all(inFlight);
-const readSeconds = (performance.now() - readsStarted) / 1000;
-const allReads = [...readSamples.values()].flat();
-
-console.log(`Builds: ${USERS} people sending a change at the same moment`);
-const builds = await Promise.all(people.map((person) => person.build("Show how many notes there are")));
-
-console.log(`Previews: ${PREVIEWS} people starting one at the same moment`);
-const previews = await Promise.all(
-  people.slice(0, PREVIEWS).map(async (person) => {
-    const started = performance.now();
-    let preview = await person.json("POST", `/api/projects/${person.projectId}/preview`);
-    let waited = false;
-    while (preview.status === "CREATING" && performance.now() - started < 300_000) {
-      waited ||= preview.queuePosition != null;
-      await sleep(500);
-      preview = await person.json("GET", `/api/projects/${person.projectId}/preview`);
-    }
-    const running = performance.now() - started;
-    let page = { status: 0, size: 0 };
-    let visit = null;
-    while (preview.status === "RUNNING" && page.status !== 200 && performance.now() - started < 120_000) {
-      visit ??= await previewVisitor(preview.previewUrl);
-      if (visit) page = await visit();
-      if (page.status !== 200) await sleep(300);
-    }
-    return { person, status: preview.status, detail: preview.detail, waited, running, served: page.status === 200 ? performance.now() - started : NaN, visit };
-  }),
-);
-
-const up = previews.filter((preview) => preview.status === "RUNNING" && preview.visit);
-const pageSamples = [];
-if (up.length) {
-  console.log("Preview pages: 200 loads through the proxy, 4 at a time");
-  for (let batch = 0; batch < 50; batch++) {
-    await Promise.all(
-      Array.from({ length: 4 }, async (_, slot) => {
-        const started = performance.now();
-        const page = await up[(batch + slot) % up.length].visit();
-        pageSamples.push({ ms: performance.now() - started, ok: page.status === 200, status: page.status });
-      }),
-    );
-  }
-}
-await Promise.all(previews.map((preview) => preview.person.call("DELETE", `/api/projects/${preview.person.projectId}/preview`)));
-
-console.log("Rate limit: one person sending 700 calls at once");
-const burst = await Promise.all(Array.from({ length: 700 }, () => people[0].call("GET", "/api/auth/me").then((response) => response.status)));
-const burstCounts = burst.reduce((counts, status) => ({ ...counts, [status]: (counts[status] ?? 0) + 1 }), {});
-
-const buildSummary = (pick) => summarise(builds.map((build) => ({ ms: pick(build), ok: build.outcome === "SAVED" })));
-const lines = [
-  "# Load test",
-  "",
-  `Run ${new Date().toISOString()} against the journey stack on one machine: ${USERS} signed-in people, the scripted model.`,
-  "",
-  "## Reads",
-  "",
-  `${USERS} people, each making ${RATE} calls a second for ${Math.round(readSeconds)} s: ${allReads.length} calls, ${(allReads.length / readSeconds).toFixed(0)} a second.`,
-  "",
-  "| Call | Calls | p50 | p95 | p99 | Slowest | Failed |",
-  "|---|---|---|---|---|---|---|",
-  ...READS.map(([name]) => row(`\`${name}\``, summarise(readSamples.get(name)))),
-  row("**All reads**", summarise(allReads)),
-  "",
-  "## Builds at the same moment",
-  "",
-  `${USERS} people each sent a change at once: ${builds.map((build) => build.outcome).join(", ")}. The scripted model answers in about a second, so this is the pipeline's own work.`,
-  "",
-  "| | Turns | p50 | p95 | Slowest | Not saved |",
-  "|---|---|---|---|---|---|",
-  ...[["To the first piece of the answer", (b) => b.firstPiece], ["To the turn saved (`done`)", (b) => b.total]].map(([name, pick]) => {
-    const s = buildSummary(pick);
+const buildRows = (turns) => {
+  const summary = (pick) => summarise(turns.map((turn) => ({ ms: pick(turn), ok: turn.outcome === "SAVED" })));
+  return [["To the first piece of the answer", (b) => b.firstPiece], ["To the turn saved (`done`)", (b) => b.total]].map(([name, pick]) => {
+    const s = summary(pick);
     return `| ${name} | ${s.calls} | ${ms(s.p50)} | ${ms(s.p95)} | ${ms(s.max)} | ${s.failed} |`;
-  }),
-  "",
-  "## Previews at the same moment",
-  "",
-  `${PREVIEWS} people each started a preview at once, against a warm pool of two.`,
-  "",
-  "| Person | Ended | Waited in line | To running | To the page answering |",
-  "|---|---|---|---|---|",
-  ...previews.map((p, index) => `| ${index + 1} | ${p.status}${p.status === "RUNNING" ? "" : ` (${p.detail ?? ""})`} | ${p.waited ? "yes" : "no"} | ${seconds(p.running)} | ${seconds(p.served)} |`),
-  "",
-  ...(pageSamples.length
-    ? ["| Call | Calls | p50 | p95 | p99 | Slowest | Failed |", "|---|---|---|---|---|---|---|", row("A preview's page through the proxy", summarise(pageSamples)), ""]
-    : []),
-  "## The rate limit",
-  "",
-  `One person sent 700 calls to one service at once: ${Object.entries(burstCounts).map(([status, count]) => `${count} answered ${status}`).join(", ")}. The limit is a bucket of 600 per person per service that refills at 10 a second, which is why a burst that takes a moment gets a few more than 600.`,
-  "",
-];
+  });
+};
 
-const out = fileURLToPath(new URL("./test-results/", import.meta.url));
-mkdirSync(out, { recursive: true });
-writeFileSync(out + "load-report.md", lines.join("\n"));
-writeFileSync(
-  out + "load-results.json",
-  JSON.stringify(
-    {
-      users: USERS,
-      reads: Object.fromEntries(READS.map(([name]) => [name, summarise(readSamples.get(name))])),
-      allReads: summarise(allReads),
-      readsPerSecond: allReads.length / readSeconds,
-      builds: { firstPiece: buildSummary((b) => b.firstPiece), total: buildSummary((b) => b.total), outcomes: builds.map((b) => b.outcome) },
-      previews: previews.map(({ status, waited, running, served }) => ({ status, waited, running, served })),
-      previewPage: summarise(pageSamples),
-      burst: burstCounts,
-    },
-    null,
-    2,
-  ),
-);
-console.log("\n" + lines.join("\n"));
+const people = PROD ? EMAILS.map((email, number) => new Person(number, email)) : Array.from({ length: USERS }, (_, number) => new Person(number));
+let password;
+if (PROD) {
+  password = await askHidden(`Password of the ${USERS} test accounts on ${PROD}: `);
+  stack.firebaseKey = await firebaseWebKey(PROD);
+}
 
-const broken =
-  summarise(allReads).failed > 0 ||
-  builds.some((build) => build.outcome !== "SAVED") ||
-  previews.some((p) => p.status !== "RUNNING" || !Number.isFinite(p.served)) ||
-  summarise(pageSamples).failed > 0;
+let broken = true;
+try {
+  console.log(`Signing in ${USERS} people and giving each a project with one build in it`);
+  for (const person of people) {
+    await person.signIn(password);
+    person.projectId = (await person.json("POST", "/api/projects/from-prompt", { prompt: "A notes app" })).id;
+  }
+  password = undefined;
+  const firstBuilds = [];
+  for (const person of people) {
+    const first = await person.build("A notes app where I can write and delete notes");
+    if (first.outcome !== "SAVED") throw new Error(`A first build for ${person.email} did not save: ${first.outcome}`);
+    firstBuilds.push(first);
+    const { files } = await person.json("GET", `/api/projects/${person.projectId}/files`);
+    const paths = files.map((file) => file.path);
+    person.filePath = paths.includes("src/pages/Index.tsx") ? "src/pages/Index.tsx" : (paths.find((path) => path.endsWith(".tsx")) ?? paths[0]);
+  }
+
+  const READS = [
+    ["GET /api/auth/me", "account", () => "/api/auth/me"],
+    ["GET /api/me/subscription", "account", () => "/api/me/subscription"],
+    ["GET /api/plans", "account", () => "/api/plans"],
+    ["GET /api/projects", "workspace", () => "/api/projects"],
+    ["GET /api/projects/{id}", "workspace", (p) => `/api/projects/${p.projectId}`],
+    ["GET /api/projects/{id}/files", "workspace", (p) => `/api/projects/${p.projectId}/files`],
+    ["GET /api/projects/{id}/files/content", "workspace", (p) => `/api/projects/${p.projectId}/files/content?path=${encodeURIComponent(p.filePath)}`],
+    ["GET /api/chat/projects/{id}", "intelligence", (p) => `/api/chat/projects/${p.projectId}`],
+    ["GET /api/usage/today", "intelligence", (p) => `/api/usage/today?projectId=${p.projectId}`],
+  ];
+
+  console.log(`Reads: ${USERS} people, ${RATE} calls a second each, for ${SECONDS} s`);
+  const readSamples = new Map(READS.map(([name]) => [name, []]));
+  const inFlight = [];
+  const readsStarted = performance.now();
+  let tick = 0;
+  while (performance.now() - readsStarted < SECONDS * 1000) {
+    for (const person of people) {
+      const [name, , path] = READS[(tick + people.indexOf(person)) % READS.length];
+      const started = performance.now();
+      inFlight.push(
+        person
+          .call("GET", path(person))
+          .then(async (response) => {
+            await response.arrayBuffer();
+            readSamples.get(name).push({ ms: performance.now() - started, ok: response.ok, status: response.status });
+          })
+          .catch(() => readSamples.get(name).push({ ms: performance.now() - started, ok: false, status: 0 })),
+      );
+    }
+    tick++;
+    const next = readsStarted + (tick * 1000) / RATE;
+    await sleep(Math.max(0, next - performance.now()));
+  }
+  await Promise.all(inFlight);
+  const readSeconds = (performance.now() - readsStarted) / 1000;
+  const allReads = [...readSamples.values()].flat();
+
+  console.log(`Builds: ${USERS} people sending a change at the same moment`);
+  const builds = await Promise.all(people.map((person) => person.build("Show how many notes there are")));
+
+  console.log(`Previews: ${PREVIEWS} people starting one at the same moment`);
+  const previews = await Promise.all(
+    people.slice(0, PREVIEWS).map(async (person) => {
+      const started = performance.now();
+      let preview = await person.json("POST", `/api/projects/${person.projectId}/preview`);
+      let waited = false;
+      while (preview.status === "CREATING" && performance.now() - started < 300_000) {
+        waited ||= preview.queuePosition != null;
+        await sleep(500);
+        preview = await person.json("GET", `/api/projects/${person.projectId}/preview`);
+      }
+      const running = performance.now() - started;
+      let page = { status: 0, size: 0 };
+      let visit = null;
+      while (preview.status === "RUNNING" && page.status !== 200 && performance.now() - started < 120_000) {
+        visit ??= await previewVisitor(preview.previewUrl);
+        if (visit) page = await visit();
+        if (page.status !== 200) await sleep(300);
+      }
+      return { person, status: preview.status, detail: preview.detail, waited, running, served: page.status === 200 ? performance.now() - started : NaN, visit };
+    }),
+  );
+
+  const up = previews.filter((preview) => preview.status === "RUNNING" && preview.visit);
+  const pageSamples = [];
+  if (up.length) {
+    console.log("Preview pages: 200 loads through the proxy, 4 at a time");
+    for (let batch = 0; batch < 50; batch++) {
+      await Promise.all(
+        Array.from({ length: 4 }, async (_, slot) => {
+          const started = performance.now();
+          const page = await up[(batch + slot) % up.length].visit();
+          pageSamples.push({ ms: performance.now() - started, ok: page.status === 200, status: page.status });
+        }),
+      );
+    }
+  }
+  await Promise.all(previews.map((preview) => preview.person.call("DELETE", `/api/projects/${preview.person.projectId}/preview`)));
+
+  console.log("Rate limit: one person sending 700 calls at once");
+  const burst = await Promise.all(Array.from({ length: 700 }, () => people[0].call("GET", "/api/auth/me").then((response) => response.status, () => 0)));
+  const burstCounts = burst.reduce((counts, status) => ({ ...counts, [status]: (counts[status] ?? 0) + 1 }), {});
+
+  const buildSummary = (pick) => summarise(builds.map((build) => ({ ms: pick(build), ok: build.outcome === "SAVED" })));
+  const lines = [
+    "# Load test",
+    "",
+    PROD
+      ? `Run ${new Date().toISOString()} against ${PROD}: ${USERS} signed-in test accounts, the real model, from one machine over the internet - every time includes the trip there and back through Cloudflare.`
+      : `Run ${new Date().toISOString()} against the journey stack on one machine: ${USERS} signed-in people, the scripted model.`,
+    "",
+    "## Reads",
+    "",
+    `${USERS} people, each making ${RATE} calls a second for ${Math.round(readSeconds)} s: ${allReads.length} calls, ${(allReads.length / readSeconds).toFixed(0)} a second.`,
+    "",
+    "| Call | Calls | p50 | p95 | p99 | Slowest | Failed |",
+    "|---|---|---|---|---|---|---|",
+    ...READS.map(([name]) => row(`\`${name}\``, summarise(readSamples.get(name)))),
+    row("**All reads**", summarise(allReads)),
+    "",
+    "## First builds, one at a time",
+    "",
+    `Each person's first build of a notes app, sent one after another so that none waited on another.`,
+    "",
+    "| | Turns | p50 | p95 | Slowest | Not saved |",
+    "|---|---|---|---|---|---|",
+    ...buildRows(firstBuilds),
+    "",
+    "## Builds at the same moment",
+    "",
+    `${USERS} people each sent a change at once: ${builds.map((build) => build.outcome).join(", ")}. ${PROD ? "These are real model turns, so the provider's time is in them." : "The scripted model answers in about a second, so this is the pipeline's own work."}`,
+    "",
+    "| | Turns | p50 | p95 | Slowest | Not saved |",
+    "|---|---|---|---|---|---|",
+    ...buildRows(builds),
+    "",
+    "## Previews at the same moment",
+    "",
+    `${PREVIEWS} people each started a preview at once, against ${PROD ? "the production pool" : "a warm pool of two"}.`,
+    "",
+    "| Person | Ended | Waited in line | To running | To the page answering |",
+    "|---|---|---|---|---|",
+    ...previews.map((p, index) => `| ${index + 1} | ${p.status}${p.status === "RUNNING" ? "" : ` (${p.detail ?? ""})`} | ${p.waited ? "yes" : "no"} | ${seconds(p.running)} | ${seconds(p.served)} |`),
+    "",
+    ...(pageSamples.length
+      ? ["| Call | Calls | p50 | p95 | p99 | Slowest | Failed |", "|---|---|---|---|---|---|---|", row("A preview's page through the proxy", summarise(pageSamples)), ""]
+      : []),
+    "## The rate limit",
+    "",
+    `One person sent 700 calls to one service at once: ${Object.entries(burstCounts).map(([status, count]) => `${count} answered ${status}`).join(", ")}. The limit is a bucket of 600 per person per service that refills at 10 a second, which is why a burst that takes a moment gets a few more than 600.`,
+    "",
+  ];
+
+  const out = fileURLToPath(new URL("./test-results/", import.meta.url));
+  const suffix = PROD ? "-prod" : "";
+  mkdirSync(out, { recursive: true });
+  writeFileSync(out + `load-report${suffix}.md`, lines.join("\n"));
+  writeFileSync(
+    out + `load-results${suffix}.json`,
+    JSON.stringify(
+      {
+        target: PROD ?? "journey stack",
+        users: USERS,
+        reads: Object.fromEntries(READS.map(([name]) => [name, summarise(readSamples.get(name))])),
+        allReads: summarise(allReads),
+        readsPerSecond: allReads.length / readSeconds,
+        firstBuilds: { firstPiece: summarise(firstBuilds.map((b) => ({ ms: b.firstPiece, ok: true }))), total: summarise(firstBuilds.map((b) => ({ ms: b.total, ok: true }))) },
+        builds: { firstPiece: buildSummary((b) => b.firstPiece), total: buildSummary((b) => b.total), outcomes: builds.map((b) => b.outcome) },
+        previews: previews.map(({ status, waited, running, served }) => ({ status, waited, running, served })),
+        previewPage: summarise(pageSamples),
+        burst: burstCounts,
+      },
+      null,
+      2,
+    ),
+  );
+  console.log("\n" + lines.join("\n"));
+
+  broken =
+    summarise(allReads).failed > 0 ||
+    builds.some((build) => build.outcome !== "SAVED") ||
+    previews.some((p) => p.status !== "RUNNING" || !Number.isFinite(p.served)) ||
+    summarise(pageSamples).failed > 0;
+} catch (error) {
+  console.error(error.message);
+} finally {
+  if (PROD) {
+    const made = people.filter((person) => person.projectId);
+    console.log(`Deleting the ${made.length} projects the test made`);
+    for (const person of made) {
+      await person.call("DELETE", `/api/projects/${person.projectId}/preview`).catch(() => undefined);
+      const response = await person.call("DELETE", `/api/projects/${person.projectId}`).catch(() => ({ ok: false, status: 0 }));
+      if (!response.ok) console.error(`Could not delete project ${person.projectId} of ${person.email} (${response.status}); delete it from the dashboard`);
+    }
+  }
+}
 process.exit(broken ? 1 : 0);

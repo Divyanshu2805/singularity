@@ -4,9 +4,9 @@ A shared, public sign-in the README gives out, so anyone can look around without
 
 | | |
 |---|---|
-| Address | `demo@divyanshuagrahari.dev` |
+| Address | `demo@singularity.dev` |
 | Password | `demo1234` |
-| Name | Journey Tester |
+| Name | Demo User |
 | Firebase uid | `singularity-demo` (`demo.firebase-uid`, the same in every service) |
 
 It opens on one project, **Quick notes you can jot and clear**: the notes app from the README's screenshots, already built, with its chat, its four files and a preview that starts when it is opened. The build is the scripted model's (`StubReplies`), recorded as a real turn, so no model is called to make it.
