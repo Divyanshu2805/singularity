@@ -46,14 +46,15 @@ On the Free plan's 100,000 tokens a day, a whole pass is about a fifth of the al
 
 ## Whether a build is right
 
-From the [build benchmark](build-benchmark-results.md), last run of 2026-10-08:
+From the [build benchmark](build-benchmark-results.md), two runs of 2026-10-16 (one with the repair loop switched off):
 
 | | |
 |---|---|
-| Turns that ended the way their kind should, with nothing for the server to add | 20 of 20 |
-| Built projects that install, type-check and bundle (`scripts/bench-verify.sh`) | 16 of 16 |
+| Turns that ended the way their kind should, with nothing for the server to add | 48 of 48 |
+| Built projects that install, type-check and bundle (`scripts/bench-verify.sh`) | 40 of 40 |
+| Projects with a server of their own that start on the port they are given and serve their pages and API | 6 of 6 |
 
-One earlier run of the same day saved two builds of eight that did not compile; see that page for why one clean run is not a guarantee.
+A run of 2026-10-08 saved two builds of eight that did not compile; see that page for why clean runs are not a guarantee.
 
 ## Under load
 

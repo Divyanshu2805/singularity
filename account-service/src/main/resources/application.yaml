@@ -48,7 +48,7 @@ spring.cloud.openfeign.client.config:
 # purpose, so they are plain values, not secrets. Off unless DEMO_ENABLED is true; production turns it on.
 demo:
   enabled: ${DEMO_ENABLED:false}
-  email: demo@divyanshuagrahari.dev
+  email: demo@singularity.dev
   password: demo1234
   # 22:00 UTC is 03:30 in India.
   reset-cron: "0 0 22 * * *"

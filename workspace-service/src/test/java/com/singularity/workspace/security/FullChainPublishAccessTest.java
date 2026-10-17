@@ -226,7 +226,7 @@ class FullChainPublishAccessTest {
         SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity, HandlerExceptionResolver handlerExceptionResolver) {
             SessionAuthenticator sessionAuthenticator = cookie -> {
                 if (DEMO_COOKIE.equals(cookie)) {
-                    return Optional.of(new UserPrincipal(99L, "demo@divyanshuagrahari.dev", "singularity-demo", List.of()));
+                    return Optional.of(new UserPrincipal(99L, "demo@singularity.dev", "singularity-demo", List.of()));
                 }
                 if (!VALID_COOKIE.equals(cookie)) return Optional.empty();
                 return Optional.of(new UserPrincipal(USER_ID, "caller@example.com", "firebase-uid-7", List.of()));
