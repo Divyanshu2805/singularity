@@ -55,4 +55,4 @@ It is **off by default** (`revision-validation.enabled: false`) because every ru
 - **No crash recovery mid-apply.** An in-request failure rolls back cleanly, but a process crash between two apply steps leaves a revision stuck in `STAGING` with no automatic reconciliation.
 - **A save by hand and a build do not lock each other.** The generation lock lives in intelligence-service; a save made while someone else's build is running lands, and the build - which read the files when it started - then publishes over it. The save is still in the history. The editor holds saving while the person's own response is being written.
 
-These are tracked in [not yet built](../known-gaps/not-yet-built.md).
+These are tracked in [not yet built](../known-gaps/README.md).

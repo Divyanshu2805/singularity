@@ -43,7 +43,7 @@ While a reply is being written its cost is estimated at four characters a token,
 
 ## One machine in production
 
-Everything runs on a single node. Losing it means restoring from the nightly backup onto a new machine (about 1–2 hours), and preview start-ups compete with the services for two CPU cores. See [risks and growth](../deployment/risks-and-growth.md).
+Everything runs on a single node. Losing it means restoring from the nightly backup onto a new machine (about 1–2 hours), and preview start-ups compete with the services for two CPU cores. See [deployment risks](../deployment/README.md#risks).
 
 ## The highest-risk paths are verified by hand
 

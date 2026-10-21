@@ -20,4 +20,4 @@ Run everything on one Oracle Cloud Always Free Arm VM (2 OCPU, 12 GB) as single-
 - Running cost is about $0 a month, plus the domain and a capped AI key.
 - The single machine is a single point of failure. Recovery is a restore from backup onto a new VM, and moving providers is a settings change plus a restore, with the URL unchanged.
 - CPU, not memory, limits how many previews can start at once. See [capacity](../../deployment/capacity.md).
-- Scaling beyond one node — a separate preview node pool, managed Postgres — reuses the same images and manifests. See [growth path](../../deployment/risks-and-growth.md#growth-path).
+- Scaling beyond one node — a separate preview node pool, managed Postgres — reuses the same images and manifests. See [growth path](../../deployment/README.md#growing-past-one-vm).

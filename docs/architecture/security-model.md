@@ -1,6 +1,6 @@
 # Security Model
 
-Singularity runs code written by an AI on behalf of its users, stores their projects, and bills them. This page describes the boundaries that keep those concerns apart and where each one is enforced. The rules contributors must not break are summarised in [security guardrails](../practices/security-guardrails.md); how to report a vulnerability is in [`SECURITY.md`](../../SECURITY.md).
+Singularity runs code written by an AI on behalf of its users, stores their projects, and bills them. This page describes the boundaries that keep those concerns apart and where each one is enforced. The rules contributors must not break are summarised in [security guardrails](../practices/security-guardrails.md).
 
 ## Identity and sessions
 
@@ -152,7 +152,7 @@ A client-side route change after sign-out does not clear module-level state: the
 
 ## Inside the cluster
 
-Generated code is fenced by the runner pods' own network policy. Between the trusted workloads there is a second set, `deploy/k8s/network-policies/`: in `singularity` every incoming connection is refused unless a rule allows it - the tunnel to the Gateway and frontend, the Gateway and the services to one another, the three database owners and the backup to Postgres, workspace-service, the backup, the runners and (for published apps) the preview proxy to MinIO - and in `singularity-ai` Redis accepts only workspace-service and the proxy. Every rule is proven on a kind cluster with a stand-in pod for each workload: the 31 connections the application makes are let through and the 173 others refused (`deploy/scripts/check-network-policies.sh`). It was **switched on in production on 2026-10-10, by hand**, and the app was walked under it - sign-in, a project, a build, a preview and a published app. It is still not part of base or the deploy, so a cluster built from scratch does not have it until it is applied; see [known gaps](../known-gaps/not-yet-built.md#platform). The internal shared secret and the databases' passwords still stand behind it.
+Generated code is fenced by the runner pods' own network policy. Between the trusted workloads there is a second set, `deploy/k8s/network-policies/`: in `singularity` every incoming connection is refused unless a rule allows it - the tunnel to the Gateway and frontend, the Gateway and the services to one another, the three database owners and the backup to Postgres, workspace-service, the backup, the runners and (for published apps) the preview proxy to MinIO - and in `singularity-ai` Redis accepts only workspace-service and the proxy. Every rule is proven on a kind cluster with a stand-in pod for each workload: the 31 connections the application makes are let through and the 173 others refused (`deploy/scripts/check-network-policies.sh`). It was **switched on in production on 2026-10-10, by hand**, and the app was walked under it - sign-in, a project, a build, a preview and a published app. It is still not part of base or the deploy, so a cluster built from scratch does not have it until it is applied; see [known gaps](../known-gaps/README.md#platform). The internal shared secret and the databases' passwords still stand behind it.
 
 ## The deploy pipeline
 

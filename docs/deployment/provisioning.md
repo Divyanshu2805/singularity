@@ -52,4 +52,4 @@ In Cloudflare, point both the app hostname and the `*` wildcard at the tunnel. T
 
 ## 6. First deploy
 
-Run the CI workflow (see [CI/CD](ci-cd.md)), then work through the [release checklist](release-checklist.md). After the first deploy, run one backup by hand and the uptime workflow once to prove the backup path end to end (see [backups](../operations/backups.md)).
+Run the CI workflow (see [CI/CD](ci-cd.md)), then work through the [checks for a new environment](README.md#checks-for-a-new-environment). After the first deploy, run one backup by hand and the uptime workflow once to prove the backup path end to end (see [backups](../operations/backups.md)).

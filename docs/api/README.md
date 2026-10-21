@@ -9,7 +9,7 @@ All browser traffic goes to the Gateway — `http://localhost:8000` locally, the
 | Path prefix | Owning service |
 |---|---|
 | `/api/auth/**`, `/api/plans`, `/api/me/**`, `/api/payments/**`, `/webhooks/payment` | account-service |
-| `/api/projects/**` (except `.../code/**`), `/api/previews`, `/api/public/**` | workspace-service |
+| `/api/projects/**` (except `.../code/**`), `/api/previews/**`, `/api/public/**`, `/api/github/**` | workspace-service |
 | `/api/chat/**`, `/api/ideas/**`, `/api/usage/**`, `/api/projects/{id}/code/**` | intelligence-service |
 | `/internal/**` | Never routed — service-to-service only |
 
@@ -56,4 +56,4 @@ A path no route owns is a 404 from the Gateway. `RoutingTableTest` pins every do
 - [Streaming](streaming.md) — the two SSE formats and keep-alives.
 - [Errors](errors.md) — the error shape and every exception → status mapping.
 - [Request validation](validation.md) — notable constraints.
-- [API behavior worth knowing](../known-gaps/api-behavior.md) — responses that are easy to mistake for bugs.
+- [API behaviour worth knowing](../known-gaps/README.md#api-behaviour-worth-knowing) — responses that are easy to mistake for bugs.

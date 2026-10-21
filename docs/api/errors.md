@@ -28,7 +28,7 @@ Client-fault statuses log at `WARN` with the message only. Only genuine server f
 
 | Exception | Status | Meaning | Log |
 |---|---|---|---|
-| `ResourceNotFoundException` | 404 | Entity not found. For projects, see [403 vs 404](../known-gaps/api-behavior.md). | WARN |
+| `ResourceNotFoundException` | 404 | Entity not found. For projects, see [403 vs 404](../known-gaps/README.md#api-behaviour-worth-knowing). | WARN |
 | `ForbiddenException` | 403 | An explicit business-rule refusal (e.g. forking your own project). | WARN |
 | `AuthorizationDeniedException` | 403 | A `@PreAuthorize` denial. | WARN |
 | `CsrfException` | 403 | Missing or mismatched `X-XSRF-TOKEN` on a write. | WARN + cause |
@@ -55,4 +55,4 @@ Client-fault statuses log at `WARN` with the message only. Only genuine server f
 
 ## Errors inside a stream
 
-Once a server-sent-event stream has started, a failure can't change the status code; it arrives as an SSE `error` event instead. See [Streaming](streaming.md#errors-after-the-stream-starts).
+Once a server-sent-event stream has started, a failure can't change the status code; it arrives as an SSE `error` event instead. See [Streaming](streaming.md#chat-stream).
