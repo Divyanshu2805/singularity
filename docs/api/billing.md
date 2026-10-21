@@ -21,7 +21,7 @@ Plans, subscriptions and Stripe checkout. **Service:** account-service · **Cont
 
 ## Test mode
 
-The live demo runs with Stripe test keys; use card `4242 4242 4242 4242` with any future expiry and CVC. The pricing and billing pages show a notice when the frontend is built with `VITE_PAYMENTS_TEST_MODE=true`. Moving to live payments is described in [operations](../operations/stripe-live-mode.md).
+The live demo runs with Stripe test keys; use card `4242 4242 4242 4242` with any future expiry and CVC. The pricing and billing pages show a notice when the frontend is built with `VITE_PAYMENTS_TEST_MODE=true`. Moving to live payments is described in [operations](../operations/README.md#taking-real-payments).
 
 ## Related
 

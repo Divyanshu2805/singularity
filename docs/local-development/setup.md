@@ -1,6 +1,6 @@
-# First-Time Setup
+# Setup
 
-Assumes the [prerequisites](prerequisites.md) are installed and [`.env`](configuration.md) is filled in.
+Assumes the [tools and accounts](README.md#what-you-need) are in place and [`.env`](configuration.md) is filled in.
 
 ## 1. Start PostgreSQL and MinIO
 
@@ -42,7 +42,7 @@ npm run dev
 
 ## 4. Sign in
 
-Open <http://localhost:5173> and create an account through the normal sign-in flow. There is no seed data and no demo login.
+Open <http://localhost:5173> and create an account. There's no seed data locally, and the demo account only exists in production.
 
 ## Local URLs
 
