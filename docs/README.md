@@ -1,32 +1,15 @@
-# Singularity Documentation
+# Docs
 
-Everything about how Singularity is built, run and changed. Start with the section that matches what you're trying to do.
+| Section | What's in it |
+|---|---|
+| [Local development](local-development/README.md) | Tools, `.env`, starting the stack, previews on kind, troubleshooting |
+| [Architecture](architecture/README.md) | Services, request flows, file revisions, the security model, decision records |
+| [API](api/README.md) | Every endpoint, the two streaming formats, errors |
+| [Data model](schema/README.md) | The three databases, their tables and enums, schema conventions |
+| [Results](results.md) | What's been measured: build speed and quality, preview starts, load, cost, coverage |
+| [Known gaps](known-gaps/README.md) | What isn't built yet, and trade-offs the design accepts |
+| [Deployment](deployment/README.md) | The k3s VM, manifests, images, CI/CD, config, capacity |
+| [Operations](operations/README.md) | Deploys and rollback, monitoring, backups, upkeep |
+| [Engineering practices](practices/README.md) | Conventions, testing, the guardrails every change keeps, pitfalls we've hit |
 
-## Getting started
-
-- [Local development](local-development/README.md) — prerequisites, configuration, running the stack, live previews, troubleshooting.
-- [Tech stack](tech-stack.md) — the languages, frameworks and services in use.
-
-## Understanding the system
-
-- [Architecture](architecture/README.md) — services, module map, request flows, security model, file revisions.
-- [Architecture decisions](architecture/decisions/README.md) — why the system is shaped the way it is.
-- [Data model](schema/README.md) — the three databases, their entities, and schema conventions.
-
-## Reference
-
-- [API reference](api/README.md) — every endpoint, the streaming formats, and the error model.
-- [Known gaps](known-gaps/README.md) — constraints, trade-offs, and what isn't built yet.
-
-## Working on the code
-
-- [Engineering practices](practices/README.md) — conventions, security guardrails, testing, definition of done, and known pitfalls.
-
-## Running in production
-
-- [Deployment](deployment/README.md) — infrastructure, manifests, images, CI/CD, configuration, provisioning, capacity.
-- [Operations](operations/README.md) — deploys and rollback, monitoring, backups, upkeep.
-
-## Keeping these docs accurate
-
-These pages describe the system as it is now. A change that makes any of them inaccurate updates them in the same pull request.
+When a change makes a page wrong, fix the page in the same change.
