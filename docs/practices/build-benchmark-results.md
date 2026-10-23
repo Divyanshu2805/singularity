@@ -2,7 +2,7 @@
 
 What the [build benchmark](testing.md#the-build-benchmark) measured, run by run. Each run up to 2026-10-08 is the same twenty requests: eight first builds, eight changes to the apps those builds left, two questions and two requests for another stack. From 2026-10-10 there are twenty-three: a first build and two changes that need a server of the project's own were added. By 2026-10-16 there are twenty-four, with a change that removes a page.
 
-All of it was measured on Google's models through the OpenAI-compatible endpoint, on one developer machine, with each project held in memory. **None of it says what production does**: production is configured for a different model on a different provider, which has not been measured.
+All of it was measured on Google's models through the OpenAI-compatible endpoint, on one developer machine, with each project held in memory. Production uses the same models (`gemini-3.8-flash` for builds, `gemini-3.5-flash-lite` for the rest), but nothing here was timed there.
 
 Times are medians. "Right" means the turn ended the way its kind should and the server had nothing to add. "Compile" is `scripts/bench-verify.sh` on the projects the run wrote: do they install, type-check and bundle.
 

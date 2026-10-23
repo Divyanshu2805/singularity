@@ -4,7 +4,7 @@
 
 | Suite | Command | Size | Needs |
 |---|---|---|---|
-| Backend (all modules) | `./mvnw test` | 1,618 tests — common-lib 34, gateway 95, account 75, workspace 730, intelligence 684 | Docker, for one integration test (below) |
+| Backend (all modules) | `./mvnw test` | 1,623 tests — common-lib 37, gateway 95, account 75, workspace 732, intelligence 684 | Docker, for one integration test (below) |
 | Frontend | `cd frontend && npm test` | 931 tests in 75 files (Vitest) | — |
 | Preview proxy | `cd proxy && node --test` | 92 tests: the access token, routing, the script injected into a previewed page (run against a stand-in window), the card picture the page draws of itself (`snapshot.js`), editing the page's words in place (`text-edit.js`), and publishing - the host and path rules, the headers, the storage signature (checked against AWS's own worked example) and the whole handler against a stand-in store | — |
 | The starter template's launcher | `node --test scripts/starter-launcher.test.mjs` | 8 tests: `start.mjs`, which runs a built project as one program on a host - the pages, the fallback for an app's own addresses, files outside the build staying out of reach, and `/api` on an app with no server | — |
@@ -68,7 +68,7 @@ The scripted model finishes a build in two seconds, so its files arrive while th
 
 Run it after any change that crosses a service boundary or touches sign-in, the chat stream, the preview panel or the lesson panel. A step that fails leaves a trace, a video and every service's log in `e2e/test-results` and `e2e/.run/logs`.
 
-The same stack serves two measurements that are not tests and run only when asked for: `npm run load` (the [load test](product-numbers.md#under-load)) and, with the stack started with `--real-ai <env file>`, `npm run numbers` (one pass with the configured model, which spends tokens). What they measured is in [the product's numbers](product-numbers.md).
+The same stack serves three measurements that are not tests and run only when asked for: `npm run load` (the [load test](../results.md#under-load)), `npm run throughput` (the [read ramp](../results.md#read-throughput), with enough users signed in that none hits the rate limit) and, with the stack started with `--real-ai <env file>`, `npm run numbers` (one pass with the configured model, which spends tokens). What they measured is in [results](../results.md).
 
 The load test also runs against the deployed site: `node load.mjs --prod https://<site> --emails a@x.com,b@x.com`, in a terminal. It never creates an account - make the test accounts on the site first, with verified addresses and one password between them, and it asks for that password in a hidden prompt. Its builds use the real model and each account's daily allowance, and its previews take production runners for a few minutes; the projects it made are deleted at the end, and the accounts are kept for the next run.
 
@@ -81,7 +81,7 @@ cd frontend && npm run coverage                  # frontend: a summary, and an H
 
 Each backend module has a floor for the share of its lines the tests run (`coverage.minimum.lines` in its `pom.xml`), and `verify` fails a module that falls under it. It is checked at `verify`, not `test`, so running one test by name is never failed for what it did not cover. The frontend has two floors in `vitest.config.ts`: one for `src/lib`, where the logic and the tests are, and a low one for the whole app that only catches a collapse.
 
-The floors sit a little under what was measured when they were set ([the numbers](product-numbers.md#how-much-of-the-code-the-tests-run)). Raise one when you add tests; do not lower one to get a change through.
+The floors sit a little under what was measured when they were set ([results](../results.md#tests-and-coverage)). Raise one when you add tests; do not lower one to get a change through.
 
 ## Lighthouse
 
