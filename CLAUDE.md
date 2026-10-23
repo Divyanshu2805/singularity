@@ -48,7 +48,7 @@ frontend/src/           pages/ components/ hooks/ lib/ — logic lives in lib/
 proxy/                  Node reverse proxy for preview hostnames; also serves published apps from storage (published*.js, s3.js)
 e2e/                    the browser journey test (Playwright) and what it stands on: stack.sh starts the whole
                         application on ports of its own with the scripted model and the Firebase Auth emulator;
-                        load.mjs, lighthouse.mjs and real/ are measurements, run only when asked for
+                        load.mjs, throughput.mjs, lighthouse.mjs and real/ are measurements, run only when asked for
 k8s/                    LOCAL DEV ONLY — the preview pipeline on kind while the backend runs via mvnw;
                         preview-test-cluster.sh stands a second one up in its own namespace for PreviewPipelineIT
 deploy/k8s/             the production topology (Kustomize: base/ + overlays/kind, overlays/oracle; namespaces/;
@@ -69,7 +69,7 @@ docs/                   documentation — start at docs/README.md
 ./mvnw -pl common-lib,<service> test -Dtest=ClassName#method   # one test, building common-lib from source
 ./mvnw -pl gateway-service test -Dtest=RoutingTableTest        # rerun after any controller or route change
 ./mvnw -pl <service> spring-boot:run                           # prove a change boots (see local setup for ports)
-./mvnw test                                                    # all backend tests (1,618; one needs Docker)
+./mvnw test                                                    # all backend tests (1,623; one needs Docker)
 ./mvnw verify                                                  # the same, and each module held to its coverage floor (what CI runs)
 ./mvnw clean package                                           # build every module
 cd frontend && npx tsc --noEmit -p tsconfig.app.json && npm run lint && npm run coverage && npm run build

@@ -48,6 +48,7 @@ Adding a call between services takes three pieces: an `Internal*Controller` endp
 **Timeouts and retries.** Every Feign call is bounded:
 
 - `feign.client.config.default.connectTimeout` / `readTimeout` (2 s / 5 s, in each caller's `application.yaml`) caps a single attempt.
+- Every call goes through a pool of Apache HttpClient 5 connections (`feign-hc5`, a dependency of `common-lib`), not a connection of its own. `FeignConnectionPool` closes a connection idle for 15 s, before the callee's Tomcat drops it at 60 s, and `spring.cloud.openfeign.httpclient.hc5.connection-request-timeout` (2 s, in each caller's `application.yaml`) caps the wait for one. Without the pool, Spring Cloud OpenFeign falls back to the JDK's `HttpURLConnection`, which under load ran the machine out of local ports ([pitfalls](../practices/gotchas/microservices-and-build.md#feign-falls-back-to-a-client-with-no-pool)).
 - `common-lib`'s `FeignResilienceConfig` gives every client a bounded `Retryer` — 3 attempts with 100 ms–1 s backoff — which fires only on a `RetryableException` (a connect or read timeout, or a refused connection). A decoded 4xx or 5xx response is surfaced once, never retried blindly.
 
 This keeps one slow or unreachable service from stalling most requests through the services that depend on it. It matters most for account-service, since session authentication itself calls it.

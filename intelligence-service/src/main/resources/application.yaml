@@ -94,6 +94,14 @@ feign:
         connectTimeout: 2000
         readTimeout: 5000
 
+# Every Feign call goes through a pool of Apache HttpClient 5 connections, whose idle ones common-lib's
+# FeignConnectionPool closes. A call waits at most two seconds for one of the pool's connections - a bound, like
+# connectTimeout, on a downstream that is backed up - not the client's default of three minutes.
+spring.cloud.openfeign.httpclient:
+  hc5:
+    connection-request-timeout: 2
+    connection-request-timeout-unit: seconds
+
 firebase:
   project-id: ${FIREBASE_PROJECT_ID}
   credentials-path: ${FIREBASE_CREDENTIALS_PATH}

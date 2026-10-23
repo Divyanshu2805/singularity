@@ -7,6 +7,7 @@
     "test": "playwright test",
     "numbers": "playwright test --config playwright.real.config.ts",
     "load": "node load.mjs",
+    "throughput": "node throughput.mjs",
     "lighthouse": "node lighthouse.mjs"
   },
   "devDependencies": {

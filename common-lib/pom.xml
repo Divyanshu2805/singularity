@@ -43,6 +43,13 @@
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-openfeign</artifactId>
 		</dependency>
+		<!-- Gives every Feign client a pooled Apache HttpClient 5. Without it Spring Cloud OpenFeign falls back to the
+		     JDK's HttpURLConnection, which keeps five idle connections per host and opened a new one for nearly every
+		     call under load (see FeignConnectionPool). -->
+		<dependency>
+			<groupId>io.github.openfeign</groupId>
+			<artifactId>feign-hc5</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>com.google.firebase</groupId>
 			<artifactId>firebase-admin</artifactId>

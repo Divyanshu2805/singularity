@@ -13,6 +13,12 @@ spring:
     driver-class-name: org.postgresql.Driver
 
   jpa:
+    # Off: a request's database connection goes back to the pool when its transaction ends, not when the request
+    # does. On (Spring Boot's default), the permission check took a connection and a file read then held it for the
+    # whole of its storage call, so ten slow reads emptied the pool of ten and every other request queued behind them
+    # (docs/practices/product-numbers.md#read-throughput). A lazy association is read inside a transaction or fetched
+    # with its query (PreviewSessionRepository's entity graphs).
+    open-in-view: false
     hibernate:
       # Flyway (db/migration/V1__init.sql) owns the schema, not Hibernate - same fix account-service already
       # applied for the persisted-enum/ddl-auto:update CHECK-constraint trap (docs/schema/).
@@ -45,6 +51,14 @@ feign:
         # a real downstream failure still surfaces once, not retried blindly.
         connectTimeout: 2000
         readTimeout: 5000
+
+# Every Feign call goes through a pool of Apache HttpClient 5 connections, whose idle ones common-lib's
+# FeignConnectionPool closes. A call waits at most two seconds for one of the pool's connections - a bound, like
+# connectTimeout, on a downstream that is backed up - not the client's default of three minutes.
+spring.cloud.openfeign.httpclient:
+  hc5:
+    connection-request-timeout: 2
+    connection-request-timeout-unit: seconds
 
 firebase:
   project-id: ${FIREBASE_PROJECT_ID}

@@ -44,6 +44,14 @@ spring.cloud.openfeign.client.config:
   intelligence-service:
     readTimeout: 60000
 
+# Every Feign call goes through a pool of Apache HttpClient 5 connections, whose idle ones common-lib's
+# FeignConnectionPool closes. A call waits at most two seconds for one of the pool's connections - a bound, like
+# connectTimeout, on a downstream that is backed up - not the client's default of three minutes.
+spring.cloud.openfeign.httpclient:
+  hc5:
+    connection-request-timeout: 2
+    connection-request-timeout-unit: seconds
+
 # The shared public demo account (DemoAccountServiceImpl). Its address and password are published in the README on
 # purpose, so they are plain values, not secrets. Off unless DEMO_ENABLED is true; production turns it on.
 demo:

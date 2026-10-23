@@ -153,7 +153,7 @@ public class PreviewDeploymentServiceImpl implements PreviewDeploymentService {
             Preview runner = session.getPreview();
             if (session.getEndedAt() == null && runner.getStatus() == PreviewStatus.RUNNING) {
                 if (endIfRunnerGone(projectId, runner)) {
-                    return sessionRepository.findById(session.getId())
+                    return sessionRepository.findWithPreviewById(session.getId())
                             .map(ended -> toResponse(ended.getPreview(), ended, null))
                             .orElseGet(() -> toResponse(runner, session, null));
                 }

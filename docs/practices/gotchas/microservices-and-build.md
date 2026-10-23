@@ -55,3 +55,15 @@
 - **Symptom:** now and then a request through the Gateway is a `500` with `Connection prematurely closed BEFORE response` in the Gateway's log, most often the first request after a quiet spell or after a service restarted. On `POST /api/chat/stream` the browser showed "failed" for a build that was in fact running, and Retry was then refused as "already generating".
 - **Cause:** the Gateway pools its connections to each service and by default keeps an idle one for as long as it likes. The service closes idle connections on its own clock, so the Gateway can write a request onto a connection that is already gone.
 - **Fix:** the pool drops a connection idle for 15 seconds and any connection after ten minutes (`spring.cloud.gateway.server.webflux.httpclient.pool` in the Gateway's `application.yaml`). The browser no longer takes a `5xx` on that request at its word either: it asks whether its turn is running and joins it.
+
+## Feign falls back to a client with no pool
+
+- **Symptom:** under load, calls from one service to another fail with `feign.RetryableException: Address already in use: getsockopt` (a `java.net.BindException`), surfacing as `500`s on the user requests that made them - one chat read in five in the read-throughput run. Nothing is wrong at low load, and `netstat` shows thousands of connections to the callee in `TIME_WAIT`.
+- **Cause:** Spring Cloud OpenFeign uses Apache HttpClient 5 only when `feign-hc5` is on the classpath, and otherwise falls back to the JDK's `HttpURLConnection` without saying so. That client keeps five idle connections per host, so a service making more calls than that at once opens a new connection for nearly every call, and the closed ones outlive their use in `TIME_WAIT` until the machine runs out of local ports.
+- **Fix:** common-lib depends on `feign-hc5`, so every Feign call goes through a pool; `FeignConnectionPool` closes a pooled connection idle for 15 s, before the callee's Tomcat closes it at 60, and each service bounds the wait for a pooled connection (`spring.cloud.openfeign.httpclient.hc5.connection-request-timeout`). `FeignConnectionPoolTest` runs the pool as Spring Cloud builds it against a local server. Found by `e2e/throughput.mjs` ([results](../../results.md#read-throughput)).
+
+## The MinIO client runs five calls at a time
+
+- **Symptom:** file reads stop at a few hundred a second while the service's CPU, its database pool and its request threads all have room; a thread dump has every busy request thread parked in `MinioClient.getObject` on a `CompletableFuture`.
+- **Cause:** the MinIO SDK sends every call through OkHttp's asynchronous dispatcher, even its blocking methods, and the client it builds for itself keeps OkHttp's default of five calls at a time to one host. All of a service's objects are on one host.
+- **Fix:** `StorageConfig` builds the SDK's own default client with a dispatcher and a connection pool sized for 64 calls at once. `StorageConfigTest` holds ten calls open together against a local server; with the SDK's stock client only five of them are answered.

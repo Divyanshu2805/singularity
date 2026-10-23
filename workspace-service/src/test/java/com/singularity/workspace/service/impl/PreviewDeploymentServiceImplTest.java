@@ -176,7 +176,7 @@ class PreviewDeploymentServiceImplTest {
         PreviewSession ended = PreviewSession.builder().id(SESSION_ID).preview(runner(PreviewStatus.TERMINATED, "runner-a"))
                 .projectId(PROJECT_ID).userId(USER_ID).endedAt(Instant.now())
                 .endReason(PreviewDeploymentServiceImpl.RUNNER_GONE).failed(false).build();
-        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(ended));
+        when(sessionRepository.findWithPreviewById(session.getId())).thenReturn(Optional.of(ended));
 
         PreviewResponse response = service.getPreview(PROJECT_ID).orElseThrow();
 

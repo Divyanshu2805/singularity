@@ -1,6 +1,7 @@
 package com.singularity.workspace.repository;
 
 import com.singularity.workspace.entity.PreviewSession;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -21,13 +22,22 @@ import java.util.Optional;
  *
  * <p>Every lookup here is per user on purpose. There is deliberately no "is this project's preview open" query - that
  * is exactly the question that once leaked one person's preview to every collaborator.
+ *
+ * <p>The lookups a request makes fetch the session's runner with it. This service does not keep a request's database
+ * session open after its transaction (spring.jpa.open-in-view is off), so a runner left as a lazy reference could not
+ * be read once the lookup had returned.
  */
 @Repository
 public interface PreviewSessionRepository extends JpaRepository<PreviewSession, Long> {
 
+    @EntityGraph(attributePaths = "preview")
     Optional<PreviewSession> findFirstByProjectIdAndUserIdAndEndedAtIsNullOrderByIdDesc(Long projectId, Long userId);
 
+    @EntityGraph(attributePaths = "preview")
     Optional<PreviewSession> findFirstByProjectIdAndUserIdOrderByIdDesc(Long projectId, Long userId);
+
+    @EntityGraph(attributePaths = "preview")
+    Optional<PreviewSession> findWithPreviewById(Long id);
 
     int countByUserIdAndEndedAtIsNull(Long userId);
 
