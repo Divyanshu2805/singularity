@@ -22,7 +22,7 @@ metadata:
   name: runner-pool
   namespace: singularity-ai
 spec:
-  replicas: 1 # docs/deployment/'s preview-capacity table: down from 2, saves memory, first start still instant
+  replicas: 1 # docs/deployment.md's preview-capacity table: down from 2, saves memory, first start still instant
   selector:
     matchLabels:
       app: runner
@@ -52,7 +52,7 @@ spec:
           emptyDir:
             sizeLimit: 512Mi
       initContainers:
-        # docs/deployment/container-images.md: docker/preview-runner.Dockerfile is the runner's own
+        # docs/deployment.md: docker/preview-runner.Dockerfile is the runner's own
         # base image plus the starter template's installed node_modules at /opt/template-node-modules. A plain volume
         # mount can't deliver that - the `workspace` emptyDir mounts over /app and would shadow it - so this copies
         # it into the volume once, while the pod is idle in the warm pool and nobody is waiting. The preview's own

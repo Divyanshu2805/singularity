@@ -50,7 +50,7 @@ spec:
 
 ---
 
-# MinIO itself is NOT defined here any more (docs/local-development/live-previews.md) - apply exactly one
+# MinIO itself is NOT defined here any more (docs/development.md) - apply exactly one
 # of k8s/minio-hostbridge.yml (local kind dev, bridges to the laptop's own docker-compose MinIO) or k8s/minio.yml
 # (a real in-cluster MinIO, for an actual deployment) after this file. Both define a Service named minio-service
 # in this namespace; applying both is a mistake, not a valid combined configuration.
@@ -120,7 +120,7 @@ spec:
 
 # CODE_REVIEW.md OPS-01: a least-privilege identity for workspace-service's own K8s API access (PreviewRunnerPool's
 # fabric8 client - claiming/releasing runner pods, exec-ing commands and uploading files into them). Forward-looking:
-# workspace-service itself doesn't run inside this cluster yet (docs/local-development/ - it reads a developer's
+# workspace-service itself doesn't run inside this cluster yet (docs/development.md - it reads a developer's
 # local kubeconfig, which is full-privilege, not scoped by anything here), so nothing binds this ServiceAccount to a
 # running pod today. It exists so that when workspace-service does get deployed in-cluster, there's already a
 # narrowly-scoped identity to give it instead of the implicit `default` ServiceAccount - the same gap runner-pods.yml

@@ -1,4 +1,4 @@
-# Two namespaces (docs/deployment/'s architecture table): `singularity` holds every trusted workload -
+# Two namespaces (docs/deployment.md's architecture table): `singularity` holds every trusted workload -
 # Postgres, MinIO, the five Spring Boot services, the frontend, and (oracle overlay only) cloudflared. `singularity-ai`
 # holds the untrusted live-preview pipeline - Redis, the preview-proxy, and the runner pod pool that executes
 # arbitrary, AI-generated project code (see CLAUDE.md's guardrail on that boundary). Keeping them apart means a
@@ -9,7 +9,7 @@
 # development (backend runs outside the cluster via `mvnw`; only the preview pipeline - Redis, proxy, runner pool -
 # lives in a `singularity-ai`-only kind cluster). `deploy/k8s/` is the full-stack topology this phase introduces:
 # every service containerized and running in-cluster, rehearsed on kind before it ever touches a real server. Don't
-# conflate the two - `k8s/` keeps serving docs/local-development/'s existing workflow untouched.
+# conflate the two - `k8s/` keeps serving docs/development.md's existing workflow untouched.
 #
 # Lives in its own directory, a sibling of base/ - not inside base/ itself, and not in base/kustomization.yaml's
 # resources - deliberately, same reasoning as overlays/oracle/deployer-bootstrap.yaml. Kubernetes' built-in `admin`
@@ -40,7 +40,7 @@ metadata:
 
 # Defense in depth, same rationale as the existing `k8s/infra.yml` LimitRange/ResourceQuota for `singularity-ai`
 # (CODE_REVIEW.md SEC-10): stops a manifest that forgets its own resources from shipping unbounded, and caps each
-# namespace's total footprint regardless of replica count. Sized from docs/deployment/kubernetes.md's memory
+# namespace's total footprint regardless of replica count. Sized from docs/deployment.md's memory
 # table - the trusted namespace runs one copy of each service plus the maintenance overhead of a rolling update.
 apiVersion: v1
 kind: LimitRange

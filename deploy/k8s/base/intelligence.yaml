@@ -5,7 +5,7 @@
 # Extra secret beyond the ones shared with account-service/workspace-service (db-credentials/
 # firebase-service-account/internal-service-secret):
 #   kubectl create secret generic openrouter-api-key -n singularity --from-literal=api-key='<OPENROUTER_API_KEY -
-#     a separate key with a hard credit limit, per docs/deployment/configuration.md, never the dev key>'
+#     a separate key with a hard credit limit, per docs/deployment.md, never the dev key>'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -128,7 +128,7 @@ spec:
               memory: "384Mi"
             limits:
               cpu: "1"
-              # docs/deployment/kubernetes.md's resource-limits table.
+              # docs/deployment.md's resource-limits table.
               memory: "640Mi"
           readinessProbe:
             httpGet:

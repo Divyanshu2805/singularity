@@ -6,7 +6,7 @@ spring:
 
   datasource:
     # A separate logical database on the same local Postgres server — every service owns its own database
-    # (docs/schema/). No tables/FKs shared with the other services' databases.
+    # (docs/data-model.md). No tables/FKs shared with the other services' databases.
     url: jdbc:postgresql://localhost:9010/singularity-account-db
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
@@ -16,7 +16,7 @@ spring:
     hibernate:
       # Flyway (db/migration/V1__init.sql) owns the schema now, not Hibernate — validate only checks the
       # entities still match what's actually there. This is the concrete fix for the persisted-enum/
-      # ddl-auto:update trap documented in docs/schema/: Hibernate never generates or checks a CHECK
+      # ddl-auto:update trap documented in docs/data-model.md: Hibernate never generates or checks a CHECK
       # constraint in validate mode, so that entire failure class doesn't exist here.
       ddl-auto: validate
     show-sql: true

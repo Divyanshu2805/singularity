@@ -7,7 +7,7 @@ package com.singularity.workspace.service;
  * <p>Handles: writing a file's bytes once, keyed by their own hash (safe to retry, safe to dedup - the same content
  * written twice is the same object); materializing a blob into a project's live path key, the same way a fork
  * already copies files server-side; and removing a path from the live layout. Never deletes a blob - garbage
- * collection is deliberately out of scope until real usage shows it is needed (see docs/schema/).
+ * collection is deliberately out of scope until real usage shows it is needed (see docs/data-model.md).
  */
 public interface BlobStore {
 

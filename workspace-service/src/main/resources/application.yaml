@@ -16,12 +16,12 @@ spring:
     # Off: a request's database connection goes back to the pool when its transaction ends, not when the request
     # does. On (Spring Boot's default), the permission check took a connection and a file read then held it for the
     # whole of its storage call, so ten slow reads emptied the pool of ten and every other request queued behind them
-    # (docs/practices/product-numbers.md#read-throughput). A lazy association is read inside a transaction or fetched
+    # (docs/results.md). A lazy association is read inside a transaction or fetched
     # with its query (PreviewSessionRepository's entity graphs).
     open-in-view: false
     hibernate:
       # Flyway (db/migration/V1__init.sql) owns the schema, not Hibernate - same fix account-service already
-      # applied for the persisted-enum/ddl-auto:update CHECK-constraint trap (docs/schema/).
+      # applied for the persisted-enum/ddl-auto:update CHECK-constraint trap (docs/data-model.md).
       ddl-auto: validate
     show-sql: true
     properties:
@@ -158,7 +158,7 @@ preview:
         local-port: 8090
 
 # Published apps: a production build of one revision, built in a runner pod and served by the preview proxy from the
-# bucket below (docs/architecture/decisions/0008-published-apps.md). The public domain is its own setting so published
+# bucket below (docs/architecture.md). The public domain is its own setting so published
 # apps can move to a domain of their own without a code change; until then it follows the preview domain. The proxy
 # reads the same domain as PUBLISHED_DOMAIN.
 publishing:
@@ -204,7 +204,7 @@ github:
   # Where GitHub sends the browser back: a page of the app, which posts what it was given to /api/github/callback.
   callback-url: ${GITHUB_CALLBACK_URL:${client.url}/github/callback}
   # `repo` is what GitHub requires to make a private repository. It reaches every repository the person has; this
-  # service touches only the one it made for the project (docs/architecture/decisions/0010-push-a-project-to-github.md).
+  # service touches only the one it made for the project (docs/architecture.md).
   scope: repo
   state-ttl: 10m
   request-timeout: 20s

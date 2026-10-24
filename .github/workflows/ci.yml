@@ -10,7 +10,7 @@ name: CI
 # a kind cluster, and `journey` starts the whole application - every service's Flyway migrations against a real
 # Postgres included - and walks one person's path through it in a browser.
 #
-# docs/deployment/ci-cd.md: on a push to main, once every test job passes, this also builds all 8 arm64
+# docs/deployment.md: on a push to main, once every test job passes, this also builds all 8 arm64
 # images, pushes them to GHCR tagged with the commit SHA, waits for the owner's approval (the `approve` job), and
 # deploys to the Oracle cluster over Tailscale - a failed smoke test rolls the affected services back automatically.
 # A pull request only ever runs the test jobs:
@@ -75,7 +75,7 @@ jobs:
         run: bash scripts/coverage-summary.sh >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the reactor's jars for the image-build job
-        # docker/java-service.Dockerfile packages a jar it did not build itself (docs/deployment/container-images.md) -
+        # docker/java-service.Dockerfile packages a jar it did not build itself (docs/deployment.md) -
         # this is what lets the image job (a separate, arm64 runner) use the exact jar this job just tested, not a
         # fresh rebuild that could theoretically differ.
         if: github.event_name == 'push'
@@ -437,7 +437,7 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/singularity-frontend:${{ env.DEPLOY_SHA }}
-          # docs/deployment/configuration.md: every VITE_FIREBASE_* entry is a GitHub *variable*, not a
+          # docs/deployment.md: every VITE_FIREBASE_* entry is a GitHub *variable*, not a
           # secret - none of them are sensitive, they only identify the Firebase project to the browser. Same
           # names as frontend/.env.example (VITE_FIREBASE_API_KEY/AUTH_DOMAIN/PROJECT_ID/APP_ID) - not derived
           # from the separate, backend-only firebase-project-id in the oracle overlay's app-config.yaml, though both
@@ -695,7 +695,7 @@ jobs:
           kubectl apply -k deploy/k8s/overlays/oracle
 
       - name: Wait for each service to become ready
-        # docs/deployment/'s deploy order: Postgres/MinIO/Redis, then discovery, then the three domain
+        # docs/deployment.md's deploy order: Postgres/MinIO/Redis, then discovery, then the three domain
         # services, then the gateway, frontend and proxy. `kubectl apply -k` doesn't sequence the actual rollout
         # itself, but checking readiness in this order still gives an early, specific failure (which service, not
         # just "the deploy is unhealthy") instead of one final timeout with no clue which pod never came up.
@@ -722,7 +722,7 @@ jobs:
 
       - name: Roll back on failure
         # Plain `failure()` - not just a failed smoke test, a rollout that never became Ready (the previous step)
-        # is just as much "a failed rollout" as docs/deployment/'s own Phase 5 spec calls for rolling back.
+        # is just as much "a failed rollout" as docs/deployment.md's own Phase 5 spec calls for rolling back.
         #
         # Only what this run changed is rolled back, to the revision it was at. This step used to undo every
         # service whenever anything in the job failed - so a deploy that failed before applying anything (a missing

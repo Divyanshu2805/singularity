@@ -35,7 +35,7 @@ import java.util.List;
  * header and any access-denied from the security chain all used to fall through to the catch-all. Registered
  * automatically by CommonLibAutoConfiguration, so no service imports it; every service sharing one handler is
  * deliberate, since a divergent error taxonomy between services is hard to notice from the browser. Full table:
- * docs/api/.
+ * docs/api.md.
  */
 @Slf4j
 @RestControllerAdvice

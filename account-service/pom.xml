@@ -52,7 +52,7 @@
 		<!-- Spring Boot 4 moved FlywayAutoConfiguration out of the core autoconfigure jar into this dedicated
 		     module - flyway-core alone resolves and compiles fine but is never auto-configured, which is a
 		     silent failure (no error, Hibernate just fails schema validation because nothing ever ran the
-		     migration). See docs/local-development/troubleshooting.md's troubleshooting table. -->
+		     migration). See docs/development.md's troubleshooting table. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-flyway</artifactId>

@@ -2,9 +2,9 @@
 
 The **full-stack rehearsal** of the production topology: every component (Postgres, MinIO, the five Java services,
 the frontend and the preview pipeline) running in-cluster on `kind`, using the same `deploy/k8s/base` the production
-overlay uses. See [Kubernetes manifests](../../../../docs/deployment/kubernetes.md) for how the manifests fit together.
+overlay uses. See [Kubernetes manifests](../../../../docs/deployment.md) for how the manifests fit together.
 
-This is a different exercise from the day-to-day loop in [live previews](../../../../docs/local-development/live-previews.md),
+This is a different exercise from the day-to-day loop in [live previews](../../../../docs/development.md#live-previews-on-kind),
 where the backend runs on your machine and only the preview pipeline lives in kind. Don't run both against the same cluster.
 
 ## 1. Create a dedicated cluster
@@ -60,7 +60,7 @@ kubectl -n singularity-ai get pods -w
 ```
 
 Then port-forward the three entry points a browser needs and walk through the
-[release checklist](../../../../docs/deployment/release-checklist.md) against `http://localhost:8080`:
+checks in [deployment](../../../../docs/deployment.md) against `http://localhost:8080`:
 
 ```bash
 kubectl -n singularity port-forward svc/frontend 8080:80

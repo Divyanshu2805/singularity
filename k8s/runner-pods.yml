@@ -66,7 +66,7 @@ spec:
         - name: runner
           # CODE_REVIEW.md OPS-01: pinned to the version actually running when this was checked, not the floating
           # major-version tag. Node 22, because a project's own server opens its database through `node:sqlite`
-          # (docs/architecture/decisions/0009-a-server-in-the-preview.md).
+          # (docs/architecture.md).
           image: node:22.22.0-alpine
           workingDir: /app
           command: ["/bin/sh", "-c", "sleep infinity"]
@@ -112,7 +112,7 @@ spec:
             # MC_HOST_myminio every time.
             - name: HOME
               value: /tmp
-            # docs/architecture/security-model.md: a read-only user (`previewreader`), not the MinIO
+            # docs/architecture.md: a read-only user (`previewreader`), not the MinIO
             # admin credentials - a compromised runner pod's syncer can list and read the projects bucket, never
             # write, delete, or touch any other bucket or the admin API. k8s/minio.yml's bootstrap Job creates that
             # user; create the secret before running it:
@@ -183,7 +183,7 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # MinIO, explicitly - docs/architecture/security-model.md: the syncer's own credential is a
+    # MinIO, explicitly - docs/architecture.md: the syncer's own credential is a
     # read-only user scoped to the projects bucket (k8s/minio.yml's bootstrap Job), and this is what stops a
     # compromised runner reaching any OTHER in-cluster pod on port 9000 the way the old blanket rule below did.
     - to:

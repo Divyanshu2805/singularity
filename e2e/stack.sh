@@ -17,7 +17,7 @@
 #
 # The namespace must not be shared with any other database. workspace-service releases every claimed runner pod its
 # own database has not heard of, so this stack gets `singularity-e2e`, apart from both your own previews
-# (`singularity-ai`) and PreviewPipelineIT (`singularity-it`). See docs/practices/gotchas/kubernetes.md.
+# (`singularity-ai`) and PreviewPipelineIT (`singularity-it`). See .claude/practices/gotchas/kubernetes.md.
 #
 # Usage:
 #   ./mvnw -DskipTests package                              # once, and again after changing a service

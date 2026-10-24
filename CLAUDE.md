@@ -15,15 +15,14 @@ These are authoritative and kept current:
 
 | Need | Read |
 |---|---|
-| Services, module map, request flows, "where do I change X" | [`docs/architecture/`](docs/architecture/README.md) |
-| Why the system is shaped as it is | [`docs/architecture/decisions/`](docs/architecture/decisions/README.md) |
-| Security boundaries and where they're enforced | [`docs/architecture/security-model.md`](docs/architecture/security-model.md) |
-| Entities, tables, enums, schema conventions | [`docs/schema/`](docs/schema/README.md) |
-| Every endpoint, SSE formats, the error model | [`docs/api/`](docs/api/README.md) |
-| Setup, configuration, live previews, troubleshooting | [`docs/local-development/`](docs/local-development/README.md) |
-| Constraints, trade-offs, what isn't built yet | [`docs/known-gaps/`](docs/known-gaps/README.md) |
-| Production topology, CI/CD, configuration | [`docs/deployment/`](docs/deployment/README.md) |
-| Deploys, rollback, monitoring, backups | [`docs/operations/`](docs/operations/README.md) |
+| Services, request flows, revisions, previews, publishing, security, key decisions | [`docs/architecture.md`](docs/architecture.md) |
+| Tables per service, schema conventions | [`docs/data-model.md`](docs/data-model.md) |
+| Every endpoint, the chat stream, the error model, the internal API | [`docs/api.md`](docs/api.md) |
+| Setup, configuration, live previews, tests, troubleshooting | [`docs/development.md`](docs/development.md) |
+| Production topology, CI/CD, secrets, operations, capacity | [`docs/deployment.md`](docs/deployment.md) |
+| What isn't built yet | [`docs/known-gaps.md`](docs/known-gaps.md) |
+| Measured numbers | [`docs/results.md`](docs/results.md) |
+| Every build-benchmark run | [`.claude/practices/build-benchmark-results.md`](.claude/practices/build-benchmark-results.md) |
 
 If a change would make any of these inaccurate, **update that doc in the same change**.
 
@@ -60,7 +59,7 @@ docker/                 the shared Java service Dockerfile (MODULE build-arg) an
 scripts/                bench-verify.sh - compiles a build benchmark's projects in a throwaway container and starts the
                         ones that have a server; starter-launcher.test.mjs - tests the template's start.mjs;
                         coverage-summary.sh - the backend's coverage per module, after `./mvnw verify`
-docs/                   documentation — start at docs/README.md
+docs/                   documentation — start at docs/README.md; the working notes CLAUDE.md imports are in .claude/practices/
 ```
 
 ## Commands
@@ -83,7 +82,7 @@ cd proxy && node --test                                         # the preview pr
 ./mvnw -DskipTests package && e2e/stack.sh up --context kind-singularity && (cd e2e && npm test); e2e/stack.sh down --context kind-singularity   # the browser journey; after a change that crosses services, or touches sign-in, chat, preview or lessons
 ```
 
-On Windows, use `mvnw.cmd`. A bare `./mvnw spring-boot:run` at the root fails — the root `pom.xml` has no main class. Running all five services on one machine needs a distinct `MANAGEMENT_SERVER_PORT` per service; see [setup](docs/local-development/setup.md).
+On Windows, use `mvnw.cmd`. A bare `./mvnw spring-boot:run` at the root fails — the root `pom.xml` has no main class. Running all five services on one machine needs a distinct `MANAGEMENT_SERVER_PORT` per service; see [development](docs/development.md).
 
 Build and test as a reactor (`-pl common-lib,<service>`), never `-pl <service>` alone: every checkout on the machine shares one `~/.m2` `common-lib` SNAPSHOT jar.
 
@@ -91,24 +90,24 @@ Build and test as a reactor (`-pl common-lib,<service>`), never `-pl <service>` 
 
 The following are imported in full.
 
-@docs/practices/security-guardrails.md
+@.claude/practices/security-guardrails.md
 
-@docs/practices/coding-conventions.md
+@.claude/practices/coding-conventions.md
 
-@docs/practices/testing.md
+@.claude/practices/testing.md
 
-@docs/practices/definition-of-done.md
+@.claude/practices/definition-of-done.md
 
 ## Known pitfalls
 
 Silent-failure traps this stack has hit, imported in full. Check here first when something "should work" but doesn't.
 
-@docs/practices/gotchas/spring-and-jpa.md
+@.claude/practices/gotchas/spring-and-jpa.md
 
-@docs/practices/gotchas/microservices-and-build.md
+@.claude/practices/gotchas/microservices-and-build.md
 
-@docs/practices/gotchas/kubernetes.md
+@.claude/practices/gotchas/kubernetes.md
 
-@docs/practices/gotchas/ci-and-tooling.md
+@.claude/practices/gotchas/ci-and-tooling.md
 
-@docs/practices/gotchas/ai-generation.md
+@.claude/practices/gotchas/ai-generation.md

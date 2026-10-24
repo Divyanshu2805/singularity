@@ -37,7 +37,7 @@ spec:
               memory: "64Mi"
             limits:
               cpu: "250m"
-              # docs/deployment/kubernetes.md's resource-limits table.
+              # docs/deployment.md's resource-limits table.
               memory: "256Mi"
           readinessProbe:
             tcpSocket:

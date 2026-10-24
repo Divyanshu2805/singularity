@@ -139,7 +139,7 @@ import static org.mockito.Mockito.when;
  * <p>The entry point is built by hand around the two stand-ins it needs - who is signed in, and their plan - rather
  * than left to Spring to wire. The application's own {@code @EnableFeignClients} registers a real client for the
  * account service, and asking Spring for that type by injection resolves the real one too, which needs Feign
- * infrastructure this slice does not load (docs/practices/gotchas/spring-and-jpa.md).
+ * infrastructure this slice does not load (.claude/practices/gotchas/spring-and-jpa.md).
  *
  * <p>One instance runs every step, since the steps share a preview, and with that lifecycle the Spring context is
  * built before the container extension has started anything - so the database is started by hand where the
@@ -151,7 +151,7 @@ import static org.mockito.Mockito.when;
  *
  * <p>How long each start took is printed and written to {@code target/preview-timings.txt}: a first start, a
  * restart on a pod that already has its packages, and a start from a fresh pod. Those are the numbers
- * docs/deployment/capacity.md asks to be re-measured.
+ * docs/deployment.md asks to be re-measured.
  */
 @DataJpaTest(properties = {
         "spring.flyway.locations=classpath:db/migration",

@@ -44,7 +44,7 @@ spec:
               memory: "256Mi"
             limits:
               cpu: "500m"
-              # docs/deployment/kubernetes.md's resource-limits table.
+              # docs/deployment.md's resource-limits table.
               memory: "448Mi"
           readinessProbe:
             httpGet:

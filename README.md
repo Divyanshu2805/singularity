@@ -4,7 +4,7 @@
 
 <p align="center">
   <b>Describe an app, watch it get built, run it live, publish it.</b><br/>
-  An AI app builder on Spring Boot microservices, with every generated app running in its own Kubernetes pod.
+  An AI app builder on Spring Boot microservices. Every generated app runs in its own Kubernetes pod.
 </p>
 
 <p align="center">
@@ -16,148 +16,141 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-0a0b0d" alt="MIT License" /></a>
 </p>
 
-<p align="center">
-  <a href="https://singularity.divyanshuagrahari.dev"><b>Live demo</b></a> ·
-  <a href="docs/README.md">Docs</a> ·
-  <a href="docs/results.md">Results</a>
-</p>
-
 ---
-
-You type an idea in a sentence. A short interview, written for that idea, turns it into a brief. Then a chat builds the project file by file while you watch. The server checks every turn before saving it and sends anything broken back to the model to fix. Each turn is saved as one atomic revision, and the app runs straight away in its own pod behind a signed link. When it's ready, one click publishes a production build at a public URL.
-
-It also teaches. Teach me mode explains each step on the lines it changed, and a project tour shows how a click travels through the files.
-
-<p align="center">
-  <img src="docs/assets/screenshots/build.jpg" alt="A project after its first build: the chat with its checklist beside the code" width="900" />
-</p>
 
 ## Try it
 
-**[singularity.divyanshuagrahari.dev](https://singularity.divyanshuagrahari.dev)**. Sign in with Google or email, or use the shared demo account:
+| | |
+|---|---|
+| **App** | [singularity.divyanshuagrahari.dev](https://singularity.divyanshuagrahari.dev) |
+| **Demo login** | `demo@singularity.dev` / `demo1234` |
+| **Test card** | `4242 4242 4242 4242`, any future date, any CVC |
 
-```
-demo@singularity.dev / demo1234
-```
+The demo account already has a notes app built, so you land straight in the chat, code and live preview. It's shared and resets every night, so it can't publish, invite, pay or connect GitHub. Sign in with Google or email to get your own account.
 
-The demo account opens on a notes app that's already built. It can't publish, connect GitHub, invite people or pay, and it's reset every night. Payments run in Stripe test mode, so `4242 4242 4242 4242` with any future date works and no money moves.
+<p align="center">
+  <img src="docs/assets/screenshots/build.jpg" alt="A project after its first build: chat, checklist and code" width="900" />
+</p>
+
+## What it does
+
+You describe an idea in one sentence. The model asks a few questions to pin it down, then builds the project file by file in a chat. The server checks every turn before saving it and sends broken code back to the model to fix. The app runs straight away in its own pod, and one click publishes it to a public link.
+
+| | |
+|---|---|
+| **Build** | Idea interview, streaming builds with a checklist, edits as search-and-replace, undo and restore, an optional server + SQLite per project |
+| **Run** | Live preview per project from a warm pod pool, shared with collaborators |
+| **Share** | Publish to a public link, fork, owner/editor/viewer roles, ZIP export, push to GitHub |
+| **Learn** | Teach me mode explains each step on the lines it changed, plus a project tour and glossary |
+| **Billing** | Stripe plans with daily-token, project and preview limits |
 
 ## Results
 
-Measured on one development laptop. Setup, dates and the full tables are in [docs/results.md](docs/results.md).
+| | Before | After |
+|---|---|---|
+| Model's first word on a build | 9.1 s | **2.7 s** (−70%) |
+| A change to a built app | 21.3 s | **11.2 s** (−47%) |
+| Preview start, fresh pod | 30.1 s | **4.3 s** (−86%) |
+| Read throughput at 256 in flight, 300 users | 2,794 req/s | **3,429 req/s** (+23%) |
+| p99 latency at the same load | 552 ms | **343 ms** (−38%) |
+| Preview step in the browser E2E test | fails 1 in 10 | **30 / 30** |
 
-| | |
-|---|---|
-| Time to the model's first word on a build | **9.1 s → 2.7 s** (−70%) from per-call reasoning effort |
-| A change to a built app | **21.3 s → 11.2 s** (−47%) by dropping a file-fetch round trip |
-| Preview first start, fresh pod | **30.1 s → 4.3 s** (−86%) from warm pods with pre-installed packages |
-| Build benchmark | **24 / 24** turns right, **20 / 20** generated projects compile, **3 / 3** generated servers start |
-| Read throughput | **2,794 → 3,429 req/s** (+23%) and **p99 552 → 343 ms** (−38%) at 256 in flight with 300 users, after thread dumps exposed connection-pool and storage-client limits |
-| Reads at normal load | **p99 44 ms**, 0 of 2,880 failed (8 users, every call through the Gateway with its session checked) |
-| Flaky preview step | **1 in 10 → 30 / 30** after three races were traced in pod logs |
-| Cost | about **3 cents** for a whole pass: interview, build, change, lesson |
-| Tests | **1,623** backend, **931** frontend, **92** proxy, plus a real preview and publish on kind and two Playwright journeys |
-| Coverage | **75.4%** backend lines, **77.4%** frontend logic, each with a floor CI enforces |
+On the build benchmark, 24 of 24 turns ended right, and all 20 generated projects install, type-check and bundle. Each full pass (interview, build, change, lesson) costs about 3 cents. How each number was measured: [docs/results.md](docs/results.md).
 
 ## How it works
 
+```mermaid
+flowchart LR
+    B[Browser] --> G[Gateway]
+    G --> A[account-service]
+    G --> W[workspace-service]
+    G --> I[intelligence-service]
+    A --- ADB[(Postgres)]
+    W --- WDB[(Postgres)]
+    I --- IDB[(Postgres)]
+    W --- M[(MinIO)]
+    I --> LLM[Gemini]
+    W --> K8s[Runner pods]
+    P[Preview proxy] --> K8s
+    B -. preview / published URL .-> P
 ```
-browser ──► Gateway ──┬──► account-service       users, sessions, plans, Stripe
-                      ├──► workspace-service     projects, files, revisions, previews, publishing
-                      └──► intelligence-service  build chat, lessons, idea interview, usage
 
-  each service has its own Postgres · files in MinIO · services find each other via Eureka
-
-preview hostnames ──► Node proxy ──► runner pods (generated code runs only here)
-```
-
-A build goes through six steps:
-
-1. **Interview.** The model asks up to five questions written for the idea, then writes a brief.
-2. **Generate.** The model streams its plan, files and edits in a tagged format over SSE. The server and the browser both parse it, against one shared file of test cases.
-3. **Check.** Each file is parsed, its imports are resolved, and the turn is type-checked inside the project's preview pod. Problems go back to the model as a repair, and only errors the turn itself caused count.
-4. **Save.** The turn's files are stored by SHA-256 and committed as one revision with a compare-and-swap on the project's head. It lands whole or not at all, and any revision can be restored.
-5. **Preview.** A warm pod is claimed from a pool, the files sync in, and the Vite dev server runs there behind a signed, expiring link routed through Redis.
-6. **Publish.** A production build runs in a pod claimed just for it. The output is read back as untrusted data and stored, and only then does a one-file pointer flip it live. A failed build never touches the live app.
-
-The [architecture docs](docs/architecture/README.md) go further, and the [decision records](docs/architecture/decisions/README.md) cover why it's split this way, why generated code only runs in pods, and why revisions are content-addressed.
-
-## Features
-
-- **Building**: idea interview, streaming builds with a live checklist, search-and-replace edits, in-turn checks and repairs, undo and restore, and an optional server and SQLite database per project
-- **Running**: a live preview per project from a warm pod pool, shared by collaborators and reclaimed when idle
-- **Sharing**: publish to a public link, fork, owner/editor/viewer roles, invitations, ZIP export, push to GitHub
-- **Learning**: Teach me mode with a lesson and a small exercise per step, a project tour, a glossary, and questions about any selection
-- **Accounts**: Firebase sign-in turned into a server-side session, Stripe plans with daily-token, project and preview limits, and a usage page
-
-## Screenshots
-
-| | |
+| Service | Owns |
 |---|---|
-| <img src="docs/assets/screenshots/interview.jpg" alt="The idea interview with suggested answers" /> | <img src="docs/assets/screenshots/preview.jpg" alt="The built app running in the live preview" /> |
-| The interview turns one sentence into a brief | The app running in its own pod |
-| <img src="docs/assets/screenshots/tour.jpg" alt="The project tour in the Learn panel" /> | <img src="docs/assets/screenshots/publish.jpg" alt="The publish panel with the live link" /> |
-| The project tour | One click to a public link |
+| Gateway | The only origin the browser talks to; routes by path |
+| account | Users, sessions (Firebase → cookie), plans, Stripe |
+| workspace | Projects, files, revisions, previews, publishing |
+| intelligence | Build chat, lessons, idea interview, token usage |
 
-The screenshots are from the local stack with the scripted model, so the app is the same small notes app every time.
+Generated code never runs on a service. It only runs in runner pods: non-root, no capabilities, a strict network policy.
+
+```mermaid
+sequenceDiagram
+    participant U as Browser
+    participant I as intelligence
+    participant L as Model
+    participant W as workspace
+    participant P as Runner pod
+    U->>I: build request (SSE)
+    I->>L: project brief + request
+    L-->>I: plan, files, edits (streamed)
+    I-->>U: streamed live
+    I->>P: parse, resolve imports, type-check
+    alt problems found
+        I->>L: repair request
+    end
+    I->>W: save turn as one revision
+    W->>P: sync files, dev server reloads
+```
+
+Each turn is saved as one revision: files are stored by SHA-256, and the project's head moves with a compare-and-swap, so a turn lands whole or not at all. Publishing builds in a separate pod and only flips a pointer once the build succeeds, so a failed build never breaks the live app.
+
+More: [architecture](docs/architecture.md).
 
 ## Stack
 
 | | |
 |---|---|
-| Backend | Java 25, Spring Boot 4.1, Spring Cloud Gateway, Eureka, OpenFeign, Spring AI 2.0 |
+| Backend | Java 25, Spring Boot 4.1, Spring Cloud Gateway, Eureka, OpenFeign, Spring AI |
 | Data | PostgreSQL (one per service, Flyway), MinIO, Redis |
 | Frontend | React 18, TypeScript, Vite, Tailwind, shadcn/ui, TanStack Query, CodeMirror |
-| Previews | fabric8 Kubernetes client, a Node reverse proxy with signed tokens |
-| Infra | k3s on an Oracle Arm VM, Kustomize, Cloudflare Tunnel, Tailscale, GitHub Actions, GHCR |
-| Testing | JUnit, Testcontainers, Vitest, Playwright, Lighthouse |
-| Integrations | Firebase Auth, Stripe, Gemini through an OpenAI-compatible API |
+| Infra | k3s, Kustomize, Cloudflare Tunnel, Tailscale, GitHub Actions, GHCR |
+| Testing | JUnit, Testcontainers, Vitest, Playwright |
 
-## Running it locally
+## Run it locally
 
-The fastest way needs no keys at all. It starts the whole app on a kind cluster with a scripted model and the Firebase Auth emulator:
+No keys needed. This starts everything on a kind cluster with a scripted model and the Firebase emulator:
 
 ```bash
 ./mvnw -DskipTests package
 e2e/stack.sh up --context kind-<your-cluster>
 ```
 
-For a normal dev setup you need JDK 25, Node 20+, Docker, a Firebase project and a model API key:
+The full dev setup with your own keys is in [docs/development.md](docs/development.md).
 
-```bash
-git clone https://github.com/Divyanshu2805/singularity.git && cd singularity
-docker compose -f services.docker-compose.yml up -d   # Postgres and MinIO
-cp .env.example .env                                  # fill in your keys
-./mvnw clean package -DskipTests                      # mvnw.cmd on Windows
-```
+## Tests
 
-Then start the five services and the frontend, as described in [setup](docs/local-development/setup.md). Live previews also need a local kind cluster ([live previews](docs/local-development/live-previews.md)).
+| Suite | Count |
+|---|---|
+| Backend (JUnit, Testcontainers) | 1,623 |
+| Frontend (Vitest) | 931 |
+| Preview proxy | 92 |
+| Real preview + publish on kind | 17 steps |
+| Browser journeys (Playwright) | 2 journeys, 24 steps |
 
-```bash
-./mvnw verify                          # backend tests and coverage floors
-cd frontend && npm test                # frontend
-cd proxy && node --test                # preview proxy
-```
+CI runs all of it on every push to `main`, then builds 8 arm64 images, deploys after approval and rolls back if the smoke test fails.
 
-## Deployment
+## Docs
 
-It runs on one free Oracle Arm VM as single-node k3s, with no inbound ports open. Traffic comes through a Cloudflare tunnel, and deploys go over Tailscale. On every push to `main`, CI runs the tests, a real preview and publish on kind, and both browser journeys. It then builds eight arm64 images, deploys after approval, smoke-tests the site and rolls back on failure. Databases and storage are backed up nightly to Cloudflare R2. See [deployment](docs/deployment/README.md).
-
-## Repository layout
-
-```
-gateway-service/        Spring Cloud Gateway, the only origin the browser talks to
-discovery-service/      Eureka
-account-service/        users, sessions, plans, Stripe
-workspace-service/      projects, files, revisions, previews, publishing
-intelligence-service/   build chat, code insight, idea interview, usage
-common-lib/             shared errors, session auth, internal-API plumbing
-frontend/               React app
-proxy/                  preview and published-app proxy (Node)
-e2e/                    Playwright journeys, load test, local full stack
-deploy/  k8s/  docker/  production manifests, local kind setup, Dockerfiles
-docs/                   documentation
-```
+| | |
+|---|---|
+| [Architecture](docs/architecture.md) | Services, flows, revisions, security, key decisions |
+| [API](docs/api.md) | Every endpoint |
+| [Data model](docs/data-model.md) | Tables per service |
+| [Development](docs/development.md) | Setup, config, commands, troubleshooting |
+| [Deployment](docs/deployment.md) | Production on k3s, CI/CD, operations |
+| [Results](docs/results.md) | Measurements and how they were taken |
+| [Known gaps](docs/known-gaps.md) | What isn't built yet |
 
 ## License
 

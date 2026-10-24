@@ -9,7 +9,7 @@
  *
  * A count of tokens means nothing to someone who has never used an AI API, so the allowance is also said as builds:
  * about how many requests a day's allowance, or what is left of it, pays for. One build is taken as 15,000 tokens -
- * the build benchmark's first builds cost about 14,000 (docs/practices/build-benchmark-results.md), and a change to a
+ * the build benchmark's first builds cost about 14,000 (.claude/practices/build-benchmark-results.md), and a change to a
  * built app costs less - rounded down, and to the nearest five once it is twenty or more, so the figure is never a
  * promise the meter cannot keep. Change TOKENS_PER_BUILD when the benchmark moves.
  *

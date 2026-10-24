@@ -3,7 +3,7 @@
 # the proxy's idea of which hostnames are published apps agree. The Cloudflare tunnel's existing `*.<domain>` rule already
 # sends every such hostname to this proxy; published apps need no new tunnel entry while they share the domain.
 # Moving them to a registered domain of their own means changing PUBLISHED_DOMAIN here, PUBLISHING_PUBLIC_DOMAIN on
-# workspace-service, and adding that domain's wildcard to the tunnel (docs/architecture/security-model.md).
+# workspace-service, and adding that domain's wildcard to the tunnel (docs/architecture.md).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

@@ -24,7 +24,7 @@
 #   k8s/preview-test-cluster.sh --context kind-singularity --down     # remove the namespace again
 #
 # --context is required and never defaulted: this applies manifests and creates secrets, and the cluster kubectl
-# happens to point at is not a safe guess (docs/practices/gotchas/ci-and-tooling.md).
+# happens to point at is not a safe guess (.claude/practices/gotchas/ci-and-tooling.md).
 set -euo pipefail
 
 # Git Bash rewrites arguments that start with a slash into Windows paths; nothing here wants that.

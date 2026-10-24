@@ -6,7 +6,7 @@ package com.singularity.workspace.enums;
  * <p>Handles: naming them - starting, running, failed to start, and ended.
  *
  * <p>Like every other enum column in this codebase, the previews table carries no database check constraint listing
- * these values (see docs/schema/conventions.md, "Enum columns carry no CHECK constraint") - this column has already grown a
+ * these values (see docs/data-model.md, "Enum columns carry no CHECK constraint") - this column has already grown a
  * fourth value once with no migration needed for it.
  */
 public enum PreviewStatus {

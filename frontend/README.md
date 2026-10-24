@@ -8,7 +8,7 @@ React 18 and TypeScript, built with Vite 5. Styling is Tailwind CSS with shadcn/
 
 ## Getting started
 
-The frontend expects the backend to be running — see [local development](../docs/local-development/README.md).
+The frontend expects the backend to be running — see [local development](../docs/development.md).
 
 ```bash
 npm install
@@ -52,8 +52,8 @@ src/
 Two rules keep the code manageable:
 
 - **Logic lives in `lib/`** and is tested there without rendering. `lib/` never imports from `components/` or `pages/`.
-- **Module-level stores register with `onSignOut(...)`** in `lib/session.ts`, so no project or user data survives a sign-out. See [sign-out data isolation](../docs/architecture/security-model.md#sign-out-data-isolation-frontend).
+- **Module-level stores register with `onSignOut(...)`** in `lib/session.ts`, so no project or user data survives a sign-out. See [sign-out data isolation](../docs/architecture.md#security).
 
 ## Production image
 
-`Dockerfile` builds the app and serves it from unprivileged nginx (`nginx.conf`): hashed assets are cached for a year, and every other path falls back to `index.html` with `no-cache`. See [container images](../docs/deployment/container-images.md).
+`Dockerfile` builds the app and serves it from unprivileged nginx (`nginx.conf`): hashed assets are cached for a year, and every other path falls back to `index.html` with `no-cache`. See [container images](../docs/deployment.md).

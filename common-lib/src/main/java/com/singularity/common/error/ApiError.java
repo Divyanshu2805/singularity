@@ -19,7 +19,7 @@ import java.util.UUID;
  * those cannot be made to read the message. Only those errors carry a code; everything else omits the field.
  *
  * <p>requestId is a fresh random id, not a correlation id threaded from an incoming header or a distributed trace -
- * this codebase has neither (docs/known-gaps/constraints-and-trade-offs.md §8). It exists so a user can quote one opaque, non-sensitive value
+ * this codebase has neither (docs/known-gaps.md §8). It exists so a user can quote one opaque, non-sensitive value
  * to support, and support can find the matching log line: GlobalExceptionHandler always logs {@code apiError} itself,
  * so every id that reaches a client also reaches the log, for free, with no separate correlation wiring.
  */

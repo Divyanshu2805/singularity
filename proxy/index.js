@@ -82,7 +82,7 @@ if (!ACCESS_TOKEN_SECRET) {
     console.error('PREVIEW_ACCESS_TOKEN_SECRET is not set - every preview request will be refused rather than served unauthenticated');
 }
 
-// Published apps (docs/architecture/decisions/0008-published-apps.md): a hostname that is one label under
+// Published apps (docs/architecture.md): a hostname that is one label under
 // PUBLISHED_DOMAIN and is not a preview's is a published app, served from storage with no token. Without the domain or
 // the storage settings the feature is off and every hostname is treated as a preview, as before.
 const PUBLISHED_DOMAIN = process.env.PUBLISHED_DOMAIN;

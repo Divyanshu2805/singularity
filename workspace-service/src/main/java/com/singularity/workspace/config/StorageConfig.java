@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
  * uses, and the client it builds for itself keeps OkHttp's default of five calls at a time to one host. Every file
  * lives on one host, so a sixth file read waited for one of the five to finish: under load the file-content endpoint
  * stopped at about 350 reads a second with its request threads parked on the SDK's futures, whatever else was free
- * (docs/practices/product-numbers.md#read-throughput). The client here is the SDK's own default - its five-minute
+ * (docs/results.md). The client here is the SDK's own default - its five-minute
  * timeouts and HTTP/1.1 - with a dispatcher and a connection pool sized for more calls than that. Tomcat's 200 request
  * threads are still the outer bound; past MAX_CONCURRENT_CALLS a storage call waits in the dispatcher's queue.
  */

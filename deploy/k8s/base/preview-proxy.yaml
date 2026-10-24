@@ -47,7 +47,7 @@ spec:
               memory: "128Mi"
             limits:
               cpu: "500m"
-              # docs/deployment/kubernetes.md's resource-limits table.
+              # docs/deployment.md's resource-limits table.
               memory: "256Mi"
           env:
             - name: REDIS_URL
@@ -61,7 +61,7 @@ spec:
             # below remap its own external port 80 to this one.
             - name: PORT
               value: "8080"
-            # Published apps (docs/architecture/decisions/0008-published-apps.md): the proxy serves them from the
+            # Published apps (docs/architecture.md): the proxy serves them from the
             # published-apps bucket with a read-only user, to anyone, with no token. These are literals rather than
             # ConfigMap references because the ConfigMap lives in the `singularity` namespace and this pod does not;
             # the oracle overlay patches the domain, scheme and app URL. PUBLISHED_DOMAIN must be the same value as

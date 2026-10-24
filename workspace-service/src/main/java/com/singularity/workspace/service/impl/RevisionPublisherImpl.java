@@ -182,7 +182,7 @@ public class RevisionPublisherImpl implements RevisionPublisher {
 
     /**
      * Resolves each change's previous state (adopting a legacy, never-versioned file into the blob store the first
-     * time it's touched - see docs/schema/) and uploads every EDIT's new content, all before anything is
+     * time it's touched - see docs/data-model.md) and uploads every EDIT's new content, all before anything is
      * written to Postgres. Touches only the blob bucket - a failure here leaves the live layout and every table
      * untouched.
      */

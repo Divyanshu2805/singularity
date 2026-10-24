@@ -15,7 +15,7 @@ spring:
   jpa:
     hibernate:
       # Flyway (db/migration/V1__init.sql) owns the schema, not Hibernate - same fix account-service/workspace-
-      # service already applied for the persisted-enum/ddl-auto:update CHECK-constraint trap (docs/schema/).
+      # service already applied for the persisted-enum/ddl-auto:update CHECK-constraint trap (docs/data-model.md).
       ddl-auto: validate
     show-sql: true
     properties:

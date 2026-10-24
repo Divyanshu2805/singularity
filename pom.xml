@@ -15,7 +15,7 @@
 	<name>singularity-parent</name>
 	<description>
 		Reactor parent for the Singularity backend: a Gateway and Eureka in front of three domain services
-		(account, workspace, intelligence) that share common-lib. See docs/architecture/ for the shape.
+		(account, workspace, intelligence) that share common-lib. See docs/architecture.md for the shape.
 	</description>
 
 	<!--

@@ -63,7 +63,7 @@ spec:
             # the Service below remap its own external port 80 to this one. No external behavior change.
             - name: PORT
               value: "8080"
-            # Published apps (docs/architecture/decisions/0008-published-apps.md): any hostname that is one label under
+            # Published apps (docs/architecture.md): any hostname that is one label under
             # PUBLISHED_DOMAIN and is not a preview's is served from the published-apps bucket with a read-only user.
             # Create the user's secret once per cluster, with the same value minio-bootstrap-published-reader uses:
             #   kubectl create secret generic minio-published-credentials -n singularity-ai --from-literal=password='...'

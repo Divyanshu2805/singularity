@@ -1,4 +1,4 @@
-# Non-secret, environment-specific settings shared across the five Java services - docs/deployment/configuration.md
+# Non-secret, environment-specific settings shared across the five Java services - docs/deployment.md
 # classifies FIREBASE_PROJECT_ID and APP_DOMAIN/CLIENT_URL as GitHub "variable" entries, not secrets.
 #
 # Values here are the kind-rehearsal ones (the more frequently-run case) - the oracle overlay patches only what
@@ -26,9 +26,9 @@ data:
   preview-public-scheme: http
   preview-public-domain: localhost
   preview-public-port: "8090"
-  # Which provider and models intelligence-service calls (docs/deployment/configuration.md). The code default is
+  # Which provider and models intelligence-service calls (docs/deployment.md). The code default is
   # OpenRouter; a deployment calls Google's OpenAI-compatible endpoint directly, with the models and the reasoning
-  # effort the build benchmark was measured on (docs/practices/build-benchmark-results.md). The key in the
+  # effort the build benchmark was measured on (.claude/practices/build-benchmark-results.md). The key in the
   # openrouter-api-key Secret must therefore be a Gemini API key - the Secret keeps its name, only its value changes.
   ai-base-url: https://generativelanguage.googleapis.com/v1beta/openai
   ai-completions-path: /chat/completions
