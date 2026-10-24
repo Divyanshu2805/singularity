@@ -1,78 +1,77 @@
 # Results
 
-Measured on a development laptop with the services, Postgres, a kind cluster and the load generator on the same machine.
+All of this was measured on one development laptop, with the services, Postgres, a kind cluster and the load generator on the same machine.
 
-## Summary
-
-| | Before | After |
-|---|---|---|
-| Model's first word on a build | 9.1 s | **2.7 s** (−70%) |
-| A change to a built app | 21.3 s | **11.2 s** (−47%) |
-| Preview start, fresh pod | 30.1 s | **4.3 s** (−86%) |
-| Read throughput, 256 in flight | 2,794 req/s | **3,429 req/s** (+23%) |
-| p99 at 256 in flight | 552 ms | **343 ms** (−38%) |
-| Preview step in the browser E2E test | fails 1 in 10 | **30 / 30** |
+| What improved | From | To | What changed |
+|---|---|---|---|
+| Wait for the model's first word on a build | 9.1 s | 2.7 s | Builds run at low reasoning effort |
+| Time to apply a change to a built app | 21.3 s | 11.2 s | The prompt shows whole files up to 24,000 characters, so the model no longer fetches the page it needs first |
+| Preview start in a fresh pod | 30.1 s | 4.3 s | Warm pods come with `node_modules` already installed |
+| Read throughput, 256 requests in flight | 2,794 req/s | 3,429 req/s | Three connection limits fixed (below) |
+| p99 latency at the same load | 552 ms | 343 ms | Same fixes |
+| Browser test runs where the preview step passes | 9 in 10 | 30 in 30 | Three start-up races fixed (below) |
 
 ## Build speed
 
-`BuildBenchmarkIT` runs fixed requests as whole build turns against the real model (`gemini-3.8-flash`). Numbers are medians of 8 first builds and 8 changes.
+`BuildBenchmarkIT` runs a fixed set of build requests against the real model (`gemini-3.8-flash`) and times each turn. These are medians of 8 first builds and 8 follow-up changes.
 
-| | First word | First build | Change |
+| Setup | First word | First build | Change |
 |---|---|---|---|
-| Before | 9.1 s | 54.8 s | 21.3 s |
+| Default reasoning effort | 9.1 s | 54.8 s | 21.3 s |
 | Low reasoning effort | 2.4 s | 42.5 s | 17.4 s |
-| + one fewer fetch round | 2.7 s | 53.0 s | 11.2 s |
+| Low effort, plus no extra fetch round | 2.7 s | 53.0 s | 11.2 s |
 
-- **Reasoning effort.** Most of the wait for the first word was the model reasoning before it wrote anything. Builds and repairs now run at `low`.
-- **The fetch round.** The prompt cut files at 12,000 characters, so most changes started with an extra round trip to read one page. Raising the limit to 24,000 removed it.
+The last row's first build is slower than the second because the prompt also started asking for the app's theme.
 
 ## Build quality
 
 | | |
 |---|---|
-| Turns that ended right | 24 / 24 |
+| Benchmark turns that ended the way they should | 24 / 24 |
 | Generated projects that install, type-check and bundle | 20 / 20 |
-| Generated servers that start and answer | 3 / 3 |
-| Cost per full pass (interview, build, change, lesson) | ~3 cents |
+| Generated servers that start and answer requests | 3 / 3 |
+| Model cost of a full pass (interview, build, change, lesson) | about 3 cents |
 
-`scripts/bench-verify.sh` compiles every generated project in a throwaway container and starts any server it has.
+`scripts/bench-verify.sh` builds each generated project in a throwaway container and starts any server it has.
 
 ## Preview start
 
-`PreviewPipelineIT` on kind, from the start request to the dev server answering through the proxy.
+Measured by `PreviewPipelineIT` on kind, from the start request until the dev server answers through the proxy.
 
-| | Empty `node_modules` | Seeded |
+| | Without pre-installed packages | With them |
 |---|---|---|
-| First start | 30.1 s | **4.3 s** |
-| Reinstall after a new package | 7.1 s | 6.1 s |
-| Waited for a new pod | 37.9 s | 14.2 s |
-
-Warm pods get a pre-built `node_modules`, copied in by an init container while they wait.
+| First start | 30.1 s | 4.3 s |
+| Reinstall after adding a package | 7.1 s | 6.1 s |
+| Start that had to wait for a new pod | 37.9 s | 14.2 s |
 
 ## Throughput
 
-`e2e/throughput.mjs`: 300 signed-in users, each paced under the rate limit, in a closed loop of nine reads. No call failed on either side.
+`e2e/throughput.mjs` signs in 300 users and keeps a fixed number of requests in flight across nine read endpoints. Each user stays under the rate limit, and no request failed in any run.
 
-| In flight | Before | p99 | After | p99 |
+| Requests in flight | Before | p99 | After | p99 |
 |---|---|---|---|---|
 | 32 | 3,516 req/s | 36 ms | 3,592 req/s | 51 ms |
-| 128 | 3,184 | 205 ms | 3,576 | 149 ms |
-| **256** | **2,794** | **552 ms** | **3,429** | **343 ms** |
-| 512 | 2,846 | 932 ms | 3,388 | 719 ms |
+| 128 | 3,184 req/s | 205 ms | 3,576 req/s | 149 ms |
+| 256 | 2,794 req/s | 552 ms | 3,429 req/s | 343 ms |
+| 512 | 2,846 req/s | 932 ms | 3,388 req/s | 719 ms |
 
-The peak (~3,500 req/s) is the laptop's CPU and didn't move. What changed is that throughput no longer sags past it. Thread dumps and socket stats found three limits:
+The peak, about 3,500 req/s, is set by the laptop's CPU and stayed the same. The fixes stopped throughput from falling once requests started queuing. Thread dumps and socket stats found the limits:
 
 | Problem | Fix |
 |---|---|
-| Feign opened a new connection per call, until the machine ran out of ports | Pooled Apache HttpClient 5 |
-| A file read held a DB connection through its whole MinIO call (22 of 32 threads waiting on Hikari) | `open-in-view: false` in workspace-service |
-| The MinIO client ran 5 calls at a time | Dispatcher raised to 64 |
-
-At normal load (8 users, 48 req/s) every read stays under 44 ms at p99.
+| Feign opened a new connection for every call, until the machine ran out of ports | Pooled Apache HttpClient 5 |
+| A file read held a database connection for its whole MinIO call, leaving 22 of 32 threads waiting | `open-in-view` turned off in workspace-service |
+| The MinIO client ran only 5 calls at a time | Raised to 64 |
 
 ## Flaky preview
 
-Roughly 1 in 10 browser-test runs showed the template instead of the built app. Pod logs showed three causes: a dependency scan reading a half-written file, a page that missed the dev server's reload, and a port-forward replaced after a single failed connection. After fixing all three it passed 30 / 30.
+About one browser-test run in ten showed the starter template instead of the built app. Pod logs pointed to three causes:
+
+1. The dev server scanned dependencies while a file was still being written.
+2. The page loaded before it could hear the dev server's reload.
+3. A port-forward was replaced after a single failed connection.
+
+With all three fixed, the step passed 30 runs out of 30.
 
 ## Tests
 
@@ -81,7 +80,7 @@ Roughly 1 in 10 browser-test runs showed the template instead of the built app. 
 | Backend | 1,623 |
 | Frontend | 931 |
 | Preview proxy | 92 |
-| Real preview + publish on kind | 17 steps |
+| Real preview and publish on kind | 17 steps |
 | Browser journeys | 2 journeys, 24 steps |
 
-Line coverage is 75.4% for the backend and 77.4% for the frontend's logic. CI fails the build if a module drops below its floor.
+Backend line coverage is 75.4%, and the frontend's logic is at 77.4%. CI fails if a module drops below its floor.

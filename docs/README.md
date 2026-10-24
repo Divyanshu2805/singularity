@@ -8,4 +8,3 @@
 | [Development](development.md) | Setup, config, previews on kind, tests, troubleshooting |
 | [Deployment](deployment.md) | Production, CI/CD, secrets, operations |
 | [Results](results.md) | What was measured and how |
-| [Known gaps](known-gaps.md) | What isn't built yet |

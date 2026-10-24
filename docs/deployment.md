@@ -4,19 +4,21 @@ Production is one Oracle Always Free Arm VM (2 OCPU, 12 GB) running single-node 
 
 ```mermaid
 flowchart LR
-    U[Visitors] -->|HTTPS| CF[Cloudflare]
-    CF -->|tunnel| CD[cloudflared]
-    subgraph VM[Oracle VM · k3s]
-        CD --> FE[frontend nginx]
-        CD -->|/api, /webhooks| GW[gateway]
-        CD -->|*.divyanshuagrahari.dev| PX[preview proxy]
-        GW --> SVC[account · workspace · intelligence]
-        SVC --> PG[(Postgres)]
-        SVC --> MN[(MinIO)]
-        PX --> RP[runner pods]
-        BK[nightly backup] --> R2[(Cloudflare R2)]
+    U["Visitors"] -- HTTPS --> CF["Cloudflare"]
+    CF -- tunnel --> CD["cloudflared"]
+    GH["GitHub Actions"] -- Tailscale --> K8S["k3s API"]
+    subgraph vm ["Oracle VM, k3s"]
+        CD --> FE["frontend (nginx)"]
+        CD -- "/api, /webhooks" --> GW["gateway"]
+        CD -- "preview and published hosts" --> PX["preview proxy"]
+        GW --> SVC["account, workspace, intelligence"]
+        SVC --> PG[("Postgres")]
+        SVC --> MN[("MinIO")]
+        PX --> RP["runner pods"]
+        K8S
     end
-    GH[GitHub Actions] -->|Tailscale| VM
+    PG -. nightly backup .-> R2[("Cloudflare R2")]
+    MN -. nightly backup .-> R2
 ```
 
 | Namespace | Runs |
@@ -30,14 +32,14 @@ The app is at `singularity.divyanshuagrahari.dev`. Previews and published apps a
 
 ```mermaid
 flowchart LR
-    P[Push to main] --> T[backend · frontend · proxy<br/>preview + publish on kind<br/>browser journeys · Lighthouse]
-    T --> IMG[8 arm64 images → GHCR]
-    IMG --> APR{Owner approves}
-    APR --> SEC[Rebuild Secrets from<br/>GitHub environment]
-    SEC --> AP[kubectl apply -k]
-    AP --> SM{Smoke test}
-    SM -->|fail| RB[Roll back changed workloads]
-    SM -->|ok| DONE[Live]
+    P["Push to main"] --> T["Tests: backend, frontend, proxy, preview and publish on kind, browser journeys, Lighthouse"]
+    T --> IMG["8 arm64 images to GHCR"]
+    IMG --> APR{"Owner approves"}
+    APR --> SEC["Rebuild Secrets from GitHub"]
+    SEC --> AP["kubectl apply -k"]
+    AP --> SM{"Smoke test"}
+    SM -- fails --> RB["Roll back what changed"]
+    SM -- passes --> DONE["Live"]
 ```
 
 - Pull requests run the test jobs only. They never see a secret or deploy.

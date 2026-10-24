@@ -20,7 +20,6 @@ These are authoritative and kept current:
 | Every endpoint, the chat stream, the error model, the internal API | [`docs/api.md`](docs/api.md) |
 | Setup, configuration, live previews, tests, troubleshooting | [`docs/development.md`](docs/development.md) |
 | Production topology, CI/CD, secrets, operations, capacity | [`docs/deployment.md`](docs/deployment.md) |
-| What isn't built yet | [`docs/known-gaps.md`](docs/known-gaps.md) |
 | Measured numbers | [`docs/results.md`](docs/results.md) |
 | Every build-benchmark run | [`.claude/practices/build-benchmark-results.md`](.claude/practices/build-benchmark-results.md) |
 

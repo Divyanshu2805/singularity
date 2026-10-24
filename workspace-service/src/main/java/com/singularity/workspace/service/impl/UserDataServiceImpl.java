@@ -26,8 +26,8 @@ import java.util.Locale;
  * the account, and the next attempt deletes them, finding the previews already stopped and the apps already down.
  * The address is lower-cased because invitations are stored lower-cased.
  *
- * <p>A deleted project is a soft delete like any other, so its files stay in storage as every deleted project's do
- * (docs/known-gaps); nothing in the app can reach them again.
+ * <p>A deleted project is a soft delete like any other, so its files stay in storage as every deleted project's do,
+ * and nothing in the app can reach them again.
  */
 @Slf4j
 @Service
