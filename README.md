@@ -18,6 +18,10 @@
 
 ---
 
+Singularity turns a one-line idea into a working web app. You describe what you want, and an AI builds it while you watch. The app runs live in the browser straight away, and you can publish it to a public link with one click.
+
+Most AI code tools hand back code nobody has checked. Here the server checks every change before saving it, and runs the app in a sandboxed Kubernetes pod so you can see it working. It's built for people who can't code yet, so it also explains what it built, step by step, in your own code.
+
 ## Try it
 
 | | |
@@ -37,10 +41,10 @@ The demo account already has a notes app built, so you land straight in the chat
 **Building**
 - Start from one sentence. The model asks a few questions written for your idea and turns the answers into a brief.
 - The build streams live with a checklist of steps, the files being written, and the model's plan.
-- Every turn is checked before it's saved: edits must apply, files must parse, imports must resolve, and the project must type-check. Anything broken goes back to the model to fix.
-- Each turn is saved as one revision. You can undo it or restore any earlier version.
+- Every change is checked before it's saved: edits must apply, files must parse, imports must resolve, and the project must type-check. Anything broken goes back to the model to fix.
+- Each change is saved as a version. You can undo it or go back to any earlier version.
 - If the app needs to share data between people, the model gives it its own Node server and SQLite database.
-- Stop a build halfway, ask a question instead of building, or edit files by hand.
+- Stop a build halfway, edit files by hand, or ask about the project in the chat and get an answer without anything being rebuilt.
 
 **Running and sharing**
 - A live preview of every project, in its own pod, updating as files change.
@@ -58,6 +62,16 @@ The demo account already has a notes app built, so you land straight in the chat
 - Email, Google and optional two-step sign-in through Firebase, turned into a server-side session.
 - Free, Pro and Business plans on Stripe, with daily token, project and preview limits enforced on the server.
 - A usage page that breaks down tokens by day, feature and project.
+
+## Engineering highlights
+
+Measured locally. How each one was measured is in [docs/results.md](docs/results.md).
+
+- **Faster builds.** Lowering the model's reasoning effort and removing an extra file-fetch step cut the wait for the AI's first word from 9.1 s to 2.7 s, and the time to apply a change from 21.3 s to 11.2 s.
+- **Faster previews.** Keeping a spare pod ready with packages already installed cut the time to start a preview from 30.1 s to 4.3 s.
+- **More throughput under load.** A load test with 300 users found three bottlenecks in thread dumps: HTTP calls between services opened a new connection every time, file reads held a database connection while waiting on storage, and the storage client only allowed 5 calls at once. Fixing them raised throughput from 2,794 to 3,429 requests a second and cut the slowest 1% of response times from 552 ms to 343 ms, with 256 requests in flight.
+- **Generated code that works.** On a benchmark of 24 build requests, every one finished correctly, and all 20 generated projects install, type-check and bundle.
+- **A flaky test made reliable.** A preview check that failed 1 run in 10 was traced through pod logs to three timing bugs. With those fixed, it passed 30 runs out of 30.
 
 ## Screenshots
 
@@ -93,7 +107,9 @@ flowchart LR
 | workspace | Projects, files, revisions, previews, publishing |
 | intelligence | Build chat, lessons, idea interview, token usage |
 
-Each service has its own database. Generated code never runs on a service, only inside runner pods that are locked down: non-root, no Linux capabilities, a strict network policy.
+Each service has its own database. Generated code never runs on a service. It only runs in sandboxed Kubernetes pods ("runner pods"): no root user, no Linux capabilities, and a strict network policy.
+
+Each build request goes like this:
 
 ```mermaid
 sequenceDiagram
@@ -110,23 +126,13 @@ sequenceDiagram
     alt Problems found
         I->>L: Repair request
     end
-    I->>W: Save the turn as one revision
+    I->>W: Save all changes as one version
     W->>P: Sync files to the preview
 ```
 
-A turn's files are stored by SHA-256, and the project's head moves with a compare-and-swap, so a turn lands whole or not at all. Publishing builds in a separate pod and switches the live app only after the build succeeds.
+A build's changes are saved all at once or not at all, so a project is never left half-updated. Publishing builds the app in a separate pod and only replaces the live version if the build succeeds.
 
 More detail in [docs/architecture.md](docs/architecture.md).
-
-## Engineering highlights
-
-- **Faster builds.** Dropping the model's reasoning effort and removing an extra file-fetch round trip cut the wait for the first word from 9.1 s to 2.7 s, and a change to an app from 21.3 s to 11.2 s.
-- **Faster previews.** Keeping a warm pod with packages already installed cut a preview start from 30.1 s to 4.3 s.
-- **Holds up under load.** A load test with 300 users found three limits through thread dumps: Feign without a connection pool, a DB connection held during storage reads, and a MinIO client capped at 5 calls. Fixing them raised throughput from 2,794 to 3,429 req/s and cut p99 latency from 552 ms to 343 ms at 256 concurrent requests.
-- **Reliable generated code.** On a benchmark of 24 build requests, every turn ended correctly, and all 20 generated projects install, type-check and bundle.
-- **No flaky preview test.** A preview race that failed 1 run in 10 was traced through pod logs to three causes, and after fixing them it passed 30 runs out of 30.
-
-How each number was measured: [docs/results.md](docs/results.md).
 
 ## Stack
 
@@ -141,12 +147,17 @@ How each number was measured: [docs/results.md](docs/results.md).
 
 ## Running locally
 
-The quickest way needs no keys. It starts the whole app on a kind cluster with a scripted model and the Firebase emulator:
+The quickest way needs no API keys. It runs the whole app on a local Kubernetes cluster, with a scripted AI model and the Firebase emulator standing in for the real services.
+
+You need Docker, JDK 25, Node 20+ and [kind](https://kind.sigs.k8s.io/).
 
 ```bash
+kind create cluster --name singularity --config k8s/kind-config.yaml
 ./mvnw -DskipTests package
-e2e/stack.sh up --context kind-<your-cluster>
+e2e/stack.sh up --context kind-singularity
 ```
+
+Then open http://localhost:14173 and create an account. The first start takes about three minutes. Run `e2e/stack.sh down --context kind-singularity` to stop it.
 
 Setting it up with your own keys is covered in [docs/development.md](docs/development.md).
 
