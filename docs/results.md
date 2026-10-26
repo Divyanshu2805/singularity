@@ -9,7 +9,6 @@ All of this was measured on one development laptop, with the services, Postgres,
 | Preview start in a fresh pod | 30.1 s | 4.3 s | Warm pods come with `node_modules` already installed |
 | Read throughput, 256 requests in flight | 2,794 req/s | 3,429 req/s | Three connection limits fixed (below) |
 | p99 latency at the same load | 552 ms | 343 ms | Same fixes |
-| Browser test runs where the preview step passes | 9 in 10 | 30 in 30 | Three start-up races fixed (below) |
 
 ## Build speed
 
@@ -62,16 +61,6 @@ The peak, about 3,500 req/s, is set by the laptop's CPU and stayed the same. The
 | Feign opened a new connection for every call, until the machine ran out of ports | Pooled Apache HttpClient 5 |
 | A file read held a database connection for its whole MinIO call, leaving 22 of 32 threads waiting | `open-in-view` turned off in workspace-service |
 | The MinIO client ran only 5 calls at a time | Raised to 64 |
-
-## Flaky preview
-
-About one browser-test run in ten showed the starter template instead of the built app. Pod logs pointed to three causes:
-
-1. The dev server scanned dependencies while a file was still being written.
-2. The page loaded before it could hear the dev server's reload.
-3. A port-forward was replaced after a single failed connection.
-
-With all three fixed, the step passed 30 runs out of 30.
 
 ## Tests
 

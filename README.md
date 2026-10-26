@@ -65,13 +65,13 @@ The demo account already has a notes app built, so you land straight in the chat
 
 ## Engineering highlights
 
-Measured locally. How each one was measured is in [docs/results.md](docs/results.md).
+Measured locally. Details in [docs/results.md](docs/results.md).
 
-- **Faster builds.** Lowering the model's reasoning effort and removing an extra file-fetch step cut the wait for the AI's first word from 9.1 s to 2.7 s, and the time to apply a change from 21.3 s to 11.2 s.
-- **Faster previews.** Keeping a spare pod ready with packages already installed cut the time to start a preview from 30.1 s to 4.3 s.
-- **More throughput under load.** A load test with 300 users found three bottlenecks in thread dumps: HTTP calls between services opened a new connection every time, file reads held a database connection while waiting on storage, and the storage client only allowed 5 calls at once. Fixing them raised throughput from 2,794 to 3,429 requests a second and cut the slowest 1% of response times from 552 ms to 343 ms, with 256 requests in flight.
-- **Generated code that works.** On a benchmark of 24 build requests, every one finished correctly, and all 20 generated projects install, type-check and bundle.
-- **A flaky test made reliable.** A preview check that failed 1 run in 10 was traced through pod logs to three timing bugs. With those fixed, it passed 30 runs out of 30.
+- **Preview start: 30.1 s → 4.3 s.** A warm pod with packages already installed.
+- **Throughput: +23%, slowest 1% of responses −38%** with 256 requests in flight and 300 users. Three bottlenecks found in thread dumps and fixed.
+- **First AI response: 9.1 s → 2.7 s.** Lower reasoning effort and one fewer file fetch.
+- **Applying a change: 21.3 s → 11.2 s.** Same two changes.
+- **24 / 24** benchmark builds finished correctly, and **20 / 20** generated projects compile.
 
 ## Screenshots
 
