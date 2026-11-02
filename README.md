@@ -11,8 +11,16 @@
   <a href="https://github.com/Divyanshu2805/singularity/actions/workflows/ci.yml"><img src="https://github.com/Divyanshu2805/singularity/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
   <img src="https://img.shields.io/badge/Java-25-0a0b0d?logo=openjdk" alt="Java 25" />
   <img src="https://img.shields.io/badge/Spring_Boot-4.1-0a0b0d?logo=springboot" alt="Spring Boot 4.1" />
+  <img src="https://img.shields.io/badge/Spring_Cloud-Gateway_and_Eureka-0a0b0d?logo=spring" alt="Spring Cloud" />
+  <img src="https://img.shields.io/badge/Spring_AI-Gemini-0a0b0d?logo=spring" alt="Spring AI" />
+  <img src="https://img.shields.io/badge/PostgreSQL-per_service-0a0b0d?logo=postgresql" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Redis-Preview_routes-0a0b0d?logo=redis" alt="Redis" />
+  <img src="https://img.shields.io/badge/MinIO-Object_storage-0a0b0d?logo=minio" alt="MinIO" />
   <img src="https://img.shields.io/badge/React-18-0a0b0d?logo=react" alt="React 18" />
+  <img src="https://img.shields.io/badge/Docker-Images-0a0b0d?logo=docker" alt="Docker" />
   <img src="https://img.shields.io/badge/Kubernetes-k3s-0a0b0d?logo=kubernetes" alt="Kubernetes" />
+  <img src="https://img.shields.io/badge/GitHub_Actions-CI%2FCD-0a0b0d?logo=githubactions" alt="GitHub Actions" />
+  <img src="https://img.shields.io/badge/Playwright-E2E-0a0b0d?logo=playwright" alt="Playwright" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-0a0b0d" alt="MIT License" /></a>
 </p>
 
@@ -62,16 +70,6 @@ The demo account already has a notes app built, so you land straight in the chat
 - Email, Google and optional two-step sign-in through Firebase, turned into a server-side session.
 - Free, Pro and Business plans on Stripe, with daily token, project and preview limits enforced on the server.
 - A usage page that breaks down tokens by day, feature and project.
-
-## Engineering highlights
-
-Measured locally. Details in [docs/results.md](docs/results.md).
-
-- **Preview start: 30.1 s → 4.3 s.** A warm pod with packages already installed.
-- **Throughput: +23%, slowest 1% of responses −38%** with 256 requests in flight and 300 users. Three bottlenecks found in thread dumps and fixed.
-- **First AI response: 9.1 s → 2.7 s.** Lower reasoning effort and one fewer file fetch.
-- **Applying a change: 21.3 s → 11.2 s.** Same two changes.
-- **24 / 24** benchmark builds finished correctly, and **20 / 20** generated projects compile.
 
 ## Screenshots
 
@@ -182,7 +180,7 @@ Every push to `main` runs all of it, builds 8 arm64 images, deploys after approv
 | [Data model](docs/data-model.md) | Tables per service |
 | [Development](docs/development.md) | Setup, config, tests, troubleshooting |
 | [Deployment](docs/deployment.md) | Production, CI/CD, operations |
-| [Results](docs/results.md) | How the numbers were measured |
+| [Results](docs/results.md) | Every measurement and how it was taken |
 
 ## License
 
